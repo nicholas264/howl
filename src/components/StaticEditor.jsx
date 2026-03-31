@@ -11,7 +11,7 @@ const TEMPLATES = [
   { id: 'editorial', label: 'Editorial', Component: EditorialTemplate },
 ];
 
-export default function StaticEditor({ variation, photoUrl, onClose }) {
+export default function StaticEditor({ variation, photoUrl, textPosition, onClose }) {
   const [templateId, setTemplateId] = useState('overlay');
   const [formatKey, setFormatKey] = useState('square');
   const [exporting, setExporting] = useState(false);
@@ -148,6 +148,7 @@ export default function StaticEditor({ variation, photoUrl, onClose }) {
                 photoUrl={photoUrl}
                 format={formatKey}
                 dimensions={format}
+                textPosition={textPosition}
               />
             </div>
           </div>

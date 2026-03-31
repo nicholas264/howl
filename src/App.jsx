@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { PRODUCTS, ANGLES, PLATFORMS } from "./data";
 import { buildSystemPrompt, buildUserPrompt } from "./prompts";
+import { analyzeImage } from "./utils/analyzeImage";
 import ConfigPanel from "./components/ConfigPanel";
 import ResultsPanel from "./components/ResultsPanel";
 import StaticEditor from "./components/StaticEditor";
@@ -20,7 +21,18 @@ export default function HowlAdEngine() {
   const [filterAngle, setFilterAngle] = useState("all");
   const [filterProduct, setFilterProduct] = useState("all");
   const [productPhoto, setProductPhoto] = useState(null);
+  const [textPosition, setTextPosition] = useState({ vertical: 'bottom', horizontal: 'left' });
   const [staticVariation, setStaticVariation] = useState(null);
+
+  const handlePhotoChange = useCallback(async (dataUrl) => {
+    setProductPhoto(dataUrl);
+    if (dataUrl) {
+      const position = await analyzeImage(dataUrl);
+      setTextPosition(position);
+    } else {
+      setTextPosition({ vertical: 'bottom', horizontal: 'left' });
+    }
+  }, []);
 
   const toggleProduct = (id) => setSelectedProducts((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
   const toggleAngle = (id) => setSelectedAngles((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
@@ -111,7 +123,7 @@ export default function HowlAdEngine() {
           selectedAvatar={selectedAvatar} setSelectedAvatar={setSelectedAvatar}
           copyCount={copyCount} setCopyCount={setCopyCount}
           customContext={customContext} setCustomContext={setCustomContext}
-          productPhoto={productPhoto} onPhotoChange={setProductPhoto}
+          productPhoto={productPhoto} onPhotoChange={handlePhotoChange}
           loading={loading} error={error} generate={generate}
         />
       )}
@@ -131,6 +143,7 @@ export default function HowlAdEngine() {
         <StaticEditor
           variation={staticVariation}
           photoUrl={productPhoto}
+          textPosition={textPosition}
           onClose={() => setStaticVariation(null)}
         />
       )}

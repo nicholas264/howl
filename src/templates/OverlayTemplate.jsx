@@ -1,12 +1,29 @@
 import { COLORS, FONTS, LOGOS } from '../brand';
 
-export default function OverlayTemplate({ variation, photoUrl, format, dimensions }) {
+export default function OverlayTemplate({ variation, photoUrl, format, dimensions, textPosition }) {
   const isStory = format === 'story';
   const headlineSize = isStory ? 64 : 52;
   const bodySize = isStory ? 28 : 24;
   const ctaSize = isStory ? 26 : 22;
   const logoWidth = isStory ? 140 : 120;
   const padding = isStory ? 60 : 48;
+
+  const vPos = textPosition?.vertical || 'bottom';
+  const hPos = textPosition?.horizontal || 'left';
+
+  // Gradient direction based on where text goes
+  const gradientDir = vPos === 'top' ? 'to bottom' : 'to top';
+  const gradientStart = 'rgba(0,0,0,0.85)';
+  const gradientMid = 'rgba(0,0,0,0.4)';
+
+  // Logo goes in the opposite corner from text
+  const logoTop = vPos === 'bottom' ? padding : undefined;
+  const logoBottom = vPos === 'top' ? padding : undefined;
+  const logoLeft = hPos === 'right' ? padding : undefined;
+  const logoRight = hPos === 'left' || hPos === 'center' ? padding : undefined;
+
+  // Text alignment
+  const textAlign = hPos === 'right' ? 'right' : hPos === 'center' ? 'center' : 'left';
 
   return (
     <div style={{
@@ -25,34 +42,37 @@ export default function OverlayTemplate({ variation, photoUrl, format, dimension
         backgroundPosition: 'center',
       }} />
 
-      {/* Bottom gradient overlay */}
+      {/* Gradient overlay — positioned where text goes */}
       <div style={{
         position: 'absolute',
         inset: 0,
-        background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 40%, transparent 70%)',
+        background: `linear-gradient(${gradientDir}, ${gradientStart} 0%, ${gradientMid} 40%, transparent 70%)`,
       }} />
 
-      {/* Logo top-right */}
+      {/* Logo in opposite corner */}
       <img
         src={LOGOS.stackedWhite}
         alt="HOWL"
         style={{
           position: 'absolute',
-          top: padding,
-          right: padding,
+          top: logoTop,
+          bottom: logoBottom,
+          left: logoLeft,
+          right: logoRight,
           width: logoWidth,
           height: 'auto',
         }}
       />
 
-      {/* Text content at bottom */}
+      {/* Text content — positioned based on analysis */}
       <div style={{
         position: 'absolute',
-        bottom: 0,
+        ...(vPos === 'top' ? { top: 0 } : { bottom: 0 }),
         left: 0,
         right: 0,
         padding: padding,
-        paddingTop: 0,
+        ...(vPos === 'top' ? { paddingBottom: 0 } : { paddingTop: 0 }),
+        textAlign,
       }}>
         <div style={{
           fontFamily: FONTS.headline.family,

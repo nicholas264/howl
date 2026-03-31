@@ -1,12 +1,14 @@
 import { COLORS, FONTS, LOGOS } from '../brand';
 
-export default function EditorialTemplate({ variation, photoUrl, format, dimensions }) {
+export default function EditorialTemplate({ variation, photoUrl, format, dimensions, textPosition }) {
   const isStory = format === 'story';
   const stripHeight = Math.round(dimensions.height * 0.18);
   const headlineSize = isStory ? 40 : 32;
   const ctaSize = isStory ? 22 : 18;
   const logoWidth = isStory ? 80 : 65;
   const padding = isStory ? 40 : 32;
+
+  const vPos = textPosition?.vertical || 'bottom';
 
   return (
     <div style={{
@@ -25,14 +27,14 @@ export default function EditorialTemplate({ variation, photoUrl, format, dimensi
         backgroundPosition: 'center',
       }} />
 
-      {/* Branded strip at bottom */}
+      {/* Branded strip — top or bottom based on white space analysis */}
       <div style={{
         position: 'absolute',
-        bottom: 0,
+        ...(vPos === 'top' ? { top: 0 } : { bottom: 0 }),
         left: 0,
         right: 0,
         height: stripHeight,
-        backgroundColor: `rgba(51, 63, 76, 0.95)`,
+        backgroundColor: 'rgba(51, 63, 76, 0.95)',
         display: 'flex',
         alignItems: 'center',
         padding: `0 ${padding}px`,
