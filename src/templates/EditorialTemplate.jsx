@@ -2,9 +2,9 @@ import { COLORS, FONTS } from '../brand';
 
 export default function EditorialTemplate({ variation, photoUrl, format, dimensions, textPosition }) {
   const isStory = format === 'story';
-  const stripHeight = Math.round(dimensions.height * 0.18);
-  const headlineSize = isStory ? 40 : 32;
-  const ctaSize = isStory ? 22 : 18;
+  const stripHeight = Math.round(dimensions.height * 0.25);
+  const headlineSize = isStory ? 36 : 28;
+  const ctaSize = isStory ? 44 : 36;
   const padding = isStory ? 40 : 32;
 
   const isLight = textPosition?.isLight ?? false;
@@ -79,7 +79,7 @@ export default function EditorialTemplate({ variation, photoUrl, format, dimensi
           flexShrink: 0,
           whiteSpace: 'nowrap',
         }}>
-          {variation.cta} »
+          →
         </div>
       </div>
     </div>

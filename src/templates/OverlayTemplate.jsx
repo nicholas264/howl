@@ -2,8 +2,8 @@ import { COLORS, FONTS } from '../brand';
 
 export default function OverlayTemplate({ variation, photoUrl, format, dimensions, textPosition }) {
   const isStory = format === 'story';
-  const headlineSize = isStory ? 72 : 60;
-  const ctaSize = isStory ? 28 : 24;
+  const headlineSize = isStory ? 56 : 46;
+  const ctaSize = isStory ? 44 : 36;
   const padding = isStory ? 60 : 48;
 
   const isLight = textPosition?.isLight ?? false;
@@ -75,7 +75,7 @@ export default function OverlayTemplate({ variation, photoUrl, format, dimension
           letterSpacing: FONTS.subHeadline.letterSpacing,
           color: ctaColor,
         }}>
-          {variation.cta} »
+          →
         </div>
       </div>
     </div>

@@ -3,8 +3,8 @@ import { COLORS, FONTS } from '../brand';
 export default function SplitTemplate({ variation, photoUrl, format, dimensions, textPosition }) {
   const isStory = format === 'story';
   const photoPercent = isStory ? 55 : 60;
-  const headlineSize = isStory ? 64 : 52;
-  const ctaSize = isStory ? 26 : 22;
+  const headlineSize = isStory ? 52 : 42;
+  const ctaSize = isStory ? 44 : 36;
   const padding = isStory ? 52 : 40;
 
   const isLight = textPosition?.isLight ?? false;
@@ -71,7 +71,7 @@ export default function SplitTemplate({ variation, photoUrl, format, dimensions,
         letterSpacing: FONTS.subHeadline.letterSpacing,
         color: ctaColor,
       }}>
-        {variation.cta} »
+        →
       </div>
     </div>
   );
