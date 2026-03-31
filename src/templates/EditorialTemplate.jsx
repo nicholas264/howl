@@ -19,13 +19,18 @@ export default function EditorialTemplate({ variation, photoUrl, format, dimensi
       backgroundColor: COLORS.midnightSky,
     }}>
       {/* Full-bleed product photo */}
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        backgroundImage: `url(${photoUrl})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }} />
+      <img
+        src={photoUrl}
+        alt=""
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+        }}
+      />
 
       {/* Branded strip — top or bottom based on white space analysis */}
       <div style={{

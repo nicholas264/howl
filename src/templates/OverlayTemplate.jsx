@@ -34,13 +34,18 @@ export default function OverlayTemplate({ variation, photoUrl, format, dimension
       backgroundColor: COLORS.midnightSky,
     }}>
       {/* Full-bleed product photo */}
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        backgroundImage: `url(${photoUrl})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }} />
+      <img
+        src={photoUrl}
+        alt=""
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+        }}
+      />
 
       {/* Gradient overlay — positioned where text goes */}
       <div style={{
