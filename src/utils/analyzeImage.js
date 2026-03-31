@@ -1,16 +1,19 @@
 /**
- * Analyzes an image to find the best region for text placement.
- * Divides the image into a grid and scores each region by how
- * "uniform" it is (low pixel variance = good for text overlay).
+ * Analyzes an image to find the best region for text placement
+ * and whether the background is light or dark.
  *
- * Returns: { vertical: 'top'|'bottom', horizontal: 'left'|'right'|'center' }
+ * Returns: {
+ *   vertical: 'top'|'bottom',
+ *   horizontal: 'left'|'right'|'center',
+ *   isLight: boolean  // true = light background, use dark text
+ * }
  */
 export function analyzeImage(dataUrl) {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      const size = 300; // downsample for speed
+      const size = 300;
       const scale = size / Math.max(img.width, img.height);
       canvas.width = Math.round(img.width * scale);
       canvas.height = Math.round(img.height * scale);
@@ -22,7 +25,6 @@ export function analyzeImage(dataUrl) {
       const w = canvas.width;
       const h = canvas.height;
 
-      // Define 6 regions: top-left, top-right, bottom-left, bottom-right, top-center, bottom-center
       const regions = [
         { id: { vertical: 'top', horizontal: 'left' }, x: 0, y: 0, w: w / 2, h: h / 2 },
         { id: { vertical: 'top', horizontal: 'right' }, x: w / 2, y: 0, w: w / 2, h: h / 2 },
@@ -33,7 +35,8 @@ export function analyzeImage(dataUrl) {
       ];
 
       let bestScore = -1;
-      let bestRegion = regions[3].id; // default: bottom-left
+      let bestRegion = regions[3].id;
+      let bestMean = 128;
 
       for (const region of regions) {
         const x0 = Math.round(region.x);
@@ -41,12 +44,10 @@ export function analyzeImage(dataUrl) {
         const x1 = Math.round(region.x + region.w);
         const y1 = Math.round(region.y + region.h);
 
-        // Collect luminance values in this region
         const values = [];
         for (let y = y0; y < y1; y++) {
           for (let x = x0; x < x1; x++) {
             const i = (y * w + x) * 4;
-            // Perceived luminance
             const lum = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
             values.push(lum);
           }
@@ -54,24 +55,22 @@ export function analyzeImage(dataUrl) {
 
         if (values.length === 0) continue;
 
-        // Calculate mean and variance
         const mean = values.reduce((a, b) => a + b, 0) / values.length;
         const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length;
-
-        // Score: low variance = uniform region = good for text
-        // Also slightly prefer brighter regions (easier to overlay dark text or add gradient)
-        const uniformityScore = 1 / (1 + variance / 1000);
-        const score = uniformityScore;
+        const score = 1 / (1 + variance / 1000);
 
         if (score > bestScore) {
           bestScore = score;
           bestRegion = region.id;
+          bestMean = mean;
         }
       }
 
-      resolve(bestRegion);
+      // isLight: true if the best text region is bright (use dark text)
+      // Threshold ~140 — above that is "light background"
+      resolve({ ...bestRegion, isLight: bestMean > 140 });
     };
-    img.onerror = () => resolve({ vertical: 'bottom', horizontal: 'left' });
+    img.onerror = () => resolve({ vertical: 'bottom', horizontal: 'left', isLight: false });
     img.src = dataUrl;
   });
 }

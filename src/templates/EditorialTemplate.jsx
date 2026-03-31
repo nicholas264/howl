@@ -1,14 +1,21 @@
-import { COLORS, FONTS, LOGOS } from '../brand';
+import { COLORS, FONTS } from '../brand';
 
 export default function EditorialTemplate({ variation, photoUrl, format, dimensions, textPosition }) {
   const isStory = format === 'story';
   const stripHeight = Math.round(dimensions.height * 0.18);
   const headlineSize = isStory ? 40 : 32;
   const ctaSize = isStory ? 22 : 18;
-  const logoWidth = isStory ? 80 : 65;
   const padding = isStory ? 40 : 32;
 
+  const isLight = textPosition?.isLight ?? false;
   const vPos = textPosition?.vertical || 'bottom';
+
+  // Strip bg and text colors adapt to image brightness
+  const stripBg = isLight
+    ? 'rgba(249, 243, 223, 0.95)'   // Natural bg for light images
+    : 'rgba(51, 63, 76, 0.95)';     // Midnight Sky bg for dark images
+  const headlineColor = isLight ? COLORS.midnightSky : COLORS.natural;
+  const ctaColor = COLORS.flame;
 
   return (
     <div style={{
@@ -32,14 +39,14 @@ export default function EditorialTemplate({ variation, photoUrl, format, dimensi
         }}
       />
 
-      {/* Branded strip — top or bottom */}
+      {/* Branded strip */}
       <div style={{
         position: 'absolute',
         ...(vPos === 'top' ? { top: 0 } : { bottom: 0 }),
         left: 0,
         right: 0,
         height: stripHeight,
-        backgroundColor: 'rgba(51, 63, 76, 0.95)',
+        backgroundColor: stripBg,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -47,18 +54,7 @@ export default function EditorialTemplate({ variation, photoUrl, format, dimensi
         gap: padding,
         textAlign: 'center',
       }}>
-        {/* Logo left */}
-        <img
-          src={LOGOS.stackedWhite}
-          alt="HOWL"
-          style={{
-            width: logoWidth,
-            height: 'auto',
-            flexShrink: 0,
-          }}
-        />
-
-        {/* Headline center */}
+        {/* Headline */}
         <div style={{
           flex: 1,
           fontFamily: FONTS.headline.family,
@@ -66,20 +62,20 @@ export default function EditorialTemplate({ variation, photoUrl, format, dimensi
           fontSize: headlineSize,
           textTransform: FONTS.headline.transform,
           letterSpacing: FONTS.headline.letterSpacing,
-          color: COLORS.natural,
+          color: headlineColor,
           lineHeight: 1.15,
         }}>
           {variation.headline}
         </div>
 
-        {/* CTA right */}
+        {/* CTA */}
         <div style={{
           fontFamily: FONTS.subHeadline.family,
           fontWeight: FONTS.subHeadline.weight,
           fontSize: ctaSize,
           textTransform: FONTS.subHeadline.transform,
           letterSpacing: FONTS.subHeadline.letterSpacing,
-          color: COLORS.flame,
+          color: ctaColor,
           flexShrink: 0,
           whiteSpace: 'nowrap',
         }}>

@@ -1,15 +1,20 @@
-import { COLORS, FONTS, LOGOS } from '../brand';
+import { COLORS, FONTS } from '../brand';
 
 export default function SplitTemplate({ variation, photoUrl, format, dimensions, textPosition }) {
   const isStory = format === 'story';
   const photoPercent = isStory ? 55 : 60;
   const headlineSize = isStory ? 64 : 52;
   const ctaSize = isStory ? 26 : 22;
-  const logoWidth = isStory ? 100 : 90;
   const padding = isStory ? 52 : 40;
 
+  const isLight = textPosition?.isLight ?? false;
   const vPos = textPosition?.vertical || 'bottom';
   const textOnTop = vPos === 'top';
+
+  // Copy section: light bg → Midnight Sky text, dark bg → Natural text
+  const copyBg = isLight ? COLORS.natural : COLORS.midnightSky;
+  const headlineColor = isLight ? COLORS.midnightSky : COLORS.natural;
+  const ctaColor = COLORS.flame;
 
   const photoHeight = Math.round(dimensions.height * photoPercent / 100);
   const copyHeight = dimensions.height - photoHeight;
@@ -36,7 +41,7 @@ export default function SplitTemplate({ variation, photoUrl, format, dimensions,
     <div key="copy" style={{
       width: '100%',
       height: copyHeight,
-      backgroundColor: COLORS.midnightSky,
+      backgroundColor: copyBg,
       padding: padding,
       display: 'flex',
       flexDirection: 'column',
@@ -51,7 +56,7 @@ export default function SplitTemplate({ variation, photoUrl, format, dimensions,
         fontSize: headlineSize,
         textTransform: FONTS.headline.transform,
         letterSpacing: FONTS.headline.letterSpacing,
-        color: COLORS.natural,
+        color: headlineColor,
         lineHeight: 1.1,
         marginBottom: 20,
       }}>
@@ -64,23 +69,10 @@ export default function SplitTemplate({ variation, photoUrl, format, dimensions,
         fontSize: ctaSize,
         textTransform: FONTS.subHeadline.transform,
         letterSpacing: FONTS.subHeadline.letterSpacing,
-        color: COLORS.flame,
+        color: ctaColor,
       }}>
         {variation.cta} »
       </div>
-
-      {/* Logo bottom-right */}
-      <img
-        src={LOGOS.stackedWhite}
-        alt="HOWL"
-        style={{
-          position: 'absolute',
-          bottom: padding,
-          right: padding,
-          width: logoWidth,
-          height: 'auto',
-        }}
-      />
     </div>
   );
 

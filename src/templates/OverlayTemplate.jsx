@@ -1,20 +1,18 @@
-import { COLORS, FONTS, LOGOS } from '../brand';
+import { COLORS, FONTS } from '../brand';
 
 export default function OverlayTemplate({ variation, photoUrl, format, dimensions, textPosition }) {
   const isStory = format === 'story';
   const headlineSize = isStory ? 72 : 60;
   const ctaSize = isStory ? 28 : 24;
-  const logoWidth = isStory ? 140 : 120;
   const padding = isStory ? 60 : 48;
 
-  const vPos = textPosition?.vertical || 'bottom';
-  const hPos = textPosition?.horizontal || 'center';
+  const isLight = textPosition?.isLight ?? false;
 
-  // Logo goes in the opposite corner from text
-  const logoTop = vPos === 'bottom' ? padding : undefined;
-  const logoBottom = vPos === 'top' ? padding : undefined;
-  const logoLeft = hPos === 'right' ? padding : undefined;
-  const logoRight = hPos === 'left' || hPos === 'center' ? padding : undefined;
+  // On light backgrounds: dark text, no scrim
+  // On dark backgrounds: light text, subtle scrim
+  const headlineColor = isLight ? COLORS.midnightSky : COLORS.natural;
+  const ctaColor = COLORS.flame;
+  const scrimBg = isLight ? 'transparent' : 'rgba(0,0,0,0.35)';
 
   return (
     <div style={{
@@ -38,27 +36,12 @@ export default function OverlayTemplate({ variation, photoUrl, format, dimension
         }}
       />
 
-      {/* Scrim for text readability */}
+      {/* Scrim — only on dark backgrounds */}
       <div style={{
         position: 'absolute',
         inset: 0,
-        background: 'rgba(0,0,0,0.35)',
+        background: scrimBg,
       }} />
-
-      {/* Logo in opposite corner */}
-      <img
-        src={LOGOS.stackedWhite}
-        alt="HOWL"
-        style={{
-          position: 'absolute',
-          top: logoTop,
-          bottom: logoBottom,
-          left: logoLeft,
-          right: logoRight,
-          width: logoWidth,
-          height: 'auto',
-        }}
-      />
 
       {/* Centered headline + CTA */}
       <div style={{
@@ -77,7 +60,7 @@ export default function OverlayTemplate({ variation, photoUrl, format, dimension
           fontSize: headlineSize,
           textTransform: FONTS.headline.transform,
           letterSpacing: FONTS.headline.letterSpacing,
-          color: COLORS.natural,
+          color: headlineColor,
           lineHeight: 1.1,
           marginBottom: 24,
         }}>
@@ -90,7 +73,7 @@ export default function OverlayTemplate({ variation, photoUrl, format, dimension
           fontSize: ctaSize,
           textTransform: FONTS.subHeadline.transform,
           letterSpacing: FONTS.subHeadline.letterSpacing,
-          color: COLORS.flame,
+          color: ctaColor,
         }}>
           {variation.cta} »
         </div>
