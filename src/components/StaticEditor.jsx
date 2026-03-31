@@ -26,6 +26,13 @@ export default function StaticEditor({ variation, photoUrl, textPosition, onClos
     setExporting(true);
     try {
       await document.fonts.ready;
+      // First render warms html-to-image's font cache so fonts embed correctly
+      await toPng(captureRef.current, {
+        width: format.width,
+        height: format.height,
+        pixelRatio: 1,
+      });
+      // Second render captures with fonts properly embedded
       const dataUrl = await toPng(captureRef.current, {
         width: format.width,
         height: format.height,

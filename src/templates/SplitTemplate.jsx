@@ -31,7 +31,7 @@ export default function SplitTemplate({ variation, photoUrl, format, dimensions,
         style={{
           width: '100%',
           height: '100%',
-          objectFit: 'cover',
+          objectFit: 'contain',
         }}
       />
     </div>
