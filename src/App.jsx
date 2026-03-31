@@ -10,7 +10,7 @@ import "./styles.css";
 export default function HowlAdEngine() {
   const [selectedProducts, setSelectedProducts] = useState(["r1", "r4mkii"]);
   const [selectedAngles, setSelectedAngles] = useState(["burn_ban", "skeptic", "heat"]);
-  const [selectedPlatform, setSelectedPlatform] = useState("meta");
+  const platform = PLATFORMS[0]; // Meta only
   const [selectedAvatar, setSelectedAvatar] = useState(null);
   const [copyCount, setCopyCount] = useState(10);
   const [customContext, setCustomContext] = useState("");
@@ -48,8 +48,6 @@ export default function HowlAdEngine() {
 
     const products = PRODUCTS.filter((p) => selectedProducts.includes(p.id));
     const angles = ANGLES.filter((a) => selectedAngles.includes(a.id));
-    const platform = PLATFORMS.find((p) => p.id === selectedPlatform);
-
     try {
       const response = await fetch("/api/generate", {
         method: "POST",
@@ -97,7 +95,6 @@ export default function HowlAdEngine() {
     return true;
   });
 
-  const platform = PLATFORMS.find((p) => p.id === selectedPlatform);
   const uniqueAngles = [...new Set(variations.map((v) => v.angle))];
   const uniqueProducts = [...new Set(variations.map((v) => v.product))];
 
@@ -118,7 +115,6 @@ export default function HowlAdEngine() {
       {activeTab === "config" && (
         <ConfigPanel
           selectedProducts={selectedProducts} toggleProduct={toggleProduct}
-          selectedPlatform={selectedPlatform} setSelectedPlatform={setSelectedPlatform}
           selectedAngles={selectedAngles} toggleAngle={toggleAngle}
           selectedAvatar={selectedAvatar} setSelectedAvatar={setSelectedAvatar}
           copyCount={copyCount} setCopyCount={setCopyCount}

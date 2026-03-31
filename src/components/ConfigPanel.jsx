@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { PRODUCTS, ANGLES, AVATARS, PLATFORMS, COPY_COUNT_OPTIONS } from '../data';
+import { PRODUCTS, ANGLES, AVATARS, COPY_COUNT_OPTIONS } from '../data';
 
 export default function ConfigPanel({
   selectedProducts, toggleProduct,
-  selectedPlatform, setSelectedPlatform,
   selectedAngles, toggleAngle,
   selectedAvatar, setSelectedAvatar,
   copyCount, setCopyCount,
@@ -76,17 +75,6 @@ export default function ConfigPanel({
             <div key={p.id} className={`chip ${selectedProducts.includes(p.id) ? "on" : ""}`} onClick={() => toggleProduct(p.id)}>
               <strong>{p.name}</strong> — {p.price}
               <span className="chip-sub">{p.subtitle}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="sect">
-        <div className="slbl">Platform</div>
-        <div className="chips">
-          {PLATFORMS.map((p) => (
-            <div key={p.id} className={`chip ${selectedPlatform === p.id ? "on" : ""}`} onClick={() => setSelectedPlatform(p.id)}>
-              {p.label}
             </div>
           ))}
         </div>

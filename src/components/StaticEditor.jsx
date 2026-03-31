@@ -21,8 +21,6 @@ export default function StaticEditor({ variation, photoUrl, textPosition, onClos
   const format = FORMATS[formatKey];
   const TemplateComponent = template.Component;
 
-  const previewScale = 0.4;
-
   const handleExport = useCallback(async () => {
     if (!captureRef.current) return;
     setExporting(true);
@@ -46,6 +44,15 @@ export default function StaticEditor({ variation, photoUrl, textPosition, onClos
     }
   }, [format, templateId, variation]);
 
+  // Calculate preview scale to fit within viewport
+  // Preview area: viewport height minus padding (80px top/bottom)
+  // Preview should fit fully visible
+  const maxPreviewH = typeof window !== 'undefined' ? window.innerHeight - 100 : 700;
+  const maxPreviewW = typeof window !== 'undefined' ? Math.min(window.innerWidth * 0.55, 600) : 500;
+  const scaleByH = maxPreviewH / format.height;
+  const scaleByW = maxPreviewW / format.width;
+  const previewScale = Math.min(scaleByH, scaleByW, 0.5);
+
   return (
     <div style={{
       position: 'fixed',
@@ -55,91 +62,144 @@ export default function StaticEditor({ variation, photoUrl, textPosition, onClos
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
+      padding: 20,
     }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{
         background: '#F9F3DF',
         border: '1px solid #e0d9c4',
-        maxWidth: 900,
-        maxHeight: '95vh',
-        width: '95vw',
-        overflow: 'auto',
-        padding: 28,
-        position: 'relative',
         borderRadius: 8,
+        display: 'flex',
+        maxHeight: 'calc(100vh - 40px)',
+        overflow: 'hidden',
       }}>
-        {/* Close button */}
-        <button onClick={onClose} style={{
-          position: 'absolute', top: 12, right: 16,
-          background: 'none', border: 'none', color: '#8a8270',
-          fontSize: 20, cursor: 'pointer', fontFamily: 'inherit',
-        }}>×</button>
+        {/* Left: Controls */}
+        <div style={{
+          width: 240,
+          padding: 24,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          borderRight: '1px solid #e0d9c4',
+          flexShrink: 0,
+        }}>
+          <div>
+            <div style={{ fontSize: 10, letterSpacing: 3, textTransform: 'uppercase', color: '#8a8270', marginBottom: 20 }}>
+              Static Ad
+            </div>
 
-        <div style={{ fontSize: 10, letterSpacing: 3, textTransform: 'uppercase', color: '#8a8270', marginBottom: 20 }}>
-          Static Ad Generator
-        </div>
+            {/* Template selector */}
+            <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8a8270', marginBottom: 8 }}>Template</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+              {TEMPLATES.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setTemplateId(t.id)}
+                  style={{
+                    padding: '8px 14px',
+                    border: `1px solid ${templateId === t.id ? '#DC440A' : '#e0d9c4'}`,
+                    background: templateId === t.id ? '#fef8f0' : '#fff',
+                    color: templateId === t.id ? '#333F4C' : '#8a8270',
+                    fontFamily: 'inherit',
+                    fontSize: 10,
+                    letterSpacing: 1,
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    borderRadius: 4,
+                    textAlign: 'left',
+                  }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
 
-        {/* Template selector */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          {TEMPLATES.map((t) => (
+            {/* Format toggle */}
+            <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8a8270', marginBottom: 8 }}>Format</div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
+              {Object.entries(FORMATS).map(([key, f]) => (
+                <button
+                  key={key}
+                  onClick={() => setFormatKey(key)}
+                  style={{
+                    padding: '6px 12px',
+                    border: `1px solid ${formatKey === key ? '#DC440A' : '#e0d9c4'}`,
+                    background: formatKey === key ? '#fef8f0' : '#fff',
+                    color: formatKey === key ? '#333F4C' : '#8a8270',
+                    fontFamily: 'inherit',
+                    fontSize: 10,
+                    cursor: 'pointer',
+                    borderRadius: 4,
+                    flex: 1,
+                    textAlign: 'center',
+                  }}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Copy info */}
+            <div style={{ fontSize: 9, color: '#8a8270', lineHeight: 1.6, marginBottom: 20 }}>
+              <strong style={{ color: '#333F4C' }}>{variation.product}</strong> · {variation.angle}<br />
+              <span style={{ color: '#333F4C' }}>"{variation.headline}"</span>
+            </div>
+          </div>
+
+          {/* Bottom buttons */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <button
-              key={t.id}
-              onClick={() => setTemplateId(t.id)}
+              onClick={handleExport}
+              disabled={exporting}
               style={{
-                padding: '8px 16px',
-                border: `1px solid ${templateId === t.id ? '#DC440A' : '#e0d9c4'}`,
-                background: templateId === t.id ? '#fef8f0' : '#fff',
-                color: templateId === t.id ? '#333F4C' : '#8a8270',
+                padding: '12px 16px',
+                background: exporting ? '#e0d9c4' : '#DC440A',
+                border: 'none',
+                color: exporting ? '#a09880' : '#fff',
                 fontFamily: 'inherit',
                 fontSize: 10,
-                letterSpacing: 1,
+                fontWeight: 700,
+                letterSpacing: 2,
+                textTransform: 'uppercase',
+                cursor: exporting ? 'not-allowed' : 'pointer',
+                borderRadius: 4,
+              }}
+            >
+              {exporting ? 'Exporting...' : 'Download PNG'}
+            </button>
+            <button
+              onClick={onClose}
+              style={{
+                padding: '10px 16px',
+                background: 'none',
+                border: '1px solid #e0d9c4',
+                color: '#8a8270',
+                fontFamily: 'inherit',
+                fontSize: 10,
+                letterSpacing: 2,
                 textTransform: 'uppercase',
                 cursor: 'pointer',
                 borderRadius: 4,
               }}
             >
-              {t.label}
+              Close
             </button>
-          ))}
+          </div>
         </div>
 
-        {/* Format toggle */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-          {Object.entries(FORMATS).map(([key, f]) => (
-            <button
-              key={key}
-              onClick={() => setFormatKey(key)}
-              style={{
-                padding: '6px 14px',
-                border: `1px solid ${formatKey === key ? '#DC440A' : '#e0d9c4'}`,
-                background: formatKey === key ? '#fef8f0' : '#fff',
-                color: formatKey === key ? '#333F4C' : '#8a8270',
-                fontFamily: 'inherit',
-                fontSize: 10,
-                cursor: 'pointer',
-                borderRadius: 4,
-              }}
-            >
-              {f.label} ({f.width}×{f.height})
-            </button>
-          ))}
-        </div>
-
-        {/* Preview container */}
+        {/* Right: Preview */}
         <div style={{
           display: 'flex',
+          alignItems: 'center',
           justifyContent: 'center',
-          marginBottom: 20,
-          background: '#fff',
-          padding: 20,
-          border: '1px solid #e0d9c4',
-          overflow: 'hidden',
-          borderRadius: 6,
+          padding: 24,
+          background: '#f0ead4',
         }}>
           <div style={{
             width: format.width * previewScale,
             height: format.height * previewScale,
             overflow: 'hidden',
-            position: 'relative',
+            borderRadius: 4,
+            boxShadow: '0 4px 24px rgba(51,63,76,0.15)',
           }}>
             <div style={{
               transform: `scale(${previewScale})`,
@@ -157,34 +217,6 @@ export default function StaticEditor({ variation, photoUrl, textPosition, onClos
             </div>
           </div>
         </div>
-
-        {/* Copy info */}
-        <div style={{ fontSize: 9, color: '#8a8270', marginBottom: 16, lineHeight: 1.6 }}>
-          <strong style={{ color: '#333F4C' }}>{variation.product}</strong> · {variation.angle}<br />
-          "{variation.headline}"
-        </div>
-
-        {/* Export button */}
-        <button
-          onClick={handleExport}
-          disabled={exporting}
-          style={{
-            padding: '12px 28px',
-            background: exporting ? '#e0d9c4' : '#DC440A',
-            border: 'none',
-            color: exporting ? '#a09880' : '#fff',
-            fontFamily: 'inherit',
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: 3,
-            textTransform: 'uppercase',
-            cursor: exporting ? 'not-allowed' : 'pointer',
-            width: '100%',
-            borderRadius: 4,
-          }}
-        >
-          {exporting ? 'Exporting...' : `Download PNG (${format.width}×${format.height})`}
-        </button>
       </div>
 
       {/* Hidden full-resolution capture div */}
