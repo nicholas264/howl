@@ -14,12 +14,12 @@ export default function ResultsPanel({
 
       <div className="rhead">
         <div className="filters">
-          <span style={{ fontSize: 9, letterSpacing: 2, color: "#333", textTransform: "uppercase", marginRight: 4 }}>Filter:</span>
+          <span style={{ fontSize: 9, letterSpacing: 2, color: "#8a8270", textTransform: "uppercase", marginRight: 4 }}>Filter:</span>
           <button className={`fbtn ${filterAngle === "all" ? "on" : ""}`} onClick={() => setFilterAngle("all")}>All Angles</button>
           {uniqueAngles.map((a) => (
             <button key={a} className={`fbtn ${filterAngle === a ? "on" : ""}`} onClick={() => setFilterAngle(a)}>{a}</button>
           ))}
-          <span style={{ width: 1, height: 16, background: "#1e1e1e", display: "inline-block", margin: "0 4px" }} />
+          <span style={{ width: 1, height: 16, background: "#e0d9c4", display: "inline-block", margin: "0 4px" }} />
           <button className={`fbtn ${filterProduct === "all" ? "on" : ""}`} onClick={() => setFilterProduct("all")}>All Products</button>
           {uniqueProducts.map((p) => (
             <button key={p} className={`fbtn ${filterProduct === p ? "on" : ""}`} onClick={() => setFilterProduct(p)}>{p}</button>
@@ -41,8 +41,6 @@ export default function ResultsPanel({
               <span className="ctag">{v.angle}</span>
             </div>
             <div className="chl">{v.headline}</div>
-            <div className="cbody">{v.primary_text}</div>
-            {v.description && <div className="cdesc">{v.description}</div>}
             <div className="ccta">{v.cta} →</div>
             <button
               className="static-btn"

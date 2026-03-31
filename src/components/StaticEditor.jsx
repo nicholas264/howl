@@ -51,29 +51,30 @@ export default function StaticEditor({ variation, photoUrl, textPosition, onClos
       position: 'fixed',
       inset: 0,
       zIndex: 9999,
-      background: 'rgba(0,0,0,0.85)',
+      background: 'rgba(51,63,76,0.7)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
     }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{
-        background: '#111',
-        border: '1px solid #1e1e1e',
+        background: '#F9F3DF',
+        border: '1px solid #e0d9c4',
         maxWidth: 900,
         maxHeight: '95vh',
         width: '95vw',
         overflow: 'auto',
         padding: 28,
         position: 'relative',
+        borderRadius: 8,
       }}>
         {/* Close button */}
         <button onClick={onClose} style={{
           position: 'absolute', top: 12, right: 16,
-          background: 'none', border: 'none', color: '#555',
+          background: 'none', border: 'none', color: '#8a8270',
           fontSize: 20, cursor: 'pointer', fontFamily: 'inherit',
         }}>×</button>
 
-        <div style={{ fontSize: 10, letterSpacing: 3, textTransform: 'uppercase', color: '#3a3a3a', marginBottom: 20 }}>
+        <div style={{ fontSize: 10, letterSpacing: 3, textTransform: 'uppercase', color: '#8a8270', marginBottom: 20 }}>
           Static Ad Generator
         </div>
 
@@ -85,14 +86,15 @@ export default function StaticEditor({ variation, photoUrl, textPosition, onClos
               onClick={() => setTemplateId(t.id)}
               style={{
                 padding: '8px 16px',
-                border: `1px solid ${templateId === t.id ? '#d94f2b' : '#1e1e1e'}`,
-                background: templateId === t.id ? '#1a0e0a' : '#0c0c0c',
-                color: templateId === t.id ? '#f0e8de' : '#555',
+                border: `1px solid ${templateId === t.id ? '#DC440A' : '#e0d9c4'}`,
+                background: templateId === t.id ? '#fef8f0' : '#fff',
+                color: templateId === t.id ? '#333F4C' : '#8a8270',
                 fontFamily: 'inherit',
                 fontSize: 10,
                 letterSpacing: 1,
                 textTransform: 'uppercase',
                 cursor: 'pointer',
+                borderRadius: 4,
               }}
             >
               {t.label}
@@ -108,12 +110,13 @@ export default function StaticEditor({ variation, photoUrl, textPosition, onClos
               onClick={() => setFormatKey(key)}
               style={{
                 padding: '6px 14px',
-                border: `1px solid ${formatKey === key ? '#d94f2b' : '#1e1e1e'}`,
-                background: formatKey === key ? '#1a0e0a' : '#0c0c0c',
-                color: formatKey === key ? '#f0e8de' : '#555',
+                border: `1px solid ${formatKey === key ? '#DC440A' : '#e0d9c4'}`,
+                background: formatKey === key ? '#fef8f0' : '#fff',
+                color: formatKey === key ? '#333F4C' : '#8a8270',
                 fontFamily: 'inherit',
                 fontSize: 10,
                 cursor: 'pointer',
+                borderRadius: 4,
               }}
             >
               {f.label} ({f.width}×{f.height})
@@ -126,10 +129,11 @@ export default function StaticEditor({ variation, photoUrl, textPosition, onClos
           display: 'flex',
           justifyContent: 'center',
           marginBottom: 20,
-          background: '#0a0a0a',
+          background: '#fff',
           padding: 20,
-          border: '1px solid #1a1a1a',
+          border: '1px solid #e0d9c4',
           overflow: 'hidden',
+          borderRadius: 6,
         }}>
           <div style={{
             width: format.width * previewScale,
@@ -155,8 +159,8 @@ export default function StaticEditor({ variation, photoUrl, textPosition, onClos
         </div>
 
         {/* Copy info */}
-        <div style={{ fontSize: 9, color: '#444', marginBottom: 16, lineHeight: 1.6 }}>
-          <strong style={{ color: '#666' }}>{variation.product}</strong> · {variation.angle}<br />
+        <div style={{ fontSize: 9, color: '#8a8270', marginBottom: 16, lineHeight: 1.6 }}>
+          <strong style={{ color: '#333F4C' }}>{variation.product}</strong> · {variation.angle}<br />
           "{variation.headline}"
         </div>
 
@@ -166,9 +170,9 @@ export default function StaticEditor({ variation, photoUrl, textPosition, onClos
           disabled={exporting}
           style={{
             padding: '12px 28px',
-            background: exporting ? '#1e1e1e' : '#d94f2b',
+            background: exporting ? '#e0d9c4' : '#DC440A',
             border: 'none',
-            color: exporting ? '#333' : '#fff',
+            color: exporting ? '#a09880' : '#fff',
             fontFamily: 'inherit',
             fontSize: 11,
             fontWeight: 700,
@@ -176,6 +180,7 @@ export default function StaticEditor({ variation, photoUrl, textPosition, onClos
             textTransform: 'uppercase',
             cursor: exporting ? 'not-allowed' : 'pointer',
             width: '100%',
+            borderRadius: 4,
           }}
         >
           {exporting ? 'Exporting...' : `Download PNG (${format.width}×${format.height})`}
@@ -194,6 +199,7 @@ export default function StaticEditor({ variation, photoUrl, textPosition, onClos
             photoUrl={photoUrl}
             format={formatKey}
             dimensions={format}
+            textPosition={textPosition}
           />
         </div>
       </div>

@@ -102,7 +102,7 @@ export default function HowlAdEngine() {
   const uniqueProducts = [...new Set(variations.map((v) => v.product))];
 
   return (
-    <div style={{ minHeight: "100vh", background: "#09090b", color: "#e4dfd6", fontFamily: "'JetBrains Mono', 'SF Mono', monospace" }}>
+    <div style={{ minHeight: "100vh", background: "#F9F3DF", color: "#333F4C", fontFamily: "'JetBrains Mono', 'SF Mono', monospace" }}>
       <div className="hd">
         <div className="hd-logo"><b>HOWL</b> / Ad Engine</div>
         <div className="hd-sub">938 Reviews × Claude</div>
