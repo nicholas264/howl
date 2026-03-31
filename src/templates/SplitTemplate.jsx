@@ -3,15 +3,12 @@ import { COLORS, FONTS, LOGOS } from '../brand';
 export default function SplitTemplate({ variation, photoUrl, format, dimensions, textPosition }) {
   const isStory = format === 'story';
   const photoPercent = isStory ? 55 : 60;
-  const headlineSize = isStory ? 58 : 48;
-  const bodySize = isStory ? 26 : 22;
-  const ctaSize = isStory ? 24 : 20;
+  const headlineSize = isStory ? 64 : 52;
+  const ctaSize = isStory ? 26 : 22;
   const logoWidth = isStory ? 100 : 90;
   const padding = isStory ? 52 : 40;
 
   const vPos = textPosition?.vertical || 'bottom';
-
-  // Split can flip: photo top + text bottom, or text top + photo bottom
   const textOnTop = vPos === 'top';
 
   const photoHeight = Math.round(dimensions.height * photoPercent / 100);
@@ -43,7 +40,9 @@ export default function SplitTemplate({ variation, photoUrl, format, dimensions,
       padding: padding,
       display: 'flex',
       flexDirection: 'column',
+      alignItems: 'center',
       justifyContent: 'center',
+      textAlign: 'center',
       position: 'relative',
     }}>
       <div style={{
@@ -54,22 +53,9 @@ export default function SplitTemplate({ variation, photoUrl, format, dimensions,
         letterSpacing: FONTS.headline.letterSpacing,
         color: COLORS.natural,
         lineHeight: 1.1,
-        marginBottom: 14,
-      }}>
-        {variation.headline}
-      </div>
-
-      <div style={{
-        fontFamily: FONTS.body.family,
-        fontWeight: FONTS.body.weight,
-        fontSize: bodySize,
-        letterSpacing: FONTS.body.letterSpacing,
-        color: COLORS.natural,
-        opacity: 0.8,
-        lineHeight: 1.4,
         marginBottom: 20,
       }}>
-        {variation.primary_text}
+        {variation.headline}
       </div>
 
       <div style={{
@@ -83,7 +69,7 @@ export default function SplitTemplate({ variation, photoUrl, format, dimensions,
         {variation.cta} »
       </div>
 
-      {/* Logo in corner of copy section */}
+      {/* Logo bottom-right */}
       <img
         src={LOGOS.stackedWhite}
         alt="HOWL"

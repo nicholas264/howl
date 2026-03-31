@@ -32,7 +32,7 @@ export default function EditorialTemplate({ variation, photoUrl, format, dimensi
         }}
       />
 
-      {/* Branded strip — top or bottom based on white space analysis */}
+      {/* Branded strip — top or bottom */}
       <div style={{
         position: 'absolute',
         ...(vPos === 'top' ? { top: 0 } : { bottom: 0 }),
@@ -42,8 +42,10 @@ export default function EditorialTemplate({ variation, photoUrl, format, dimensi
         backgroundColor: 'rgba(51, 63, 76, 0.95)',
         display: 'flex',
         alignItems: 'center',
+        justifyContent: 'center',
         padding: `0 ${padding}px`,
         gap: padding,
+        textAlign: 'center',
       }}>
         {/* Logo left */}
         <img

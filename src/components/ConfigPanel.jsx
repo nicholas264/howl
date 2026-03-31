@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { PRODUCTS, ANGLES, AVATARS, PLATFORMS, COPY_COUNT_OPTIONS } from '../data';
 
 export default function ConfigPanel({
@@ -10,8 +11,9 @@ export default function ConfigPanel({
   productPhoto, onPhotoChange,
   loading, error, generate,
 }) {
-  const handleFileSelect = (e) => {
-    const file = e.target.files?.[0];
+  const [dragging, setDragging] = useState(false);
+
+  const processFile = (file) => {
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
       alert('File must be under 10MB');
@@ -42,6 +44,25 @@ export default function ConfigPanel({
       img.src = ev.target.result;
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleFileSelect = (e) => processFile(e.target.files?.[0]);
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    processFile(file);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setDragging(false);
   };
 
   return (
@@ -119,10 +140,18 @@ export default function ConfigPanel({
             <button className="photo-remove" onClick={() => onPhotoChange(null)}>Remove Photo</button>
           </div>
         ) : (
-          <label className="photo-upload" style={{ display: 'block' }}>
+          <label
+            className={`photo-upload ${dragging ? 'dragging' : ''}`}
+            style={{ display: 'block' }}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+          >
             <input type="file" accept="image/jpeg,image/png" onChange={handleFileSelect} style={{ display: 'none' }} />
-            <div style={{ fontSize: 11, color: '#555' }}>Click to upload product photo (JPEG/PNG, max 10MB)</div>
-            <div style={{ fontSize: 9, color: '#333', marginTop: 4 }}>Used for static ad image generation</div>
+            <div style={{ fontSize: 11, color: dragging ? '#d94f2b' : '#555' }}>
+              {dragging ? 'Drop image here' : 'Drag & drop product photo here, or click to browse'}
+            </div>
+            <div style={{ fontSize: 9, color: '#333', marginTop: 4 }}>JPEG/PNG, max 10MB</div>
           </label>
         )}
       </div>
