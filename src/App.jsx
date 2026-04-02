@@ -23,15 +23,33 @@ export default function HowlAdEngine() {
   const [productPhoto, setProductPhoto] = useState(null);
   const [textPosition, setTextPosition] = useState({ vertical: 'bottom', horizontal: 'left' });
   const [staticVariation, setStaticVariation] = useState(null);
+  const [savedImages, setSavedImages] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('howl_saved_images') || '[]'); }
+    catch { return []; }
+  });
 
   const handlePhotoChange = useCallback(async (dataUrl) => {
     setProductPhoto(dataUrl);
     if (dataUrl) {
       const position = await analyzeImage(dataUrl);
       setTextPosition(position);
+      setSavedImages(prev => {
+        const filtered = prev.filter(img => img.url !== dataUrl);
+        const next = [{ url: dataUrl, id: Date.now() }, ...filtered].slice(0, 6);
+        try { localStorage.setItem('howl_saved_images', JSON.stringify(next)); } catch {}
+        return next;
+      });
     } else {
       setTextPosition({ vertical: 'bottom', horizontal: 'left' });
     }
+  }, []);
+
+  const removeSavedImage = useCallback((id) => {
+    setSavedImages(prev => {
+      const next = prev.filter(img => img.id !== id);
+      try { localStorage.setItem('howl_saved_images', JSON.stringify(next)); } catch {}
+      return next;
+    });
   }, []);
 
   const toggleProduct = (id) => setSelectedProducts((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
@@ -120,6 +138,7 @@ export default function HowlAdEngine() {
           copyCount={copyCount} setCopyCount={setCopyCount}
           customContext={customContext} setCustomContext={setCustomContext}
           productPhoto={productPhoto} onPhotoChange={handlePhotoChange}
+          savedImages={savedImages} onRemoveSavedImage={removeSavedImage}
           loading={loading} error={error} generate={generate}
         />
       )}

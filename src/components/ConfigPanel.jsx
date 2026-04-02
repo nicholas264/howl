@@ -8,6 +8,7 @@ export default function ConfigPanel({
   copyCount, setCopyCount,
   customContext, setCustomContext,
   productPhoto, onPhotoChange,
+  savedImages, onRemoveSavedImage,
   loading, error, generate,
 }) {
   const [dragging, setDragging] = useState(false);
@@ -141,6 +142,63 @@ export default function ConfigPanel({
             </div>
             <div style={{ fontSize: 9, color: '#333', marginTop: 4 }}>JPEG/PNG, max 10MB</div>
           </label>
+        )}
+
+        {savedImages && savedImages.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8a8270', marginBottom: 8 }}>
+              Saved Images
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {savedImages.map((img) => (
+                <div
+                  key={img.id}
+                  style={{
+                    position: 'relative',
+                    width: 72,
+                    height: 72,
+                    borderRadius: 4,
+                    overflow: 'hidden',
+                    border: productPhoto === img.url ? '2px solid #DC440A' : '2px solid #e0d9c4',
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                  }}
+                  onClick={() => onPhotoChange(img.url)}
+                  title="Click to use this image"
+                >
+                  <img
+                    src={img.url}
+                    alt=""
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onRemoveSavedImage(img.id); }}
+                    title="Remove from library"
+                    style={{
+                      position: 'absolute',
+                      top: 2,
+                      right: 2,
+                      width: 16,
+                      height: 16,
+                      background: 'rgba(51,63,76,0.75)',
+                      border: 'none',
+                      borderRadius: 2,
+                      color: '#fff',
+                      fontSize: 9,
+                      lineHeight: '16px',
+                      cursor: 'pointer',
+                      padding: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 
