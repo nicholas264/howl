@@ -1,7 +1,7 @@
 export default function ResultsPanel({
   variations, filtered, platform, uniqueAngles, uniqueProducts,
   filterAngle, setFilterAngle, filterProduct, setFilterProduct,
-  exportCSV, setActiveTab, generate, productPhoto, onCreateStatic,
+  exportCSV, setActiveTab, generate, hasSavedImages, onCreateStatic,
 }) {
   return (
     <div className="body">
@@ -44,11 +44,9 @@ export default function ResultsPanel({
             <div className="ccta">{v.cta} →</div>
             <button
               className="static-btn"
-              disabled={!productPhoto}
-              title={!productPhoto ? "Upload a product photo in Configure tab first" : "Create static ad image"}
               onClick={() => onCreateStatic(v)}
             >
-              Create Static Ad
+              {hasSavedImages ? 'Create Static Ad' : 'Create Static Ad ↗'}
             </button>
           </div>
         ))}

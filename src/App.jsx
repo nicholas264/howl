@@ -21,7 +21,6 @@ export default function HowlAdEngine() {
   const [filterAngle, setFilterAngle] = useState("all");
   const [filterProduct, setFilterProduct] = useState("all");
   const [productPhoto, setProductPhoto] = useState(null);
-  const [textPosition, setTextPosition] = useState({ vertical: 'bottom', horizontal: 'left' });
   const [staticVariation, setStaticVariation] = useState(null);
   const [savedImages, setSavedImages] = useState(() => {
     try { return JSON.parse(localStorage.getItem('howl_saved_images') || '[]'); }
@@ -32,15 +31,12 @@ export default function HowlAdEngine() {
     setProductPhoto(dataUrl);
     if (dataUrl) {
       const position = await analyzeImage(dataUrl);
-      setTextPosition(position);
       setSavedImages(prev => {
         const filtered = prev.filter(img => img.url !== dataUrl);
-        const next = [{ url: dataUrl, id: Date.now() }, ...filtered].slice(0, 6);
+        const next = [{ url: dataUrl, id: Date.now(), textPosition: position }, ...filtered].slice(0, 6);
         try { localStorage.setItem('howl_saved_images', JSON.stringify(next)); } catch {}
         return next;
       });
-    } else {
-      setTextPosition({ vertical: 'bottom', horizontal: 'left' });
     }
   }, []);
 
@@ -150,15 +146,16 @@ export default function HowlAdEngine() {
           filterAngle={filterAngle} setFilterAngle={setFilterAngle}
           filterProduct={filterProduct} setFilterProduct={setFilterProduct}
           exportCSV={exportCSV} setActiveTab={setActiveTab} generate={generate}
-          productPhoto={productPhoto} onCreateStatic={setStaticVariation}
+          hasSavedImages={savedImages.length > 0} onCreateStatic={setStaticVariation}
         />
       )}
 
       {staticVariation && (
         <StaticEditor
           variation={staticVariation}
-          photoUrl={productPhoto}
-          textPosition={textPosition}
+          savedImages={savedImages}
+          onAddImage={handlePhotoChange}
+          onRemoveSavedImage={removeSavedImage}
           onClose={() => setStaticVariation(null)}
         />
       )}
