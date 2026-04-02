@@ -26,6 +26,22 @@ export default function HowlAdEngine() {
     try { return JSON.parse(localStorage.getItem('howl_saved_images') || '[]'); }
     catch { return []; }
   });
+  const [favorites, setFavorites] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('howl_favorites') || '[]'); }
+    catch { return []; }
+  });
+
+  const toggleFavorite = useCallback((variation) => {
+    setFavorites(prev => {
+      const key = `${variation.product}__${variation.headline}`;
+      const exists = prev.some(f => `${f.product}__${f.headline}` === key);
+      const next = exists
+        ? prev.filter(f => `${f.product}__${f.headline}` !== key)
+        : [{ ...variation, savedAt: Date.now() }, ...prev].slice(0, 50);
+      try { localStorage.setItem('howl_favorites', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
 
   const handlePhotoChange = useCallback(async (dataUrl) => {
     setProductPhoto(dataUrl);
@@ -147,6 +163,7 @@ export default function HowlAdEngine() {
           filterProduct={filterProduct} setFilterProduct={setFilterProduct}
           exportCSV={exportCSV} setActiveTab={setActiveTab} generate={generate}
           hasSavedImages={savedImages.length > 0} onCreateStatic={setStaticVariation}
+          favorites={favorites} toggleFavorite={toggleFavorite}
         />
       )}
 

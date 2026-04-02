@@ -4,11 +4,13 @@ import { FORMATS } from '../brand';
 import OverlayTemplate from '../templates/OverlayTemplate';
 import SplitTemplate from '../templates/SplitTemplate';
 import EditorialTemplate from '../templates/EditorialTemplate';
+import UGCTemplate from '../templates/UGCTemplate';
 
 const TEMPLATES = [
   { id: 'overlay', label: 'Overlay', Component: OverlayTemplate },
   { id: 'split', label: 'Split', Component: SplitTemplate },
   { id: 'editorial', label: 'Editorial', Component: EditorialTemplate },
+  { id: 'ugc', label: 'UGC Quote', Component: UGCTemplate },
 ];
 
 const DEFAULT_POSITION = { vertical: 'bottom', horizontal: 'left' };

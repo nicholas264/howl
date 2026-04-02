@@ -1,8 +1,9 @@
 import { COLORS, FONTS } from '../brand';
+import { scaleFontSize } from '../utils/scaleFontSize';
 
 export default function OverlayTemplate({ variation, photoUrl, format, dimensions, textPosition }) {
   const isStory = format === 'story';
-  const headlineSize = isStory ? 56 : 46;
+  const headlineSize = scaleFontSize(variation.headline, isStory ? 56 : 46, 28);
   const ctaSize = isStory ? 44 : 36;
   const padding = isStory ? 60 : 48;
 

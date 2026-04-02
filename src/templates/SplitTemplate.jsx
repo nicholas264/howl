@@ -1,9 +1,10 @@
 import { COLORS, FONTS } from '../brand';
+import { scaleFontSize } from '../utils/scaleFontSize';
 
 export default function SplitTemplate({ variation, photoUrl, format, dimensions, textPosition }) {
   const isStory = format === 'story';
   const photoPercent = isStory ? 55 : 60;
-  const headlineSize = isStory ? 52 : 42;
+  const headlineSize = scaleFontSize(variation.headline, isStory ? 52 : 42, 26);
   const ctaSize = isStory ? 44 : 36;
   const padding = isStory ? 52 : 40;
 

@@ -1,9 +1,10 @@
 import { COLORS, FONTS } from '../brand';
+import { scaleFontSize } from '../utils/scaleFontSize';
 
 export default function EditorialTemplate({ variation, photoUrl, format, dimensions, textPosition }) {
   const isStory = format === 'story';
   const stripHeight = Math.round(dimensions.height * 0.25);
-  const headlineSize = isStory ? 36 : 28;
+  const headlineSize = scaleFontSize(variation.headline, isStory ? 36 : 28, 18);
   const ctaSize = isStory ? 44 : 36;
   const padding = isStory ? 40 : 32;
 
