@@ -1,4 +1,4 @@
-import { COLORS, FONTS } from '../brand';
+import { COLORS, FONTS, LOGOS } from '../brand';
 import { scaleFontSize } from '../utils/scaleFontSize';
 
 export default function EditorialTemplate({ variation, photoUrl, format, dimensions, textPosition }) {
@@ -55,6 +55,16 @@ export default function EditorialTemplate({ variation, photoUrl, format, dimensi
         gap: padding,
         textAlign: 'center',
       }}>
+        {/* Logo */}
+        <img
+          src={isLight ? LOGOS.stackedBlack : LOGOS.stackedWhite}
+          alt="HOWL"
+          style={{ height: isStory ? 48 : 36, objectFit: 'contain', flexShrink: 0 }}
+        />
+
+        {/* Divider */}
+        <div style={{ width: 1, height: '50%', background: isLight ? 'rgba(51,63,76,0.2)' : 'rgba(249,243,223,0.2)', flexShrink: 0 }} />
+
         {/* Headline */}
         <div style={{
           flex: 1,
@@ -65,6 +75,8 @@ export default function EditorialTemplate({ variation, photoUrl, format, dimensi
           letterSpacing: FONTS.headline.letterSpacing,
           color: headlineColor,
           lineHeight: 1.15,
+          overflowWrap: 'break-word',
+          wordBreak: 'break-word',
         }}>
           {variation.headline}
         </div>

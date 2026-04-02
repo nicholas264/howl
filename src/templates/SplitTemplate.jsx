@@ -1,4 +1,4 @@
-import { COLORS, FONTS } from '../brand';
+import { COLORS, FONTS, LOGOS } from '../brand';
 import { scaleFontSize } from '../utils/scaleFontSize';
 
 export default function SplitTemplate({ variation, photoUrl, format, dimensions, textPosition }) {
@@ -50,6 +50,7 @@ export default function SplitTemplate({ variation, photoUrl, format, dimensions,
       justifyContent: 'center',
       textAlign: 'center',
       position: 'relative',
+      boxSizing: 'border-box',
     }}>
       <div style={{
         fontFamily: FONTS.headline.family,
@@ -60,6 +61,9 @@ export default function SplitTemplate({ variation, photoUrl, format, dimensions,
         color: headlineColor,
         lineHeight: 1.1,
         marginBottom: 20,
+        overflowWrap: 'break-word',
+        wordBreak: 'break-word',
+        maxWidth: '100%',
       }}>
         {variation.headline}
       </div>
@@ -73,6 +77,15 @@ export default function SplitTemplate({ variation, photoUrl, format, dimensions,
         color: ctaColor,
       }}>
         →
+      </div>
+
+      {/* Logo */}
+      <div style={{ position: 'absolute', bottom: 20, right: 28 }}>
+        <img
+          src={isLight ? LOGOS.stackedBlack : LOGOS.stackedWhite}
+          alt="HOWL"
+          style={{ height: isStory ? 44 : 34, objectFit: 'contain' }}
+        />
       </div>
     </div>
   );
