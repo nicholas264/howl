@@ -3,8 +3,8 @@ import { scaleFontSize } from '../utils/scaleFontSize';
 
 export default function UGCTemplate({ variation, photoUrl, format, dimensions }) {
   const isStory = format === 'story';
-  const headlineSize = scaleFontSize(variation.headline, isStory ? 68 : 54, 30);
-  const padding = isStory ? 88 : 64;
+  const headlineSize = scaleFontSize(variation.headline, isStory ? 64 : 52, 28);
+  const padding = isStory ? 80 : 60;
 
   return (
     <div style={{
@@ -12,96 +12,103 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions })
       height: dimensions.height,
       position: 'relative',
       overflow: 'hidden',
-      backgroundColor: '#FFFFFF',
+      backgroundColor: COLORS.natural,
       display: 'flex',
       flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: `${padding}px`,
       boxSizing: 'border-box',
     }}>
 
-      {/* Optional small product image */}
-      {photoUrl && (
+      {/* Top accent bar */}
+      <div style={{ height: 8, background: COLORS.flame, flexShrink: 0 }} />
+
+      {/* Main content — centered */}
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: `${padding * 0.6}px ${padding}px`,
+        textAlign: 'center',
+        boxSizing: 'border-box',
+      }}>
+
+        {/* Stars */}
         <div style={{
-          width: isStory ? 260 : 200,
-          height: isStory ? 260 : 200,
-          marginBottom: isStory ? 48 : 36,
+          fontSize: isStory ? 40 : 32,
+          color: COLORS.flame,
+          letterSpacing: 6,
+          marginBottom: isStory ? 40 : 28,
           flexShrink: 0,
         }}>
-          <img src={photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+          ★★★★★
         </div>
-      )}
 
-      {/* Opening quote mark */}
-      <div style={{
-        alignSelf: 'flex-start',
-        fontFamily: 'Georgia, serif',
-        fontSize: isStory ? 120 : 96,
-        color: COLORS.flame,
-        lineHeight: 0.65,
-        marginBottom: isStory ? 32 : 24,
-        userSelect: 'none',
-      }}>"</div>
+        {/* Headline */}
+        <div style={{
+          fontFamily: FONTS.headline.family,
+          fontWeight: FONTS.headline.weight,
+          fontSize: headlineSize,
+          textTransform: FONTS.headline.transform,
+          letterSpacing: FONTS.headline.letterSpacing,
+          color: COLORS.midnightSky,
+          lineHeight: 1.12,
+          overflowWrap: 'break-word',
+          wordBreak: 'break-word',
+          maxWidth: '100%',
+        }}>
+          {variation.headline}
+        </div>
 
-      {/* Headline */}
-      <div style={{
-        fontFamily: FONTS.headline.family,
-        fontWeight: FONTS.headline.weight,
-        fontSize: headlineSize,
-        textTransform: FONTS.headline.transform,
-        letterSpacing: FONTS.headline.letterSpacing,
-        color: COLORS.midnightSky,
-        lineHeight: 1.12,
-        textAlign: 'center',
-      }}>
-        {variation.headline}
+        {/* Divider */}
+        <div style={{
+          width: 48,
+          height: 3,
+          background: COLORS.flame,
+          margin: `${isStory ? 44 : 32}px auto`,
+          flexShrink: 0,
+        }} />
+
+        {/* Attribution */}
+        <div style={{
+          fontFamily: FONTS.subHeadline.family,
+          fontWeight: FONTS.subHeadline.weight,
+          fontSize: isStory ? 24 : 18,
+          textTransform: 'uppercase',
+          letterSpacing: '0.18em',
+          color: '#9a8f80',
+          flexShrink: 0,
+        }}>
+          Verified HOWL Customer
+        </div>
+
+        {/* 938 reviews social proof */}
+        <div style={{
+          fontFamily: FONTS.body.family,
+          fontSize: isStory ? 22 : 16,
+          color: '#b0a898',
+          marginTop: isStory ? 16 : 10,
+          letterSpacing: '0.05em',
+          flexShrink: 0,
+        }}>
+          938 Reviews · 90.4% Five Star
+        </div>
       </div>
 
-      {/* Divider */}
+      {/* Bottom bar with logo */}
       <div style={{
-        width: 48,
-        height: 3,
-        background: COLORS.flame,
-        margin: `${isStory ? 40 : 30}px auto`,
-        flexShrink: 0,
-      }} />
-
-      {/* Attribution */}
-      <div style={{
-        fontFamily: FONTS.subHeadline.family,
-        fontWeight: FONTS.subHeadline.weight,
-        fontSize: isStory ? 26 : 20,
-        textTransform: 'uppercase',
-        letterSpacing: '0.15em',
-        color: '#9a9080',
-      }}>
-        Verified HOWL Customer
-      </div>
-
-      {/* Stars */}
-      <div style={{
-        fontSize: isStory ? 36 : 28,
-        color: COLORS.flame,
-        marginTop: isStory ? 20 : 14,
-        letterSpacing: 4,
-      }}>
-        ★★★★★
-      </div>
-
-      {/* Logo — bottom center */}
-      <div style={{
-        position: 'absolute',
-        bottom: isStory ? 56 : 40,
-        left: 0,
-        right: 0,
+        height: isStory ? 100 : 80,
+        borderTop: `1px solid rgba(51,63,76,0.1)`,
         display: 'flex',
+        alignItems: 'center',
         justifyContent: 'center',
+        flexShrink: 0,
+        backgroundColor: COLORS.natural,
       }}>
         <img
           src={LOGOS.stackedBlack}
           alt="HOWL"
-          style={{ height: isStory ? 56 : 44, objectFit: 'contain' }}
+          style={{ height: isStory ? 52 : 40, objectFit: 'contain' }}
         />
       </div>
     </div>
