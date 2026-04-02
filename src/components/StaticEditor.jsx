@@ -44,6 +44,7 @@ export default function StaticEditor({ variation, savedImages, onAddImage, onRem
   const [formatKey, setFormatKey] = useState('square');
   const [exporting, setExporting] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [headline, setHeadline] = useState(variation.headline);
 
   const [selectedIds, setSelectedIds] = useState(() =>
     savedImages.length > 0 ? new Set([savedImages[0].id]) : new Set()
@@ -72,6 +73,7 @@ export default function StaticEditor({ variation, savedImages, onAddImage, onRem
 
   const previewImage = savedImages.find(img => img.id === previewId);
   const selectedImages = savedImages.filter(img => selectedIds.has(img.id));
+  const activeVariation = { ...variation, headline };
 
   const toggleSelect = (id) => {
     setSelectedIds(prev => {
@@ -173,11 +175,32 @@ export default function StaticEditor({ variation, savedImages, onAddImage, onRem
               ))}
             </div>
 
-            {/* Copy info */}
-            <div style={{ fontSize: 9, color: '#8a8270', lineHeight: 1.6, marginBottom: 20 }}>
-              <strong style={{ color: '#333F4C' }}>{variation.product}</strong> · {variation.angle}<br />
-              <span style={{ color: '#333F4C' }}>"{variation.headline}"</span>
+            {/* Editable copy */}
+            <div style={{ fontSize: 9, color: '#8a8270', marginBottom: 6 }}>
+              <strong style={{ color: '#333F4C' }}>{variation.product}</strong> · {variation.angle}
             </div>
+            <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8a8270', marginBottom: 6 }}>Headline</div>
+            <textarea
+              value={headline}
+              onChange={(e) => setHeadline(e.target.value)}
+              rows={3}
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                padding: '8px 10px', marginBottom: 4,
+                border: '1px solid #e0d9c4', borderRadius: 4,
+                background: '#fff', color: '#333F4C',
+                fontFamily: 'inherit', fontSize: 11, lineHeight: 1.5,
+                resize: 'vertical', outline: 'none',
+              }}
+            />
+            <button
+              onClick={() => setHeadline(variation.headline)}
+              style={{
+                background: 'none', border: 'none', padding: 0,
+                fontSize: 8, color: '#8a8270', cursor: 'pointer',
+                letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16,
+              }}
+            >Reset to AI copy</button>
 
             {/* Image picker */}
             <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8a8270', marginBottom: 8 }}>
@@ -280,7 +303,7 @@ export default function StaticEditor({ variation, savedImages, onAddImage, onRem
             }}>
               <div style={{ transform: `scale(${previewScale})`, transformOrigin: 'top left', width: format.width, height: format.height }}>
                 <TemplateComponent
-                  variation={variation}
+                  variation={activeVariation}
                   photoUrl={previewImage.url}
                   format={formatKey}
                   dimensions={format}
@@ -301,7 +324,7 @@ export default function StaticEditor({ variation, savedImages, onAddImage, onRem
         {selectedImages.map(img => (
           <div key={img.id} ref={el => { captureRefs.current[img.id] = el; }} style={{ width: format.width, height: format.height }}>
             <TemplateComponent
-              variation={variation}
+              variation={activeVariation}
               photoUrl={img.url}
               format={formatKey}
               dimensions={format}
