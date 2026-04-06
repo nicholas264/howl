@@ -7,6 +7,17 @@ import UGCTemplate from '../templates/UGCTemplate';
 const LS_REVIEWS = 'howl_review_ads_reviews';
 const LS_NAME = 'howl_review_ads_name';
 
+const PRODUCT_NAMES = {
+  'r1': 'HOWL R1',
+  'r4mkii': 'HOWL R4 MkII',
+  'r4': 'HOWL R4',
+};
+
+function verifiedLabel(handle) {
+  const name = PRODUCT_NAMES[handle] || 'HOWL';
+  return `Verified ${name} Customer`;
+}
+
 function parseLoox(csv) {
   const { data } = Papa.parse(csv, { header: true, skipEmptyLines: true });
   return data
@@ -309,7 +320,8 @@ export default function ReviewAdTool() {
               variation={{ headline: previewReview.quote }}
               format={formatKeys[0]}
               dimensions={pvFmt}
-              attribution={previewReview.nickname}
+              reviewerName={previewReview.nickname}
+              attribution={verifiedLabel(previewReview.handle)}
             />
           </PreviewCard>
         ) : (
@@ -325,7 +337,7 @@ export default function ReviewAdTool() {
             const key = `${r.id}_${fk}`;
             return (
               <div key={key} ref={el => { captureRefs.current[key] = el; }} style={{ width: fmt.width, height: fmt.height }}>
-                <UGCTemplate variation={{ headline: r.quote }} format={fk} dimensions={fmt} attribution={r.nickname} />
+                <UGCTemplate variation={{ headline: r.quote }} format={fk} dimensions={fmt} reviewerName={r.nickname} attribution={verifiedLabel(r.handle)} />
               </div>
             );
           })

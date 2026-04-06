@@ -1,7 +1,7 @@
 import { COLORS, FONTS, LOGOS } from '../brand';
 import { scaleFontSize } from '../utils/scaleFontSize';
 
-export default function UGCTemplate({ variation, photoUrl, format, dimensions, attribution, socialProof }) {
+export default function UGCTemplate({ variation, photoUrl, format, dimensions, attribution, socialProof, reviewerName }) {
   const isStory = format === 'story';
   const headlineSize = scaleFontSize(variation.headline, isStory ? 64 : 52, 28);
   const padding = isStory ? 80 : 60;
@@ -69,11 +69,26 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
           flexShrink: 0,
         }} />
 
-        {/* Attribution */}
+        {/* Reviewer name */}
+        {reviewerName && (
+          <div style={{
+            fontFamily: FONTS.subHeadline.family,
+            fontWeight: FONTS.subHeadline.weight,
+            fontSize: isStory ? 26 : 20,
+            letterSpacing: '0.12em',
+            color: '#6b6055',
+            flexShrink: 0,
+            marginBottom: isStory ? 8 : 6,
+          }}>
+            {reviewerName}
+          </div>
+        )}
+
+        {/* Verified label */}
         <div style={{
           fontFamily: FONTS.subHeadline.family,
           fontWeight: FONTS.subHeadline.weight,
-          fontSize: isStory ? 24 : 18,
+          fontSize: isStory ? 20 : 15,
           textTransform: 'uppercase',
           letterSpacing: '0.18em',
           color: '#9a8f80',
