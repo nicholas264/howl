@@ -139,7 +139,7 @@ export default function ReviewAdTool() {
     const attribution = manualReviewer.trim() || undefined;
 
     return (
-      <div style={{ display: 'flex', minHeight: 'calc(100vh - 100px)' }}>
+      <div style={{ display: 'flex', height: 'calc(100vh - 100px)', overflow: 'hidden' }}>
         <div style={leftPanel}>
           <div>
             <div style={label}>Import Loox CSV</div>
@@ -209,9 +209,9 @@ export default function ReviewAdTool() {
   const exportTotal = selectedCount * formatKeys.length;
 
   return (
-    <div style={{ display: 'flex', minHeight: 'calc(100vh - 100px)' }}>
+    <div style={{ display: 'flex', height: 'calc(100vh - 100px)', overflow: 'hidden' }}>
       {/* Left panel */}
-      <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #e0d9c4', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #e0d9c4', display: 'flex', flexDirection: 'column', height: '100%' }}>
 
         {/* Header */}
         <div style={{ padding: '14px 20px', borderBottom: '1px solid #e0d9c4', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -281,6 +281,7 @@ export default function ReviewAdTool() {
                       next.has(r.id) ? next.delete(r.id) : next.add(r.id);
                       return next;
                     });
+                    setPreviewId(r.id);
                   }}
                   onClick={e => e.stopPropagation()}
                   style={{ marginTop: 3, flexShrink: 0, accentColor: '#DC440A' }}
@@ -363,7 +364,7 @@ function PreviewBox({ fmt, scale, children }) {
   );
 }
 
-const leftPanel = { width: 300, flexShrink: 0, padding: 32, borderRight: '1px solid #e0d9c4', display: 'flex', flexDirection: 'column', gap: 24 };
+const leftPanel = { width: 300, flexShrink: 0, padding: 32, borderRight: '1px solid #e0d9c4', display: 'flex', flexDirection: 'column', gap: 24, height: '100%', overflowY: 'auto' };
 const rightPanel = { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0ead4', padding: 40 };
 const label = { fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8a8270', marginBottom: 8, fontWeight: 600 };
 const textareaStyle = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #e0d9c4', borderRadius: 4, background: '#fff', color: '#333F4C', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.5, resize: 'vertical', outline: 'none' };
