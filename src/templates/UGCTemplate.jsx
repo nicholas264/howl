@@ -3,7 +3,7 @@ import { scaleFontSize } from '../utils/scaleFontSize';
 
 export default function UGCTemplate({ variation, photoUrl, format, dimensions, attribution, socialProof, reviewerName }) {
   const isStory = format === 'story';
-  const headlineSize = scaleFontSize(variation.headline, isStory ? 64 : 52, 28);
+  const headlineSize = scaleFontSize(variation.headline, isStory ? 88 : 72, 32);
   const padding = isStory ? 80 : 60;
 
   return (
@@ -35,10 +35,10 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
 
         {/* Stars */}
         <div style={{
-          fontSize: isStory ? 40 : 32,
+          fontSize: isStory ? 60 : 48,
           color: COLORS.flame,
-          letterSpacing: 6,
-          marginBottom: isStory ? 40 : 28,
+          letterSpacing: 8,
+          marginBottom: isStory ? 48 : 36,
           flexShrink: 0,
         }}>
           ★★★★★
@@ -74,11 +74,11 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
           <div style={{
             fontFamily: FONTS.subHeadline.family,
             fontWeight: FONTS.subHeadline.weight,
-            fontSize: isStory ? 26 : 20,
+            fontSize: isStory ? 36 : 28,
             letterSpacing: '0.12em',
             color: '#6b6055',
             flexShrink: 0,
-            marginBottom: isStory ? 8 : 6,
+            marginBottom: isStory ? 10 : 8,
           }}>
             {reviewerName}
           </div>
@@ -88,7 +88,7 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
         <div style={{
           fontFamily: FONTS.subHeadline.family,
           fontWeight: FONTS.subHeadline.weight,
-          fontSize: isStory ? 20 : 15,
+          fontSize: isStory ? 28 : 22,
           textTransform: 'uppercase',
           letterSpacing: '0.18em',
           color: '#9a8f80',
@@ -100,9 +100,9 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
         {/* Social proof */}
         <div style={{
           fontFamily: FONTS.body.family,
-          fontSize: isStory ? 22 : 16,
+          fontSize: isStory ? 30 : 22,
           color: '#b0a898',
-          marginTop: isStory ? 16 : 10,
+          marginTop: isStory ? 18 : 12,
           letterSpacing: '0.05em',
           flexShrink: 0,
         }}>
