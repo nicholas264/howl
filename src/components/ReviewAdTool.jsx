@@ -23,6 +23,7 @@ export default function ReviewAdTool() {
   const [selected, setSelected] = useState(new Set());
   const [previewId, setPreviewId] = useState(null);
   const [ratingFilter, setRatingFilter] = useState(5);
+  const [productFilter, setProductFilter] = useState('all');
   const [formatKeys, setFormatKeys] = useState(['square']);
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState('');
@@ -112,7 +113,11 @@ export default function ReviewAdTool() {
     }
   }, [reviews, selected, formatKeys]);
 
-  const filtered = reviews.filter(r => ratingFilter === 0 || r.rating === ratingFilter);
+  const products = [...new Set(reviews.map(r => r.handle).filter(Boolean))].sort();
+  const filtered = reviews.filter(r =>
+    (ratingFilter === 0 || r.rating === ratingFilter) &&
+    (productFilter === 'all' || r.handle === productFilter)
+  );
   const previewReview = reviews.find(r => r.id === previewId) || filtered[0] || null;
   const selectedCount = filtered.filter(r => selected.has(r.id)).length;
 
@@ -217,7 +222,7 @@ export default function ReviewAdTool() {
           </label>
         </div>
 
-        {/* Filters */}
+        {/* Rating filter */}
         <div style={{ padding: '10px 20px', borderBottom: '1px solid #e0d9c4', display: 'flex', gap: 6, alignItems: 'center' }}>
           {[0, 5, 4, 3].map(r => (
             <button key={r} onClick={() => setRatingFilter(r)} style={{
@@ -232,6 +237,21 @@ export default function ReviewAdTool() {
             <button onClick={() => setSelected(new Set())} style={microBtn}>None</button>
           </div>
         </div>
+
+        {/* Product filter */}
+        {products.length > 1 && (
+          <div style={{ padding: '10px 20px', borderBottom: '1px solid #e0d9c4', display: 'flex', gap: 6, alignItems: 'center' }}>
+            {['all', ...products].map(p => (
+              <button key={p} onClick={() => setProductFilter(p)} style={{
+                padding: '3px 8px', border: `1px solid ${productFilter === p ? '#DC440A' : '#e0d9c4'}`,
+                background: productFilter === p ? '#fef8f0' : '#fff',
+                color: productFilter === p ? '#DC440A' : '#8a8270',
+                fontFamily: 'inherit', fontSize: 9, cursor: 'pointer', borderRadius: 3,
+                textTransform: 'uppercase', letterSpacing: 1,
+              }}>{p === 'all' ? 'All' : p}</button>
+            ))}
+          </div>
+        )}
 
         {/* Review list */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
