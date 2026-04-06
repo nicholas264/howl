@@ -4,6 +4,9 @@ import { toPng } from 'html-to-image';
 import { FORMATS } from '../brand';
 import UGCTemplate from '../templates/UGCTemplate';
 
+const LS_REVIEWS = 'howl_review_ads_reviews';
+const LS_NAME = 'howl_review_ads_name';
+
 function parseLoox(csv) {
   const { data } = Papa.parse(csv, { header: true, skipEmptyLines: true });
   return data
@@ -17,11 +20,18 @@ function parseLoox(csv) {
     }));
 }
 
+function loadSaved() {
+  try { return JSON.parse(localStorage.getItem(LS_REVIEWS) || '[]'); } catch { return []; }
+}
+
 export default function ReviewAdTool() {
-  // CSV mode
-  const [reviews, setReviews] = useState([]);
-  const [selected, setSelected] = useState(new Set());
-  const [previewId, setPreviewId] = useState(null);
+  const [reviews, setReviews] = useState(loadSaved);
+  const [csvName, setCsvName] = useState(() => localStorage.getItem(LS_NAME) || '');
+  const [selected, setSelected] = useState(() => {
+    const saved = loadSaved();
+    return new Set(saved.filter(r => r.rating === 5).map(r => r.id));
+  });
+  const [previewId, setPreviewId] = useState(() => loadSaved()[0]?.id || null);
   const [ratingFilter, setRatingFilter] = useState(5);
   const [productFilter, setProductFilter] = useState('all');
   const [formatKeys, setFormatKeys] = useState(['square']);
@@ -29,7 +39,7 @@ export default function ReviewAdTool() {
   const [exportProgress, setExportProgress] = useState('');
   const [dragging, setDragging] = useState(false);
 
-  // Single mode
+  // Single / no-CSV mode
   const [manualQuote, setManualQuote] = useState('');
   const [manualReviewer, setManualReviewer] = useState('');
   const [manualFormat, setManualFormat] = useState('square');
@@ -37,18 +47,30 @@ export default function ReviewAdTool() {
   const captureRefs = useRef({});
   const singleCaptureRef = useRef(null);
 
-  // --- CSV handling ---
   const handleFile = (file) => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (e) => {
       const parsed = parseLoox(e.target.result);
       setReviews(parsed);
+      setCsvName(file.name);
       const fiveStars = new Set(parsed.filter(r => r.rating === 5).map(r => r.id));
       setSelected(fiveStars);
       setPreviewId(parsed[0]?.id || null);
+      setRatingFilter(5);
+      setProductFilter('all');
+      try { localStorage.setItem(LS_REVIEWS, JSON.stringify(parsed)); } catch {}
+      try { localStorage.setItem(LS_NAME, file.name); } catch {}
     };
     reader.readAsText(file);
+  };
+
+  const clearCSV = () => {
+    setReviews([]);
+    setCsvName('');
+    setSelected(new Set());
+    setPreviewId(null);
+    try { localStorage.removeItem(LS_REVIEWS); localStorage.removeItem(LS_NAME); } catch {}
   };
 
   const handleDrop = (e) => {
@@ -57,7 +79,6 @@ export default function ReviewAdTool() {
     handleFile(e.dataTransfer.files?.[0]);
   };
 
-  // --- Single export ---
   const handleSingleExport = useCallback(async () => {
     if (!manualQuote.trim() || !singleCaptureRef.current) return;
     setExporting(true);
@@ -69,17 +90,11 @@ export default function ReviewAdTool() {
       const dataUrl = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
       const a = document.createElement('a');
       a.download = `howl_review_${fmt.label.replace(':', 'x')}_${Date.now()}.png`;
-      a.href = dataUrl;
-      a.click();
-    } catch (err) {
-      console.error(err);
-      alert('Export failed. Please try again.');
-    } finally {
-      setExporting(false);
-    }
+      a.href = dataUrl; a.click();
+    } catch (err) { console.error(err); alert('Export failed.'); }
+    finally { setExporting(false); }
   }, [manualQuote, manualFormat]);
 
-  // --- Bulk export ---
   const handleBulkExport = useCallback(async () => {
     const toExport = filtered.filter(r => selected.has(r.id));
     if (toExport.length === 0) return;
@@ -99,18 +114,12 @@ export default function ReviewAdTool() {
           const dataUrl = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
           const a = document.createElement('a');
           a.download = `howl_${review.handle || 'review'}_${fmt.label.replace(':', 'x')}_${count}.png`;
-          a.href = dataUrl;
-          a.click();
+          a.href = dataUrl; a.click();
           await new Promise(res => setTimeout(res, 250));
         }
       }
-    } catch (err) {
-      console.error(err);
-      alert('Export failed. Try a smaller batch.');
-    } finally {
-      setExporting(false);
-      setExportProgress('');
-    }
+    } catch (err) { console.error(err); alert('Export failed. Try a smaller batch.'); }
+    finally { setExporting(false); setExportProgress(''); }
   }, [reviews, selected, formatKeys]);
 
   const products = [...new Set(reviews.map(r => r.handle).filter(Boolean))].sort();
@@ -120,38 +129,30 @@ export default function ReviewAdTool() {
   );
   const previewReview = reviews.find(r => r.id === previewId) || filtered[0] || null;
   const selectedCount = filtered.filter(r => selected.has(r.id)).length;
+  const exportTotal = selectedCount * formatKeys.length;
 
-  const toggleFormat = (key) => {
-    setFormatKeys(prev =>
-      prev.includes(key)
-        ? prev.length > 1 ? prev.filter(k => k !== key) : prev
-        : [...prev, key]
-    );
-  };
+  const toggleFormat = (key) => setFormatKeys(prev =>
+    prev.includes(key) ? (prev.length > 1 ? prev.filter(k => k !== key) : prev) : [...prev, key]
+  );
 
   // ---- Single / no-CSV mode ----
   if (reviews.length === 0) {
     const fmt = FORMATS[manualFormat];
-    const maxH = typeof window !== 'undefined' ? window.innerHeight - 160 : 700;
-    const maxW = typeof window !== 'undefined' ? Math.min(window.innerWidth * 0.55, 560) : 500;
-    const scale = Math.min(maxH / fmt.height, maxW / fmt.width, 0.42);
+    const scale = 0.4;
     const variation = { headline: manualQuote || 'Paste a review to get started.' };
     const attribution = manualReviewer.trim() || undefined;
 
     return (
-      <div style={{ display: 'flex', height: 'calc(100vh - 100px)', overflow: 'hidden' }}>
-        <div style={leftPanel}>
+      <div style={{ display: 'flex', height: 'calc(100vh - 108px)' }}>
+        {/* Left */}
+        <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #e0d9c4', display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: 28, gap: 20 }}>
           <div>
-            <div style={label}>Import Loox CSV</div>
+            <div style={S.label}>Import Loox CSV</div>
             <label
               onDrop={handleDrop}
               onDragOver={e => { e.preventDefault(); setDragging(true); }}
               onDragLeave={() => setDragging(false)}
-              style={{
-                display: 'block', padding: '14px 12px', borderRadius: 4, cursor: 'pointer',
-                textAlign: 'center', border: `1px dashed ${dragging ? '#DC440A' : '#c0b89a'}`,
-                background: dragging ? '#fef8f0' : 'transparent',
-              }}
+              style={{ display: 'block', padding: '14px 12px', borderRadius: 4, cursor: 'pointer', textAlign: 'center', border: `1px dashed ${dragging ? '#DC440A' : '#c0b89a'}`, background: dragging ? '#fef8f0' : 'transparent' }}
             >
               <input type="file" accept=".csv" onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
               <div style={{ fontSize: 10, color: dragging ? '#DC440A' : '#8a8270' }}>
@@ -161,35 +162,34 @@ export default function ReviewAdTool() {
           </div>
 
           <div>
-            <div style={label}>Review Quote</div>
-            <textarea value={manualQuote} onChange={e => setManualQuote(e.target.value)} placeholder="Or paste a single review here..." rows={6} style={textareaStyle} />
+            <div style={S.label}>Review Quote</div>
+            <textarea value={manualQuote} onChange={e => setManualQuote(e.target.value)} placeholder="Or paste a single review here..." rows={6} style={S.textarea} />
           </div>
 
           <div>
-            <div style={label}>Reviewer <span style={{ color: '#b0a898', fontWeight: 400 }}>(optional)</span></div>
-            <input type="text" value={manualReviewer} onChange={e => setManualReviewer(e.target.value)} placeholder="e.g. John B." style={inputStyle} />
+            <div style={S.label}>Reviewer <span style={{ color: '#b0a898', fontWeight: 400 }}>(optional)</span></div>
+            <input type="text" value={manualReviewer} onChange={e => setManualReviewer(e.target.value)} placeholder="e.g. John B." style={S.input} />
           </div>
 
           <div>
-            <div style={label}>Format</div>
+            <div style={S.label}>Format</div>
             <div style={{ display: 'flex', gap: 8 }}>
               {Object.entries(FORMATS).map(([key, f]) => (
-                <button key={key} onClick={() => setManualFormat(key)} style={fmtBtn(manualFormat === key)}>{f.label}</button>
+                <button key={key} onClick={() => setManualFormat(key)} style={S.fmtBtn(manualFormat === key)}>{f.label}</button>
               ))}
             </div>
           </div>
 
-          <div style={{ marginTop: 'auto' }}>
-            <button onClick={handleSingleExport} disabled={exporting || !manualQuote.trim()} style={exportBtn(exporting || !manualQuote.trim())}>
-              {exporting ? 'Exporting...' : 'Download PNG'}
-            </button>
-          </div>
+          <button onClick={handleSingleExport} disabled={exporting || !manualQuote.trim()} style={S.exportBtn(exporting || !manualQuote.trim())}>
+            {exporting ? 'Exporting...' : 'Download PNG'}
+          </button>
         </div>
 
-        <div style={rightPanel}>
-          <PreviewBox fmt={fmt} scale={scale}>
+        {/* Right */}
+        <div style={S.rightPanel}>
+          <PreviewCard fmt={fmt} scale={scale}>
             <UGCTemplate variation={variation} format={manualFormat} dimensions={fmt} attribution={attribution} />
-          </PreviewBox>
+          </PreviewCard>
         </div>
 
         <div style={{ position: 'fixed', left: -99999, top: 0 }}>
@@ -201,60 +201,58 @@ export default function ReviewAdTool() {
     );
   }
 
-  // ---- Bulk / CSV mode ----
+  // ---- CSV / Bulk mode ----
   const pvFmt = FORMATS[formatKeys[0]];
-  const maxH = typeof window !== 'undefined' ? window.innerHeight - 160 : 700;
-  const maxW = typeof window !== 'undefined' ? Math.min(window.innerWidth * 0.55, 560) : 500;
-  const pvScale = Math.min(maxH / pvFmt.height, maxW / pvFmt.width, 0.42);
-  const exportTotal = selectedCount * formatKeys.length;
+  const pvScale = 0.4;
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 100px)', overflow: 'hidden' }}>
-      {/* Left panel */}
-      <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #e0d9c4', display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', height: 'calc(100vh - 108px)' }}>
+      {/* Left panel — flex column with fixed header/footer, scrollable list */}
+      <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #e0d9c4', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
 
-        {/* Header */}
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid #e0d9c4', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 10, color: '#333F4C' }}>{reviews.length} reviews loaded</span>
-          <label style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#DC440A', cursor: 'pointer' }}>
-            <input type="file" accept=".csv" onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
-            Change CSV
-          </label>
-        </div>
-
-        {/* Rating filter */}
-        <div style={{ padding: '10px 20px', borderBottom: '1px solid #e0d9c4', display: 'flex', gap: 6, alignItems: 'center' }}>
-          {[0, 5, 4, 3].map(r => (
-            <button key={r} onClick={() => setRatingFilter(r)} style={{
-              padding: '3px 8px', border: `1px solid ${ratingFilter === r ? '#DC440A' : '#e0d9c4'}`,
-              background: ratingFilter === r ? '#fef8f0' : '#fff',
-              color: ratingFilter === r ? '#DC440A' : '#8a8270',
-              fontFamily: 'inherit', fontSize: 9, cursor: 'pointer', borderRadius: 3,
-            }}>{r === 0 ? 'All' : `${r}★`}</button>
-          ))}
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 5 }}>
-            <button onClick={() => setSelected(new Set(filtered.map(r => r.id)))} style={microBtn}>All</button>
-            <button onClick={() => setSelected(new Set())} style={microBtn}>None</button>
+        {/* Fixed: CSV header */}
+        <div style={{ padding: '12px 20px', borderBottom: '1px solid #e0d9c4', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 10, color: '#333F4C', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {csvName || `${reviews.length} reviews`}
+            </div>
+            <div style={{ fontSize: 9, color: '#8a8270', marginTop: 1 }}>{reviews.length} reviews loaded</div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
+            <label style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#DC440A', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <input type="file" accept=".csv" onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
+              Replace
+            </label>
+            <button onClick={clearCSV} style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#8a8270', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Clear</button>
           </div>
         </div>
 
-        {/* Product filter */}
+        {/* Fixed: Rating filter */}
+        <div style={{ padding: '8px 16px', borderBottom: '1px solid #e0d9c4', flexShrink: 0, display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+          {[0, 5, 4, 3].map(r => (
+            <button key={r} onClick={() => setRatingFilter(r)} style={S.filterBtn(ratingFilter === r)}>
+              {r === 0 ? 'All' : `${r}★`}
+            </button>
+          ))}
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 5 }}>
+            <button onClick={() => setSelected(new Set(filtered.map(r => r.id)))} style={S.microBtn}>All</button>
+            <button onClick={() => setSelected(new Set())} style={S.microBtn}>None</button>
+          </div>
+        </div>
+
+        {/* Fixed: Product filter (only if multiple products) */}
         {products.length > 1 && (
-          <div style={{ padding: '10px 20px', borderBottom: '1px solid #e0d9c4', display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div style={{ padding: '8px 16px', borderBottom: '1px solid #e0d9c4', flexShrink: 0, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
             {['all', ...products].map(p => (
-              <button key={p} onClick={() => setProductFilter(p)} style={{
-                padding: '3px 8px', border: `1px solid ${productFilter === p ? '#DC440A' : '#e0d9c4'}`,
-                background: productFilter === p ? '#fef8f0' : '#fff',
-                color: productFilter === p ? '#DC440A' : '#8a8270',
-                fontFamily: 'inherit', fontSize: 9, cursor: 'pointer', borderRadius: 3,
-                textTransform: 'uppercase', letterSpacing: 1,
-              }}>{p === 'all' ? 'All' : p}</button>
+              <button key={p} onClick={() => setProductFilter(p)} style={{ ...S.filterBtn(productFilter === p), textTransform: 'uppercase', letterSpacing: 1 }}>
+                {p === 'all' ? 'All' : p}
+              </button>
             ))}
           </div>
         )}
 
-        {/* Review list */}
-        <div style={{ flex: 1, overflowY: 'auto' }}>
+        {/* Scrollable: review list */}
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
           {filtered.length === 0 && (
             <div style={{ padding: 20, fontSize: 10, color: '#8a8270' }}>No reviews at this rating.</div>
           )}
@@ -262,16 +260,7 @@ export default function ReviewAdTool() {
             const isSelected = selected.has(r.id);
             const isPreviewing = previewId === r.id;
             return (
-              <div
-                key={r.id}
-                onClick={() => setPreviewId(r.id)}
-                style={{
-                  padding: '10px 16px 10px 12px', cursor: 'pointer',
-                  borderBottom: '1px solid #e0d9c4',
-                  background: isPreviewing ? '#fef8f0' : 'transparent',
-                  display: 'flex', gap: 10, alignItems: 'flex-start',
-                }}
-              >
+              <div key={r.id} onClick={() => setPreviewId(r.id)} style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid #e0d9c4', background: isPreviewing ? '#fef8f0' : 'transparent', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                 <input
                   type="checkbox"
                   checked={isSelected}
@@ -288,11 +277,7 @@ export default function ReviewAdTool() {
                 />
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 9, color: '#DC440A', marginBottom: 2 }}>{'★'.repeat(r.rating)}</div>
-                  <div style={{
-                    fontSize: 10, color: '#333F4C', lineHeight: 1.4,
-                    overflow: 'hidden', display: '-webkit-box',
-                    WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-                  }}>{r.quote}</div>
+                  <div style={{ fontSize: 10, color: '#333F4C', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{r.quote}</div>
                   <div style={{ fontSize: 9, color: '#8a8270', marginTop: 3 }}>{r.nickname}</div>
                 </div>
               </div>
@@ -300,43 +285,39 @@ export default function ReviewAdTool() {
           })}
         </div>
 
-        {/* Format + export */}
-        <div style={{ padding: 16, borderTop: '1px solid #e0d9c4', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div>
-            <div style={{ ...label, marginBottom: 6 }}>Format</div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {Object.entries(FORMATS).map(([key, f]) => (
-                <button key={key} onClick={() => toggleFormat(key)} style={fmtBtn(formatKeys.includes(key))}>{f.label}</button>
-              ))}
-            </div>
+        {/* Fixed: Format + export */}
+        <div style={{ flexShrink: 0, padding: '14px 16px', borderTop: '1px solid #e0d9c4', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {Object.entries(FORMATS).map(([key, f]) => (
+              <button key={key} onClick={() => toggleFormat(key)} style={S.fmtBtn(formatKeys.includes(key))}>{f.label}</button>
+            ))}
           </div>
-          <button onClick={handleBulkExport} disabled={exporting || selectedCount === 0} style={exportBtn(exporting || selectedCount === 0)}>
+          <button onClick={handleBulkExport} disabled={exporting || selectedCount === 0} style={S.exportBtn(exporting || selectedCount === 0)}>
             {exporting
               ? `Exporting ${exportProgress}...`
-              : selectedCount === 0
-                ? 'Select reviews'
-                : `Export ${exportTotal} PNG${exportTotal !== 1 ? 's' : ''}`}
+              : selectedCount === 0 ? 'Select reviews'
+              : `Export ${exportTotal} PNG${exportTotal !== 1 ? 's' : ''}`}
           </button>
         </div>
       </div>
 
       {/* Right: preview */}
-      <div style={rightPanel}>
+      <div style={S.rightPanel}>
         {previewReview ? (
-          <PreviewBox fmt={pvFmt} scale={pvScale}>
+          <PreviewCard fmt={pvFmt} scale={pvScale}>
             <UGCTemplate
               variation={{ headline: previewReview.quote }}
               format={formatKeys[0]}
               dimensions={pvFmt}
               attribution={previewReview.nickname}
             />
-          </PreviewBox>
+          </PreviewCard>
         ) : (
           <div style={{ color: '#8a8270', fontSize: 12 }}>No reviews match filter</div>
         )}
       </div>
 
-      {/* Hidden capture divs — one per selected review × format */}
+      {/* Hidden capture divs */}
       <div style={{ position: 'fixed', left: -99999, top: 0 }}>
         {filtered.filter(r => selected.has(r.id)).flatMap(r =>
           formatKeys.map(fk => {
@@ -354,9 +335,9 @@ export default function ReviewAdTool() {
   );
 }
 
-function PreviewBox({ fmt, scale, children }) {
+function PreviewCard({ fmt, scale, children }) {
   return (
-    <div style={{ width: fmt.width * scale, height: fmt.height * scale, overflow: 'hidden', borderRadius: 4, boxShadow: '0 4px 32px rgba(51,63,76,0.18)' }}>
+    <div style={{ width: fmt.width * scale, height: fmt.height * scale, flexShrink: 0, overflow: 'hidden', borderRadius: 4, boxShadow: '0 4px 32px rgba(51,63,76,0.18)' }}>
       <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: fmt.width, height: fmt.height }}>
         {children}
       </div>
@@ -364,11 +345,13 @@ function PreviewBox({ fmt, scale, children }) {
   );
 }
 
-const leftPanel = { width: 300, flexShrink: 0, padding: 32, borderRight: '1px solid #e0d9c4', display: 'flex', flexDirection: 'column', gap: 24, height: '100%', overflowY: 'auto' };
-const rightPanel = { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0ead4', padding: 40 };
-const label = { fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8a8270', marginBottom: 8, fontWeight: 600 };
-const textareaStyle = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #e0d9c4', borderRadius: 4, background: '#fff', color: '#333F4C', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.5, resize: 'vertical', outline: 'none' };
-const inputStyle = { width: '100%', boxSizing: 'border-box', padding: '8px 12px', border: '1px solid #e0d9c4', borderRadius: 4, background: '#fff', color: '#333F4C', fontFamily: 'inherit', fontSize: 12, outline: 'none' };
-const fmtBtn = (active) => ({ flex: 1, padding: '7px 0', border: `1px solid ${active ? '#DC440A' : '#e0d9c4'}`, background: active ? '#fef8f0' : '#fff', color: active ? '#DC440A' : '#8a8270', fontFamily: 'inherit', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 });
-const exportBtn = (disabled) => ({ width: '100%', padding: '12px 0', background: disabled ? '#e0d9c4' : '#DC440A', border: 'none', borderRadius: 4, color: disabled ? '#a09880' : '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer' });
-const microBtn = { padding: '3px 7px', border: '1px solid #e0d9c4', background: '#fff', color: '#8a8270', fontFamily: 'inherit', fontSize: 8, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 3 };
+const S = {
+  label: { fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8a8270', marginBottom: 8, fontWeight: 600 },
+  textarea: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #e0d9c4', borderRadius: 4, background: '#fff', color: '#333F4C', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.5, resize: 'vertical', outline: 'none' },
+  input: { width: '100%', boxSizing: 'border-box', padding: '8px 12px', border: '1px solid #e0d9c4', borderRadius: 4, background: '#fff', color: '#333F4C', fontFamily: 'inherit', fontSize: 12, outline: 'none' },
+  fmtBtn: (active) => ({ flex: 1, padding: '7px 0', border: `1px solid ${active ? '#DC440A' : '#e0d9c4'}`, background: active ? '#fef8f0' : '#fff', color: active ? '#DC440A' : '#8a8270', fontFamily: 'inherit', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 }),
+  exportBtn: (disabled) => ({ width: '100%', padding: '12px 0', background: disabled ? '#e0d9c4' : '#DC440A', border: 'none', borderRadius: 4, color: disabled ? '#a09880' : '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer' }),
+  filterBtn: (active) => ({ padding: '3px 8px', border: `1px solid ${active ? '#DC440A' : '#e0d9c4'}`, background: active ? '#fef8f0' : '#fff', color: active ? '#DC440A' : '#8a8270', fontFamily: 'inherit', fontSize: 9, cursor: 'pointer', borderRadius: 3 }),
+  microBtn: { padding: '3px 7px', border: '1px solid #e0d9c4', background: '#fff', color: '#8a8270', fontFamily: 'inherit', fontSize: 8, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 3 },
+  rightPanel: { flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0ead4', padding: 40, overflow: 'auto' },
+};
