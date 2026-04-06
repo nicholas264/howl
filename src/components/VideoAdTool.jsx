@@ -36,21 +36,7 @@ function loadReviews() {
   try { return JSON.parse(localStorage.getItem(LS_REVIEWS) || '[]'); } catch { return []; }
 }
 
-async function renderOverlayPNG(text, videoW, videoH, opts) {
-  await document.fonts.load(`800 ${opts.fontSize}px Montserrat`);
-  const canvas = document.createElement('canvas');
-  canvas.width = videoW;
-  canvas.height = videoH;
-  const ctx = canvas.getContext('2d');
-
-  const lineHeight = Math.round(opts.fontSize * 1.25);
-  const maxWidth = videoW * 0.82;
-  const margin = videoW * 0.09;
-
-  ctx.font = `800 ${opts.fontSize}px Montserrat, sans-serif`;
-  ctx.textBaseline = 'top';
-
-  // Word-wrap
+function wrapText(ctx, text, maxWidth) {
   const words = text.split(' ');
   const lines = [];
   let cur = '';
@@ -60,28 +46,95 @@ async function renderOverlayPNG(text, videoW, videoH, opts) {
     else cur = test;
   }
   if (cur) lines.push(cur);
+  return lines;
+}
 
-  const blockH = lines.length * lineHeight;
-  let x;
-  if (opts.h === 'left')        { x = margin;          ctx.textAlign = 'left'; }
-  else if (opts.h === 'right')  { x = videoW - margin; ctx.textAlign = 'right'; }
-  else                          { x = videoW / 2;      ctx.textAlign = 'center'; }
+async function renderOverlayPNG(text, videoW, videoH, opts) {
+  await Promise.all([
+    document.fonts.load(`800 ${opts.fontSize}px Montserrat`),
+    document.fonts.load(`700 ${Math.round(opts.fontSize * 0.38)}px "Libre Franklin"`),
+  ]);
 
+  const canvas = document.createElement('canvas');
+  canvas.width = videoW;
+  canvas.height = videoH;
+  const ctx = canvas.getContext('2d');
+
+  const quoteFontSize   = opts.fontSize;
+  const attribFontSize  = Math.round(opts.fontSize * 0.42);  // reviewer name
+  const verifiedFontSize = Math.round(opts.fontSize * 0.34); // verified label
+  const quoteLineH   = Math.round(quoteFontSize * 1.25);
+  const attribLineH  = Math.round(attribFontSize * 1.4);
+  const maxWidth = videoW * 0.82;
+  const margin   = videoW * 0.09;
+  const gap      = Math.round(opts.fontSize * 0.55); // space between quote and attribution
+
+  // Measure quote lines
+  ctx.font = `800 ${quoteFontSize}px Montserrat, sans-serif`;
+  const quoteLines = wrapText(ctx, text, maxWidth);
+  const quoteH = quoteLines.length * quoteLineH;
+
+  // Measure attribution lines
+  const hasAttrib = !!(opts.reviewerName || opts.verifiedLabel);
+  let attribH = 0;
+  if (hasAttrib) attribH = gap + attribLineH + (opts.verifiedLabel ? Math.round(verifiedFontSize * 1.4) : 0);
+
+  const blockH = quoteH + attribH;
+
+  // X alignment
+  let x, align;
+  if (opts.h === 'left')       { x = margin;          align = 'left'; }
+  else if (opts.h === 'right') { x = videoW - margin; align = 'right'; }
+  else                         { x = videoW / 2;      align = 'center'; }
+
+  // Y start
   const vPad = videoH * 0.08;
   let y;
   if (opts.v === 'top')         y = vPad;
   else if (opts.v === 'bottom') y = videoH - vPad - blockH;
   else                          y = (videoH - blockH) / 2;
 
-  if (opts.shadow) {
-    ctx.shadowColor = 'rgba(0,0,0,0.75)';
-    ctx.shadowBlur = Math.round(opts.fontSize * 0.4);
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 2;
-  }
+  // Shadow helper
+  const applyShadow = () => {
+    if (opts.shadow) {
+      ctx.shadowColor = 'rgba(0,0,0,0.8)';
+      ctx.shadowBlur = Math.round(quoteFontSize * 0.4);
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
+    }
+  };
+  const clearShadow = () => { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0; };
 
+  ctx.textBaseline = 'top';
+  ctx.textAlign = align;
+
+  // Draw quote
+  ctx.font = `800 ${quoteFontSize}px Montserrat, sans-serif`;
   ctx.fillStyle = opts.color;
-  lines.forEach((line, i) => ctx.fillText(line, x, y + i * lineHeight));
+  applyShadow();
+  quoteLines.forEach((line, i) => ctx.fillText(line, x, y + i * quoteLineH));
+
+  // Draw attribution block
+  if (hasAttrib) {
+    let ay = y + quoteH + gap;
+
+    if (opts.reviewerName) {
+      clearShadow();
+      ctx.font = `700 ${attribFontSize}px "Libre Franklin", sans-serif`;
+      ctx.fillStyle = opts.color;
+      applyShadow();
+      ctx.fillText(opts.reviewerName, x, ay);
+      ay += attribLineH;
+    }
+
+    if (opts.verifiedLabel) {
+      clearShadow();
+      ctx.font = `700 ${verifiedFontSize}px "Libre Franklin", sans-serif`;
+      ctx.fillStyle = opts.color === '#ffffff' ? 'rgba(255,255,255,0.75)' : opts.color === '#DC440A' ? 'rgba(220,68,10,0.75)' : 'rgba(51,63,76,0.65)';
+      applyShadow();
+      ctx.fillText(opts.verifiedLabel.toUpperCase(), x, ay);
+    }
+  }
 
   return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
@@ -102,6 +155,7 @@ export default function VideoAdTool() {
   const [shadow, setShadow]           = useState(true);
   const [ffmpegReady, setFfmpegReady] = useState(false);
   const [ffmpegLoading, setFfmpegLoading] = useState(true);
+  const [ffmpegError, setFfmpegError] = useState('');
   const [exporting, setExporting]     = useState(false);
   const [exportMsg, setExportMsg]     = useState('');
   const [dragging, setDragging]       = useState(false);
@@ -113,16 +167,22 @@ export default function VideoAdTool() {
   // Load FFmpeg on mount
   useEffect(() => {
     (async () => {
+      if (typeof SharedArrayBuffer === 'undefined') {
+        setFfmpegError('SharedArrayBuffer unavailable — required security headers may be missing. Try a hard refresh or contact support.');
+        setFfmpegLoading(false);
+        return;
+      }
       try {
         const ff = new FFmpeg();
         await ff.load({
-          coreURL:  '/ffmpeg/ffmpeg-core.js',
-          wasmURL:  '/ffmpeg/ffmpeg-core.wasm',
+          coreURL: '/ffmpeg/ffmpeg-core.js',
+          wasmURL: '/ffmpeg/ffmpeg-core.wasm',
         });
         ffmpegRef.current = ff;
         setFfmpegReady(true);
       } catch (e) {
         console.error('FFmpeg load failed', e);
+        setFfmpegError(`FFmpeg failed to load: ${e?.message || e}. Try refreshing.`);
       } finally {
         setFfmpegLoading(false);
       }
@@ -177,6 +237,8 @@ export default function VideoAdTool() {
 
       const overlayBlob = await renderOverlayPNG(overlayText, videoDims.w, videoDims.h, {
         fontSize, color, v: pos.v, h: pos.h, shadow,
+        reviewerName: selectedReview?.nickname || null,
+        verifiedLabel: selectedReview ? `Verified HOWL ${PRODUCT_NAMES[selectedReview.handle] || 'HOWL'} Customer` : null,
       });
       const overlayArr = new Uint8Array(await overlayBlob.arrayBuffer());
 
@@ -255,6 +317,11 @@ export default function VideoAdTool() {
         {ffmpegLoading && (
           <div style={{ padding: '8px 20px', background: '#fef8f0', borderBottom: '1px solid #e0d9c4', fontSize: 9, color: '#DC440A', letterSpacing: 1, textTransform: 'uppercase' }}>
             Loading FFmpeg…
+          </div>
+        )}
+        {ffmpegError && (
+          <div style={{ padding: '10px 20px', background: '#fff0ee', borderBottom: '1px solid #f5c0b0', fontSize: 10, color: '#b03010', lineHeight: 1.5 }}>
+            {ffmpegError}
           </div>
         )}
 
@@ -394,7 +461,8 @@ export default function VideoAdTool() {
         <div style={{ flexShrink: 0, padding: '14px 16px', borderTop: '1px solid #e0d9c4' }}>
           <button onClick={handleExport} disabled={!canExport} style={S.exportBtn(!canExport)}>
             {exporting ? exportMsg || 'Processing…'
-              : !ffmpegReady ? 'Loading FFmpeg…'
+              : ffmpegError ? 'FFmpeg unavailable'
+              : ffmpegLoading ? 'Loading FFmpeg…'
               : !videoFile ? 'Upload a video'
               : !overlayText.trim() ? 'Select a review'
               : 'Export MP4'}
@@ -407,7 +475,19 @@ export default function VideoAdTool() {
         {videoUrl ? (
           <div style={{ position: 'relative', maxHeight: '100%', maxWidth: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <video ref={videoRef} src={videoUrl} onLoadedMetadata={handleVideoMeta} controls loop style={{ maxHeight: 'calc(100vh - 130px)', maxWidth: '100%', display: 'block' }} />
-            {overlayText && <div style={overlayStyle}>{overlayText.toUpperCase()}</div>}
+            {overlayText && (
+              <div style={overlayStyle}>
+                <div>{overlayText.toUpperCase()}</div>
+                {selectedReview && (
+                  <div style={{ marginTop: '0.5em' }}>
+                    <div style={{ fontSize: '0.52em', opacity: 1 }}>{selectedReview.nickname}</div>
+                    <div style={{ fontSize: '0.42em', opacity: 0.75, letterSpacing: '0.12em' }}>
+                      VERIFIED HOWL {(PRODUCT_NAMES[selectedReview.handle] || 'HOWL').toUpperCase()} CUSTOMER
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <div style={{ color: '#555', fontSize: 12, textAlign: 'center', padding: 40, lineHeight: 1.8 }}>
