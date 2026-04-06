@@ -194,7 +194,7 @@ export default function VideoAdTool() {
       const { w, h } = videoDims;
 
       // 1. Build overlay canvas once
-      const overlayCanvas = await buildOverlayCanvas(overlayText, w, h, {
+      const overlayCanvas = await buildOverlayCanvas(`\u201c${overlayText}\u201d`, w, h, {
         fontSize, color, v: pos.v, h: pos.h, shadow,
         reviewerName: selectedReview?.nickname || null,
         verifiedLabel: selectedReview
@@ -283,6 +283,16 @@ export default function VideoAdTool() {
   const color = TEXT_COLORS.find(c => c.id === colorId).value;
   const canExport = supported && !!videoFile && !!overlayText.trim() && !exporting;
 
+  // Compute exact preview dimensions so overlay scale matches export
+  const availH = typeof window !== 'undefined' ? window.innerHeight - 130 : 800;
+  const availW = typeof window !== 'undefined' ? window.innerWidth - 320 : 700;
+  const previewScale = videoDims.w > 0
+    ? Math.min(availH / videoDims.h, availW / videoDims.w, 1)
+    : 0.4;
+  const displayW = Math.round(videoDims.w * previewScale);
+  const displayH = Math.round(videoDims.h * previewScale);
+  const previewFontSize = fontSize * previewScale;
+
   const overlayStyle = {
     position: 'absolute', pointerEvents: 'none',
     left: pos.h === 'left' ? '9%' : pos.h === 'right' ? 'auto' : '50%',
@@ -296,7 +306,7 @@ export default function VideoAdTool() {
     textAlign: pos.h === 'center' ? 'center' : pos.h,
     maxWidth: '82%', color,
     fontFamily: "'Montserrat', sans-serif", fontWeight: 800,
-    fontSize: `${fontSize * 0.22}px`, lineHeight: 1.25,
+    fontSize: `${previewFontSize}px`, lineHeight: 1.25,
     textTransform: 'uppercase', letterSpacing: '0.04em',
     textShadow: shadow ? '0 2px 8px rgba(0,0,0,0.8)' : 'none',
     wordBreak: 'break-word',
@@ -465,11 +475,11 @@ export default function VideoAdTool() {
       {/* Right: preview */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1a1a1a', overflow: 'hidden' }}>
         {videoUrl ? (
-          <div style={{ position: 'relative', maxHeight: '100%', maxWidth: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <video ref={videoRef} src={videoUrl} onLoadedMetadata={handleVideoMeta} controls loop style={{ maxHeight: 'calc(100vh - 130px)', maxWidth: '100%', display: 'block' }} />
+          <div style={{ position: 'relative', width: displayW, height: displayH, flexShrink: 0 }}>
+            <video ref={videoRef} src={videoUrl} onLoadedMetadata={handleVideoMeta} controls loop style={{ width: displayW, height: displayH, display: 'block' }} />
             {overlayText && (
               <div style={overlayStyle}>
-                <div>{overlayText.toUpperCase()}</div>
+                <div>{'\u201c'}{overlayText.toUpperCase()}{'\u201d'}</div>
                 {selectedReview && (
                   <div style={{ marginTop: '0.45em' }}>
                     <div style={{ fontSize: '0.52em' }}>{selectedReview.nickname}</div>
