@@ -6,6 +6,7 @@ import ConfigPanel from "./components/ConfigPanel";
 import ResultsPanel from "./components/ResultsPanel";
 import StaticEditor from "./components/StaticEditor";
 import ReviewAdTool from "./components/ReviewAdTool";
+import VideoAdTool from "./components/VideoAdTool";
 import "./styles.css";
 
 export default function HowlAdEngine() {
@@ -142,6 +143,7 @@ export default function HowlAdEngine() {
           Results {variations.length > 0 && `(${variations.length})`}
         </button>
         <button className={`tab ${activeTab === "review" ? "on" : ""}`} onClick={() => setActiveTab("review")}>Review Ads</button>
+        <button className={`tab ${activeTab === "video" ? "on" : ""}`} onClick={() => setActiveTab("video")}>Video Ads</button>
       </div>
 
       {activeTab === "config" && (
@@ -170,6 +172,7 @@ export default function HowlAdEngine() {
       )}
 
       {activeTab === "review" && <ReviewAdTool />}
+      {activeTab === "video" && <VideoAdTool />}
 
       {staticVariation && (
         <StaticEditor
