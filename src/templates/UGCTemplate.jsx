@@ -1,7 +1,7 @@
 import { COLORS, FONTS, LOGOS } from '../brand';
 import { scaleFontSize } from '../utils/scaleFontSize';
 
-export default function UGCTemplate({ variation, photoUrl, format, dimensions }) {
+export default function UGCTemplate({ variation, photoUrl, format, dimensions, attribution, socialProof }) {
   const isStory = format === 'story';
   const headlineSize = scaleFontSize(variation.headline, isStory ? 64 : 52, 28);
   const padding = isStory ? 80 : 60;
@@ -79,10 +79,10 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions })
           color: '#9a8f80',
           flexShrink: 0,
         }}>
-          Verified HOWL Customer
+          {attribution || 'Verified HOWL Customer'}
         </div>
 
-        {/* 938 reviews social proof */}
+        {/* Social proof */}
         <div style={{
           fontFamily: FONTS.body.family,
           fontSize: isStory ? 22 : 16,
@@ -91,7 +91,7 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions })
           letterSpacing: '0.05em',
           flexShrink: 0,
         }}>
-          938 Reviews · 90.4% Five Star
+          {socialProof || '938 Reviews · 90.4% Five Star'}
         </div>
       </div>
 

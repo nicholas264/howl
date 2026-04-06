@@ -5,6 +5,7 @@ import { analyzeImage } from "./utils/analyzeImage";
 import ConfigPanel from "./components/ConfigPanel";
 import ResultsPanel from "./components/ResultsPanel";
 import StaticEditor from "./components/StaticEditor";
+import ReviewAdTool from "./components/ReviewAdTool";
 import "./styles.css";
 
 export default function HowlAdEngine() {
@@ -140,6 +141,7 @@ export default function HowlAdEngine() {
         <button className={`tab ${activeTab === "results" ? "on" : ""}`} onClick={() => setActiveTab("results")} disabled={variations.length === 0}>
           Results {variations.length > 0 && `(${variations.length})`}
         </button>
+        <button className={`tab ${activeTab === "review" ? "on" : ""}`} onClick={() => setActiveTab("review")}>Review Ads</button>
       </div>
 
       {activeTab === "config" && (
@@ -166,6 +168,8 @@ export default function HowlAdEngine() {
           favorites={favorites} toggleFavorite={toggleFavorite}
         />
       )}
+
+      {activeTab === "review" && <ReviewAdTool />}
 
       {staticVariation && (
         <StaticEditor
