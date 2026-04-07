@@ -1,10 +1,11 @@
 import { COLORS, FONTS, LOGOS } from '../brand';
 import { scaleFontSize } from '../utils/scaleFontSize';
 
-export default function UGCTemplate({ variation, photoUrl, format, dimensions, attribution, socialProof, reviewerName }) {
+export default function UGCTemplate({ variation, photoUrl, format, dimensions, attribution, socialProof, reviewerName, backgroundImage }) {
   const isStory = format === 'story';
   const headlineSize = scaleFontSize(variation.headline, isStory ? 88 : 72, 32);
   const padding = isStory ? 80 : 60;
+  const hasBackground = !!backgroundImage;
 
   return (
     <div style={{
@@ -12,14 +13,19 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
       height: dimensions.height,
       position: 'relative',
       overflow: 'hidden',
-      backgroundColor: COLORS.natural,
+      backgroundColor: hasBackground ? 'transparent' : COLORS.natural,
+      backgroundImage: hasBackground ? `url(${backgroundImage})` : 'none',
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
       display: 'flex',
       flexDirection: 'column',
       boxSizing: 'border-box',
     }}>
+      {/* Scrim when background image is set */}
+      {hasBackground && <div style={{ position: 'absolute', inset: 0, background: 'rgba(249,243,223,0.72)', zIndex: 0 }} />}
 
       {/* Top accent bar */}
-      <div style={{ height: 8, background: COLORS.flame, flexShrink: 0 }} />
+      <div style={{ height: 8, background: COLORS.flame, flexShrink: 0, position: 'relative', zIndex: 1 }} />
 
       {/* Main content — centered */}
       <div style={{
@@ -31,6 +37,8 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
         padding: `${padding * 0.6}px ${padding}px`,
         textAlign: 'center',
         boxSizing: 'border-box',
+        position: 'relative',
+        zIndex: 1,
       }}>
 
         {/* Stars */}
@@ -118,7 +126,9 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
         alignItems: 'center',
         justifyContent: 'center',
         flexShrink: 0,
-        backgroundColor: COLORS.natural,
+        backgroundColor: hasBackground ? 'rgba(249,243,223,0.85)' : COLORS.natural,
+        position: 'relative',
+        zIndex: 1,
       }}>
         <img
           src={LOGOS.stackedBlack}

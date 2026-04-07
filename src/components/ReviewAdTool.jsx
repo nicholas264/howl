@@ -38,6 +38,13 @@ function loadSaved() {
   try { return JSON.parse(localStorage.getItem(LS_REVIEWS) || '[]'); } catch { return []; }
 }
 
+const LS_SAVED_IMAGES = 'howl_saved_images';
+const LS_BG = 'howl_review_bg';
+
+function loadSavedImages() {
+  try { return JSON.parse(localStorage.getItem(LS_SAVED_IMAGES) || '[]'); } catch { return []; }
+}
+
 export default function ReviewAdTool() {
   const [reviews, setReviews] = useState(loadSaved);
   const [csvName, setCsvName] = useState(() => localStorage.getItem(LS_NAME) || '');
@@ -52,6 +59,9 @@ export default function ReviewAdTool() {
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState('');
   const [dragging, setDragging] = useState(false);
+  const [bgImage, setBgImage] = useState(() => { try { return localStorage.getItem(LS_BG) || null; } catch { return null; } });
+  const [savedImages, setSavedImages] = useState(loadSavedImages);
+  const bgFileRef = useRef(null);
 
   // Single / no-CSV mode
   const [manualQuote, setManualQuote] = useState('');
@@ -60,6 +70,39 @@ export default function ReviewAdTool() {
 
   const captureRefs = useRef({});
   const singleCaptureRef = useRef(null);
+
+  const handleBgFile = (file) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 2160;
+        let { width: w, height: h } = img;
+        if (w > maxDim || h > maxDim) { const s = maxDim / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const url = canvas.toDataURL('image/jpeg', 0.92);
+        setBgImage(url);
+        try { localStorage.setItem(LS_BG, url); } catch {}
+        // Also add to shared image library if not already there
+        setSavedImages(prev => {
+          if (prev.some(i => i.url === url)) return prev;
+          const next = [{ id: Date.now(), url }, ...prev].slice(0, 8);
+          try { localStorage.setItem(LS_SAVED_IMAGES, JSON.stringify(next)); } catch {}
+          return next;
+        });
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearBg = () => {
+    setBgImage(null);
+    try { localStorage.removeItem(LS_BG); } catch {}
+  };
 
   const handleFile = (file) => {
     if (!file) return;
@@ -194,6 +237,9 @@ export default function ReviewAdTool() {
             </div>
           </div>
 
+          {/* Background image */}
+          <BgImagePicker bgImage={bgImage} savedImages={savedImages} onSelect={url => { setBgImage(url); try { localStorage.setItem(LS_BG, url); } catch {} }} onUpload={handleBgFile} onClear={clearBg} fileRef={bgFileRef} />
+
           <button onClick={handleSingleExport} disabled={exporting || !manualQuote.trim()} style={S.exportBtn(exporting || !manualQuote.trim())}>
             {exporting ? 'Exporting...' : 'Download PNG'}
           </button>
@@ -202,13 +248,13 @@ export default function ReviewAdTool() {
         {/* Right */}
         <div style={S.rightPanel}>
           <PreviewCard fmt={fmt} scale={scale}>
-            <UGCTemplate variation={variation} format={manualFormat} dimensions={fmt} attribution={attribution} />
+            <UGCTemplate variation={variation} format={manualFormat} dimensions={fmt} attribution={attribution} backgroundImage={bgImage} />
           </PreviewCard>
         </div>
 
         <div style={{ position: 'fixed', left: -99999, top: 0 }}>
           <div ref={singleCaptureRef} style={{ width: fmt.width, height: fmt.height }}>
-            <UGCTemplate variation={variation} format={manualFormat} dimensions={fmt} attribution={attribution} />
+            <UGCTemplate variation={variation} format={manualFormat} dimensions={fmt} attribution={attribution} backgroundImage={bgImage} />
           </div>
         </div>
       </div>
@@ -299,13 +345,14 @@ export default function ReviewAdTool() {
           })}
         </div>
 
-        {/* Fixed: Format + export */}
+        {/* Fixed: Format + background + export */}
         <div style={{ flexShrink: 0, padding: '14px 16px', borderTop: '1px solid #e0d9c4', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', gap: 6 }}>
             {Object.entries(FORMATS).map(([key, f]) => (
               <button key={key} onClick={() => toggleFormat(key)} style={S.fmtBtn(formatKeys.includes(key))}>{f.label}</button>
             ))}
           </div>
+          <BgImagePicker bgImage={bgImage} savedImages={savedImages} onSelect={url => { setBgImage(url); try { localStorage.setItem(LS_BG, url); } catch {} }} onUpload={handleBgFile} onClear={clearBg} fileRef={bgFileRef} />
           <button onClick={handleBulkExport} disabled={exporting || selectedCount === 0} style={S.exportBtn(exporting || selectedCount === 0)}>
             {exporting
               ? `Exporting ${exportProgress}...`
@@ -325,6 +372,7 @@ export default function ReviewAdTool() {
               dimensions={pvFmt}
               reviewerName={previewReview.nickname}
               attribution={verifiedLabel(previewReview.handle)}
+              backgroundImage={bgImage}
             />
           </PreviewCard>
         ) : (
@@ -340,12 +388,38 @@ export default function ReviewAdTool() {
             const key = `${r.id}_${fk}`;
             return (
               <div key={key} ref={el => { captureRefs.current[key] = el; }} style={{ width: fmt.width, height: fmt.height }}>
-                <UGCTemplate variation={{ headline: r.quote }} format={fk} dimensions={fmt} reviewerName={r.nickname} attribution={verifiedLabel(r.handle)} />
+                <UGCTemplate variation={{ headline: r.quote }} format={fk} dimensions={fmt} reviewerName={r.nickname} attribution={verifiedLabel(r.handle)} backgroundImage={bgImage} />
               </div>
             );
           })
         )}
       </div>
+    </div>
+  );
+}
+
+function BgImagePicker({ bgImage, savedImages, onSelect, onUpload, onClear, fileRef }) {
+  return (
+    <div>
+      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8a8270', marginBottom: 6, fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Background Image</span>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => fileRef.current?.click()} style={{ fontSize: 9, color: '#DC440A', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' }}>+ Upload</button>
+          {bgImage && <button onClick={onClear} style={{ fontSize: 9, color: '#b0a898', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' }}>Clear</button>}
+        </div>
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" onChange={e => { onUpload(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
+      {savedImages.length > 0 ? (
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+          {savedImages.map(img => (
+            <div key={img.id} onClick={() => onSelect(img.url)} style={{ width: 48, height: 48, borderRadius: 3, overflow: 'hidden', border: `2px solid ${bgImage === img.url ? '#DC440A' : '#e0d9c4'}`, cursor: 'pointer', flexShrink: 0 }}>
+              <img src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontSize: 9, color: '#b0a898' }}>Upload images in Image Ads tab to reuse here.</div>
+      )}
     </div>
   );
 }
