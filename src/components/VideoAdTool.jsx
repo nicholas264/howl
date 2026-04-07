@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useLayoutEffect } from 'react';
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 import { COLORS } from '../brand';
 
@@ -136,7 +136,7 @@ async function buildOverlayCanvas(text, videoW, videoH, opts) {
   return canvas;
 }
 
-export default function VideoAdTool() {
+export default function VideoAdTool({ initialText, onTextConsumed }) {
   const allReviews = loadReviews();
   const hasCSV = allReviews.length > 0;
   const supported = typeof VideoEncoder !== 'undefined';
@@ -146,7 +146,7 @@ export default function VideoAdTool() {
   const [videoDims, setVideoDims]         = useState({ w: 1080, h: 1920 });
   const [productFilter, setProductFilter] = useState('all');
   const [selectedReview, setSelectedReview] = useState(null);
-  const [manualText, setManualText]       = useState('');
+  const [manualText, setManualText]       = useState(initialText || '');
   const [fontSize, setFontSize]           = useState(72);
   const [colorId, setColorId]             = useState('white');
   const [positionId, setPositionId]       = useState('bc');
@@ -158,6 +158,14 @@ export default function VideoAdTool() {
 
   const videoRef    = useRef(null);
   const fileInputRef = useRef(null);
+
+  useLayoutEffect(() => {
+    if (initialText) {
+      setManualText(initialText);
+      setSelectedReview(null);
+      onTextConsumed?.();
+    }
+  }, [initialText]);
 
   const handleFile = (file) => {
     if (!file || !file.type.startsWith('video/')) { alert('Please upload a video file.'); return; }

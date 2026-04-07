@@ -1,14 +1,14 @@
 import { useState } from 'react';
 
 function isFavorited(variation, favorites) {
-  const key = `${variation.product}__${variation.headline}`;
-  return favorites.some(f => `${f.product}__${f.headline}` === key);
+  const key = `${variation.product}__${variation.hook}`;
+  return favorites.some(f => `${f.product}__${f.hook}` === key);
 }
 
 export default function ResultsPanel({
   variations, filtered, platform, uniqueAngles, uniqueProducts,
   filterAngle, setFilterAngle, filterProduct, setFilterProduct,
-  exportCSV, setActiveTab, generate, hasSavedImages, onCreateStatic,
+  exportCSV, setActiveTab, generate, onUseInVideo,
   favorites, toggleFavorite,
 }) {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
@@ -32,7 +32,7 @@ export default function ResultsPanel({
         <div className="sbox"><div className="sv">{variations.length}</div><div className="sl">Variations</div></div>
         <div className="sbox"><div className="sv">{uniqueAngles.length}</div><div className="sl">Angles</div></div>
         <div className="sbox"><div className="sv">{uniqueProducts.length}</div><div className="sl">Products</div></div>
-        <div className="sbox"><div className="sv">{platform.label}</div><div className="sl">Platform</div></div>
+        <div className="sbox"><div className="sv">Overlay</div><div className="sl">Format</div></div>
         <div className="sbox" style={{ cursor: 'pointer' }} onClick={() => setShowFavoritesOnly(v => !v)}>
           <div className="sv" style={{ color: showFavoritesOnly ? '#DC440A' : undefined }}>
             {favorites.length} {showFavoritesOnly ? '★' : '☆'}
@@ -101,13 +101,13 @@ export default function ResultsPanel({
                 <span className="ctag prod">{v.product}</span>
                 <span className="ctag">{v.angle}</span>
               </div>
-              <div className="chl">{v.headline}</div>
-              <div className="ccta">{v.cta} →</div>
+              <div className="chl">{v.hook}</div>
+              <div className="ccta" style={{ fontStyle: 'normal', fontSize: 11, opacity: 0.75 }}>{v.body}</div>
               <button
                 className="static-btn"
-                onClick={() => onCreateStatic(v)}
+                onClick={() => onUseInVideo(v)}
               >
-                {hasSavedImages ? 'Create Static Ad' : 'Create Static Ad ↗'}
+                → Use in Video
               </button>
             </div>
           );

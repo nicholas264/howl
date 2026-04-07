@@ -1,10 +1,8 @@
 import { useState, useCallback } from "react";
 import { PRODUCTS, ANGLES, PLATFORMS } from "./data";
 import { buildSystemPrompt, buildUserPrompt } from "./prompts";
-import { analyzeImage } from "./utils/analyzeImage";
 import ConfigPanel from "./components/ConfigPanel";
 import ResultsPanel from "./components/ResultsPanel";
-import StaticEditor from "./components/StaticEditor";
 import ReviewAdTool from "./components/ReviewAdTool";
 import VideoAdTool from "./components/VideoAdTool";
 import "./styles.css";
@@ -22,12 +20,7 @@ export default function HowlAdEngine() {
   const [activeTab, setActiveTab] = useState("config");
   const [filterAngle, setFilterAngle] = useState("all");
   const [filterProduct, setFilterProduct] = useState("all");
-  const [productPhoto, setProductPhoto] = useState(null);
-  const [staticVariation, setStaticVariation] = useState(null);
-  const [savedImages, setSavedImages] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('howl_saved_images') || '[]'); }
-    catch { return []; }
-  });
+  const [videoText, setVideoText] = useState(null);
   const [favorites, setFavorites] = useState(() => {
     try { return JSON.parse(localStorage.getItem('howl_favorites') || '[]'); }
     catch { return []; }
@@ -35,35 +28,19 @@ export default function HowlAdEngine() {
 
   const toggleFavorite = useCallback((variation) => {
     setFavorites(prev => {
-      const key = `${variation.product}__${variation.headline}`;
-      const exists = prev.some(f => `${f.product}__${f.headline}` === key);
+      const key = `${variation.product}__${variation.hook}`;
+      const exists = prev.some(f => `${f.product}__${f.hook}` === key);
       const next = exists
-        ? prev.filter(f => `${f.product}__${f.headline}` !== key)
+        ? prev.filter(f => `${f.product}__${f.hook}` !== key)
         : [{ ...variation, savedAt: Date.now() }, ...prev].slice(0, 50);
       try { localStorage.setItem('howl_favorites', JSON.stringify(next)); } catch {}
       return next;
     });
   }, []);
 
-  const handlePhotoChange = useCallback(async (dataUrl) => {
-    setProductPhoto(dataUrl);
-    if (dataUrl) {
-      const position = await analyzeImage(dataUrl);
-      setSavedImages(prev => {
-        const filtered = prev.filter(img => img.url !== dataUrl);
-        const next = [{ url: dataUrl, id: Date.now(), textPosition: position }, ...filtered].slice(0, 6);
-        try { localStorage.setItem('howl_saved_images', JSON.stringify(next)); } catch {}
-        return next;
-      });
-    }
-  }, []);
-
-  const removeSavedImage = useCallback((id) => {
-    setSavedImages(prev => {
-      const next = prev.filter(img => img.id !== id);
-      try { localStorage.setItem('howl_saved_images', JSON.stringify(next)); } catch {}
-      return next;
-    });
+  const handleUseInVideo = useCallback((variation) => {
+    setVideoText(variation.hook);
+    setActiveTab('video');
   }, []);
 
   const toggleProduct = (id) => setSelectedProducts((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
@@ -153,8 +130,6 @@ export default function HowlAdEngine() {
           selectedAvatar={selectedAvatar} setSelectedAvatar={setSelectedAvatar}
           copyCount={copyCount} setCopyCount={setCopyCount}
           customContext={customContext} setCustomContext={setCustomContext}
-          productPhoto={productPhoto} onPhotoChange={handlePhotoChange}
-          savedImages={savedImages} onRemoveSavedImage={removeSavedImage}
           loading={loading} error={error} generate={generate}
         />
       )}
@@ -166,23 +141,13 @@ export default function HowlAdEngine() {
           filterAngle={filterAngle} setFilterAngle={setFilterAngle}
           filterProduct={filterProduct} setFilterProduct={setFilterProduct}
           exportCSV={exportCSV} setActiveTab={setActiveTab} generate={generate}
-          hasSavedImages={savedImages.length > 0} onCreateStatic={setStaticVariation}
+          onUseInVideo={handleUseInVideo}
           favorites={favorites} toggleFavorite={toggleFavorite}
         />
       )}
 
       {activeTab === "review" && <ReviewAdTool />}
-      {activeTab === "video" && <VideoAdTool />}
-
-      {staticVariation && (
-        <StaticEditor
-          variation={staticVariation}
-          savedImages={savedImages}
-          onAddImage={handlePhotoChange}
-          onRemoveSavedImage={removeSavedImage}
-          onClose={() => setStaticVariation(null)}
-        />
-      )}
+      {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} />}
     </div>
   );
 }

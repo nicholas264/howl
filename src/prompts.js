@@ -85,29 +85,28 @@ export function buildUserPrompt(products, angles, platform, avatarId, copyCount,
     return `- ${full.label}: ${full.desc}. Customer quotes to draw from: ${full.customerLanguage.map((l) => `"${l}"`).join(", ")}`;
   });
 
-  return `Generate exactly ${copyCount} headline variations as a JSON array.
+  return `Generate exactly ${copyCount} video overlay variations as a JSON array.
+
+These will be burned as text overlays onto UGC/product videos — not static ads. Think short, punchy, scroll-stopping. The hook is the big text the viewer sees first. The body is one tight sentence underneath it.
 
 PRODUCTS TO FEATURE:
 ${products.map((p) => `- ${p.name} (${p.price}): ${p.tagline}`).join("\n")}
 
-PLATFORM: ${platform.label}
-HEADLINE CHARACTER LIMIT: ${platform.charLimits.headline} chars max
-
 ANGLES TO USE (distribute evenly across variations):
 ${angleData.join("\n")}
 
-${avatar ? `TARGET AVATAR: ${avatar.label} — ${avatar.desc}. Write headlines this specific person would stop scrolling for.` : ""}
+${avatar ? `TARGET AVATAR: ${avatar.label} — ${avatar.desc}. Write copy this specific person would stop scrolling for.` : ""}
 
 ${customContext ? `ADDITIONAL CONTEXT:\n${customContext}` : ""}
 
 Each variation must be a JSON object with ONLY these fields:
 - "product": "${products.map((p) => p.name).join('" or "')}"
 - "angle": the angle label used
-- "headline": the headline (STRICT ${platform.charLimits.headline} char limit). Must communicate core value prop. Customer quotes must be in quotation marks.
-- "cta": short CTA (e.g. "Shop Now", "Get Yours", "Meet the R1")
+- "hook": BIG overlay text (STRICT 6 words max). This is what stops the scroll. Customer quotes must be in quotation marks. NO em dashes.
+- "body": One punchy sentence (max 15 words). Delivers the proof or the transformation. NO em dashes.
 ${avatar ? `- "avatar": "${avatar.label}"` : ""}
 
-IMPORTANT: Headlines must communicate WHY this product matters, not just WHAT it does. Lead with transformation, not features. When quoting customers, use their exact words in quotes.
+HOOK RULES: Lead with outcome or emotion, not the product. Specific numbers shock. Real customer quotes in quotes crush. No filler words. No "game-changer."
 
 Respond with ONLY the JSON array. No preamble, no markdown, no explanation.`;
 }
