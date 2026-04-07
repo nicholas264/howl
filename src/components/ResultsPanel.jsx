@@ -8,7 +8,7 @@ function isFavorited(variation, favorites) {
 export default function ResultsPanel({
   variations, filtered, platform, uniqueAngles, uniqueProducts,
   filterAngle, setFilterAngle, filterProduct, setFilterProduct,
-  exportCSV, setActiveTab, generate, onUseInVideo,
+  exportCSV, setActiveTab, generate, onUseInVideo, onUseOnImage,
   favorites, toggleFavorite,
 }) {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
@@ -103,12 +103,10 @@ export default function ResultsPanel({
               </div>
               <div className="chl">{v.hook}</div>
               <div className="ccta" style={{ fontStyle: 'normal', fontSize: 11, opacity: 0.75 }}>{v.body}</div>
-              <button
-                className="static-btn"
-                onClick={() => onUseInVideo(v)}
-              >
-                → Use in Video
-              </button>
+              <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                <button className="static-btn" style={{ flex: 1 }} onClick={() => onUseOnImage(v)}>→ Image</button>
+                <button className="static-btn" style={{ flex: 1 }} onClick={() => onUseInVideo(v)}>→ Video</button>
+              </div>
             </div>
           );
         })}

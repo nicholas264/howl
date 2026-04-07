@@ -5,6 +5,7 @@ import ConfigPanel from "./components/ConfigPanel";
 import ResultsPanel from "./components/ResultsPanel";
 import ReviewAdTool from "./components/ReviewAdTool";
 import VideoAdTool from "./components/VideoAdTool";
+import ImageAdTool from "./components/ImageAdTool";
 import "./styles.css";
 
 export default function HowlAdEngine() {
@@ -21,6 +22,7 @@ export default function HowlAdEngine() {
   const [filterAngle, setFilterAngle] = useState("all");
   const [filterProduct, setFilterProduct] = useState("all");
   const [videoText, setVideoText] = useState(null);
+  const [imageText, setImageText] = useState(null);
   const [favorites, setFavorites] = useState(() => {
     try { return JSON.parse(localStorage.getItem('howl_favorites') || '[]'); }
     catch { return []; }
@@ -41,6 +43,11 @@ export default function HowlAdEngine() {
   const handleUseInVideo = useCallback((variation) => {
     setVideoText(variation.hook);
     setActiveTab('video');
+  }, []);
+
+  const handleUseOnImage = useCallback((variation) => {
+    setImageText(variation.hook);
+    setActiveTab('image');
   }, []);
 
   const toggleProduct = (id) => setSelectedProducts((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
@@ -119,6 +126,7 @@ export default function HowlAdEngine() {
         <button className={`tab ${activeTab === "results" ? "on" : ""}`} onClick={() => setActiveTab("results")} disabled={variations.length === 0}>
           Results {variations.length > 0 && `(${variations.length})`}
         </button>
+        <button className={`tab ${activeTab === "image" ? "on" : ""}`} onClick={() => setActiveTab("image")}>Image Ads</button>
         <button className={`tab ${activeTab === "review" ? "on" : ""}`} onClick={() => setActiveTab("review")}>Review Ads</button>
         <button className={`tab ${activeTab === "video" ? "on" : ""}`} onClick={() => setActiveTab("video")}>Video Ads</button>
       </div>
@@ -141,11 +149,12 @@ export default function HowlAdEngine() {
           filterAngle={filterAngle} setFilterAngle={setFilterAngle}
           filterProduct={filterProduct} setFilterProduct={setFilterProduct}
           exportCSV={exportCSV} setActiveTab={setActiveTab} generate={generate}
-          onUseInVideo={handleUseInVideo}
+          onUseInVideo={handleUseInVideo} onUseOnImage={handleUseOnImage}
           favorites={favorites} toggleFavorite={toggleFavorite}
         />
       )}
 
+      {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} />}
       {activeTab === "review" && <ReviewAdTool />}
       {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} />}
     </div>
