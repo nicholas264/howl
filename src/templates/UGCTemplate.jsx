@@ -1,11 +1,12 @@
 import { COLORS, FONTS, LOGOS } from '../brand';
 import { scaleFontSize } from '../utils/scaleFontSize';
 
-export default function UGCTemplate({ variation, photoUrl, format, dimensions, attribution, socialProof, reviewerName, backgroundImage }) {
+export default function UGCTemplate({ variation, photoUrl, format, dimensions, attribution, socialProof, reviewerName, backgroundImage, scrimColor }) {
   const isStory = format === 'story';
   const headlineSize = scaleFontSize(variation.headline, isStory ? 88 : 72, 32);
   const padding = isStory ? 80 : 60;
   const hasBackground = !!backgroundImage;
+  const scrim = scrimColor ?? 'rgba(249,243,223,0.72)';
 
   return (
     <div style={{
@@ -21,8 +22,7 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
       flexDirection: 'column',
       boxSizing: 'border-box',
     }}>
-      {/* Scrim when background image is set */}
-      {hasBackground && <div style={{ position: 'absolute', inset: 0, background: 'rgba(249,243,223,0.72)', zIndex: 0 }} />}
+      {hasBackground && <div style={{ position: 'absolute', inset: 0, background: scrim, zIndex: 0 }} />}
 
       {/* Top accent bar */}
       <div style={{ height: 8, background: COLORS.flame, flexShrink: 0, position: 'relative', zIndex: 1 }} />

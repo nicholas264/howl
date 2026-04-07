@@ -60,8 +60,14 @@ export default function ReviewAdTool() {
   const [exportProgress, setExportProgress] = useState('');
   const [dragging, setDragging] = useState(false);
   const [bgImage, setBgImage] = useState(() => { try { return localStorage.getItem(LS_BG) || null; } catch { return null; } });
+  const [scrimColor, setScrimColor] = useState(() => { try { return localStorage.getItem('howl_review_scrim') || 'rgba(249,243,223,0.72)'; } catch { return 'rgba(249,243,223,0.72)'; } });
   const [savedImages, setSavedImages] = useState(loadSavedImages);
   const bgFileRef = useRef(null);
+
+  const handleScrimChange = (val) => {
+    setScrimColor(val);
+    try { localStorage.setItem('howl_review_scrim', val); } catch {}
+  };
 
   // Single / no-CSV mode
   const [manualQuote, setManualQuote] = useState('');
@@ -238,7 +244,7 @@ export default function ReviewAdTool() {
           </div>
 
           {/* Background image */}
-          <BgImagePicker bgImage={bgImage} savedImages={savedImages} onSelect={url => { setBgImage(url); try { localStorage.setItem(LS_BG, url); } catch {} }} onUpload={handleBgFile} onClear={clearBg} fileRef={bgFileRef} />
+          <BgImagePicker bgImage={bgImage} savedImages={savedImages} onSelect={url => { setBgImage(url); try { localStorage.setItem(LS_BG, url); } catch {} }} onUpload={handleBgFile} onClear={clearBg} fileRef={bgFileRef} scrimColor={scrimColor} onScrimChange={handleScrimChange} />
 
           <button onClick={handleSingleExport} disabled={exporting || !manualQuote.trim()} style={S.exportBtn(exporting || !manualQuote.trim())}>
             {exporting ? 'Exporting...' : 'Download PNG'}
@@ -248,13 +254,13 @@ export default function ReviewAdTool() {
         {/* Right */}
         <div style={S.rightPanel}>
           <PreviewCard fmt={fmt} scale={scale}>
-            <UGCTemplate variation={variation} format={manualFormat} dimensions={fmt} attribution={attribution} backgroundImage={bgImage} />
+            <UGCTemplate variation={variation} format={manualFormat} dimensions={fmt} attribution={attribution} backgroundImage={bgImage} scrimColor={scrimColor} />
           </PreviewCard>
         </div>
 
         <div style={{ position: 'fixed', left: -99999, top: 0 }}>
           <div ref={singleCaptureRef} style={{ width: fmt.width, height: fmt.height }}>
-            <UGCTemplate variation={variation} format={manualFormat} dimensions={fmt} attribution={attribution} backgroundImage={bgImage} />
+            <UGCTemplate variation={variation} format={manualFormat} dimensions={fmt} attribution={attribution} backgroundImage={bgImage} scrimColor={scrimColor} />
           </div>
         </div>
       </div>
@@ -352,7 +358,7 @@ export default function ReviewAdTool() {
               <button key={key} onClick={() => toggleFormat(key)} style={S.fmtBtn(formatKeys.includes(key))}>{f.label}</button>
             ))}
           </div>
-          <BgImagePicker bgImage={bgImage} savedImages={savedImages} onSelect={url => { setBgImage(url); try { localStorage.setItem(LS_BG, url); } catch {} }} onUpload={handleBgFile} onClear={clearBg} fileRef={bgFileRef} />
+          <BgImagePicker bgImage={bgImage} savedImages={savedImages} onSelect={url => { setBgImage(url); try { localStorage.setItem(LS_BG, url); } catch {} }} onUpload={handleBgFile} onClear={clearBg} fileRef={bgFileRef} scrimColor={scrimColor} onScrimChange={handleScrimChange} />
           <button onClick={handleBulkExport} disabled={exporting || selectedCount === 0} style={S.exportBtn(exporting || selectedCount === 0)}>
             {exporting
               ? `Exporting ${exportProgress}...`
@@ -388,7 +394,7 @@ export default function ReviewAdTool() {
             const key = `${r.id}_${fk}`;
             return (
               <div key={key} ref={el => { captureRefs.current[key] = el; }} style={{ width: fmt.width, height: fmt.height }}>
-                <UGCTemplate variation={{ headline: r.quote }} format={fk} dimensions={fmt} reviewerName={r.nickname} attribution={verifiedLabel(r.handle)} backgroundImage={bgImage} />
+                <UGCTemplate variation={{ headline: r.quote }} format={fk} dimensions={fmt} reviewerName={r.nickname} attribution={verifiedLabel(r.handle)} backgroundImage={bgImage} scrimColor={scrimColor} />
               </div>
             );
           })
@@ -398,10 +404,17 @@ export default function ReviewAdTool() {
   );
 }
 
-function BgImagePicker({ bgImage, savedImages, onSelect, onUpload, onClear, fileRef }) {
+const SCRIM_OPTIONS = [
+  { label: 'Tan',   value: 'rgba(249,243,223,0.72)' },
+  { label: 'Black', value: 'rgba(0,0,0,0.55)' },
+  { label: 'White', value: 'rgba(255,255,255,0.72)' },
+  { label: 'None',  value: 'rgba(0,0,0,0)' },
+];
+
+function BgImagePicker({ bgImage, savedImages, onSelect, onUpload, onClear, fileRef, scrimColor, onScrimChange }) {
   return (
-    <div>
-      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8a8270', marginBottom: 6, fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8a8270', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Background Image</span>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => fileRef.current?.click()} style={{ fontSize: 9, color: '#DC440A', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' }}>+ Upload</button>
@@ -419,6 +432,22 @@ function BgImagePicker({ bgImage, savedImages, onSelect, onUpload, onClear, file
         </div>
       ) : (
         <div style={{ fontSize: 9, color: '#b0a898' }}>Upload images in Image Ads tab to reuse here.</div>
+      )}
+      {bgImage && (
+        <div>
+          <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8a8270', fontWeight: 600, marginBottom: 5 }}>Overlay Color</div>
+          <div style={{ display: 'flex', gap: 5 }}>
+            {SCRIM_OPTIONS.map(o => (
+              <button key={o.label} onClick={() => onScrimChange(o.value)} style={{
+                flex: 1, padding: '5px 0', borderRadius: 3, cursor: 'pointer', fontSize: 9,
+                border: `1px solid ${scrimColor === o.value ? '#DC440A' : '#e0d9c4'}`,
+                background: scrimColor === o.value ? '#fef8f0' : '#fff',
+                color: scrimColor === o.value ? '#DC440A' : '#8a8270',
+                fontFamily: 'inherit', letterSpacing: 1, textTransform: 'uppercase',
+              }}>{o.label}</button>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
