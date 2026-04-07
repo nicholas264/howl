@@ -13,6 +13,8 @@ const PRODUCT_NAMES = {
   'r4': 'HOWL R4',
 };
 
+const VALID_HANDLES = new Set(['r1', 'r4', 'r4mkii']);
+
 function verifiedLabel(handle) {
   const name = PRODUCT_NAMES[handle] || 'HOWL';
   return `Verified ${name} Customer`;
@@ -28,7 +30,8 @@ function parseLoox(csv) {
       quote: r.review.trim(),
       nickname: r.nickname || r.full_name || 'Verified HOWL Customer',
       handle: (r.handle || '').replace('the-howl-', ''),
-    }));
+    }))
+    .filter(r => VALID_HANDLES.has(r.handle));
 }
 
 function loadSaved() {
