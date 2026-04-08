@@ -115,10 +115,16 @@ export default function HowlAdEngine() {
   const uniqueProducts = [...new Set(variations.map((v) => v.product))];
 
   return (
-    <div style={{ minHeight: "100vh", background: "#F9F3DF", color: "#333F4C", fontFamily: "'JetBrains Mono', 'SF Mono', monospace" }}>
+    <div style={{ minHeight: "100vh", background: "#0d1117", color: "#f0f4f8", fontFamily: "'JetBrains Mono', 'SF Mono', monospace" }}>
       <div className="hd">
-        <div className="hd-logo"><b>HOWL</b> / Ad Engine</div>
-        <div className="hd-sub">938 Reviews × Claude</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <img
+            src="https://www.howlcampfires.com/cdn/shop/files/HowlCampfires_Primary_UnStacked-wht.png?v=1690935869&width=2918"
+            alt="HOWL Campfires"
+            style={{ height: 26, width: 'auto' }}
+          />
+          <div className="hd-sub">Ad Engine × Claude</div>
+        </div>
       </div>
 
       <div className="tabs">
