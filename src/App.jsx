@@ -7,9 +7,12 @@ import ReviewAdTool from "./components/ReviewAdTool";
 import VideoAdTool from "./components/VideoAdTool";
 import ImageAdTool from "./components/ImageAdTool";
 import FounderAdTool from "./components/FounderAdTool";
+import DriveButton from "./components/DriveButton";
+import { useDriveAuth } from "./hooks/useDriveAuth";
 import "./styles.css";
 
 export default function HowlAdEngine() {
+  const driveAuth = useDriveAuth();
   const [selectedProducts, setSelectedProducts] = useState(["r1", "r4mkii"]);
   const [selectedAngles, setSelectedAngles] = useState(["burn_ban", "skeptic", "heat"]);
   const platform = PLATFORMS[0]; // Meta only
@@ -126,6 +129,7 @@ export default function HowlAdEngine() {
           />
           <div className="hd-sub">Creative Studio</div>
         </div>
+        <DriveButton connected={driveAuth.connected} connect={driveAuth.connect} disconnect={driveAuth.disconnect} />
       </div>
 
       <div className="tabs">
@@ -162,8 +166,8 @@ export default function HowlAdEngine() {
         />
       )}
 
-      {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} />}
-      {activeTab === "review" && <ReviewAdTool />}
+      {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} driveAuth={driveAuth} />}
+      {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} />}
       {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} />}
       {activeTab === "founder" && <FounderAdTool />}
     </div>

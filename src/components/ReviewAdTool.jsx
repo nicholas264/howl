@@ -47,7 +47,7 @@ function loadSavedImages() {
   try { return JSON.parse(localStorage.getItem(LS_SAVED_IMAGES) || '[]'); } catch { return []; }
 }
 
-export default function ReviewAdTool() {
+export default function ReviewAdTool({ driveAuth }) {
   const [reviews, setReviews] = useState(loadSaved);
   const [csvName, setCsvName] = useState(() => localStorage.getItem(LS_NAME) || '');
   const [selected, setSelected] = useState(() => {
@@ -160,7 +160,7 @@ export default function ReviewAdTool() {
     finally { setExporting(false); }
   }, [manualQuote, manualFormat]);
 
-  const handleBulkExport = useCallback(async () => {
+  const handleBulkExport = useCallback(async ({ toDrive = false } = {}) => {
     const toExport = filtered.filter(r => selected.has(r.id));
     if (toExport.length === 0) return;
     setExporting(true);
@@ -177,15 +177,20 @@ export default function ReviewAdTool() {
           const fmt = FORMATS[fk];
           await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
           const dataUrl = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
-          const a = document.createElement('a');
-          a.download = `howl_${review.handle || 'review'}_${fmt.label.replace(':', 'x')}_${count}.png`;
-          a.href = dataUrl; a.click();
+          const fileName = `howl_${review.handle || 'review'}_${fmt.label.replace(':', 'x')}_${count}.png`;
+          if (toDrive && driveAuth?.connected) {
+            await driveAuth.uploadFile({ fileName, fileData: dataUrl, mimeType: 'image/png' });
+          } else {
+            const a = document.createElement('a');
+            a.download = fileName;
+            a.href = dataUrl; a.click();
+          }
           await new Promise(res => setTimeout(res, 250));
         }
       }
     } catch (err) { console.error(err); alert('Export failed. Try a smaller batch.'); }
     finally { setExporting(false); setExportProgress(''); }
-  }, [reviews, selected, formatKeys]);
+  }, [reviews, selected, formatKeys, driveAuth]);
 
   const products = [...new Set(reviews.map(r => r.handle).filter(Boolean))].sort();
   const filtered = reviews.filter(r =>
@@ -364,12 +369,17 @@ export default function ReviewAdTool() {
             ))}
           </div>
           <BgImagePicker bgImage={bgImage} savedImages={savedImages} onSelect={url => { setBgImage(url); try { localStorage.setItem(LS_BG, url); } catch {} }} onUpload={handleBgFile} onClear={clearBg} fileRef={bgFileRef} scrimColor={scrimColor} onScrimChange={handleScrimChange} />
-          <button onClick={handleBulkExport} disabled={exporting || selectedCount === 0} style={S.exportBtn(exporting || selectedCount === 0)}>
+          <button onClick={() => handleBulkExport()} disabled={exporting || selectedCount === 0} style={S.exportBtn(exporting || selectedCount === 0)}>
             {exporting
               ? `Exporting ${exportProgress}...`
               : selectedCount === 0 ? 'Select reviews'
               : `Export ${exportTotal} PNG${exportTotal !== 1 ? 's' : ''}`}
           </button>
+          {driveAuth?.connected && (
+            <button onClick={() => handleBulkExport({ toDrive: true })} disabled={exporting || selectedCount === 0} style={{ ...S.exportBtn(exporting || selectedCount === 0), background: exporting || selectedCount === 0 ? '#2a3441' : '#1a7f37', marginTop: 4 }}>
+              {exporting ? `Saving ${exportProgress}...` : `Save to Drive`}
+            </button>
+          )}
         </div>
       </div>
 

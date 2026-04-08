@@ -165,7 +165,7 @@ function BatchCard({ img, hook, body, fmt, pos, color, fontSize, shadow, onExpor
   );
 }
 
-export default function ImageAdTool({ initialText, onTextConsumed }) {
+export default function ImageAdTool({ initialText, onTextConsumed, driveAuth }) {
   const [mode, setMode]             = useState('single'); // 'single' | 'batch'
   const [images, setImages]         = useState(() => ls(LS_IMAGES, []));
   const [activeImg, setActiveImg]   = useState(() => { const imgs = ls(LS_IMAGES, []); return imgs[0] || null; });
@@ -275,18 +275,24 @@ export default function ImageAdTool({ initialText, onTextConsumed }) {
   };
 
   // ── Single export ─────────────────────────────────────────────────────
-  const handleExport = useCallback(async () => {
+  const handleExport = useCallback(async ({ toDrive = false } = {}) => {
     if (!activeImg || !overlayText.trim()) return;
     setExporting(true);
     try {
       const canvas = await renderToCanvas(activeImg.url, overlayText, bodyText || null, fmt.w, fmt.h, styleOpts);
-      const a = document.createElement('a');
-      a.href = canvas.toDataURL('image/png');
-      a.download = `howl_image_${formatId}_${Date.now()}.png`;
-      a.click();
+      const dataUrl = canvas.toDataURL('image/png');
+      const fileName = `howl_image_${formatId}_${Date.now()}.png`;
+      if (toDrive && driveAuth?.connected) {
+        await driveAuth.uploadFile({ fileName, fileData: dataUrl, mimeType: 'image/png' });
+      } else {
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = fileName;
+        a.click();
+      }
     } catch (err) { alert(`Export failed: ${err?.message || err}`); }
     finally { setExporting(false); }
-  }, [activeImg, overlayText, bodyText, fmt, styleOpts, formatId]);
+  }, [activeImg, overlayText, bodyText, fmt, styleOpts, formatId, driveAuth]);
 
   // ── Single card export from batch grid ───────────────────────────────
   const exportCard = async (img, hook) => {
@@ -580,9 +586,16 @@ export default function ImageAdTool({ initialText, onTextConsumed }) {
             <div style={{ fontSize: 9, color: '#8a8270', marginBottom: 8, letterSpacing: 1 }}>Rendering {exportMsg}…</div>
           )}
           {mode === 'single' ? (
-            <button onClick={handleExport} disabled={!canSingleExport} style={S.exportBtn(!canSingleExport)}>
-              {exporting ? 'Exporting…' : !activeImg ? 'Upload an image' : !overlayText.trim() ? 'Enter hook text' : `Export PNG (${fmt.label})`}
-            </button>
+            <>
+              <button onClick={() => handleExport()} disabled={!canSingleExport} style={S.exportBtn(!canSingleExport)}>
+                {exporting ? 'Exporting…' : !activeImg ? 'Upload an image' : !overlayText.trim() ? 'Enter hook text' : `Export PNG (${fmt.label})`}
+              </button>
+              {driveAuth?.connected && (
+                <button onClick={() => handleExport({ toDrive: true })} disabled={!canSingleExport} style={{ ...S.exportBtn(!canSingleExport), background: !canSingleExport ? undefined : '#1a7f37', marginTop: 6 }}>
+                  {exporting ? 'Saving…' : 'Save to Drive'}
+                </button>
+              )}
+            </>
           ) : (
             <button onClick={handleBatchExport} disabled={!canBatchExport} style={S.exportBtn(!canBatchExport)}>
               {exporting ? `Rendering ${exportMsg}…`
