@@ -123,7 +123,7 @@ export default function HowlAdEngine() {
             alt="HOWL Campfires"
             style={{ height: 26, width: 'auto' }}
           />
-          <div className="hd-sub">Ad Engine × Claude</div>
+          <div className="hd-sub">Creative Studio</div>
         </div>
       </div>
 
