@@ -10,10 +10,9 @@ const LS_NAME = 'howl_review_ads_name';
 const PRODUCT_NAMES = {
   'r1': 'HOWL R1',
   'r4mkii': 'HOWL R4 MkII',
-  'r4': 'HOWL R4',
 };
 
-const VALID_HANDLES = new Set(['r1', 'r4', 'r4mkii']);
+const VALID_HANDLES = new Set(['r1', 'r4mkii']);
 
 function verifiedLabel(handle) {
   const name = PRODUCT_NAMES[handle] || 'HOWL';
@@ -35,7 +34,10 @@ function parseLoox(csv) {
 }
 
 function loadSaved() {
-  try { return JSON.parse(localStorage.getItem(LS_REVIEWS) || '[]'); } catch { return []; }
+  try {
+    const data = JSON.parse(localStorage.getItem(LS_REVIEWS) || '[]');
+    return data.filter(r => VALID_HANDLES.has(r.handle));
+  } catch { return []; }
 }
 
 const LS_SAVED_IMAGES = 'howl_saved_images';
