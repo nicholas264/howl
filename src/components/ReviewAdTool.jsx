@@ -270,8 +270,11 @@ export default function ReviewAdTool() {
   }
 
   // ---- CSV / Bulk mode ----
+  const bothSelected = formatKeys.includes('square') && formatKeys.includes('story');
+  const squareScale = bothSelected ? 0.32 : 0.4;
+  const storyScale = bothSelected ? 0.22 : 0.4;
   const pvFmt = FORMATS[formatKeys[0]];
-  const pvScale = 0.4;
+  const pvScale = formatKeys[0] === 'story' ? storyScale : squareScale;
 
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 108px)' }}>
@@ -371,18 +374,46 @@ export default function ReviewAdTool() {
       </div>
 
       {/* Right: preview */}
-      <div style={S.rightPanel}>
+      <div style={{ ...S.rightPanel, gap: 24, flexWrap: 'wrap' }}>
         {previewReview ? (
-          <PreviewCard fmt={pvFmt} scale={pvScale}>
-            <UGCTemplate
-              variation={{ headline: previewReview.quote }}
-              format={formatKeys[0]}
-              dimensions={pvFmt}
-              reviewerName={previewReview.nickname}
-              attribution={verifiedLabel(previewReview.handle)}
-              backgroundImage={bgImage}
-            />
-          </PreviewCard>
+          bothSelected ? (
+            <>
+              <PreviewCard fmt={FORMATS.square} scale={squareScale}>
+                <UGCTemplate
+                  variation={{ headline: previewReview.quote }}
+                  format="square"
+                  dimensions={FORMATS.square}
+                  reviewerName={previewReview.nickname}
+                  attribution={verifiedLabel(previewReview.handle)}
+                  backgroundImage={bgImage}
+                  scrimColor={scrimColor}
+                />
+              </PreviewCard>
+              <PreviewCard fmt={FORMATS.story} scale={storyScale}>
+                <UGCTemplate
+                  variation={{ headline: previewReview.quote }}
+                  format="story"
+                  dimensions={FORMATS.story}
+                  reviewerName={previewReview.nickname}
+                  attribution={verifiedLabel(previewReview.handle)}
+                  backgroundImage={bgImage}
+                  scrimColor={scrimColor}
+                />
+              </PreviewCard>
+            </>
+          ) : (
+            <PreviewCard fmt={pvFmt} scale={pvScale}>
+              <UGCTemplate
+                variation={{ headline: previewReview.quote }}
+                format={formatKeys[0]}
+                dimensions={pvFmt}
+                reviewerName={previewReview.nickname}
+                attribution={verifiedLabel(previewReview.handle)}
+                backgroundImage={bgImage}
+                scrimColor={scrimColor}
+              />
+            </PreviewCard>
+          )
         ) : (
           <div style={{ color: '#8b949e', fontSize: 12 }}>No reviews match filter</div>
         )}
@@ -473,5 +504,5 @@ const S = {
   exportBtn: (disabled) => ({ width: '100%', padding: '12px 0', background: disabled ? '#2a3441' : '#DC440A', border: 'none', borderRadius: 4, color: disabled ? '#6e7681' : '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer' }),
   filterBtn: (active) => ({ padding: '3px 8px', border: `1px solid ${active ? '#DC440A' : '#2a3441'}`, background: active ? 'rgba(220,68,10,0.15)' : '#1c2330', color: active ? '#DC440A' : '#8b949e', fontFamily: 'inherit', fontSize: 9, cursor: 'pointer', borderRadius: 3 }),
   microBtn: { padding: '3px 7px', border: '1px solid #2a3441', background: '#1c2330', color: '#8b949e', fontFamily: 'inherit', fontSize: 8, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 3 },
-  rightPanel: { flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d1117', padding: 40, overflow: 'auto' },
+  rightPanel: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', background: '#0d1117', padding: 40, overflow: 'auto' },
 };

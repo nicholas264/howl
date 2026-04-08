@@ -65,7 +65,7 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
           wordBreak: 'break-word',
           maxWidth: '100%',
         }}>
-          {variation.headline}
+          {'\u201c'}{variation.headline}{'\u201d'}
         </div>
 
         {/* Divider */}
