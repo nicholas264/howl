@@ -6,6 +6,7 @@ import ResultsPanel from "./components/ResultsPanel";
 import ReviewAdTool from "./components/ReviewAdTool";
 import VideoAdTool from "./components/VideoAdTool";
 import ImageAdTool from "./components/ImageAdTool";
+import FounderAdTool from "./components/FounderAdTool";
 import "./styles.css";
 
 export default function HowlAdEngine() {
@@ -135,6 +136,7 @@ export default function HowlAdEngine() {
         <button className={`tab ${activeTab === "image" ? "on" : ""}`} onClick={() => setActiveTab("image")}>Image Ads</button>
         <button className={`tab ${activeTab === "review" ? "on" : ""}`} onClick={() => setActiveTab("review")}>Review Ads</button>
         <button className={`tab ${activeTab === "video" ? "on" : ""}`} onClick={() => setActiveTab("video")}>Video Ads</button>
+        <button className={`tab ${activeTab === "founder" ? "on" : ""}`} onClick={() => setActiveTab("founder")}>Founder Ads</button>
       </div>
 
       {activeTab === "config" && (
@@ -163,6 +165,7 @@ export default function HowlAdEngine() {
       {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} />}
       {activeTab === "review" && <ReviewAdTool />}
       {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} />}
+      {activeTab === "founder" && <FounderAdTool />}
     </div>
   );
 }
