@@ -119,7 +119,7 @@ export default function HowlAdEngine() {
       <div className="hd">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <img
-            src="https://www.howlcampfires.com/cdn/shop/files/HowlCampfires_Primary_UnStacked-wht.png?v=1690935869&width=2918"
+            src="/logos/howl-stacked-wht.png"
             alt="HOWL Campfires"
             style={{ height: 26, width: 'auto' }}
           />
