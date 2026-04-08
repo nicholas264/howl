@@ -84,7 +84,7 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
             fontWeight: FONTS.subHeadline.weight,
             fontSize: isStory ? 36 : 28,
             letterSpacing: '0.12em',
-            color: '#6b6055',
+            color: COLORS.midnightSky,
             flexShrink: 0,
             marginBottom: isStory ? 10 : 8,
           }}>
@@ -99,7 +99,7 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
           fontSize: isStory ? 28 : 22,
           textTransform: 'uppercase',
           letterSpacing: '0.18em',
-          color: '#9a8f80',
+          color: COLORS.midnightSky,
           flexShrink: 0,
         }}>
           {attribution || 'Verified HOWL Customer'}
@@ -109,7 +109,7 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
         <div style={{
           fontFamily: FONTS.body.family,
           fontSize: isStory ? 30 : 22,
-          color: '#b0a898',
+          color: COLORS.midnightSky,
           marginTop: isStory ? 18 : 12,
           letterSpacing: '0.05em',
           flexShrink: 0,
