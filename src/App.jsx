@@ -119,9 +119,9 @@ export default function HowlAdEngine() {
       <div className="hd">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <img
-            src="/logos/howl-stacked-wht.png"
+            src="/logos/howl-horizontal-wht.png"
             alt="HOWL Campfires"
-            style={{ height: 26, width: 'auto' }}
+            style={{ height: 32, width: 'auto', objectFit: 'contain' }}
           />
           <div className="hd-sub">Creative Studio</div>
         </div>
