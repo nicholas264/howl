@@ -210,7 +210,7 @@ export default function ReviewAdTool() {
     return (
       <div style={{ display: 'flex', height: 'calc(100vh - 108px)' }}>
         {/* Left */}
-        <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #e0d9c4', display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: 28, gap: 20 }}>
+        <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #2a3441', display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: 28, gap: 20 }}>
           <div>
             <div style={S.label}>Import Loox CSV</div>
             <label
@@ -279,7 +279,7 @@ export default function ReviewAdTool() {
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 108px)' }}>
       {/* Left panel — flex column with fixed header/footer, scrollable list */}
-      <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #e0d9c4', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #2a3441', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
 
         {/* Fixed: CSV header */}
         <div style={{ padding: '12px 20px', borderBottom: '1px solid #2a3441', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -299,7 +299,7 @@ export default function ReviewAdTool() {
         </div>
 
         {/* Fixed: Rating filter */}
-        <div style={{ padding: '8px 16px', borderBottom: '1px solid #e0d9c4', flexShrink: 0, display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ padding: '8px 16px', borderBottom: '1px solid #2a3441', flexShrink: 0, display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
           {[0, 5, 4, 3].map(r => (
             <button key={r} onClick={() => setRatingFilter(r)} style={S.filterBtn(ratingFilter === r)}>
               {r === 0 ? 'All' : `${r}★`}
@@ -313,7 +313,7 @@ export default function ReviewAdTool() {
 
         {/* Fixed: Product filter (only if multiple products) */}
         {products.length > 1 && (
-          <div style={{ padding: '8px 16px', borderBottom: '1px solid #e0d9c4', flexShrink: 0, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+          <div style={{ padding: '8px 16px', borderBottom: '1px solid #2a3441', flexShrink: 0, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
             {['all', ...products].map(p => (
               <button key={p} onClick={() => setProductFilter(p)} style={{ ...S.filterBtn(productFilter === p), textTransform: 'uppercase', letterSpacing: 1 }}>
                 {p === 'all' ? 'All' : p}
@@ -331,7 +331,7 @@ export default function ReviewAdTool() {
             const isSelected = selected.has(r.id);
             const isPreviewing = previewId === r.id;
             return (
-              <div key={r.id} onClick={() => setPreviewId(r.id)} style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid #e0d9c4', background: isPreviewing ? '#fef8f0' : 'transparent', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <div key={r.id} onClick={() => setPreviewId(r.id)} style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid #2a3441', background: isPreviewing ? 'rgba(220,68,10,0.1)' : 'transparent', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                 <input
                   type="checkbox"
                   checked={isSelected}
@@ -357,7 +357,7 @@ export default function ReviewAdTool() {
         </div>
 
         {/* Fixed: Format + background + export */}
-        <div style={{ flexShrink: 0, padding: '14px 16px', borderTop: '1px solid #e0d9c4', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ flexShrink: 0, padding: '14px 16px', borderTop: '1px solid #2a3441', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', gap: 6 }}>
             {Object.entries(FORMATS).map(([key, f]) => (
               <button key={key} onClick={() => toggleFormat(key)} style={S.fmtBtn(formatKeys.includes(key))}>{f.label}</button>
