@@ -220,7 +220,7 @@ export default function ReviewAdTool() {
               style={{ display: 'block', padding: '14px 12px', borderRadius: 4, cursor: 'pointer', textAlign: 'center', border: `1px dashed ${dragging ? '#DC440A' : '#c0b89a'}`, background: dragging ? '#fef8f0' : 'transparent' }}
             >
               <input type="file" accept=".csv" onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
-              <div style={{ fontSize: 10, color: dragging ? '#DC440A' : '#8a8270' }}>
+              <div style={{ fontSize: 10, color: dragging ? '#DC440A' : '#8b949e' }}>
                 {dragging ? 'Drop CSV here' : 'Upload Loox CSV — bulk export'}
               </div>
             </label>
@@ -232,7 +232,7 @@ export default function ReviewAdTool() {
           </div>
 
           <div>
-            <div style={S.label}>Reviewer <span style={{ color: '#b0a898', fontWeight: 400 }}>(optional)</span></div>
+            <div style={S.label}>Reviewer <span style={{ color: '#8b949e', fontWeight: 400 }}>(optional)</span></div>
             <input type="text" value={manualReviewer} onChange={e => setManualReviewer(e.target.value)} placeholder="e.g. John B." style={S.input} />
           </div>
 
@@ -279,19 +279,19 @@ export default function ReviewAdTool() {
       <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #e0d9c4', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
 
         {/* Fixed: CSV header */}
-        <div style={{ padding: '12px 20px', borderBottom: '1px solid #e0d9c4', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ padding: '12px 20px', borderBottom: '1px solid #2a3441', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 10, color: '#333F4C', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div style={{ fontSize: 10, color: '#f0f4f8', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {csvName || `${reviews.length} reviews`}
             </div>
-            <div style={{ fontSize: 9, color: '#8a8270', marginTop: 1 }}>{reviews.length} reviews loaded</div>
+            <div style={{ fontSize: 9, color: '#8b949e', marginTop: 1 }}>{reviews.length} reviews loaded</div>
           </div>
           <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
             <label style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#DC440A', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               <input type="file" accept=".csv" onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
               Replace
             </label>
-            <button onClick={clearCSV} style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#8a8270', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Clear</button>
+            <button onClick={clearCSV} style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#8b949e', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Clear</button>
           </div>
         </div>
 
@@ -322,7 +322,7 @@ export default function ReviewAdTool() {
         {/* Scrollable: review list */}
         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
           {filtered.length === 0 && (
-            <div style={{ padding: 20, fontSize: 10, color: '#8a8270' }}>No reviews at this rating.</div>
+            <div style={{ padding: 20, fontSize: 10, color: '#8b949e' }}>No reviews at this rating.</div>
           )}
           {filtered.map(r => {
             const isSelected = selected.has(r.id);
@@ -345,8 +345,8 @@ export default function ReviewAdTool() {
                 />
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 9, color: '#DC440A', marginBottom: 2 }}>{'★'.repeat(r.rating)}</div>
-                  <div style={{ fontSize: 10, color: '#333F4C', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{r.quote}</div>
-                  <div style={{ fontSize: 9, color: '#8a8270', marginTop: 3 }}>{r.nickname}</div>
+                  <div style={{ fontSize: 10, color: '#f0f4f8', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{r.quote}</div>
+                  <div style={{ fontSize: 9, color: '#8b949e', marginTop: 3 }}>{r.nickname}</div>
                 </div>
               </div>
             );
@@ -384,7 +384,7 @@ export default function ReviewAdTool() {
             />
           </PreviewCard>
         ) : (
-          <div style={{ color: '#8a8270', fontSize: 12 }}>No reviews match filter</div>
+          <div style={{ color: '#8b949e', fontSize: 12 }}>No reviews match filter</div>
         )}
       </div>
 
@@ -416,11 +416,11 @@ const SCRIM_OPTIONS = [
 function BgImagePicker({ bgImage, savedImages, onSelect, onUpload, onClear, fileRef, scrimColor, onScrimChange }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8a8270', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8b949e', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Background Image</span>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => fileRef.current?.click()} style={{ fontSize: 9, color: '#DC440A', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' }}>+ Upload</button>
-          {bgImage && <button onClick={onClear} style={{ fontSize: 9, color: '#b0a898', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' }}>Clear</button>}
+          {bgImage && <button onClick={onClear} style={{ fontSize: 9, color: '#8b949e', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' }}>Clear</button>}
         </div>
       </div>
       <input ref={fileRef} type="file" accept="image/*" onChange={e => { onUpload(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
@@ -433,11 +433,11 @@ function BgImagePicker({ bgImage, savedImages, onSelect, onUpload, onClear, file
           ))}
         </div>
       ) : (
-        <div style={{ fontSize: 9, color: '#b0a898' }}>Upload images in Image Ads tab to reuse here.</div>
+        <div style={{ fontSize: 9, color: '#8b949e' }}>Upload images in Image Ads tab to reuse here.</div>
       )}
       {bgImage && (
         <div>
-          <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8a8270', fontWeight: 600, marginBottom: 5 }}>Overlay Color</div>
+          <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8b949e', fontWeight: 600, marginBottom: 5 }}>Overlay Color</div>
           <div style={{ display: 'flex', gap: 5 }}>
             {SCRIM_OPTIONS.map(o => (
               <button key={o.label} onClick={() => onScrimChange(o.value)} style={{
@@ -466,12 +466,12 @@ function PreviewCard({ fmt, scale, children }) {
 }
 
 const S = {
-  label: { fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8a8270', marginBottom: 8, fontWeight: 600 },
-  textarea: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #e0d9c4', borderRadius: 4, background: '#fff', color: '#333F4C', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.5, resize: 'vertical', outline: 'none' },
-  input: { width: '100%', boxSizing: 'border-box', padding: '8px 12px', border: '1px solid #e0d9c4', borderRadius: 4, background: '#fff', color: '#333F4C', fontFamily: 'inherit', fontSize: 12, outline: 'none' },
-  fmtBtn: (active) => ({ flex: 1, padding: '7px 0', border: `1px solid ${active ? '#DC440A' : '#e0d9c4'}`, background: active ? '#fef8f0' : '#fff', color: active ? '#DC440A' : '#8a8270', fontFamily: 'inherit', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 }),
-  exportBtn: (disabled) => ({ width: '100%', padding: '12px 0', background: disabled ? '#e0d9c4' : '#DC440A', border: 'none', borderRadius: 4, color: disabled ? '#a09880' : '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer' }),
-  filterBtn: (active) => ({ padding: '3px 8px', border: `1px solid ${active ? '#DC440A' : '#e0d9c4'}`, background: active ? '#fef8f0' : '#fff', color: active ? '#DC440A' : '#8a8270', fontFamily: 'inherit', fontSize: 9, cursor: 'pointer', borderRadius: 3 }),
-  microBtn: { padding: '3px 7px', border: '1px solid #e0d9c4', background: '#fff', color: '#8a8270', fontFamily: 'inherit', fontSize: 8, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 3 },
-  rightPanel: { flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0ead4', padding: 40, overflow: 'auto' },
+  label: { fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8b949e', marginBottom: 8, fontWeight: 600 },
+  textarea: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #2a3441', borderRadius: 4, background: '#1c2330', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.5, resize: 'vertical', outline: 'none' },
+  input: { width: '100%', boxSizing: 'border-box', padding: '8px 12px', border: '1px solid #2a3441', borderRadius: 4, background: '#1c2330', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 12, outline: 'none' },
+  fmtBtn: (active) => ({ flex: 1, padding: '7px 0', border: `1px solid ${active ? '#DC440A' : '#2a3441'}`, background: active ? 'rgba(220,68,10,0.15)' : '#1c2330', color: active ? '#DC440A' : '#8b949e', fontFamily: 'inherit', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 }),
+  exportBtn: (disabled) => ({ width: '100%', padding: '12px 0', background: disabled ? '#2a3441' : '#DC440A', border: 'none', borderRadius: 4, color: disabled ? '#6e7681' : '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer' }),
+  filterBtn: (active) => ({ padding: '3px 8px', border: `1px solid ${active ? '#DC440A' : '#2a3441'}`, background: active ? 'rgba(220,68,10,0.15)' : '#1c2330', color: active ? '#DC440A' : '#8b949e', fontFamily: 'inherit', fontSize: 9, cursor: 'pointer', borderRadius: 3 }),
+  microBtn: { padding: '3px 7px', border: '1px solid #2a3441', background: '#1c2330', color: '#8b949e', fontFamily: 'inherit', fontSize: 8, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 3 },
+  rightPanel: { flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d1117', padding: 40, overflow: 'auto' },
 };
