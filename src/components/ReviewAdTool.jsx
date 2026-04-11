@@ -241,7 +241,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
       }
     } catch (err) { console.error(err); alert('Failed. Try a smaller batch.'); }
     finally { setExporting(false); setExportProgress(''); }
-  }, [reviews, selected, formatKeys, filtered, onAddToCart]);
+  }, [reviews, selected, formatKeys, onAddToCart]);
 
   const products = [...new Set(reviews.map(r => r.handle).filter(Boolean))].sort();
   const filtered = reviews.filter(r =>
