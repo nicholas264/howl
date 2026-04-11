@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { PRODUCTS, ANGLES, PLATFORMS } from "./data";
 import { buildSystemPrompt, buildUserPrompt } from "./prompts";
 import ConfigPanel from "./components/ConfigPanel";
@@ -10,13 +10,14 @@ import FounderAdTool from "./components/FounderAdTool";
 import MetaPublishTool from "./components/MetaPublishTool";
 import DriveButton from "./components/DriveButton";
 import { useDriveAuth } from "./hooks/useDriveAuth";
+import { cartGetAll, cartPut, cartDelete } from "./utils/cartDb";
 import "./styles.css";
 
 export default function HowlAdEngine() {
   const driveAuth = useDriveAuth();
   const [selectedProducts, setSelectedProducts] = useState(["r1", "r4mkii"]);
   const [selectedAngles, setSelectedAngles] = useState(["burn_ban", "skeptic", "heat"]);
-  const platform = PLATFORMS[0]; // Meta only
+  const platform = PLATFORMS[0];
   const [selectedAvatar, setSelectedAvatar] = useState(null);
   const [copyCount, setCopyCount] = useState(10);
   const [customContext, setCustomContext] = useState("");
@@ -24,22 +25,6 @@ export default function HowlAdEngine() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("config");
-  const [cartCount, setCartCount] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('howl_publish_queue') || '[]').length; } catch { return 0; }
-  });
-
-  const addToCart = useCallback((item) => {
-    try {
-      const prev = JSON.parse(localStorage.getItem('howl_publish_queue') || '[]');
-      const next = [item, ...prev];
-      localStorage.setItem('howl_publish_queue', JSON.stringify(next));
-      setCartCount(next.length);
-    } catch {}
-  }, []);
-
-  const refreshCartCount = useCallback(() => {
-    try { setCartCount(JSON.parse(localStorage.getItem('howl_publish_queue') || '[]').length); } catch {}
-  }, []);
   const [filterAngle, setFilterAngle] = useState("all");
   const [filterProduct, setFilterProduct] = useState("all");
   const [videoText, setVideoText] = useState(null);
@@ -48,6 +33,40 @@ export default function HowlAdEngine() {
     try { return JSON.parse(localStorage.getItem('howl_favorites') || '[]'); }
     catch { return []; }
   });
+
+  // ── Cart state (IndexedDB-backed) ─────────────────────────────────────────
+  const [cart, setCart] = useState([]);
+
+  useEffect(() => {
+    cartGetAll().then(items => setCart(items.sort((a, b) => b.id - a.id))).catch(() => {});
+  }, []);
+
+  const addToCart = useCallback(async (item) => {
+    try {
+      await cartPut(item);
+      setCart(prev => [item, ...prev.filter(x => x.id !== item.id)]);
+    } catch (err) {
+      console.error('Cart save failed:', err);
+    }
+  }, []);
+
+  const updateCartItem = useCallback(async (id, patch) => {
+    setCart(prev => {
+      const next = prev.map(x => x.id === id ? { ...x, ...patch } : x);
+      const updated = next.find(x => x.id === id);
+      if (updated) cartPut(updated).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const removeCartItem = useCallback(async (id) => {
+    try {
+      await cartDelete(id);
+      setCart(prev => prev.filter(x => x.id !== id));
+    } catch (err) {
+      console.error('Cart remove failed:', err);
+    }
+  }, []);
 
   const toggleFavorite = useCallback((variation) => {
     setFavorites(prev => {
@@ -82,7 +101,6 @@ export default function HowlAdEngine() {
     setLoading(true);
     setError("");
     setVariations([]);
-
     const products = PRODUCTS.filter((p) => selectedProducts.includes(p.id));
     const angles = ANGLES.filter((a) => selectedAngles.includes(a.id));
     try {
@@ -96,12 +114,10 @@ export default function HowlAdEngine() {
           messages: [{ role: "user", content: buildUserPrompt(products, angles, platform, selectedAvatar, copyCount, customContext) }],
         }),
       });
-
       const data = await response.json();
       const text = data.content.filter((b) => b.type === "text").map((b) => b.text).join("");
       const cleaned = text.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(cleaned);
-      setVariations(parsed);
+      setVariations(JSON.parse(cleaned));
       setActiveTab("results");
     } catch (err) {
       console.error(err);
@@ -134,16 +150,13 @@ export default function HowlAdEngine() {
 
   const uniqueAngles = [...new Set(variations.map((v) => v.angle))];
   const uniqueProducts = [...new Set(variations.map((v) => v.product))];
+  const cartCount = cart.length;
 
   return (
     <div style={{ minHeight: "100vh", background: "#0d1117", color: "#f0f4f8", fontFamily: "'JetBrains Mono', 'SF Mono', monospace" }}>
       <div className="hd">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <img
-            src="/logos/howl-horizontal-wht.png"
-            alt="HOWL Campfires"
-            style={{ height: 32, width: 'auto', objectFit: 'contain' }}
-          />
+          <img src="/logos/howl-horizontal-wht.png" alt="HOWL Campfires" style={{ height: 32, width: 'auto', objectFit: 'contain' }} />
           <div className="hd-sub">Creative Studio</div>
         </div>
         <DriveButton connected={driveAuth.connected} connect={driveAuth.connect} disconnect={driveAuth.disconnect} />
@@ -195,7 +208,14 @@ export default function HowlAdEngine() {
       {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} onAddToCart={addToCart} />}
       {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} />}
       {activeTab === "founder" && <FounderAdTool />}
-      {activeTab === "publish" && <MetaPublishTool onCartChange={refreshCartCount} />}
+      {activeTab === "publish" && (
+        <MetaPublishTool
+          cart={cart}
+          onAddToCart={addToCart}
+          onUpdateCartItem={updateCartItem}
+          onRemoveCartItem={removeCartItem}
+        />
+      )}
     </div>
   );
 }

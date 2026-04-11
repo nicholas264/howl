@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
 
-const LS_QUEUE  = 'howl_publish_queue';
 const LS_CONFIG = 'howl_meta_config';
 
 const OBJECTIVES = [
@@ -37,9 +36,8 @@ const S = {
   success: { padding: '8px 12px', border: '1px solid rgba(63,185,80,0.4)', background: 'rgba(63,185,80,0.1)', color: '#3fb950', fontSize: 10, borderRadius: 4, marginTop: 8 },
 };
 
-export default function MetaPublishTool({ onCartChange }) {
+export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartItem, onRemoveCartItem }) {
   const [config, setConfig] = useState(() => ls(LS_CONFIG, { pageId: '', destUrl: '' }));
-  const [queue, setQueue] = useState(() => ls(LS_QUEUE, []));
 
   const [campaigns, setCampaigns] = useState([]);
   const [adsets, setAdsets]       = useState([]);
@@ -64,22 +62,8 @@ export default function MetaPublishTool({ onCartChange }) {
     lsSet(LS_CONFIG, next);
   };
 
-  const updateQueueItem = (id, patch) => {
-    setQueue(prev => {
-      const next = prev.map(item => item.id === id ? { ...item, ...patch } : item);
-      lsSet(LS_QUEUE, next);
-      return next;
-    });
-  };
-
-  const removeFromQueue = (id) => {
-    setQueue(prev => {
-      const next = prev.filter(item => item.id !== id);
-      lsSet(LS_QUEUE, next);
-      onCartChange?.();
-      return next;
-    });
-  };
+  const updateQueueItem = (id, patch) => onUpdateCartItem?.(id, patch);
+  const removeFromQueue = (id) => onRemoveCartItem?.(id);
 
   const setStatus = (id, status, message = '') => {
     setStatuses(prev => ({ ...prev, [id]: { status, message } }));
@@ -91,17 +75,12 @@ export default function MetaPublishTool({ onCartChange }) {
       if (!file.type.startsWith('image/')) return;
       const reader = new FileReader();
       reader.onload = (e) => {
-        const entry = {
+        onAddToCart?.({
           id: Date.now() + Math.random(),
           url: e.target.result,
           name: file.name.replace(/\.[^.]+$/, ''),
           hook: '',
           body: '',
-        };
-        setQueue(prev => {
-          const next = [entry, ...prev];
-          lsSet(LS_QUEUE, next);
-          return next;
         });
       };
       reader.readAsDataURL(file);
@@ -406,7 +385,7 @@ export default function MetaPublishTool({ onCartChange }) {
       {/* Publish Queue */}
       <div style={S.section}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-          <span style={{ ...S.label, marginBottom: 0 }}>Publish Queue {queue.length > 0 && `(${queue.length})`}</span>
+          <span style={{ ...S.label, marginBottom: 0 }}>Publish Queue {cart.length > 0 && `(${cart.length})`}</span>
           <button onClick={() => fileInputRef.current?.click()} style={S.ghostBtn}>+ Upload Images</button>
           <input
             ref={fileInputRef}
@@ -418,7 +397,7 @@ export default function MetaPublishTool({ onCartChange }) {
           />
         </div>
 
-        {queue.length === 0 && (
+        {cart.length === 0 && (
           <div
             style={{ border: '2px dashed #2a3441', borderRadius: 6, padding: '32px', textAlign: 'center', color: '#6e7681', fontSize: 11 }}
             onDragOver={e => e.preventDefault()}
@@ -427,13 +406,13 @@ export default function MetaPublishTool({ onCartChange }) {
             Drop rendered ad images here, or click "+ Upload Images" above.
             <br />
             <span style={{ fontSize: 9, letterSpacing: 1, marginTop: 8, display: 'block' }}>
-              Images queued from the Image Ads tab will also appear here.
+              Images cartd from the Image Ads tab will also appear here.
             </span>
           </div>
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {queue.map(item => {
+          {cart.map(item => {
             const st = statuses[item.id] || {};
             const isPushing = st.status === 'pushing';
             const isDone = st.status === 'success';
