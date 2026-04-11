@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
+import { buildSystemPrompt } from '../prompts';
 
 const LS_CONFIG = 'howl_meta_config';
 
@@ -54,6 +55,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
   const [creatingAdset, setCreatingAdset]       = useState(false);
 
   const [statuses, setStatuses] = useState({});
+  const [generatingCopy, setGeneratingCopy] = useState({});
   const fileInputRef = useRef(null);
 
   const updateConfig = (key, val) => {
@@ -68,6 +70,38 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
   const setStatus = (id, status, message = '') => {
     setStatuses(prev => ({ ...prev, [id]: { status, message } }));
   };
+
+  // ── Generate copy with Claude ─────────────────────────────────────────────
+  const handleGenerateCopy = useCallback(async (item) => {
+    setGeneratingCopy(prev => ({ ...prev, [item.id]: true }));
+    try {
+      const r = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 512,
+          system: buildSystemPrompt(),
+          messages: [{
+            role: 'user',
+            content: `Write Meta ad copy for this HOWL Campfires creative.\n\nCreative hook: "${item.hook || item.name}"\n\nReturn ONLY valid JSON, no markdown:\n{"headline":"max 6 words, punchy, outcome-focused","primaryText":"2-3 sentences of body copy for Meta primary text field, conversational, specific, no em dashes"}`,
+          }],
+        }),
+      });
+      const data = await r.json();
+      const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+      const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+      updateQueueItem(item.id, {
+        hook: parsed.headline || item.hook,
+        body: parsed.primaryText || item.body,
+      });
+    } catch (err) {
+      console.error('Copy gen failed:', err);
+      alert('Copy generation failed. Try again.');
+    } finally {
+      setGeneratingCopy(prev => ({ ...prev, [item.id]: false }));
+    }
+  }, [updateQueueItem]);
 
   // ── Add images via file upload ────────────────────────────────────────────
   const handleFileAdd = (files) => {
@@ -452,6 +486,15 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                       <span style={{ fontSize: 9, color: '#8b949e' }}>Primary Text</span>
                       <input style={{ ...S.input, fontSize: 10 }} value={item.body} onChange={e => updateQueueItem(item.id, { body: e.target.value })} placeholder="Body copy (defaults to headline if empty)" />
                     </div>
+                  </div>
+                  <div>
+                    <button
+                      onClick={() => handleGenerateCopy(item)}
+                      disabled={generatingCopy[item.id]}
+                      style={{ padding: '6px 12px', background: 'none', border: '1px solid #2a3441', color: generatingCopy[item.id] ? '#6e7681' : '#8b949e', fontFamily: 'inherit', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', cursor: generatingCopy[item.id] ? 'not-allowed' : 'pointer', borderRadius: 3 }}
+                    >
+                      {generatingCopy[item.id] ? 'Generating…' : 'Generate Copy'}
+                    </button>
                   </div>
                   {st.status === 'error' && <div style={S.err}>{st.message}</div>}
                   {st.status === 'success' && <div style={S.success}>Pushed — {st.message} (PAUSED in Ads Manager)</div>}
