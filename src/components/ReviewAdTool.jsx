@@ -203,7 +203,8 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
       const dataUrl = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
       onAddToCart?.({
         id: Date.now(),
-        url: dataUrl,
+        squareUrl: manualFormat === 'square' ? dataUrl : null,
+        storyUrl:  manualFormat === 'story'  ? dataUrl : null,
         name: `Review Ad — ${manualQuote.slice(0, 24).trim()}`,
         hook: manualQuote.slice(0, 80).trim(),
         body: '',
@@ -219,29 +220,33 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
     try {
       await document.fonts.ready;
       let count = 0;
-      const total = toExport.length * formatKeys.length;
+      setExportProgress(`0/${toExport.length}`);
       for (const review of toExport) {
-        for (const fk of formatKeys) {
-          count++;
-          setExportProgress(`${count}/${total}`);
+        count++;
+        setExportProgress(`${count}/${toExport.length}`);
+        const renders = {};
+        for (const fk of ['square', 'story']) {
           const el = captureRefs.current[`${review.id}_${fk}`];
           if (!el) continue;
           const fmt = FORMATS[fk];
           await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
-          const dataUrl = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
+          renders[fk] = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
+        }
+        if (renders.square || renders.story) {
           onAddToCart?.({
             id: Date.now() + count,
-            url: dataUrl,
+            squareUrl: renders.square || null,
+            storyUrl:  renders.story  || null,
             name: `Review — ${review.nickname || review.handle || 'Customer'}`,
             hook: (review.quote || '').slice(0, 80).trim(),
             body: '',
           });
-          await new Promise(res => setTimeout(res, 250));
         }
+        await new Promise(res => setTimeout(res, 300));
       }
     } catch (err) { console.error(err); alert('Failed. Try a smaller batch.'); }
     finally { setExporting(false); setExportProgress(''); }
-  }, [reviews, selected, formatKeys, onAddToCart]);
+  }, [reviews, selected, onAddToCart]);
 
   const products = [...new Set(reviews.map(r => r.handle).filter(Boolean))].sort();
   const filtered = reviews.filter(r =>

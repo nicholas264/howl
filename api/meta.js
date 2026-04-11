@@ -1,3 +1,22 @@
+async function uploadImage(base64, adAccountId, accessToken, BASE) {
+  const clean = base64.replace(/^data:image\/\w+;base64,/, '');
+  const params = new URLSearchParams({
+    bytes: clean,
+    name: `howl-${Date.now()}.jpg`,
+    access_token: accessToken,
+  });
+  const r = await fetch(`${BASE}/${adAccountId}/adimages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params,
+  });
+  const d = await r.json();
+  if (d.error) throw new Error(d.error.message);
+  const hash = Object.values(d.images || {})[0]?.hash;
+  if (!hash) throw new Error('Image upload returned no hash');
+  return hash;
+}
+
 export const config = {
   api: {
     bodyParser: {
@@ -104,46 +123,81 @@ export default async function handler(req, res) {
       }
 
       case 'push_ad': {
-        const { imageBase64, adName, headline, primaryText, destUrl, pageId, adsetId } = req.body;
+        const { imageBase64, squareImageBase64, storyImageBase64, adName, headline, primaryText, destUrl, pageId, adsetId } = req.body;
 
-        // 1. Upload image
-        const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-        const imgParams = new URLSearchParams({
-          bytes: cleanBase64,
-          name: `howl-${Date.now()}.jpg`,
-          access_token: accessToken,
-        });
-        const imgRes = await fetch(`${BASE}/${adAccountId}/adimages`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: imgParams,
-        });
-        const imgData = await imgRes.json();
+        const squareBase64 = squareImageBase64 || imageBase64;
+        const storyBase64  = storyImageBase64 || null;
 
-        if (imgData.error) {
-          return res.status(400).json({ error: imgData.error.message, step: 'upload_image' });
+        // 1. Upload image(s)
+        let squareHash, storyHash;
+        try {
+          squareHash = await uploadImage(squareBase64, adAccountId, accessToken, BASE);
+        } catch (err) {
+          return res.status(400).json({ error: err.message, step: 'upload_square' });
         }
-
-        const imageHash = Object.values(imgData.images || {})[0]?.hash;
-        if (!imageHash) {
-          return res.status(400).json({ error: 'Image upload returned no hash', step: 'upload_image' });
+        if (storyBase64) {
+          try {
+            storyHash = await uploadImage(storyBase64, adAccountId, accessToken, BASE);
+          } catch (err) {
+            return res.status(400).json({ error: err.message, step: 'upload_story' });
+          }
         }
 
         // 2. Create ad creative
-        const creativeParams = new URLSearchParams({
-          name: `${adName} Creative`,
-          object_story_spec: JSON.stringify({
-            page_id: pageId,
-            link_data: {
-              image_hash: imageHash,
-              link: destUrl,
-              message: primaryText,
-              name: headline,
-              call_to_action: { type: 'SHOP_NOW' },
-            },
-          }),
-          access_token: accessToken,
-        });
+        let creativeParams;
+        if (storyHash) {
+          // Multi-placement: 1:1 → Feed, 9:16 → Stories/Reels
+          creativeParams = new URLSearchParams({
+            name: `${adName} Creative`,
+            asset_feed_spec: JSON.stringify({
+              images: [
+                { hash: squareHash, adlabels: [{ name: 'square' }] },
+                { hash: storyHash,  adlabels: [{ name: 'story'  }] },
+              ],
+              bodies:   [{ text: primaryText || headline }],
+              titles:   [{ text: headline }],
+              link_urls: [{ website_url: destUrl }],
+              call_to_action_types: ['SHOP_NOW'],
+              asset_customization_rules: [
+                {
+                  customization_spec: {
+                    publisher_platforms: ['facebook', 'instagram'],
+                    facebook_positions: ['feed'],
+                    instagram_positions: ['stream'],
+                  },
+                  image_label: { name: 'square' },
+                },
+                {
+                  customization_spec: {
+                    publisher_platforms: ['facebook', 'instagram'],
+                    facebook_positions: ['story', 'reels'],
+                    instagram_positions: ['story', 'reels'],
+                  },
+                  image_label: { name: 'story' },
+                },
+              ],
+            }),
+            object_type: 'SHARE',
+            access_token: accessToken,
+          });
+        } else {
+          // Single image fallback
+          creativeParams = new URLSearchParams({
+            name: `${adName} Creative`,
+            object_story_spec: JSON.stringify({
+              page_id: pageId,
+              link_data: {
+                image_hash: squareHash,
+                link: destUrl,
+                message: primaryText || headline,
+                name: headline,
+                call_to_action: { type: 'SHOP_NOW' },
+              },
+            }),
+            access_token: accessToken,
+          });
+        }
+
         const creativeRes = await fetch(`${BASE}/${adAccountId}/adcreatives`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

@@ -299,21 +299,23 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
     if (!activeImg || !overlayText.trim()) return;
     setExporting(true);
     try {
-      const canvas = await renderToCanvas(activeImg.url, overlayText, bodyText || null, fmt.w, fmt.h, styleOpts);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-      const entry = {
+      const [squareCanvas, storyCanvas] = await Promise.all([
+        renderToCanvas(activeImg.url, overlayText, bodyText || null, 1080, 1080, styleOpts),
+        renderToCanvas(activeImg.url, overlayText, bodyText || null, 1080, 1920, styleOpts),
+      ]);
+      onAddToCart?.({
         id: Date.now(),
-        url: dataUrl,
+        squareUrl: squareCanvas.toDataURL('image/jpeg', 0.92),
+        storyUrl:  storyCanvas.toDataURL('image/jpeg', 0.92),
         name: `HOWL ${overlayText.slice(0, 24).trim()}`,
         hook: overlayText,
         body: bodyText || '',
-      };
-      onAddToCart?.(entry);
+      });
       setExportMsg('Added to cart!');
       setTimeout(() => setExportMsg(''), 2000);
     } catch (err) { alert(`Failed: ${err?.message || err}`); }
     finally { setExporting(false); }
-  }, [activeImg, overlayText, bodyText, fmt, styleOpts]);
+  }, [activeImg, overlayText, bodyText, styleOpts]);
 
   // ── Single card export from batch grid ───────────────────────────────
   const exportCard = async (img, hook) => {

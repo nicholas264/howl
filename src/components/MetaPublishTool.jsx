@@ -208,7 +208,8 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'push_ad',
-          imageBase64: item.url,
+          squareImageBase64: item.squareUrl || item.url || null,
+          storyImageBase64:  item.storyUrl  || null,
           adName: item.name || `HOWL Ad ${new Date().toLocaleDateString()}`,
           headline: item.hook,
           primaryText: item.body || item.hook,
@@ -406,7 +407,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
             Drop rendered ad images here, or click "+ Upload Images" above.
             <br />
             <span style={{ fontSize: 9, letterSpacing: 1, marginTop: 8, display: 'block' }}>
-              Images cartd from the Image Ads tab will also appear here.
+              Ads added from Image Ads or Review Ads appear here with both 1:1 and 9:16 formats paired automatically.
             </span>
           </div>
         )}
@@ -418,8 +419,21 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
             const isDone = st.status === 'success';
             return (
               <div key={item.id} style={{ ...S.card, opacity: isDone ? 0.6 : 1 }}>
-                {/* Thumbnail */}
-                <img src={item.url} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />
+                {/* Thumbnails */}
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  {(item.squareUrl || item.url) && (
+                    <div style={{ position: 'relative' }}>
+                      <img src={item.squareUrl || item.url} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 4, display: 'block' }} />
+                      <span style={{ position: 'absolute', bottom: 3, left: 3, background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: 7, padding: '1px 4px', borderRadius: 2, letterSpacing: 1 }}>1:1</span>
+                    </div>
+                  )}
+                  {item.storyUrl && (
+                    <div style={{ position: 'relative' }}>
+                      <img src={item.storyUrl} alt="" style={{ width: 36, height: 64, objectFit: 'cover', borderRadius: 4, display: 'block' }} />
+                      <span style={{ position: 'absolute', bottom: 3, left: 3, background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: 7, padding: '1px 4px', borderRadius: 2, letterSpacing: 1 }}>9:16</span>
+                    </div>
+                  )}
+                </div>
 
                 {/* Inputs */}
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
