@@ -5,6 +5,7 @@ import { COLORS } from '../brand';
 const LS_IMAGES  = 'howl_saved_images';
 const LS_PRESETS = 'howl_style_presets';
 const LS_FAV     = 'howl_favorites';
+const LS_PUBLISH = 'howl_publish_queue';
 
 const FORMATS = [
   { id: 'square', label: '1:1',  w: 1080, h: 1080 },
@@ -293,6 +294,30 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth }) 
     } catch (err) { alert(`Export failed: ${err?.message || err}`); }
     finally { setExporting(false); }
   }, [activeImg, overlayText, bodyText, fmt, styleOpts, formatId, driveAuth]);
+
+  // ── Queue for Meta Publish ───────────────────────────────────────────
+  const handleQueueForPublish = useCallback(async () => {
+    if (!activeImg || !overlayText.trim()) return;
+    setExporting(true);
+    try {
+      const canvas = await renderToCanvas(activeImg.url, overlayText, bodyText || null, fmt.w, fmt.h, styleOpts);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      const entry = {
+        id: Date.now(),
+        url: dataUrl,
+        name: `HOWL ${overlayText.slice(0, 24).trim()}`,
+        hook: overlayText,
+        body: bodyText || '',
+      };
+      try {
+        const prev = JSON.parse(localStorage.getItem(LS_PUBLISH) || '[]');
+        localStorage.setItem(LS_PUBLISH, JSON.stringify([entry, ...prev]));
+      } catch {}
+      setExportMsg('Queued for publish!');
+      setTimeout(() => setExportMsg(''), 2000);
+    } catch (err) { alert(`Failed: ${err?.message || err}`); }
+    finally { setExporting(false); }
+  }, [activeImg, overlayText, bodyText, fmt, styleOpts]);
 
   // ── Single card export from batch grid ───────────────────────────────
   const exportCard = async (img, hook) => {
@@ -589,6 +614,9 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth }) 
             <>
               <button onClick={() => handleExport()} disabled={!canSingleExport} style={S.exportBtn(!canSingleExport)}>
                 {exporting ? 'Exporting…' : !activeImg ? 'Upload an image' : !overlayText.trim() ? 'Enter hook text' : `Export PNG (${fmt.label})`}
+              </button>
+              <button onClick={handleQueueForPublish} disabled={!canSingleExport || exporting} style={{ ...S.exportBtn(!canSingleExport || exporting), background: (!canSingleExport || exporting) ? undefined : '#6e40c9', marginTop: 6 }}>
+                {exportMsg === 'Queued for publish!' ? 'Queued!' : 'Queue for Publish'}
               </button>
               {driveAuth?.connected && (
                 <button onClick={() => handleExport({ toDrive: true })} disabled={!canSingleExport} style={{ ...S.exportBtn(!canSingleExport), background: !canSingleExport ? undefined : '#1a7f37', marginTop: 6 }}>

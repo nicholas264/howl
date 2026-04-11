@@ -7,6 +7,7 @@ import ReviewAdTool from "./components/ReviewAdTool";
 import VideoAdTool from "./components/VideoAdTool";
 import ImageAdTool from "./components/ImageAdTool";
 import FounderAdTool from "./components/FounderAdTool";
+import MetaPublishTool from "./components/MetaPublishTool";
 import DriveButton from "./components/DriveButton";
 import { useDriveAuth } from "./hooks/useDriveAuth";
 import "./styles.css";
@@ -141,6 +142,7 @@ export default function HowlAdEngine() {
         <button className={`tab ${activeTab === "review" ? "on" : ""}`} onClick={() => setActiveTab("review")}>Review Ads</button>
         <button className={`tab ${activeTab === "video" ? "on" : ""}`} onClick={() => setActiveTab("video")}>Video Ads</button>
         <button className={`tab ${activeTab === "founder" ? "on" : ""}`} onClick={() => setActiveTab("founder")}>Founder Ads</button>
+        <button className={`tab ${activeTab === "publish" ? "on" : ""}`} onClick={() => setActiveTab("publish")}>Publish</button>
       </div>
 
       {activeTab === "config" && (
@@ -170,6 +172,7 @@ export default function HowlAdEngine() {
       {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} />}
       {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} />}
       {activeTab === "founder" && <FounderAdTool />}
+      {activeTab === "publish" && <MetaPublishTool />}
     </div>
   );
 }
