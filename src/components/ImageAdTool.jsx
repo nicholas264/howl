@@ -77,7 +77,7 @@ async function renderToCanvas(imgSrc, text, bodyText, fw, fh, opts) {
 
   ctx.font = `800 ${quoteSz}px Montserrat, sans-serif`;
   ctx.textBaseline = 'top';
-  const quoteLines = wrapText(ctx, text, maxWidth);
+  const quoteLines = wrapText(ctx, text.toUpperCase(), maxWidth);
   const quoteH = quoteLines.length * quoteLineH;
 
   ctx.font = `700 ${bodySz}px "Libre Franklin", sans-serif`;
