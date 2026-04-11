@@ -24,6 +24,22 @@ export default function HowlAdEngine() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("config");
+  const [cartCount, setCartCount] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('howl_publish_queue') || '[]').length; } catch { return 0; }
+  });
+
+  const addToCart = useCallback((item) => {
+    try {
+      const prev = JSON.parse(localStorage.getItem('howl_publish_queue') || '[]');
+      const next = [item, ...prev];
+      localStorage.setItem('howl_publish_queue', JSON.stringify(next));
+      setCartCount(next.length);
+    } catch {}
+  }, []);
+
+  const refreshCartCount = useCallback(() => {
+    try { setCartCount(JSON.parse(localStorage.getItem('howl_publish_queue') || '[]').length); } catch {}
+  }, []);
   const [filterAngle, setFilterAngle] = useState("all");
   const [filterProduct, setFilterProduct] = useState("all");
   const [videoText, setVideoText] = useState(null);
@@ -142,7 +158,14 @@ export default function HowlAdEngine() {
         <button className={`tab ${activeTab === "review" ? "on" : ""}`} onClick={() => setActiveTab("review")}>Review Ads</button>
         <button className={`tab ${activeTab === "video" ? "on" : ""}`} onClick={() => setActiveTab("video")}>Video Ads</button>
         <button className={`tab ${activeTab === "founder" ? "on" : ""}`} onClick={() => setActiveTab("founder")}>Founder Ads</button>
-        <button className={`tab ${activeTab === "publish" ? "on" : ""}`} onClick={() => setActiveTab("publish")}>Publish</button>
+        <button className={`tab ${activeTab === "publish" ? "on" : ""}`} onClick={() => setActiveTab("publish")} style={{ position: 'relative' }}>
+          Publish
+          {cartCount > 0 && (
+            <span style={{ position: 'absolute', top: 6, right: 6, background: '#DC440A', color: '#fff', borderRadius: '50%', width: 15, height: 15, fontSize: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, lineHeight: 1 }}>
+              {cartCount > 99 ? '99+' : cartCount}
+            </span>
+          )}
+        </button>
       </div>
 
       {activeTab === "config" && (
@@ -168,11 +191,11 @@ export default function HowlAdEngine() {
         />
       )}
 
-      {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} driveAuth={driveAuth} />}
-      {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} />}
+      {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} driveAuth={driveAuth} onAddToCart={addToCart} />}
+      {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} onAddToCart={addToCart} />}
       {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} />}
       {activeTab === "founder" && <FounderAdTool />}
-      {activeTab === "publish" && <MetaPublishTool />}
+      {activeTab === "publish" && <MetaPublishTool onCartChange={refreshCartCount} />}
     </div>
   );
 }

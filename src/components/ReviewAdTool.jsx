@@ -47,7 +47,7 @@ function loadSavedImages() {
   try { return JSON.parse(localStorage.getItem(LS_SAVED_IMAGES) || '[]'); } catch { return []; }
 }
 
-export default function ReviewAdTool({ driveAuth }) {
+export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   const [reviews, setReviews] = useState(loadSaved);
   const [csvName, setCsvName] = useState(() => localStorage.getItem(LS_NAME) || '');
   const [selected, setSelected] = useState(() => {
@@ -192,6 +192,57 @@ export default function ReviewAdTool({ driveAuth }) {
     finally { setExporting(false); setExportProgress(''); }
   }, [reviews, selected, formatKeys, driveAuth]);
 
+  const handleAddSingleToCart = useCallback(async () => {
+    if (!manualQuote.trim() || !singleCaptureRef.current) return;
+    setExporting(true);
+    try {
+      await document.fonts.ready;
+      const fmt = FORMATS[manualFormat];
+      const el = singleCaptureRef.current;
+      await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
+      const dataUrl = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
+      onAddToCart?.({
+        id: Date.now(),
+        url: dataUrl,
+        name: `Review Ad — ${manualQuote.slice(0, 24).trim()}`,
+        hook: manualQuote.slice(0, 80).trim(),
+        body: '',
+      });
+    } catch (err) { console.error(err); alert('Failed to add to cart.'); }
+    finally { setExporting(false); }
+  }, [manualQuote, manualFormat, onAddToCart]);
+
+  const handleBulkAddToCart = useCallback(async () => {
+    const toExport = filtered.filter(r => selected.has(r.id));
+    if (toExport.length === 0) return;
+    setExporting(true);
+    try {
+      await document.fonts.ready;
+      let count = 0;
+      const total = toExport.length * formatKeys.length;
+      for (const review of toExport) {
+        for (const fk of formatKeys) {
+          count++;
+          setExportProgress(`${count}/${total}`);
+          const el = captureRefs.current[`${review.id}_${fk}`];
+          if (!el) continue;
+          const fmt = FORMATS[fk];
+          await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
+          const dataUrl = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
+          onAddToCart?.({
+            id: Date.now() + count,
+            url: dataUrl,
+            name: `Review — ${review.nickname || review.handle || 'Customer'}`,
+            hook: (review.quote || '').slice(0, 80).trim(),
+            body: '',
+          });
+          await new Promise(res => setTimeout(res, 250));
+        }
+      }
+    } catch (err) { console.error(err); alert('Failed. Try a smaller batch.'); }
+    finally { setExporting(false); setExportProgress(''); }
+  }, [reviews, selected, formatKeys, filtered, onAddToCart]);
+
   const products = [...new Set(reviews.map(r => r.handle).filter(Boolean))].sort();
   const filtered = reviews.filter(r =>
     (ratingFilter === 0 || r.rating === ratingFilter) &&
@@ -256,6 +307,11 @@ export default function ReviewAdTool({ driveAuth }) {
           <button onClick={handleSingleExport} disabled={exporting || !manualQuote.trim()} style={S.exportBtn(exporting || !manualQuote.trim())}>
             {exporting ? 'Exporting...' : 'Download PNG'}
           </button>
+          {onAddToCart && (
+            <button onClick={handleAddSingleToCart} disabled={exporting || !manualQuote.trim()} style={{ ...S.exportBtn(exporting || !manualQuote.trim()), background: (exporting || !manualQuote.trim()) ? '#2a3441' : '#6e40c9', marginTop: 6 }}>
+              {exporting ? 'Rendering...' : 'Add to Cart'}
+            </button>
+          )}
         </div>
 
         {/* Right */}
@@ -375,6 +431,11 @@ export default function ReviewAdTool({ driveAuth }) {
               : selectedCount === 0 ? 'Select reviews'
               : `Export ${exportTotal} PNG${exportTotal !== 1 ? 's' : ''}`}
           </button>
+          {onAddToCart && (
+            <button onClick={handleBulkAddToCart} disabled={exporting || selectedCount === 0} style={{ ...S.exportBtn(exporting || selectedCount === 0), background: (exporting || selectedCount === 0) ? '#2a3441' : '#6e40c9', marginTop: 4 }}>
+              {exporting ? `Rendering ${exportProgress}...` : selectedCount === 0 ? 'Select reviews' : `Add ${exportTotal} to Cart`}
+            </button>
+          )}
           {driveAuth?.connected && (
             <button onClick={() => handleBulkExport({ toDrive: true })} disabled={exporting || selectedCount === 0} style={{ ...S.exportBtn(exporting || selectedCount === 0), background: exporting || selectedCount === 0 ? '#2a3441' : '#1a7f37', marginTop: 4 }}>
               {exporting ? `Saving ${exportProgress}...` : `Save to Drive`}

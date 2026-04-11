@@ -5,7 +5,6 @@ import { COLORS } from '../brand';
 const LS_IMAGES  = 'howl_saved_images';
 const LS_PRESETS = 'howl_style_presets';
 const LS_FAV     = 'howl_favorites';
-const LS_PUBLISH = 'howl_publish_queue';
 
 const FORMATS = [
   { id: 'square', label: '1:1',  w: 1080, h: 1080 },
@@ -166,7 +165,7 @@ function BatchCard({ img, hook, body, fmt, pos, color, fontSize, shadow, onExpor
   );
 }
 
-export default function ImageAdTool({ initialText, onTextConsumed, driveAuth }) {
+export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, onAddToCart }) {
   const [mode, setMode]             = useState('single'); // 'single' | 'batch'
   const [images, setImages]         = useState(() => ls(LS_IMAGES, []));
   const [activeImg, setActiveImg]   = useState(() => { const imgs = ls(LS_IMAGES, []); return imgs[0] || null; });
@@ -309,11 +308,8 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth }) 
         hook: overlayText,
         body: bodyText || '',
       };
-      try {
-        const prev = JSON.parse(localStorage.getItem(LS_PUBLISH) || '[]');
-        localStorage.setItem(LS_PUBLISH, JSON.stringify([entry, ...prev]));
-      } catch {}
-      setExportMsg('Queued for publish!');
+      onAddToCart?.(entry);
+      setExportMsg('Added to cart!');
       setTimeout(() => setExportMsg(''), 2000);
     } catch (err) { alert(`Failed: ${err?.message || err}`); }
     finally { setExporting(false); }
@@ -616,7 +612,7 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth }) 
                 {exporting ? 'Exporting…' : !activeImg ? 'Upload an image' : !overlayText.trim() ? 'Enter hook text' : `Export PNG (${fmt.label})`}
               </button>
               <button onClick={handleQueueForPublish} disabled={!canSingleExport || exporting} style={{ ...S.exportBtn(!canSingleExport || exporting), background: (!canSingleExport || exporting) ? undefined : '#6e40c9', marginTop: 6 }}>
-                {exportMsg === 'Queued for publish!' ? 'Queued!' : 'Queue for Publish'}
+                {exportMsg === 'Added to cart!' ? 'Added to Cart!' : 'Add to Cart'}
               </button>
               {driveAuth?.connected && (
                 <button onClick={() => handleExport({ toDrive: true })} disabled={!canSingleExport} style={{ ...S.exportBtn(!canSingleExport), background: !canSingleExport ? undefined : '#1a7f37', marginTop: 6 }}>

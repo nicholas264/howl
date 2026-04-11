@@ -37,7 +37,7 @@ const S = {
   success: { padding: '8px 12px', border: '1px solid rgba(63,185,80,0.4)', background: 'rgba(63,185,80,0.1)', color: '#3fb950', fontSize: 10, borderRadius: 4, marginTop: 8 },
 };
 
-export default function MetaPublishTool() {
+export default function MetaPublishTool({ onCartChange }) {
   const [config, setConfig] = useState(() => ls(LS_CONFIG, { pageId: '', destUrl: '' }));
   const [queue, setQueue] = useState(() => ls(LS_QUEUE, []));
 
@@ -76,6 +76,7 @@ export default function MetaPublishTool() {
     setQueue(prev => {
       const next = prev.filter(item => item.id !== id);
       lsSet(LS_QUEUE, next);
+      onCartChange?.();
       return next;
     });
   };
