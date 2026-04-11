@@ -114,27 +114,7 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
           letterSpacing: '0.05em',
           flexShrink: 0,
         }}>
-          {socialProof || '938 Reviews · 90.4% Five Star'}
         </div>
-      </div>
-
-      {/* Bottom bar with logo */}
-      <div style={{
-        height: isStory ? 100 : 80,
-        borderTop: `1px solid rgba(51,63,76,0.1)`,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-        backgroundColor: hasBackground ? 'rgba(249,243,223,0.85)' : COLORS.natural,
-        position: 'relative',
-        zIndex: 1,
-      }}>
-        <img
-          src={LOGOS.stackedBlack}
-          alt="HOWL"
-          style={{ height: isStory ? 52 : 40, objectFit: 'contain' }}
-        />
       </div>
     </div>
   );
