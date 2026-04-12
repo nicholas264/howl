@@ -154,6 +154,7 @@ export default async function handler(req, res) {
           const linkLabel    = { name: 'copy' };
           creativeParams = new URLSearchParams({
             name: `${adName} Creative`,
+            page_id: pageId,
             asset_feed_spec: JSON.stringify({
               ad_formats: ['SINGLE_IMAGE'],
               images: [
