@@ -145,70 +145,22 @@ export default async function handler(req, res) {
           }
         }
 
-        // 2. Create ad creative
-        let creativeParams;
-        if (storyHash) {
-          // Multi-placement: 1:1 → Feed, 9:16 → Stories/Reels
-          const bodyLabel    = { name: 'copy' };
-          const titleLabel   = { name: 'copy' };
-          const linkLabel    = { name: 'copy' };
-          creativeParams = new URLSearchParams({
-            name: `${adName} Creative`,
+        // 2. Create ad creative (object_story_spec — works with standard Marketing API access)
+        // Meta auto-adapts the square image for Stories/Reels placements.
+        const creativeParams = new URLSearchParams({
+          name: `${adName} Creative`,
+          object_story_spec: JSON.stringify({
             page_id: pageId,
-            asset_feed_spec: JSON.stringify({
-              ad_formats: ['SINGLE_IMAGE'],
-              images: [
-                { hash: squareHash, adlabels: [{ name: 'square' }] },
-                { hash: storyHash,  adlabels: [{ name: 'story'  }] },
-              ],
-              bodies:    [{ text: primaryText || headline, adlabels: [bodyLabel]  }],
-              titles:    [{ text: headline,                adlabels: [titleLabel] }],
-              link_urls: [{ website_url: destUrl,          adlabels: [linkLabel]  }],
-              call_to_action_types: ['SHOP_NOW'],
-              asset_customization_rules: [
-                {
-                  customization_spec: {
-                    publisher_platforms: ['facebook', 'instagram'],
-                    facebook_positions: ['feed'],
-                    instagram_positions: ['stream'],
-                  },
-                  image_label:    { name: 'square' },
-                  body_label:     bodyLabel,
-                  title_label:    titleLabel,
-                  link_url_label: linkLabel,
-                },
-                {
-                  customization_spec: {
-                    publisher_platforms: ['facebook', 'instagram'],
-                    facebook_positions: ['story', 'facebook_reels'],
-                    instagram_positions: ['story', 'reels'],
-                  },
-                  image_label:    { name: 'story' },
-                  body_label:     bodyLabel,
-                  title_label:    titleLabel,
-                  link_url_label: linkLabel,
-                },
-              ],
-            }),
-            access_token: accessToken,
-          });
-        } else {
-          // Single image fallback
-          creativeParams = new URLSearchParams({
-            name: `${adName} Creative`,
-            object_story_spec: JSON.stringify({
-              page_id: pageId,
-              link_data: {
-                image_hash: squareHash,
-                link: destUrl,
-                message: primaryText || headline,
-                name: headline,
-                call_to_action: { type: 'SHOP_NOW' },
-              },
-            }),
-            access_token: accessToken,
-          });
-        }
+            link_data: {
+              image_hash: squareHash,
+              link: destUrl,
+              message: primaryText || headline,
+              name: headline,
+              call_to_action: { type: 'SHOP_NOW' },
+            },
+          }),
+          access_token: accessToken,
+        });
 
         const creativeRes = await fetch(`${BASE}/${adAccountId}/adcreatives`, {
           method: 'POST',
