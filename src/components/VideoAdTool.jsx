@@ -136,7 +136,7 @@ async function buildOverlayCanvas(text, videoW, videoH, opts) {
   return canvas;
 }
 
-export default function VideoAdTool({ initialText, onTextConsumed }) {
+export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }) {
   const allReviews = loadReviews();
   const hasCSV = allReviews.length > 0;
   const supported = typeof VideoEncoder !== 'undefined';
@@ -154,6 +154,7 @@ export default function VideoAdTool({ initialText, onTextConsumed }) {
   const [exporting, setExporting]         = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportMsg, setExportMsg]         = useState('');
+  const [addingToCart, setAddingToCart]   = useState(false);
   const [dragging, setDragging]           = useState(false);
 
   const videoRef    = useRef(null);
@@ -189,6 +190,93 @@ export default function VideoAdTool({ initialText, onTextConsumed }) {
 
   const overlayText = hasCSV ? (selectedReview?.quote || '') : manualText;
   const products = [...new Set(allReviews.map(r => r.handle).filter(Boolean))].sort();
+
+  const handleAddToCart = useCallback(async () => {
+    if (!videoFile || !overlayText.trim() || !onAddToCart) return;
+    setAddingToCart(true);
+    setExportProgress(0);
+    setExportMsg('Rendering for cart…');
+    try {
+      const posObj  = POSITIONS.find(p => p.id === positionId);
+      const colorVal = TEXT_COLORS.find(c => c.id === colorId).value;
+      const { w, h } = videoDims;
+
+      const overlayCanvas = await buildOverlayCanvas(`\u201c${overlayText}\u201d`, w, h, {
+        fontSize, color: colorVal, v: posObj.v, h: posObj.h, shadow,
+        reviewerName: selectedReview?.nickname || null,
+        verifiedLabel: selectedReview ? `Verified HOWL ${PRODUCT_NAMES[selectedReview.handle] || 'HOWL'} Customer` : null,
+      });
+
+      const vid = document.createElement('video');
+      vid.src = videoUrl;
+      vid.muted = true;
+      await new Promise((res, rej) => { vid.onloadedmetadata = res; vid.onerror = rej; vid.load(); });
+
+      const fps = 30;
+      const frameCount = Math.ceil(vid.duration * fps);
+
+      const muxer = new Muxer({
+        target: new ArrayBufferTarget(),
+        video: { codec: 'avc', width: w, height: h },
+        fastStart: 'in-memory',
+      });
+      const encoder = new VideoEncoder({
+        output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+        error: (e) => { throw e; },
+      });
+      encoder.configure({ codec: 'avc1.42001f', width: w, height: h, bitrate: 2_000_000, framerate: fps });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+
+      setExportMsg('Encoding…');
+      for (let i = 0; i < frameCount; i++) {
+        vid.currentTime = i / fps;
+        await new Promise(res => vid.addEventListener('seeked', res, { once: true }));
+        ctx.drawImage(vid, 0, 0, w, h);
+        ctx.drawImage(overlayCanvas, 0, 0);
+        const frame = new VideoFrame(canvas, { timestamp: Math.round((i / fps) * 1_000_000), duration: Math.round(1_000_000 / fps) });
+        encoder.encode(frame, { keyFrame: i % 60 === 0 });
+        frame.close();
+        setExportProgress(Math.round((i / frameCount) * 100));
+      }
+      await encoder.flush();
+      muxer.finalize();
+
+      // Convert ArrayBuffer → base64 data URL
+      const bytes = new Uint8Array(muxer.target.buffer);
+      let binary = '';
+      const chunk = 8192;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+      }
+      const videoDataUrl = `data:video/mp4;base64,${btoa(binary)}`;
+
+      const sizeMB = (muxer.target.buffer.byteLength / (1024 * 1024)).toFixed(1);
+      if (parseFloat(sizeMB) > 6) {
+        alert(`Video is ${sizeMB}MB — try a shorter clip if upload fails.`);
+      }
+
+      const monthDay = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      await onAddToCart({
+        id: Date.now(),
+        type: 'video',
+        videoUrl: videoDataUrl,
+        name: `HOWL | Video | ${overlayText.slice(0, 30).trim()} | ${monthDay}`,
+        hook: overlayText,
+        body: '',
+      });
+      setExportMsg('Added to cart!');
+      setTimeout(() => setExportMsg(''), 2000);
+    } catch (err) {
+      console.error('Cart add failed', err);
+      alert(`Failed to add to cart: ${err?.message || err}`);
+    } finally {
+      setAddingToCart(false);
+      setExportProgress(0);
+    }
+  }, [videoFile, videoUrl, overlayText, fontSize, colorId, positionId, shadow, videoDims, selectedReview, onAddToCart]);
 
   const handleExport = useCallback(async () => {
     if (!videoFile || !overlayText.trim()) return;
@@ -477,6 +565,15 @@ export default function VideoAdTool({ initialText, onTextConsumed }) {
               : !overlayText.trim() ? 'Select a review'
               : 'Export MP4'}
           </button>
+          {onAddToCart && (
+            <button
+              onClick={handleAddToCart}
+              disabled={!canExport || addingToCart}
+              style={{ ...S.exportBtn(!canExport || addingToCart), background: (!canExport || addingToCart) ? undefined : '#6e40c9', marginTop: 6 }}
+            >
+              {addingToCart ? `Encoding… ${exportProgress > 0 ? exportProgress + '%' : ''}` : exportMsg === 'Added to cart!' ? 'Added to Cart!' : 'Add to Cart'}
+            </button>
+          )}
         </div>
       </div>
 

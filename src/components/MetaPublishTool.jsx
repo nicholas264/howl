@@ -56,6 +56,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
 
   const [statuses, setStatuses] = useState({});
   const [generatingCopy, setGeneratingCopy] = useState({});
+  const [previewId, setPreviewId] = useState(null);
   const fileInputRef = useRef(null);
 
   const updateConfig = (key, val) => {
@@ -242,8 +243,10 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'push_ad',
-          squareImageBase64: item.squareUrl || item.url || null,
-          storyImageBase64:  item.storyUrl  || null,
+          ...(item.type === 'video'
+            ? { videoBase64: item.videoUrl }
+            : { squareImageBase64: item.squareUrl || item.url || null, storyImageBase64: item.storyUrl || null }
+          ),
           adName: item.name || `HOWL Ad ${new Date().toLocaleDateString()}`,
           headline: item.hook,
           primaryText: item.body || item.hook,
@@ -480,17 +483,26 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
               <div key={item.id} style={{ ...S.card, opacity: isDone ? 0.6 : 1 }}>
                 {/* Thumbnails */}
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                  {(item.squareUrl || item.url) && (
-                    <div style={{ position: 'relative' }}>
-                      <img src={item.squareUrl || item.url} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 4, display: 'block' }} />
-                      <span style={{ position: 'absolute', bottom: 3, left: 3, background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: 7, padding: '1px 4px', borderRadius: 2, letterSpacing: 1 }}>1:1</span>
+                  {item.type === 'video' ? (
+                    <div style={{ width: 64, height: 64, background: '#1c2330', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px solid #2a3441' }}>
+                      <span style={{ fontSize: 20 }}>▶</span>
+                      <span style={{ fontSize: 7, color: '#8b949e', letterSpacing: 1, marginTop: 3 }}>VIDEO</span>
                     </div>
-                  )}
-                  {item.storyUrl && (
-                    <div style={{ position: 'relative' }}>
-                      <img src={item.storyUrl} alt="" style={{ width: 36, height: 64, objectFit: 'cover', borderRadius: 4, display: 'block' }} />
-                      <span style={{ position: 'absolute', bottom: 3, left: 3, background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: 7, padding: '1px 4px', borderRadius: 2, letterSpacing: 1 }}>9:16</span>
-                    </div>
+                  ) : (
+                    <>
+                      {(item.squareUrl || item.url) && (
+                        <div style={{ position: 'relative' }}>
+                          <img src={item.squareUrl || item.url} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 4, display: 'block' }} />
+                          <span style={{ position: 'absolute', bottom: 3, left: 3, background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: 7, padding: '1px 4px', borderRadius: 2, letterSpacing: 1 }}>1:1</span>
+                        </div>
+                      )}
+                      {item.storyUrl && (
+                        <div style={{ position: 'relative' }}>
+                          <img src={item.storyUrl} alt="" style={{ width: 36, height: 64, objectFit: 'cover', borderRadius: 4, display: 'block' }} />
+                          <span style={{ position: 'absolute', bottom: 3, left: 3, background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: 7, padding: '1px 4px', borderRadius: 2, letterSpacing: 1 }}>9:16</span>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -535,9 +547,48 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                   >
                     {isPushing ? 'Pushing…' : isDone ? 'Pushed' : 'Push to Meta'}
                   </button>
+                  {item.type !== 'video' && (
+                    <button onClick={() => setPreviewId(previewId === item.id ? null : item.id)} style={{ ...S.ghostBtn, fontSize: 9 }}>
+                      {previewId === item.id ? 'Hide Preview' : 'Preview'}
+                    </button>
+                  )}
                   <button onClick={() => removeFromQueue(item.id)} style={{ ...S.ghostBtn, fontSize: 9 }}>Remove</button>
                 </div>
               </div>
+
+              {/* Facebook feed preview */}
+              {previewId === item.id && (item.squareUrl || item.url) && (
+                <div style={{ marginTop: 12, background: '#fff', borderRadius: 8, overflow: 'hidden', maxWidth: 480, boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
+                  <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#DC440A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <span style={{ color: '#fff', fontWeight: 900, fontSize: 16, fontFamily: 'system-ui' }}>H</span>
+                    </div>
+                    <div>
+                      <div style={{ color: '#050505', fontWeight: 700, fontSize: 14, fontFamily: 'system-ui', lineHeight: 1.2 }}>HOWL Campfires</div>
+                      <div style={{ color: '#65676B', fontSize: 12, fontFamily: 'system-ui' }}>Sponsored · 🌍</div>
+                    </div>
+                  </div>
+                  {(item.body || item.hook) && (
+                    <div style={{ padding: '0 16px 10px', color: '#050505', fontSize: 14, fontFamily: 'system-ui', lineHeight: 1.5 }}>
+                      {(item.body || item.hook).slice(0, 200)}{(item.body || item.hook).length > 200 ? '…' : ''}
+                    </div>
+                  )}
+                  <img src={item.squareUrl || item.url} alt="" style={{ width: '100%', display: 'block' }} />
+                  <div style={{ background: '#F0F2F5', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ color: '#65676B', fontSize: 11, fontFamily: 'system-ui', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 2 }}>
+                        {config.destUrl ? new URL(config.destUrl).hostname.replace('www.', '') : 'howlcampfires.com'}
+                      </div>
+                      <div style={{ color: '#050505', fontSize: 14, fontWeight: 700, fontFamily: 'system-ui', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {item.hook || 'Headline'}
+                      </div>
+                    </div>
+                    <div style={{ background: '#E4E6EB', border: 'none', padding: '8px 12px', borderRadius: 4, fontWeight: 700, fontSize: 13, fontFamily: 'system-ui', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      Shop Now
+                    </div>
+                  </div>
+                </div>
+              )}
             );
           })}
         </div>

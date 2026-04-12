@@ -1,3 +1,17 @@
+async function uploadVideo(base64, name, adAccountId, accessToken, BASE) {
+  const clean = base64.replace(/^data:video\/\w+;base64,/, '');
+  const videoBuffer = Buffer.from(clean, 'base64');
+  const form = new FormData();
+  form.append('access_token', accessToken);
+  form.append('title', name || `howl-video-${Date.now()}`);
+  form.append('source', new Blob([videoBuffer], { type: 'video/mp4' }), 'video.mp4');
+  const r = await fetch(`${BASE}/${adAccountId}/advideos`, { method: 'POST', body: form });
+  const d = await r.json();
+  if (d.error) throw new Error(d.error.message);
+  if (!d.id) throw new Error('Video upload returned no ID');
+  return d.id;
+}
+
 async function uploadImage(base64, adAccountId, accessToken, BASE) {
   const clean = base64.replace(/^data:image\/\w+;base64,/, '');
   const params = new URLSearchParams({
@@ -124,43 +138,56 @@ export default async function handler(req, res) {
       }
 
       case 'push_ad': {
-        const { imageBase64, squareImageBase64, storyImageBase64, adName, headline, primaryText, destUrl, adsetId } = req.body;
+        const { imageBase64, squareImageBase64, storyImageBase64, videoBase64, adName, headline, primaryText, destUrl, adsetId } = req.body;
         const pageId = req.body.pageId || defaultPageId;
 
-        const squareBase64 = squareImageBase64 || imageBase64;
-        const storyBase64  = storyImageBase64 || null;
+        let creativeParams;
 
-        // 1. Upload image(s)
-        let squareHash, storyHash;
-        try {
-          squareHash = await uploadImage(squareBase64, adAccountId, accessToken, BASE);
-        } catch (err) {
-          return res.status(400).json({ error: err.message, step: 'upload_square' });
-        }
-        if (storyBase64) {
+        if (videoBase64) {
+          // ── Video ad flow ─────────────────────────────────────────────────
+          let videoId;
           try {
-            storyHash = await uploadImage(storyBase64, adAccountId, accessToken, BASE);
+            videoId = await uploadVideo(videoBase64, adName, adAccountId, accessToken, BASE);
           } catch (err) {
-            return res.status(400).json({ error: err.message, step: 'upload_story' });
+            return res.status(400).json({ error: err.message, step: 'upload_video' });
           }
+          creativeParams = new URLSearchParams({
+            name: `${adName} Creative`,
+            object_story_spec: JSON.stringify({
+              page_id: pageId,
+              video_data: {
+                video_id: videoId,
+                message: primaryText || headline,
+                title: headline,
+                call_to_action: { type: 'SHOP_NOW', value: { link: destUrl } },
+              },
+            }),
+            access_token: accessToken,
+          });
+        } else {
+          // ── Image ad flow ─────────────────────────────────────────────────
+          const squareBase64 = squareImageBase64 || imageBase64;
+          let squareHash;
+          try {
+            squareHash = await uploadImage(squareBase64, adAccountId, accessToken, BASE);
+          } catch (err) {
+            return res.status(400).json({ error: err.message, step: 'upload_square' });
+          }
+          creativeParams = new URLSearchParams({
+            name: `${adName} Creative`,
+            object_story_spec: JSON.stringify({
+              page_id: pageId,
+              link_data: {
+                image_hash: squareHash,
+                link: destUrl,
+                message: primaryText || headline,
+                name: headline,
+                call_to_action: { type: 'SHOP_NOW' },
+              },
+            }),
+            access_token: accessToken,
+          });
         }
-
-        // 2. Create ad creative (object_story_spec — works with standard Marketing API access)
-        // Meta auto-adapts the square image for Stories/Reels placements.
-        const creativeParams = new URLSearchParams({
-          name: `${adName} Creative`,
-          object_story_spec: JSON.stringify({
-            page_id: pageId,
-            link_data: {
-              image_hash: squareHash,
-              link: destUrl,
-              message: primaryText || headline,
-              name: headline,
-              call_to_action: { type: 'SHOP_NOW' },
-            },
-          }),
-          access_token: accessToken,
-        });
 
         const creativeRes = await fetch(`${BASE}/${adAccountId}/adcreatives`, {
           method: 'POST',

@@ -330,6 +330,42 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
     } catch (err) { alert(`Export failed: ${err?.message}`); }
   };
 
+  // ── Batch add to cart ─────────────────────────────────────────────────
+  const handleBatchAddToCart = useCallback(async () => {
+    const selImgs = images.filter(i => selectedIds.has(i.id));
+    const hooks = batchHooks.split('\n').map(h => h.trim()).filter(Boolean);
+    if (!selImgs.length || !hooks.length || !onAddToCart) return;
+
+    setExporting(true);
+    const total = selImgs.length * hooks.length;
+    let done = 0;
+    setExportMsg(`0 / ${total}`);
+
+    try {
+      for (const img of selImgs) {
+        for (const hook of hooks) {
+          const [sq, st] = await Promise.all([
+            renderToCanvas(img.url, hook, bodyText || null, 1080, 1080, styleOpts),
+            renderToCanvas(img.url, hook, bodyText || null, 1080, 1920, styleOpts),
+          ]);
+          const monthDay = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          await onAddToCart({
+            id: Date.now() + Math.random(),
+            type: 'static',
+            squareUrl: sq.toDataURL('image/jpeg', 0.85),
+            storyUrl:  st.toDataURL('image/jpeg', 0.85),
+            name: `HOWL | Static | ${hook.slice(0, 30).trim()} | ${monthDay}`,
+            hook,
+            body: bodyText || '',
+          });
+          done++;
+          setExportMsg(`${done} / ${total}`);
+        }
+      }
+    } catch (err) { alert(`Failed: ${err?.message || err}`); }
+    finally { setExporting(false); setExportMsg(''); }
+  }, [images, selectedIds, batchHooks, bodyText, styleOpts, onAddToCart]);
+
   // ── Batch export ZIP ─────────────────────────────────────────────────
   const handleBatchExport = useCallback(async () => {
     const selImgs = images.filter(i => selectedIds.has(i.id));
@@ -625,12 +661,22 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
               )}
             </>
           ) : (
-            <button onClick={handleBatchExport} disabled={!canBatchExport} style={S.exportBtn(!canBatchExport)}>
-              {exporting ? `Rendering ${exportMsg}…`
-                : !selImgs.length ? 'Select images'
-                : !batchHookList.length ? 'Enter hooks above'
-                : `Export ${selImgs.length * batchHookList.length} PNGs as ZIP`}
-            </button>
+            <>
+              <button onClick={handleBatchExport} disabled={!canBatchExport} style={S.exportBtn(!canBatchExport)}>
+                {exporting ? `Rendering ${exportMsg}…`
+                  : !selImgs.length ? 'Select images'
+                  : !batchHookList.length ? 'Enter hooks above'
+                  : `Export ${selImgs.length * batchHookList.length} PNGs as ZIP`}
+              </button>
+              {onAddToCart && (
+                <button onClick={handleBatchAddToCart} disabled={!canBatchExport} style={{ ...S.exportBtn(!canBatchExport), background: !canBatchExport ? undefined : '#6e40c9', marginTop: 6 }}>
+                  {exporting ? `Adding ${exportMsg}…`
+                    : !selImgs.length ? 'Select images'
+                    : !batchHookList.length ? 'Enter hooks above'
+                    : `Add ${selImgs.length * batchHookList.length} to Cart`}
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
