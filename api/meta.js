@@ -59,6 +59,23 @@ export default async function handler(req, res) {
   try {
     switch (action) {
 
+      case 'get_dashboard': {
+        const sinceTs = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 365; // 1 year ago
+        const filtering = encodeURIComponent(JSON.stringify([{ field: 'created_time', operator: 'GREATER_THAN', value: sinceTs }]));
+
+        const [adsRes, insightsRes] = await Promise.all([
+          fetch(`${BASE}/${adAccountId}/ads?fields=id,name,created_time,status&limit=500&filtering=${filtering}&access_token=${accessToken}`),
+          fetch(`${BASE}/${adAccountId}/insights?fields=spend,impressions,clicks,ctr,reach&date_preset=last_30d&access_token=${accessToken}`),
+        ]);
+        const [adsData, insightsData] = await Promise.all([adsRes.json(), insightsRes.json()]);
+
+        if (adsData.error) throw new Error(adsData.error.message);
+        return res.json({
+          ads: adsData.data || [],
+          insights: insightsData.data?.[0] || null,
+        });
+      }
+
       case 'list_campaigns': {
         const r = await fetch(
           `${BASE}/${adAccountId}/campaigns?fields=id,name,status,objective&limit=100&access_token=${accessToken}`
