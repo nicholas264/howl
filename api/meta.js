@@ -172,7 +172,7 @@ export default async function handler(req, res) {
                 {
                   customization_spec: {
                     publisher_platforms: ['facebook', 'instagram'],
-                    facebook_positions: ['story', 'reels'],
+                    facebook_positions: ['story', 'facebook_reels'],
                     instagram_positions: ['story', 'reels'],
                   },
                   image_label: { name: 'story' },
