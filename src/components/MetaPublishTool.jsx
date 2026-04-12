@@ -477,14 +477,14 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                       <input style={{ ...S.input, fontSize: 10 }} value={item.name} onChange={e => updateQueueItem(item.id, { name: e.target.value })} placeholder="Ad name" />
                     </div>
                   </div>
-                  <div style={S.row}>
+                  <div style={{ ...S.row, alignItems: 'flex-start' }}>
                     <div style={{ ...S.col, flex: 1 }}>
                       <span style={{ fontSize: 9, color: '#8b949e' }}>Headline</span>
-                      <input style={{ ...S.input, fontSize: 10 }} value={item.hook} onChange={e => updateQueueItem(item.id, { hook: e.target.value })} placeholder="6-word hook" />
+                      <textarea style={{ ...S.input, fontSize: 10, resize: 'vertical', minHeight: 56, lineHeight: 1.5 }} value={item.hook} onChange={e => updateQueueItem(item.id, { hook: e.target.value })} placeholder="6-word hook" />
                     </div>
                     <div style={{ ...S.col, flex: 2 }}>
                       <span style={{ fontSize: 9, color: '#8b949e' }}>Primary Text</span>
-                      <input style={{ ...S.input, fontSize: 10 }} value={item.body} onChange={e => updateQueueItem(item.id, { body: e.target.value })} placeholder="Body copy (defaults to headline if empty)" />
+                      <textarea style={{ ...S.input, fontSize: 10, resize: 'vertical', minHeight: 80, lineHeight: 1.5 }} value={item.body} onChange={e => updateQueueItem(item.id, { body: e.target.value })} placeholder="Body copy (defaults to headline if empty)" />
                     </div>
                   </div>
                   <div>
