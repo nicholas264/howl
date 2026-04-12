@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { buildSystemPrompt } from '../prompts';
 
 const LS_CONFIG = 'howl_meta_config';
@@ -480,7 +480,8 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
             const isPushing = st.status === 'pushing';
             const isDone = st.status === 'success';
             return (
-              <div key={item.id} style={{ ...S.card, opacity: isDone ? 0.6 : 1 }}>
+              <React.Fragment key={item.id}>
+              <div style={{ ...S.card, opacity: isDone ? 0.6 : 1 }}>
                 {/* Thumbnails */}
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   {item.type === 'video' ? (
@@ -589,6 +590,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                   </div>
                 </div>
               )}
+              </React.Fragment>
             );
           })}
         </div>
