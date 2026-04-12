@@ -149,16 +149,20 @@ export default async function handler(req, res) {
         let creativeParams;
         if (storyHash) {
           // Multi-placement: 1:1 → Feed, 9:16 → Stories/Reels
+          const bodyLabel    = { name: 'copy' };
+          const titleLabel   = { name: 'copy' };
+          const linkLabel    = { name: 'copy' };
           creativeParams = new URLSearchParams({
             name: `${adName} Creative`,
             asset_feed_spec: JSON.stringify({
+              ad_formats: ['SINGLE_IMAGE'],
               images: [
                 { hash: squareHash, adlabels: [{ name: 'square' }] },
                 { hash: storyHash,  adlabels: [{ name: 'story'  }] },
               ],
-              bodies:   [{ text: primaryText || headline }],
-              titles:   [{ text: headline }],
-              link_urls: [{ website_url: destUrl }],
+              bodies:    [{ text: primaryText || headline, adlabels: [bodyLabel]  }],
+              titles:    [{ text: headline,                adlabels: [titleLabel] }],
+              link_urls: [{ website_url: destUrl,          adlabels: [linkLabel]  }],
               call_to_action_types: ['SHOP_NOW'],
               asset_customization_rules: [
                 {
@@ -167,7 +171,10 @@ export default async function handler(req, res) {
                     facebook_positions: ['feed'],
                     instagram_positions: ['stream'],
                   },
-                  image_label: { name: 'square' },
+                  image_label:    { name: 'square' },
+                  body_label:     bodyLabel,
+                  title_label:    titleLabel,
+                  link_url_label: linkLabel,
                 },
                 {
                   customization_spec: {
@@ -175,11 +182,13 @@ export default async function handler(req, res) {
                     facebook_positions: ['story', 'facebook_reels'],
                     instagram_positions: ['story', 'reels'],
                   },
-                  image_label: { name: 'story' },
+                  image_label:    { name: 'story' },
+                  body_label:     bodyLabel,
+                  title_label:    titleLabel,
+                  link_url_label: linkLabel,
                 },
               ],
             }),
-            object_type: 'SHARE',
             access_token: accessToken,
           });
         } else {
@@ -208,7 +217,12 @@ export default async function handler(req, res) {
         const creativeData = await creativeRes.json();
 
         if (creativeData.error) {
-          return res.status(400).json({ error: creativeData.error.message, step: 'create_creative' });
+          // Return full error detail for debugging
+          return res.status(400).json({
+            error: creativeData.error.error_user_msg || creativeData.error.message,
+            detail: creativeData.error,
+            step: 'create_creative',
+          });
         }
 
         // 3. Create ad (PAUSED — review before going live)
