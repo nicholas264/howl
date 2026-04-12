@@ -260,6 +260,22 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
     }
   }, [selectedAdsetId, config]);
 
+  // ── Push all unpushed ads sequentially ───────────────────────────────────
+  const [pushingAll, setPushingAll] = useState(false);
+  const [pushAllProgress, setPushAllProgress] = useState('');
+
+  const pushAll = useCallback(async () => {
+    const unpushed = cart.filter(item => !statuses[item.id] || statuses[item.id].status !== 'success');
+    if (unpushed.length === 0) return;
+    setPushingAll(true);
+    for (let i = 0; i < unpushed.length; i++) {
+      setPushAllProgress(`${i + 1}/${unpushed.length}`);
+      await pushAd(unpushed[i]);
+    }
+    setPushingAll(false);
+    setPushAllProgress('');
+  }, [cart, statuses, pushAd]);
+
   const activeAdsetId = selectedAdsetId && selectedAdsetId !== '__new__' ? selectedAdsetId : null;
   const activeCampaignId = selectedCampaignId && selectedCampaignId !== '__new__' ? selectedCampaignId : null;
 
@@ -422,6 +438,15 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
           <span style={{ ...S.label, marginBottom: 0 }}>Publish Queue {cart.length > 0 && `(${cart.length})`}</span>
           <button onClick={() => fileInputRef.current?.click()} style={S.ghostBtn}>+ Upload Images</button>
+          {cart.length > 0 && (
+            <button
+              onClick={pushAll}
+              disabled={pushingAll || !activeAdsetId}
+              style={S.btn(pushingAll || !activeAdsetId)}
+            >
+              {pushingAll ? `Pushing ${pushAllProgress}…` : `Push All (${cart.filter(i => !statuses[i.id] || statuses[i.id].status !== 'success').length})`}
+            </button>
+          )}
           <input
             ref={fileInputRef}
             type="file"

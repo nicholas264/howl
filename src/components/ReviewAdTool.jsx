@@ -201,11 +201,13 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
       const el = singleCaptureRef.current;
       await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
       const dataUrl = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
+      const monthDay = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       onAddToCart?.({
         id: Date.now(),
+        type: 'static',
         squareUrl: manualFormat === 'square' ? dataUrl : null,
         storyUrl:  manualFormat === 'story'  ? dataUrl : null,
-        name: `Review Ad — ${manualQuote.slice(0, 24).trim()}`,
+        name: `HOWL | Review | ${manualQuote.slice(0, 30).trim()} | ${monthDay}`,
         hook: manualQuote.slice(0, 80).trim(),
         body: '',
       });
@@ -233,11 +235,14 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
           renders[fk] = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
         }
         if (renders.square || renders.story) {
+          const monthDay = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          const reviewerName = review.nickname || review.handle || 'Customer';
           onAddToCart?.({
             id: Date.now() + count,
+            type: 'static',
             squareUrl: renders.square || null,
             storyUrl:  renders.story  || null,
-            name: `Review — ${review.nickname || review.handle || 'Customer'}`,
+            name: `HOWL | Review | ${reviewerName} | ${monthDay}`,
             hook: (review.quote || '').slice(0, 80).trim(),
             body: '',
           });

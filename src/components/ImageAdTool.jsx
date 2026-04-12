@@ -303,19 +303,21 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
         renderToCanvas(activeImg.url, overlayText, bodyText || null, 1080, 1080, styleOpts),
         renderToCanvas(activeImg.url, overlayText, bodyText || null, 1080, 1920, styleOpts),
       ]);
-      onAddToCart?.({
+      const monthDay = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      await onAddToCart?.({
         id: Date.now(),
+        type: 'static',
         squareUrl: squareCanvas.toDataURL('image/jpeg', 0.92),
         storyUrl:  storyCanvas.toDataURL('image/jpeg', 0.92),
-        name: `HOWL ${overlayText.slice(0, 24).trim()}`,
+        name: `HOWL | Static | ${overlayText.slice(0, 30).trim()} | ${monthDay}`,
         hook: overlayText,
         body: bodyText || '',
       });
       setExportMsg('Added to cart!');
       setTimeout(() => setExportMsg(''), 2000);
-    } catch (err) { alert(`Failed: ${err?.message || err}`); }
+    } catch (err) { alert(`Failed to add to cart: ${err?.message || err}`); }
     finally { setExporting(false); }
-  }, [activeImg, overlayText, bodyText, styleOpts]);
+  }, [activeImg, overlayText, bodyText, styleOpts, onAddToCart]);
 
   // ── Single card export from batch grid ───────────────────────────────
   const exportCard = async (img, hook) => {
