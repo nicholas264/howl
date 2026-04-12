@@ -33,6 +33,7 @@ export default async function handler(req, res) {
   const accessToken = process.env.META_ACCESS_TOKEN;
   const rawId = (process.env.META_AD_ACCOUNT_ID || '').replace('act_', '');
   const adAccountId = `act_${rawId}`;
+  const defaultPageId = process.env.META_PAGE_ID || '404789730317028';
 
   if (!accessToken || !rawId) {
     return res.status(500).json({ error: 'META_ACCESS_TOKEN and META_AD_ACCOUNT_ID not configured' });
@@ -123,7 +124,8 @@ export default async function handler(req, res) {
       }
 
       case 'push_ad': {
-        const { imageBase64, squareImageBase64, storyImageBase64, adName, headline, primaryText, destUrl, pageId, adsetId } = req.body;
+        const { imageBase64, squareImageBase64, storyImageBase64, adName, headline, primaryText, destUrl, adsetId } = req.body;
+        const pageId = req.body.pageId || defaultPageId;
 
         const squareBase64 = squareImageBase64 || imageBase64;
         const storyBase64  = storyImageBase64 || null;

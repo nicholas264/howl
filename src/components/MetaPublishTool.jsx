@@ -38,7 +38,7 @@ const S = {
 };
 
 export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartItem, onRemoveCartItem }) {
-  const [config, setConfig] = useState(() => ls(LS_CONFIG, { pageId: '', destUrl: '' }));
+  const [config, setConfig] = useState(() => ls(LS_CONFIG, { pageId: '404789730317028', destUrl: '' }));
 
   const [campaigns, setCampaigns] = useState([]);
   const [adsets, setAdsets]       = useState([]);
