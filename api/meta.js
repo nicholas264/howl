@@ -66,18 +66,27 @@ export default async function handler(req, res) {
           { field: 'effective_status', operator: 'IN', value: ['ACTIVE'] },
         ]));
 
-        const [adsRes, insightsRes, adsetsRes] = await Promise.all([
+        const [adsRes, insightsRes, adsetsRes, campaignsRes] = await Promise.all([
           fetch(`${BASE}/${adAccountId}/ads?fields=id,name,created_time,status&limit=500&filtering=${filtering}&access_token=${accessToken}`),
           fetch(`${BASE}/${adAccountId}/insights?fields=spend,impressions,clicks,ctr,reach&date_preset=last_30d&access_token=${accessToken}`),
           fetch(`${BASE}/${adAccountId}/adsets?fields=id,name,daily_budget,lifetime_budget,budget_remaining,campaign_id,effective_status&filtering=${activeFilter}&limit=200&access_token=${accessToken}`),
+          fetch(`${BASE}/${adAccountId}/campaigns?fields=id,name,status&filtering=${activeFilter}&limit=100&access_token=${accessToken}`),
         ]);
-        const [adsData, insightsData, adsetsData] = await Promise.all([adsRes.json(), insightsRes.json(), adsetsRes.json()]);
+        const [adsData, insightsData, adsetsData, campaignsData] = await Promise.all([adsRes.json(), insightsRes.json(), adsetsRes.json(), campaignsRes.json()]);
 
         if (adsData.error) throw new Error(adsData.error.message);
+
+        // Build campaign ID → name lookup
+        const campaignNames = {};
+        for (const c of (campaignsData.data || [])) {
+          campaignNames[c.id] = c.name;
+        }
+
         return res.json({
           ads: adsData.data || [],
           insights: insightsData.data?.[0] || null,
           activeAdsets: adsetsData.data || [],
+          campaignNames,
         });
       }
 

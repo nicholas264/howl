@@ -135,6 +135,7 @@ export default function DashboardTool() {
   }, 0);
 
   // Group active ad sets by campaign for breakdown
+  const campaignNames = data?.campaignNames || {};
   const campaignBudgets = {};
   for (const as of activeAdsets) {
     const cid = as.campaign_id || 'unknown';
@@ -193,7 +194,7 @@ export default function DashboardTool() {
                   <span style={{ ...S.label, marginBottom: 0 }}>By Campaign</span>
                   {Object.entries(campaignBudgets).sort((a, b) => b[1].totalDaily - a[1].totalDaily).slice(0, 6).map(([cid, cb]) => {
                     const pct = totalDailyBudget > 0 ? (cb.totalDaily / totalDailyBudget) * 100 : 0;
-                    const campaignName = cb.adsets[0]?.name?.split(' — ')[0] || cid.slice(-8);
+                    const campaignName = campaignNames[cid] || cid.slice(-8);
                     return (
                       <div key={cid}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
