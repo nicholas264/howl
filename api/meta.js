@@ -187,78 +187,28 @@ export default async function handler(req, res) {
             access_token: accessToken,
           });
         } else {
-          // ── Image ad flow ─────────────────────────────────────────────────
+          // ── Image ad flow (1:1 only) ─────────────────────────────────────
           const squareBase64 = squareImageBase64 || imageBase64;
-
-          if (squareBase64 && storyImageBase64) {
-            // Both formats present — upload both and use asset_feed_spec so Meta
-            // serves 1:1 to feed placements and 9:16 to Instagram story/reels.
-            let squareHash, storyHash;
-            try {
-              squareHash = await uploadImage(squareBase64, adAccountId, accessToken, BASE);
-            } catch (err) {
-              return res.status(400).json({ error: err.message, step: 'upload_square' });
-            }
-            try {
-              storyHash = await uploadImage(storyImageBase64, adAccountId, accessToken, BASE);
-            } catch (err) {
-              return res.status(400).json({ error: err.message, step: 'upload_story' });
-            }
-            creativeParams = new URLSearchParams({
-              name: `${adName} Creative`,
-              page_id: pageId,
-              asset_feed_spec: JSON.stringify({
-                images: [
-                  { hash: squareHash, adlabels: [{ name: 'square' }] },
-                  { hash: storyHash,  adlabels: [{ name: 'story'  }] },
-                ],
-                bodies:               [{ text: primaryText || headline }],
-                titles:               [{ text: headline }],
-                link_urls:            [{ website_url: destUrl }],
-                call_to_action_types: ['SHOP_NOW'],
-                asset_customization_rules: [
-                  {
-                    customization_spec: {
-                      publisher_platforms:  ['instagram'],
-                      instagram_positions:  ['story', 'reels'],
-                    },
-                    image_label: { name: 'story' },
-                  },
-                  {
-                    customization_spec: {
-                      publisher_platforms:  ['facebook', 'instagram'],
-                      facebook_positions:   ['feed'],
-                      instagram_positions:  ['stream'],
-                    },
-                    image_label: { name: 'square' },
-                  },
-                ],
-              }),
-              access_token: accessToken,
-            });
-          } else {
-            // 1:1 only fallback
-            let squareHash;
-            try {
-              squareHash = await uploadImage(squareBase64, adAccountId, accessToken, BASE);
-            } catch (err) {
-              return res.status(400).json({ error: err.message, step: 'upload_square' });
-            }
-            creativeParams = new URLSearchParams({
-              name: `${adName} Creative`,
-              object_story_spec: JSON.stringify({
-                page_id: pageId,
-                link_data: {
-                  image_hash: squareHash,
-                  link: destUrl,
-                  message: primaryText || headline,
-                  name: headline,
-                  call_to_action: { type: 'SHOP_NOW' },
-                },
-              }),
-              access_token: accessToken,
-            });
+          let squareHash;
+          try {
+            squareHash = await uploadImage(squareBase64, adAccountId, accessToken, BASE);
+          } catch (err) {
+            return res.status(400).json({ error: err.message, step: 'upload_square' });
           }
+          creativeParams = new URLSearchParams({
+            name: `${adName} Creative`,
+            object_story_spec: JSON.stringify({
+              page_id: pageId,
+              link_data: {
+                image_hash: squareHash,
+                link: destUrl,
+                message: primaryText || headline,
+                name: headline,
+                call_to_action: { type: 'SHOP_NOW' },
+              },
+            }),
+            access_token: accessToken,
+          });
         }
 
         const creativeRes = await fetch(`${BASE}/${adAccountId}/adcreatives`, {
@@ -488,41 +438,6 @@ export default async function handler(req, res) {
                     title: item.hook || '',
                     call_to_action: { type: 'SHOP_NOW', value: { link: destUrl } },
                   },
-                }),
-                access_token: accessToken,
-              });
-            } else if (item.squareUrl && item.storyUrl) {
-              const squareHash = await uploadImage(item.squareUrl, adAccountId, accessToken, BASE);
-              const storyHash = await uploadImage(item.storyUrl, adAccountId, accessToken, BASE);
-              creativeParams = new URLSearchParams({
-                name: `${item.name} Creative`,
-                page_id: pageId,
-                asset_feed_spec: JSON.stringify({
-                  images: [
-                    { hash: squareHash, adlabels: [{ name: 'square' }] },
-                    { hash: storyHash,  adlabels: [{ name: 'story'  }] },
-                  ],
-                  bodies:               [{ text: item.body || item.hook || '' }],
-                  titles:               [{ text: item.hook || '' }],
-                  link_urls:            [{ website_url: destUrl }],
-                  call_to_action_types: ['SHOP_NOW'],
-                  asset_customization_rules: [
-                    {
-                      customization_spec: {
-                        publisher_platforms:  ['instagram'],
-                        instagram_positions:  ['story', 'reels'],
-                      },
-                      image_label: { name: 'story' },
-                    },
-                    {
-                      customization_spec: {
-                        publisher_platforms:  ['facebook', 'instagram'],
-                        facebook_positions:   ['feed'],
-                        instagram_positions:  ['stream'],
-                      },
-                      image_label: { name: 'square' },
-                    },
-                  ],
                 }),
                 access_token: accessToken,
               });
