@@ -253,6 +253,49 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
     finally { setExporting(false); setExportProgress(''); }
   }, [reviews, selected, onAddToCart]);
 
+  const handleAddCarouselToCart = useCallback(async () => {
+    const toExport = filtered.filter(r => selected.has(r.id));
+    if (toExport.length < 2) { alert('Select at least 2 reviews for a carousel.'); return; }
+    if (toExport.length > 10) { alert('Meta carousels support up to 10 cards. Deselect some reviews.'); return; }
+    setExporting(true);
+    try {
+      await document.fonts.ready;
+      const cards = [];
+      let count = 0;
+      setExportProgress(`0/${toExport.length}`);
+      for (const review of toExport) {
+        count++;
+        setExportProgress(`${count}/${toExport.length}`);
+        const el = captureRefs.current[`${review.id}_square`];
+        if (!el) continue;
+        const fmt = FORMATS.square;
+        await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
+        const dataUrl = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
+        cards.push({
+          imageBase64: dataUrl,
+          squareUrl: dataUrl,
+          headline: (review.quote || '').slice(0, 80).trim(),
+          body: `— ${review.nickname || 'Verified Customer'}`,
+          reviewerName: review.nickname || review.handle || 'Customer',
+        });
+        await new Promise(res => setTimeout(res, 250));
+      }
+      if (cards.length >= 2) {
+        const monthDay = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        onAddToCart?.({
+          id: Date.now(),
+          type: 'carousel',
+          cards,
+          squareUrl: cards[0].squareUrl,
+          name: `HOWL | Review Carousel (${cards.length}) | ${monthDay}`,
+          hook: `${cards.length} verified reviews`,
+          body: '',
+        });
+      }
+    } catch (err) { console.error(err); alert('Failed to create carousel. Try fewer cards.'); }
+    finally { setExporting(false); setExportProgress(''); }
+  }, [reviews, selected, filtered, onAddToCart]);
+
   const products = [...new Set(reviews.map(r => r.handle).filter(Boolean))].sort();
   const filtered = reviews.filter(r =>
     (ratingFilter === 0 || r.rating === ratingFilter) &&
@@ -446,6 +489,11 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
               {exporting ? `Rendering ${exportProgress}...` : selectedCount === 0 ? 'Select reviews' : `Add ${exportTotal} to Cart`}
             </button>
           )}
+          {onAddToCart && (
+            <button onClick={handleAddCarouselToCart} disabled={exporting || selectedCount < 2} style={{ ...S.exportBtn(exporting || selectedCount < 2), background: (exporting || selectedCount < 2) ? '#2a3441' : '#1a7f37', marginTop: 4 }}>
+              {exporting ? `Building carousel ${exportProgress}...` : selectedCount < 2 ? 'Select 2+ for carousel' : `Add as Carousel (${selectedCount} cards)`}
+            </button>
+          )}
           {driveAuth?.connected && (
             <button onClick={() => handleBulkExport({ toDrive: true })} disabled={exporting || selectedCount === 0} style={{ ...S.exportBtn(exporting || selectedCount === 0), background: exporting || selectedCount === 0 ? '#2a3441' : '#1a7f37', marginTop: 4 }}>
               {exporting ? `Saving ${exportProgress}...` : `Save to Drive`}
@@ -502,8 +550,10 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
 
       {/* Hidden capture divs */}
       <div style={{ position: 'fixed', left: -99999, top: 0 }}>
-        {filtered.filter(r => selected.has(r.id)).flatMap(r =>
-          formatKeys.map(fk => {
+        {filtered.filter(r => selected.has(r.id)).flatMap(r => {
+          // Always include square for carousel support, plus any selected formats
+          const fks = [...new Set(['square', ...formatKeys])];
+          return fks.map(fk => {
             const fmt = FORMATS[fk];
             const key = `${r.id}_${fk}`;
             return (
@@ -511,8 +561,8 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
                 <UGCTemplate variation={{ headline: r.quote }} format={fk} dimensions={fmt} reviewerName={r.nickname} attribution={verifiedLabel(r.handle)} backgroundImage={bgImage} scrimColor={scrimColor} />
               </div>
             );
-          })
-        )}
+          });
+        })}
       </div>
     </div>
   );

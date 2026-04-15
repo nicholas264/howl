@@ -39,6 +39,7 @@ const S = {
 
 export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartItem, onRemoveCartItem }) {
   const [config, setConfig] = useState(() => ls(LS_CONFIG, { pageId: '404789730317028', destUrl: '' }));
+  const [publishMode, setPublishMode] = useState('manual'); // 'manual' | 'creative_test'
 
   const [campaigns, setCampaigns] = useState([]);
   const [adsets, setAdsets]       = useState([]);
@@ -58,6 +59,83 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
   const [generatingCopy, setGeneratingCopy] = useState({});
   const [previewId, setPreviewId] = useState(null);
   const fileInputRef = useRef(null);
+
+  // ── Creative Test state ─────────────────────────────────────────────────
+  const [ctConfig, setCtConfig] = useState(() => ls('howl_ct_config', {
+    testName: '',
+    budgetPerCreative: '20',
+    pixelId: '',
+  }));
+  const [ctSelected, setCtSelected] = useState(() => new Set());
+  const [ctRunning, setCtRunning] = useState(false);
+  const [ctProgress, setCtProgress] = useState('');
+  const [ctResult, setCtResult] = useState(null);
+
+  const updateCtConfig = (key, val) => {
+    const next = { ...ctConfig, [key]: val };
+    setCtConfig(next);
+    lsSet('howl_ct_config', next);
+  };
+
+  const toggleCtItem = (id) => {
+    setCtSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllCt = () => setCtSelected(new Set(cart.map(i => i.id)));
+  const selectNoneCt = () => setCtSelected(new Set());
+
+  const launchCreativeTest = useCallback(async () => {
+    const items = cart.filter(i => ctSelected.has(i.id));
+    if (items.length === 0) { alert('Select at least one creative.'); return; }
+    if (!config.pageId.trim()) { alert('Enter your Facebook Page ID in Settings.'); return; }
+    if (!config.destUrl.trim()) { alert('Enter a destination URL in Settings.'); return; }
+    if (!ctConfig.pixelId.trim()) { alert('Enter your Pixel ID for purchase optimization.'); return; }
+
+    setCtRunning(true);
+    setCtResult(null);
+    setCtProgress('Creating campaign...');
+
+    try {
+      const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const testName = ctConfig.testName.trim() || `[CT] HOWL — ${dateStr}`;
+
+      const r = await fetch('/api/meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_creative_test',
+          testName,
+          dailyBudgetDollars: ctConfig.budgetPerCreative,
+          pixelId: ctConfig.pixelId,
+          pageId: config.pageId,
+          destUrl: config.destUrl,
+          items: items.map(i => ({
+            name: i.name || 'Untitled',
+            type: i.type || 'static',
+            hook: i.hook || '',
+            body: i.body || '',
+            squareUrl: i.squareUrl || i.url || null,
+            storyUrl: i.storyUrl || null,
+            videoUrl: i.videoUrl || null,
+            cards: i.cards || null,
+          })),
+        }),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setCtResult(d);
+      setCtProgress('');
+    } catch (err) {
+      setCtResult({ error: err.message });
+      setCtProgress('');
+    } finally {
+      setCtRunning(false);
+    }
+  }, [cart, ctSelected, config, ctConfig]);
 
   const updateConfig = (key, val) => {
     const next = { ...config, [key]: val };
@@ -238,10 +316,25 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
 
     setStatus(item.id, 'pushing');
     try {
-      const r = await fetch('/api/meta', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      let body;
+      if (item.type === 'carousel' && item.cards) {
+        body = {
+          action: 'push_carousel',
+          cards: item.cards.map(c => ({
+            imageBase64: c.imageBase64 || c.squareUrl,
+            headline: c.headline || '',
+            body: c.body || '',
+            destUrl: config.destUrl,
+          })),
+          adName: item.name || `HOWL Carousel ${new Date().toLocaleDateString()}`,
+          headline: item.hook,
+          primaryText: item.body || item.hook,
+          destUrl: config.destUrl,
+          pageId: config.pageId,
+          adsetId,
+        };
+      } else {
+        body = {
           action: 'push_ad',
           ...(item.type === 'video'
             ? { videoBase64: item.videoUrl }
@@ -253,7 +346,12 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
           destUrl: config.destUrl,
           pageId: config.pageId,
           adsetId,
-        }),
+        };
+      }
+      const r = await fetch('/api/meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       });
       const d = await r.json();
       if (d.error) throw new Error(`[${d.step}] ${d.error}`);
@@ -281,6 +379,9 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
 
   const activeAdsetId = selectedAdsetId && selectedAdsetId !== '__new__' ? selectedAdsetId : null;
   const activeCampaignId = selectedCampaignId && selectedCampaignId !== '__new__' ? selectedCampaignId : null;
+
+  const ctSelectedCount = cart.filter(i => ctSelected.has(i.id)).length;
+  const ctTotalDaily = ctSelectedCount * parseFloat(ctConfig.budgetPerCreative || '0');
 
   return (
     <div style={S.wrap}>
@@ -315,6 +416,165 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
 
       <div style={S.divider} />
 
+      {/* Mode toggle */}
+      <div style={{ ...S.section, marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => setPublishMode('manual')}
+            style={{ padding: '8px 18px', border: `1px solid ${publishMode === 'manual' ? '#DC440A' : '#2a3441'}`, background: publishMode === 'manual' ? 'rgba(220,68,10,0.15)' : '#1c2330', color: publishMode === 'manual' ? '#DC440A' : '#8b949e', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4, fontWeight: 600 }}
+          >
+            Manual Publish
+          </button>
+          <button
+            onClick={() => setPublishMode('creative_test')}
+            style={{ padding: '8px 18px', border: `1px solid ${publishMode === 'creative_test' ? '#DC440A' : '#2a3441'}`, background: publishMode === 'creative_test' ? 'rgba(220,68,10,0.15)' : '#1c2330', color: publishMode === 'creative_test' ? '#DC440A' : '#8b949e', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4, fontWeight: 600 }}
+          >
+            Creative Test
+          </button>
+        </div>
+      </div>
+
+      {/* ── Creative Test Mode ──────────────────────────────────────────────── */}
+      {publishMode === 'creative_test' && (
+        <>
+          <div style={S.section}>
+            <span style={S.label}>Test Configuration</span>
+            <div style={{ fontSize: 9, color: '#6e7681', marginBottom: 14, letterSpacing: 1, lineHeight: 1.6 }}>
+              Creates 1 ABO campaign with 1 ad set per creative. Equal daily budgets, same broad US audience.
+              <br />Everything starts PAUSED — review in Ads Manager before going live.
+            </div>
+            <div style={{ ...S.row, marginBottom: 12 }}>
+              <div style={{ ...S.col, flex: 2 }}>
+                <span style={{ fontSize: 10, color: '#8b949e' }}>Test Name</span>
+                <input style={S.input} placeholder={`[CT] HOWL — ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`} value={ctConfig.testName} onChange={e => updateCtConfig('testName', e.target.value)} />
+              </div>
+              <div style={{ ...S.col, flex: 1 }}>
+                <span style={{ fontSize: 10, color: '#8b949e' }}>Budget / Creative / Day ($)</span>
+                <input style={S.input} type="number" min="5" placeholder="20" value={ctConfig.budgetPerCreative} onChange={e => updateCtConfig('budgetPerCreative', e.target.value)} />
+              </div>
+              <div style={{ ...S.col, flex: 1 }}>
+                <span style={{ fontSize: 10, color: '#8b949e' }}>Pixel ID</span>
+                <input style={S.input} placeholder="Pixel ID" value={ctConfig.pixelId} onChange={e => updateCtConfig('pixelId', e.target.value)} />
+              </div>
+            </div>
+            {ctSelectedCount > 0 && (
+              <div style={{ fontSize: 10, color: '#8b949e', marginBottom: 12, letterSpacing: 1 }}>
+                {ctSelectedCount} creative{ctSelectedCount !== 1 ? 's' : ''} selected — <span style={{ color: '#f0f4f8', fontWeight: 600 }}>${ctTotalDaily.toFixed(0)}/day</span> total spend
+              </div>
+            )}
+          </div>
+
+          <div style={S.divider} />
+
+          <div style={S.section}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+              <span style={{ ...S.label, marginBottom: 0 }}>Select Creatives {cart.length > 0 && `(${cart.length} in cart)`}</span>
+              <button onClick={selectAllCt} style={S.ghostBtn}>Select All</button>
+              <button onClick={selectNoneCt} style={S.ghostBtn}>None</button>
+            </div>
+
+            {cart.length === 0 && (
+              <div style={{ border: '2px dashed #2a3441', borderRadius: 6, padding: '32px', textAlign: 'center', color: '#6e7681', fontSize: 11 }}>
+                Add creatives from Image Ads, Review Ads, or Video Ads first.
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {cart.map(item => {
+                const isSelected = ctSelected.has(item.id);
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => toggleCtItem(item.id)}
+                    style={{ ...S.card, cursor: 'pointer', border: `1px solid ${isSelected ? '#DC440A' : '#2a3441'}`, background: isSelected ? 'rgba(220,68,10,0.05)' : '#161b22' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleCtItem(item.id)}
+                      onClick={e => e.stopPropagation()}
+                      style={{ marginTop: 4, flexShrink: 0, accentColor: '#DC440A' }}
+                    />
+                    {/* Thumbnail */}
+                    <div style={{ flexShrink: 0 }}>
+                      {item.type === 'video' ? (
+                        <div style={{ width: 48, height: 48, background: '#1c2330', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px solid #2a3441' }}>
+                          <span style={{ fontSize: 16 }}>▶</span>
+                          <span style={{ fontSize: 7, color: '#8b949e', letterSpacing: 1 }}>VIDEO</span>
+                        </div>
+                      ) : item.type === 'carousel' && item.cards ? (
+                        <div style={{ display: 'flex', gap: 2 }}>
+                          {item.cards.slice(0, 3).map((card, ci) => (
+                            <img key={ci} src={card.squareUrl || card.imageBase64} alt="" style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 3 }} />
+                          ))}
+                        </div>
+                      ) : (
+                        <img src={item.squareUrl || item.url} alt="" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, display: 'block' }} />
+                      )}
+                    </div>
+                    {/* Info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 11, color: '#f0f4f8', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {item.name || 'Untitled'}
+                      </div>
+                      <div style={{ fontSize: 9, color: '#8b949e', marginTop: 2 }}>
+                        {item.type === 'carousel' ? `Carousel (${item.cards?.length} cards)` : item.type === 'video' ? 'Video' : item.storyUrl ? '1:1 + 9:16' : '1:1'}
+                        {item.hook ? ` — ${item.hook.slice(0, 50)}` : ''}
+                      </div>
+                    </div>
+                    {/* Per-creative budget */}
+                    <div style={{ fontSize: 10, color: '#8b949e', flexShrink: 0 }}>
+                      ${ctConfig.budgetPerCreative}/day
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {cart.length > 0 && (
+              <div style={{ marginTop: 20 }}>
+                <button
+                  onClick={launchCreativeTest}
+                  disabled={ctRunning || ctSelectedCount === 0 || !ctConfig.pixelId.trim()}
+                  style={{ ...S.btn(ctRunning || ctSelectedCount === 0 || !ctConfig.pixelId.trim()), width: '100%', padding: '14px 0', fontSize: 11 }}
+                >
+                  {ctRunning
+                    ? ctProgress || 'Building test...'
+                    : ctSelectedCount === 0
+                    ? 'Select creatives to test'
+                    : !ctConfig.pixelId.trim()
+                    ? 'Enter Pixel ID above'
+                    : `Launch Creative Test — ${ctSelectedCount} creative${ctSelectedCount !== 1 ? 's' : ''} — $${ctTotalDaily.toFixed(0)}/day`
+                  }
+                </button>
+
+                {ctResult && !ctResult.error && (
+                  <div style={{ ...S.success, marginTop: 12 }}>
+                    Campaign created (PAUSED) — ID: {ctResult.campaignId}
+                    <div style={{ marginTop: 8, fontSize: 9, lineHeight: 1.6 }}>
+                      {ctResult.results?.map((r, i) => (
+                        <div key={i} style={{ color: r.success ? '#3fb950' : '#f85149' }}>
+                          {r.item}: {r.success ? `Ad ${r.adId}` : `Error: ${r.error}`}
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: 9, color: '#8b949e' }}>
+                      Open Ads Manager to review and activate.
+                    </div>
+                  </div>
+                )}
+                {ctResult?.error && (
+                  <div style={S.err}>{ctResult.error}</div>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── Manual Publish Mode ─────────────────────────────────────────────── */}
+      {publishMode === 'manual' && (
+        <>
       {/* Campaign Setup */}
       <div style={S.section}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
@@ -489,6 +749,24 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                       <span style={{ fontSize: 20 }}>▶</span>
                       <span style={{ fontSize: 7, color: '#8b949e', letterSpacing: 1, marginTop: 3 }}>VIDEO</span>
                     </div>
+                  ) : item.type === 'carousel' && item.cards ? (
+                    <div style={{ display: 'flex', gap: 3 }}>
+                      {item.cards.slice(0, 4).map((card, ci) => (
+                        <div key={ci} style={{ position: 'relative' }}>
+                          <img src={card.squareUrl || card.imageBase64} alt="" style={{ width: 42, height: 42, objectFit: 'cover', borderRadius: 3, display: 'block' }} />
+                          {ci === 0 && (
+                            <span style={{ position: 'absolute', bottom: 2, left: 2, background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: 6, padding: '1px 3px', borderRadius: 2, letterSpacing: 1 }}>
+                              {item.cards.length} CARDS
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                      {item.cards.length > 4 && (
+                        <div style={{ width: 42, height: 42, background: '#1c2330', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #2a3441' }}>
+                          <span style={{ fontSize: 9, color: '#8b949e' }}>+{item.cards.length - 4}</span>
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <>
                       {(item.squareUrl || item.url) && (
@@ -595,6 +873,8 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
           })}
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

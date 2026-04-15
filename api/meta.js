@@ -294,6 +294,292 @@ export default async function handler(req, res) {
         return res.json({ success: true, adId: adData.id });
       }
 
+      case 'push_carousel': {
+        const { cards, adName, headline, primaryText, destUrl, adsetId } = req.body;
+        const pageId = req.body.pageId || defaultPageId;
+
+        if (!cards || cards.length < 2) {
+          return res.status(400).json({ error: 'Carousel requires at least 2 cards', step: 'validate' });
+        }
+
+        // Upload all card images
+        const childAttachments = [];
+        for (let i = 0; i < cards.length; i++) {
+          const card = cards[i];
+          let hash;
+          try {
+            hash = await uploadImage(card.imageBase64, adAccountId, accessToken, BASE);
+          } catch (err) {
+            return res.status(400).json({ error: err.message, step: `upload_card_${i}` });
+          }
+          childAttachments.push({
+            link: card.destUrl || destUrl,
+            image_hash: hash,
+            name: card.headline || headline || '',
+            description: card.body || '',
+            call_to_action: { type: 'SHOP_NOW' },
+          });
+        }
+
+        const creativeParams = new URLSearchParams({
+          name: `${adName} Creative`,
+          object_story_spec: JSON.stringify({
+            page_id: pageId,
+            link_data: {
+              link: destUrl,
+              message: primaryText || headline,
+              child_attachments: childAttachments,
+              multi_share_optimized: false,
+            },
+          }),
+          access_token: accessToken,
+        });
+
+        const creativeRes = await fetch(`${BASE}/${adAccountId}/adcreatives`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: creativeParams,
+        });
+        const creativeData = await creativeRes.json();
+
+        if (creativeData.error) {
+          return res.status(400).json({
+            error: creativeData.error.error_user_msg || creativeData.error.message,
+            detail: creativeData.error,
+            step: 'create_creative',
+          });
+        }
+
+        const adParams = new URLSearchParams({
+          name: adName,
+          adset_id: adsetId,
+          creative: JSON.stringify({ creative_id: creativeData.id }),
+          status: 'PAUSED',
+          access_token: accessToken,
+        });
+        const adRes = await fetch(`${BASE}/${adAccountId}/ads`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: adParams,
+        });
+        const adData = await adRes.json();
+
+        if (adData.error) {
+          return res.status(400).json({ error: adData.error.message, step: 'create_ad' });
+        }
+
+        return res.json({ success: true, adId: adData.id });
+      }
+
+      case 'create_creative_test': {
+        const { testName, dailyBudgetDollars, pixelId, items } = req.body;
+        const pageId = req.body.pageId || defaultPageId;
+        const destUrl = req.body.destUrl;
+
+        if (!items || items.length === 0) {
+          return res.status(400).json({ error: 'No creatives provided', step: 'validate' });
+        }
+
+        // 1. Create ABO campaign (PAUSED)
+        const campaignParams = new URLSearchParams({
+          name: testName || `[CT] HOWL — ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+          objective: 'OUTCOME_SALES',
+          status: 'PAUSED',
+          special_ad_categories: '[]',
+          access_token: accessToken,
+        });
+        const campaignRes = await fetch(`${BASE}/${adAccountId}/campaigns`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: campaignParams,
+        });
+        const campaignData = await campaignRes.json();
+        if (campaignData.error) {
+          return res.status(400).json({ error: campaignData.error.message, step: 'create_campaign' });
+        }
+        const campaignId = campaignData.id;
+
+        // 2. Create one ad set per creative, each with equal budget
+        const dailyBudgetCents = String(Math.round(parseFloat(dailyBudgetDollars || '20') * 100));
+        const results = [];
+
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+
+          // Create ad set
+          const adsetBody = {
+            name: `${item.name || `Creative ${i + 1}`}`,
+            campaign_id: campaignId,
+            daily_budget: dailyBudgetCents,
+            billing_event: 'IMPRESSIONS',
+            optimization_goal: 'OFFSITE_CONVERSIONS',
+            bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+            status: 'PAUSED',
+            targeting: JSON.stringify({
+              geo_locations: { countries: ['US'] },
+              age_min: 18,
+              age_max: 65,
+            }),
+            access_token: accessToken,
+          };
+
+          if (pixelId) {
+            adsetBody.promoted_object = JSON.stringify({
+              pixel_id: pixelId,
+              custom_event_type: 'PURCHASE',
+            });
+          }
+
+          const adsetParams = new URLSearchParams(adsetBody);
+          const adsetRes = await fetch(`${BASE}/${adAccountId}/adsets`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: adsetParams,
+          });
+          const adsetData = await adsetRes.json();
+          if (adsetData.error) {
+            results.push({ item: item.name, error: adsetData.error.message, step: 'create_adset' });
+            continue;
+          }
+
+          // Upload creative asset
+          let creativeParams;
+          try {
+            if (item.type === 'carousel' && item.cards) {
+              // Carousel creative
+              const childAttachments = [];
+              for (const card of item.cards) {
+                const hash = await uploadImage(card.imageBase64 || card.squareUrl, adAccountId, accessToken, BASE);
+                childAttachments.push({
+                  link: card.destUrl || destUrl,
+                  image_hash: hash,
+                  name: card.headline || item.hook || '',
+                  description: card.body || '',
+                  call_to_action: { type: 'SHOP_NOW' },
+                });
+              }
+              creativeParams = new URLSearchParams({
+                name: `${item.name} Creative`,
+                object_story_spec: JSON.stringify({
+                  page_id: pageId,
+                  link_data: {
+                    link: destUrl,
+                    message: item.body || item.hook || '',
+                    child_attachments: childAttachments,
+                    multi_share_optimized: false,
+                  },
+                }),
+                access_token: accessToken,
+              });
+            } else if (item.type === 'video') {
+              const videoId = await uploadVideo(item.videoUrl, item.name, adAccountId, accessToken, BASE);
+              creativeParams = new URLSearchParams({
+                name: `${item.name} Creative`,
+                object_story_spec: JSON.stringify({
+                  page_id: pageId,
+                  video_data: {
+                    video_id: videoId,
+                    message: item.body || item.hook || '',
+                    title: item.hook || '',
+                    call_to_action: { type: 'SHOP_NOW', value: { link: destUrl } },
+                  },
+                }),
+                access_token: accessToken,
+              });
+            } else if (item.squareUrl && item.storyUrl) {
+              const squareHash = await uploadImage(item.squareUrl, adAccountId, accessToken, BASE);
+              const storyHash = await uploadImage(item.storyUrl, adAccountId, accessToken, BASE);
+              creativeParams = new URLSearchParams({
+                name: `${item.name} Creative`,
+                page_id: pageId,
+                asset_feed_spec: JSON.stringify({
+                  images: [
+                    { hash: squareHash, adlabels: [{ name: 'square' }] },
+                    { hash: storyHash,  adlabels: [{ name: 'story'  }] },
+                  ],
+                  bodies:               [{ text: item.body || item.hook || '' }],
+                  titles:               [{ text: item.hook || '' }],
+                  link_urls:            [{ website_url: destUrl }],
+                  call_to_action_types: ['SHOP_NOW'],
+                  asset_customization_rules: [
+                    {
+                      customization_spec: {
+                        publisher_platforms:  ['instagram'],
+                        instagram_positions:  ['story', 'reels'],
+                      },
+                      image_label: { name: 'story' },
+                    },
+                    {
+                      customization_spec: {
+                        publisher_platforms:  ['facebook', 'instagram'],
+                        facebook_positions:   ['feed'],
+                        instagram_positions:  ['stream'],
+                      },
+                      image_label: { name: 'square' },
+                    },
+                  ],
+                }),
+                access_token: accessToken,
+              });
+            } else {
+              const imgSrc = item.squareUrl || item.url;
+              const hash = await uploadImage(imgSrc, adAccountId, accessToken, BASE);
+              creativeParams = new URLSearchParams({
+                name: `${item.name} Creative`,
+                object_story_spec: JSON.stringify({
+                  page_id: pageId,
+                  link_data: {
+                    image_hash: hash,
+                    link: destUrl,
+                    message: item.body || item.hook || '',
+                    name: item.hook || '',
+                    call_to_action: { type: 'SHOP_NOW' },
+                  },
+                }),
+                access_token: accessToken,
+              });
+            }
+          } catch (err) {
+            results.push({ item: item.name, error: err.message, step: 'upload_asset' });
+            continue;
+          }
+
+          const creativeRes = await fetch(`${BASE}/${adAccountId}/adcreatives`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: creativeParams,
+          });
+          const creativeData = await creativeRes.json();
+          if (creativeData.error) {
+            results.push({ item: item.name, error: creativeData.error.error_user_msg || creativeData.error.message, step: 'create_creative' });
+            continue;
+          }
+
+          // Create ad (PAUSED)
+          const adParams = new URLSearchParams({
+            name: item.name || `Creative ${i + 1}`,
+            adset_id: adsetData.id,
+            creative: JSON.stringify({ creative_id: creativeData.id }),
+            status: 'PAUSED',
+            access_token: accessToken,
+          });
+          const adRes = await fetch(`${BASE}/${adAccountId}/ads`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: adParams,
+          });
+          const adData = await adRes.json();
+          if (adData.error) {
+            results.push({ item: item.name, error: adData.error.message, step: 'create_ad' });
+            continue;
+          }
+
+          results.push({ item: item.name, adsetId: adsetData.id, adId: adData.id, success: true });
+        }
+
+        return res.json({ success: true, campaignId, results });
+      }
+
       default:
         return res.status(400).json({ error: `Unknown action: ${action}` });
     }
