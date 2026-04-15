@@ -254,7 +254,10 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   }, [reviews, selected, onAddToCart]);
 
   const handleAddCarouselToCart = useCallback(async () => {
-    const toExport = filtered.filter(r => selected.has(r.id));
+    const toExport = reviews.filter(r =>
+      (ratingFilter === 0 || r.rating === ratingFilter) &&
+      (productFilter === 'all' || r.handle === productFilter)
+    ).filter(r => selected.has(r.id));
     if (toExport.length < 2) { alert('Select at least 2 reviews for a carousel.'); return; }
     if (toExport.length > 10) { alert('Meta carousels support up to 10 cards. Deselect some reviews.'); return; }
     setExporting(true);
@@ -294,7 +297,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
       }
     } catch (err) { console.error(err); alert('Failed to create carousel. Try fewer cards.'); }
     finally { setExporting(false); setExportProgress(''); }
-  }, [reviews, selected, filtered, onAddToCart]);
+  }, [reviews, selected, ratingFilter, productFilter, onAddToCart]);
 
   const products = [...new Set(reviews.map(r => r.handle).filter(Boolean))].sort();
   const filtered = reviews.filter(r =>
