@@ -62,17 +62,22 @@ export default async function handler(req, res) {
       case 'get_dashboard': {
         const sinceTs = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 365; // 1 year ago
         const filtering = encodeURIComponent(JSON.stringify([{ field: 'created_time', operator: 'GREATER_THAN', value: sinceTs }]));
+        const activeFilter = encodeURIComponent(JSON.stringify([
+          { field: 'effective_status', operator: 'IN', value: ['ACTIVE'] },
+        ]));
 
-        const [adsRes, insightsRes] = await Promise.all([
+        const [adsRes, insightsRes, adsetsRes] = await Promise.all([
           fetch(`${BASE}/${adAccountId}/ads?fields=id,name,created_time,status&limit=500&filtering=${filtering}&access_token=${accessToken}`),
           fetch(`${BASE}/${adAccountId}/insights?fields=spend,impressions,clicks,ctr,reach&date_preset=last_30d&access_token=${accessToken}`),
+          fetch(`${BASE}/${adAccountId}/adsets?fields=id,name,daily_budget,lifetime_budget,budget_remaining,campaign_id,effective_status&filtering=${activeFilter}&limit=200&access_token=${accessToken}`),
         ]);
-        const [adsData, insightsData] = await Promise.all([adsRes.json(), insightsRes.json()]);
+        const [adsData, insightsData, adsetsData] = await Promise.all([adsRes.json(), insightsRes.json(), adsetsRes.json()]);
 
         if (adsData.error) throw new Error(adsData.error.message);
         return res.json({
           ads: adsData.data || [],
           insights: insightsData.data?.[0] || null,
+          activeAdsets: adsetsData.data || [],
         });
       }
 

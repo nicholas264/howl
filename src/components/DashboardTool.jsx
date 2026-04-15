@@ -119,6 +119,31 @@ export default function DashboardTool() {
   // Recent 10 ads (sorted newest first)
   const recent = [...ads].sort((a, b) => new Date(b.created_time) - new Date(a.created_time)).slice(0, 10);
 
+  // ── Active budget breakdown ──────────────────────────────────────────────
+  const activeAdsets = data?.activeAdsets || [];
+  const totalDailyBudget = activeAdsets.reduce((sum, as) => {
+    const daily = as.daily_budget ? parseInt(as.daily_budget, 10) / 100 : 0;
+    return sum + daily;
+  }, 0);
+  const totalLifetimeBudget = activeAdsets.reduce((sum, as) => {
+    const lt = as.lifetime_budget ? parseInt(as.lifetime_budget, 10) / 100 : 0;
+    return sum + lt;
+  }, 0);
+  const totalBudgetRemaining = activeAdsets.reduce((sum, as) => {
+    const rem = as.budget_remaining ? parseInt(as.budget_remaining, 10) / 100 : 0;
+    return sum + rem;
+  }, 0);
+
+  // Group active ad sets by campaign for breakdown
+  const campaignBudgets = {};
+  for (const as of activeAdsets) {
+    const cid = as.campaign_id || 'unknown';
+    if (!campaignBudgets[cid]) campaignBudgets[cid] = { adsets: [], totalDaily: 0 };
+    const daily = as.daily_budget ? parseInt(as.daily_budget, 10) / 100 : 0;
+    campaignBudgets[cid].adsets.push(as);
+    campaignBudgets[cid].totalDaily += daily;
+  }
+
   return (
     <div style={S.wrap}>
       {/* Header */}
@@ -144,6 +169,50 @@ export default function DashboardTool() {
 
       {data && (
         <>
+          {/* Live daily budget */}
+          <div style={{ ...S.card, marginBottom: 20, borderColor: totalDailyBudget > 0 ? '#DC440A' : '#2a3441' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24 }}>
+              <div>
+                <span style={S.label}>Live Daily Budget</span>
+                <div style={{ fontSize: 36, fontWeight: 700, color: '#f0f4f8', lineHeight: 1 }}>
+                  ${totalDailyBudget.toFixed(0)}<span style={{ fontSize: 16, color: '#8b949e', fontWeight: 400 }}>/day</span>
+                </div>
+                <div style={{ fontSize: 10, color: '#8b949e', marginTop: 8, letterSpacing: 1 }}>
+                  {activeAdsets.length} active ad set{activeAdsets.length !== 1 ? 's' : ''}
+                  {totalDailyBudget > 0 && <> — <span style={{ color: '#f0f4f8' }}>${(totalDailyBudget * 7).toFixed(0)}/wk</span> — <span style={{ color: '#f0f4f8' }}>${(totalDailyBudget * 30).toFixed(0)}/mo</span></>}
+                </div>
+                {totalLifetimeBudget > 0 && (
+                  <div style={{ fontSize: 9, color: '#6e7681', marginTop: 4, letterSpacing: 1 }}>
+                    + ${totalLifetimeBudget.toFixed(0)} in lifetime budgets (${totalBudgetRemaining.toFixed(0)} remaining)
+                  </div>
+                )}
+              </div>
+              {/* Per-campaign breakdown */}
+              {Object.keys(campaignBudgets).length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 240 }}>
+                  <span style={{ ...S.label, marginBottom: 0 }}>By Campaign</span>
+                  {Object.entries(campaignBudgets).sort((a, b) => b[1].totalDaily - a[1].totalDaily).slice(0, 6).map(([cid, cb]) => {
+                    const pct = totalDailyBudget > 0 ? (cb.totalDaily / totalDailyBudget) * 100 : 0;
+                    const campaignName = cb.adsets[0]?.name?.split(' — ')[0] || cid.slice(-8);
+                    return (
+                      <div key={cid}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                          <span style={{ fontSize: 9, color: '#c9d1d9', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {campaignName} <span style={{ color: '#6e7681' }}>({cb.adsets.length})</span>
+                          </span>
+                          <span style={{ fontSize: 9, color: '#f0f4f8', fontWeight: 600 }}>${cb.totalDaily.toFixed(0)}/day</span>
+                        </div>
+                        <div style={{ height: 3, background: '#1c2330', borderRadius: 2 }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: '#DC440A', borderRadius: 2 }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Top stats */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
             {[
