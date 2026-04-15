@@ -7,7 +7,7 @@ const LS_PRESETS = 'howl_style_presets';
 const LS_FAV     = 'howl_favorites';
 
 const FORMATS = [
-  { id: 'square', label: '1:1',  w: 1080, h: 1080 },
+  { id: 'square', label: '4:5',  w: 1080, h: 1350 },
   { id: 'story',  label: '9:16', w: 1080, h: 1920 },
 ];
 

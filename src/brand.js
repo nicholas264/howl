@@ -26,7 +26,7 @@ export const FONTS = {
 };
 
 export const FORMATS = {
-  square: { width: 1080, height: 1080, label: '1:1' },
+  square: { width: 1080, height: 1350, label: '4:5' },
   story: { width: 1080, height: 1920, label: '9:16' },
 };
 
