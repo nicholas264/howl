@@ -64,11 +64,17 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   const [bgImage, setBgImage] = useState(() => { try { return localStorage.getItem(LS_BG) || null; } catch { return null; } });
   const [scrimColor, setScrimColor] = useState(() => { try { return localStorage.getItem('howl_review_scrim') || 'rgba(249,243,223,0.72)'; } catch { return 'rgba(249,243,223,0.72)'; } });
   const [savedImages, setSavedImages] = useState(loadSavedImages);
+  const [textColor, setTextColor] = useState(() => { try { return localStorage.getItem('howl_review_textcolor') || '#333F4C'; } catch { return '#333F4C'; } });
   const bgFileRef = useRef(null);
 
   const handleScrimChange = (val) => {
     setScrimColor(val);
     try { localStorage.setItem('howl_review_scrim', val); } catch {}
+  };
+
+  const handleTextColorChange = (val) => {
+    setTextColor(val);
+    try { localStorage.setItem('howl_review_textcolor', val); } catch {}
   };
 
   // Single / no-CSV mode
@@ -359,6 +365,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
 
           {/* Background image */}
           <BgImagePicker bgImage={bgImage} savedImages={savedImages} onSelect={url => { setBgImage(url); try { localStorage.setItem(LS_BG, url); } catch {} }} onUpload={handleBgFile} onClear={clearBg} fileRef={bgFileRef} scrimColor={scrimColor} onScrimChange={handleScrimChange} />
+          <TextColorPicker textColor={textColor} onChange={handleTextColorChange} />
 
           <button onClick={handleSingleExport} disabled={exporting || !manualQuote.trim()} style={S.exportBtn(exporting || !manualQuote.trim())}>
             {exporting ? 'Exporting...' : 'Download PNG'}
@@ -373,13 +380,13 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
         {/* Right */}
         <div style={S.rightPanel}>
           <PreviewCard fmt={fmt} scale={scale}>
-            <UGCTemplate variation={variation} format={manualFormat} dimensions={fmt} attribution={attribution} backgroundImage={bgImage} scrimColor={scrimColor} />
+            <UGCTemplate variation={variation} format={manualFormat} dimensions={fmt} attribution={attribution} backgroundImage={bgImage} scrimColor={scrimColor} textColor={textColor} />
           </PreviewCard>
         </div>
 
         <div style={{ position: 'fixed', left: -99999, top: 0 }}>
           <div ref={singleCaptureRef} style={{ width: fmt.width, height: fmt.height }}>
-            <UGCTemplate variation={variation} format={manualFormat} dimensions={fmt} attribution={attribution} backgroundImage={bgImage} scrimColor={scrimColor} />
+            <UGCTemplate variation={variation} format={manualFormat} dimensions={fmt} attribution={attribution} backgroundImage={bgImage} scrimColor={scrimColor} textColor={textColor} />
           </div>
         </div>
       </div>
@@ -481,6 +488,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
             ))}
           </div>
           <BgImagePicker bgImage={bgImage} savedImages={savedImages} onSelect={url => { setBgImage(url); try { localStorage.setItem(LS_BG, url); } catch {} }} onUpload={handleBgFile} onClear={clearBg} fileRef={bgFileRef} scrimColor={scrimColor} onScrimChange={handleScrimChange} />
+          <TextColorPicker textColor={textColor} onChange={handleTextColorChange} />
           <button onClick={() => handleBulkExport()} disabled={exporting || selectedCount === 0} style={S.exportBtn(exporting || selectedCount === 0)}>
             {exporting
               ? `Exporting ${exportProgress}...`
@@ -519,6 +527,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
                   attribution={verifiedLabel(previewReview.handle)}
                   backgroundImage={bgImage}
                   scrimColor={scrimColor}
+                  textColor={textColor}
                 />
               </PreviewCard>
               <PreviewCard fmt={FORMATS.story} scale={storyScale}>
@@ -530,6 +539,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
                   attribution={verifiedLabel(previewReview.handle)}
                   backgroundImage={bgImage}
                   scrimColor={scrimColor}
+                  textColor={textColor}
                 />
               </PreviewCard>
             </>
@@ -543,6 +553,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
                 attribution={verifiedLabel(previewReview.handle)}
                 backgroundImage={bgImage}
                 scrimColor={scrimColor}
+                textColor={textColor}
               />
             </PreviewCard>
           )
@@ -561,11 +572,37 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
             const key = `${r.id}_${fk}`;
             return (
               <div key={key} ref={el => { captureRefs.current[key] = el; }} style={{ width: fmt.width, height: fmt.height }}>
-                <UGCTemplate variation={{ headline: r.quote }} format={fk} dimensions={fmt} reviewerName={r.nickname} attribution={verifiedLabel(r.handle)} backgroundImage={bgImage} scrimColor={scrimColor} />
+                <UGCTemplate variation={{ headline: r.quote }} format={fk} dimensions={fmt} reviewerName={r.nickname} attribution={verifiedLabel(r.handle)} backgroundImage={bgImage} scrimColor={scrimColor} textColor={textColor} />
               </div>
             );
           });
         })}
+      </div>
+    </div>
+  );
+}
+
+const TEXT_COLOR_OPTIONS = [
+  { label: 'Dark',   value: '#333F4C' },
+  { label: 'White',  value: '#ffffff' },
+  { label: 'Flame',  value: '#DC440A' },
+  { label: 'Black',  value: '#000000' },
+];
+
+function TextColorPicker({ textColor, onChange }) {
+  return (
+    <div>
+      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8b949e', fontWeight: 600, marginBottom: 5 }}>Text Color</div>
+      <div style={{ display: 'flex', gap: 5 }}>
+        {TEXT_COLOR_OPTIONS.map(o => (
+          <button key={o.label} onClick={() => onChange(o.value)} style={{
+            flex: 1, padding: '5px 0', borderRadius: 3, cursor: 'pointer', fontSize: 9,
+            border: `1px solid ${textColor === o.value ? '#DC440A' : '#2a3441'}`,
+            background: textColor === o.value ? 'rgba(220,68,10,0.15)' : '#1c2330',
+            color: textColor === o.value ? '#DC440A' : '#8b949e',
+            fontFamily: 'inherit', letterSpacing: 1, textTransform: 'uppercase',
+          }}>{o.label}</button>
+        ))}
       </div>
     </div>
   );

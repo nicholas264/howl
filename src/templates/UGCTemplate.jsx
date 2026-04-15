@@ -1,12 +1,13 @@
 import { COLORS, FONTS, LOGOS } from '../brand';
 import { scaleFontSize } from '../utils/scaleFontSize';
 
-export default function UGCTemplate({ variation, photoUrl, format, dimensions, attribution, socialProof, reviewerName, backgroundImage, scrimColor }) {
+export default function UGCTemplate({ variation, photoUrl, format, dimensions, attribution, socialProof, reviewerName, backgroundImage, scrimColor, textColor }) {
   const isStory = format === 'story';
   const headlineSize = scaleFontSize(variation.headline, isStory ? 88 : 72, 32);
   const padding = isStory ? 80 : 60;
   const hasBackground = !!backgroundImage;
   const scrim = scrimColor ?? 'rgba(249,243,223,0.72)';
+  const txtColor = textColor || COLORS.midnightSky;
 
   return (
     <div style={{
@@ -59,7 +60,7 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
           fontSize: headlineSize,
           textTransform: FONTS.headline.transform,
           letterSpacing: FONTS.headline.letterSpacing,
-          color: COLORS.midnightSky,
+          color: txtColor,
           lineHeight: 1.12,
           overflowWrap: 'break-word',
           wordBreak: 'break-word',
@@ -84,7 +85,7 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
             fontWeight: FONTS.subHeadline.weight,
             fontSize: isStory ? 36 : 28,
             letterSpacing: '0.12em',
-            color: COLORS.midnightSky,
+            color: txtColor,
             flexShrink: 0,
             marginBottom: isStory ? 10 : 8,
           }}>
@@ -99,7 +100,7 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
           fontSize: isStory ? 28 : 22,
           textTransform: 'uppercase',
           letterSpacing: '0.18em',
-          color: COLORS.midnightSky,
+          color: txtColor,
           flexShrink: 0,
         }}>
           {attribution || 'Verified HOWL Customer'}
@@ -109,7 +110,7 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
         <div style={{
           fontFamily: FONTS.body.family,
           fontSize: isStory ? 30 : 22,
-          color: COLORS.midnightSky,
+          color: txtColor,
           marginTop: isStory ? 18 : 12,
           letterSpacing: '0.05em',
           flexShrink: 0,
