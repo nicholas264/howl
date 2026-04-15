@@ -22,7 +22,8 @@ const TEXT_COLORS = [
   { id: 'orange', label: 'Orange', value: COLORS.flame },
 ];
 
-const PRODUCT_NAMES = { r1: 'R1', r4mkii: 'R4 MkII', r4: 'R4' };
+const PRODUCT_NAMES = { r1: 'R1', r4mkii: 'R4 MkII' };
+const VALID_HANDLES = new Set(['r1', 'r4mkii']);
 
 function detectProduct(filename) {
   const f = filename.toLowerCase();
@@ -32,7 +33,9 @@ function detectProduct(filename) {
 }
 
 function loadReviews() {
-  try { return JSON.parse(localStorage.getItem(LS_REVIEWS) || '[]'); } catch { return []; }
+  try {
+    return JSON.parse(localStorage.getItem(LS_REVIEWS) || '[]').filter(r => VALID_HANDLES.has(r.handle));
+  } catch { return []; }
 }
 
 function wrapText(ctx, text, maxWidth) {
