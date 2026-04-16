@@ -19,8 +19,15 @@ export default async function handler(req, res) {
       }),
     });
     const d = await r.json();
+    // Check for GraphQL-level errors (auth, scope issues)
+    if (d.errors) {
+      throw new Error(`Shopify GraphQL error: ${d.errors.map(e => e.message).join('; ')}`);
+    }
     const result = d.data?.shopifyqlQuery;
-    if (result?.parseErrors?.length) {
+    if (!result) {
+      throw new Error(`No shopifyqlQuery in response: ${JSON.stringify(d).slice(0, 500)}`);
+    }
+    if (result.parseErrors?.length) {
       throw new Error(`ShopifyQL parse error: ${JSON.stringify(result.parseErrors)}`);
     }
     // Rows come back as objects already keyed by column name
