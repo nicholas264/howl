@@ -213,59 +213,6 @@ export default async function handler(req, res) {
             }),
             access_token: accessToken,
           });
-        } else if (storyImageBase64) {
-          // ── Image ad with 1:1 + 9:16 ────────────────────────────────────
-          const squareBase64 = squareImageBase64 || imageBase64;
-          let squareHash, storyHash;
-          try {
-            [squareHash, storyHash] = await Promise.all([
-              uploadImage(squareBase64, adAccountId, accessToken, BASE),
-              uploadImage(storyImageBase64, adAccountId, accessToken, BASE),
-            ]);
-          } catch (err) {
-            return res.status(400).json({ error: err.message, step: 'upload_images' });
-          }
-          creativeParams = new URLSearchParams({
-            name: `${adName} Creative`,
-            object_story_spec: JSON.stringify({
-              page_id: pageId,
-              link_data: {
-                image_hash: squareHash,
-                link: destUrl,
-                message: primaryText || headline,
-                name: headline,
-                call_to_action: { type: 'SHOP_NOW' },
-              },
-            }),
-            asset_feed_spec: JSON.stringify({
-              images: [
-                { hash: squareHash },
-                { hash: storyHash, adlabels: [{ name: 'story_format' }] },
-              ],
-              bodies: [{ text: primaryText || headline }],
-              titles: [{ text: headline }],
-              descriptions: [{ text: '' }],
-              link_urls: [{ website_url: destUrl }],
-              call_to_action_types: ['SHOP_NOW'],
-              asset_customization_rules: [
-                {
-                  customization_spec: {
-                    publisher_platforms: ['facebook', 'instagram'],
-                    placement_positions: ['feed', 'marketplace', 'search', 'video_feeds'],
-                  },
-                  image_label: { name: '__default__' },
-                },
-                {
-                  customization_spec: {
-                    publisher_platforms: ['facebook', 'instagram'],
-                    placement_positions: ['story', 'reels', 'right_hand_column'],
-                  },
-                  image_label: { name: 'story_format' },
-                },
-              ],
-            }),
-            access_token: accessToken,
-          });
         } else {
           // ── Image ad (1:1 only) ──────────────────────────────────────────
           const squareBase64 = squareImageBase64 || imageBase64;
@@ -519,51 +466,6 @@ export default async function handler(req, res) {
                     title: item.hook || '',
                     call_to_action: { type: 'SHOP_NOW', value: { link: destUrl } },
                   },
-                }),
-                access_token: accessToken,
-              });
-            } else if (item.storyUrl) {
-              // Image with both 1:1 and 9:16 — use asset_feed_spec for placement optimization
-              const squareHash = await uploadImage(item.squareUrl || item.url, adAccountId, accessToken, BASE);
-              const storyHash = await uploadImage(item.storyUrl, adAccountId, accessToken, BASE);
-              creativeParams = new URLSearchParams({
-                name: `${item.name} Creative`,
-                object_story_spec: JSON.stringify({
-                  page_id: pageId,
-                  link_data: {
-                    image_hash: squareHash,
-                    link: destUrl,
-                    message: item.body || item.hook || '',
-                    name: item.hook || '',
-                    call_to_action: { type: 'SHOP_NOW' },
-                  },
-                }),
-                asset_feed_spec: JSON.stringify({
-                  images: [
-                    { hash: squareHash },
-                    { hash: storyHash, adlabels: [{ name: 'story_format' }] },
-                  ],
-                  bodies: [{ text: item.body || item.hook || '' }],
-                  titles: [{ text: item.hook || '' }],
-                  descriptions: [{ text: '' }],
-                  link_urls: [{ website_url: destUrl }],
-                  call_to_action_types: ['SHOP_NOW'],
-                  asset_customization_rules: [
-                    {
-                      customization_spec: {
-                        publisher_platforms: ['facebook', 'instagram'],
-                        placement_positions: ['feed', 'marketplace', 'search', 'video_feeds'],
-                      },
-                      image_label: { name: '__default__' },
-                    },
-                    {
-                      customization_spec: {
-                        publisher_platforms: ['facebook', 'instagram'],
-                        placement_positions: ['story', 'reels', 'right_hand_column'],
-                      },
-                      image_label: { name: 'story_format' },
-                    },
-                  ],
                 }),
                 access_token: accessToken,
               });
