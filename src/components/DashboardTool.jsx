@@ -101,7 +101,17 @@ export default function DashboardTool() {
   const typeCounts = { static: 0, review: 0, video: 0, other: 0 };
   const monthMap   = {}; // key → { total, static, review, video, other }
 
+  // Deduplicate by creative ID to count unique assets, not duplicate ad objects
+  const seenCreatives = new Set();
+  const uniqueAds = [];
   for (const ad of ads) {
+    const cid = ad.creative?.id;
+    if (cid && seenCreatives.has(cid)) continue;
+    if (cid) seenCreatives.add(cid);
+    uniqueAds.push(ad);
+  }
+
+  for (const ad of uniqueAds) {
     const type  = parseAdType(ad);
     const mKey  = getMonthKey(ad.created_time);
     typeCounts[type]++;
@@ -110,10 +120,17 @@ export default function DashboardTool() {
     monthMap[mKey][type]++;
   }
 
-  const totalShipped  = ads.length;
+  const totalShipped  = uniqueAds.length;
   const thisMonthCount = monthMap[thisMonthKey]?.total || 0;
-  const thisYearCount  = ads.filter(a => new Date(a.created_time).getFullYear() === thisYear).length;
-  const activeAds      = ads.filter(a => (a.effective_status || a.status) === 'ACTIVE');
+  const thisYearCount  = uniqueAds.filter(a => new Date(a.created_time).getFullYear() === thisYear).length;
+  const seenActiveCreatives = new Set();
+  const activeAds = ads.filter(a => {
+    if ((a.effective_status || a.status) !== 'ACTIVE') return false;
+    const cid = a.creative?.id;
+    if (cid && seenActiveCreatives.has(cid)) return false;
+    if (cid) seenActiveCreatives.add(cid);
+    return true;
+  });
   const activeCount    = activeAds.length;
 
   const activeTypeCounts = { static: 0, review: 0, video: 0, other: 0 };
@@ -232,7 +249,7 @@ export default function DashboardTool() {
           {/* Top stats */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
             {[
-              { label: 'Total Shipped',  value: totalShipped },
+              { label: 'Unique Assets Shipped',  value: totalShipped },
               { label: 'This Month',     value: thisMonthCount },
               { label: 'This Year',      value: thisYearCount },
               { label: 'Currently Active', value: activeCount },
