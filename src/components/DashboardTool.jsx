@@ -104,7 +104,13 @@ export default function DashboardTool() {
   const totalShipped  = ads.length;
   const thisMonthCount = monthMap[thisMonthKey]?.total || 0;
   const thisYearCount  = ads.filter(a => new Date(a.created_time).getFullYear() === thisYear).length;
-  const activeCount    = ads.filter(a => a.status === 'ACTIVE').length;
+  const activeAds      = ads.filter(a => a.status === 'ACTIVE');
+  const activeCount    = activeAds.length;
+
+  const activeTypeCounts = { static: 0, review: 0, video: 0, other: 0 };
+  for (const ad of activeAds) {
+    activeTypeCounts[parseAdType(ad.name)]++;
+  }
 
   // Last 6 months for chart
   const chartMonths = [];
@@ -228,6 +234,41 @@ export default function DashboardTool() {
               </div>
             ))}
           </div>
+
+          {/* Active ads by type */}
+          {activeCount > 0 && (
+            <div style={{ ...S.card, marginBottom: 20 }}>
+              <span style={S.label}>Live Ads by Format</span>
+              <div style={{ display: 'flex', gap: 24, marginTop: 8, alignItems: 'center' }}>
+                {[
+                  { type: 'video', label: 'Video', icon: '▶' },
+                  { type: 'static', label: 'Static Image', icon: '■' },
+                  { type: 'review', label: 'Review', icon: '★' },
+                  { type: 'other', label: 'Other', icon: '●' },
+                ].filter(({ type }) => activeTypeCounts[type] > 0).map(({ type, label, icon }) => {
+                  const count = activeTypeCounts[type];
+                  const pct = activeCount > 0 ? Math.round((count / activeCount) * 100) : 0;
+                  return (
+                    <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 18, color: TYPE_COLORS[type] }}>{icon}</span>
+                      <div>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: '#f0f4f8', lineHeight: 1 }}>{count}</div>
+                        <div style={{ fontSize: 9, color: TYPE_COLORS[type], letterSpacing: 1, textTransform: 'uppercase', marginTop: 2 }}>
+                          {label} <span style={{ color: '#6e7681' }}>({pct}%)</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Mini bar showing the ratio */}
+              <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', marginTop: 12, background: '#1c2330' }}>
+                {['video', 'static', 'review', 'other'].filter(t => activeTypeCounts[t] > 0).map(type => (
+                  <div key={type} style={{ width: `${(activeTypeCounts[type] / activeCount) * 100}%`, background: TYPE_COLORS[type], height: '100%' }} />
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Type breakdown + 30-day insights */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
