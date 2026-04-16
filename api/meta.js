@@ -155,6 +155,7 @@ export default async function handler(req, res) {
           campaign_id,
           daily_budget: String(dailyBudgetCents),
           billing_event: 'IMPRESSIONS',
+          bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
           status: 'PAUSED',
           targeting: {
             geo_locations: { countries: ['US'] },
@@ -395,6 +396,7 @@ export default async function handler(req, res) {
             daily_budget: dailyBudgetCents,
             billing_event: 'IMPRESSIONS',
             optimization_goal: 'OFFSITE_CONVERSIONS',
+            bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
             status: 'PAUSED',
             targeting: {
               geo_locations: { countries: ['US'] },
