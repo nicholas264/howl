@@ -101,17 +101,14 @@ export default function DashboardTool() {
   const typeCounts = { static: 0, review: 0, video: 0, other: 0 };
   const monthMap   = {}; // key → { total, static, review, video, other }
 
-  // Deduplicate by underlying asset from object_story_spec
-  // Duplicating an ad creates a new creative but reuses the same image/video
+  // Deduplicate by underlying asset (image_hash / video_id from creatives endpoint)
+  const creativeAssets = data?.creativeAssets || {};
   const seenAssets = new Set();
   const uniqueAds = [];
   for (const ad of ads) {
-    const c = ad.creative || {};
-    const spec = c.object_story_spec || {};
-    const assetKey = spec.video_data?.video_id
-      || spec.link_data?.image_hash
-      || spec.photo_data?.image_hash
-      || c.id;
+    const cid = ad.creative?.id;
+    const asset = cid ? creativeAssets[cid] : null;
+    const assetKey = asset?.image_hash || asset?.video_id || cid;
     if (assetKey && seenAssets.has(assetKey)) continue;
     if (assetKey) seenAssets.add(assetKey);
     uniqueAds.push(ad);
@@ -132,12 +129,9 @@ export default function DashboardTool() {
   const seenActiveAssets = new Set();
   const activeAds = ads.filter(a => {
     if ((a.effective_status || a.status) !== 'ACTIVE') return false;
-    const c = a.creative || {};
-    const spec = c.object_story_spec || {};
-    const assetKey = spec.video_data?.video_id
-      || spec.link_data?.image_hash
-      || spec.photo_data?.image_hash
-      || c.id;
+    const cid = a.creative?.id;
+    const asset = cid ? creativeAssets[cid] : null;
+    const assetKey = asset?.image_hash || asset?.video_id || cid;
     if (assetKey && seenActiveAssets.has(assetKey)) return false;
     if (assetKey) seenActiveAssets.add(assetKey);
     return true;
@@ -164,28 +158,47 @@ export default function DashboardTool() {
 
   // ── Active budget breakdown ──────────────────────────────────────────────
   const activeAdsets = data?.activeAdsets || [];
-  const totalDailyBudget = activeAdsets.reduce((sum, as) => {
-    const daily = as.daily_budget ? parseInt(as.daily_budget, 10) / 100 : 0;
-    return sum + daily;
-  }, 0);
-  const totalLifetimeBudget = activeAdsets.reduce((sum, as) => {
-    const lt = as.lifetime_budget ? parseInt(as.lifetime_budget, 10) / 100 : 0;
-    return sum + lt;
-  }, 0);
-  const totalBudgetRemaining = activeAdsets.reduce((sum, as) => {
-    const rem = as.budget_remaining ? parseInt(as.budget_remaining, 10) / 100 : 0;
-    return sum + rem;
-  }, 0);
-
-  // Group active ad sets by campaign for breakdown
   const campaignNames = data?.campaignNames || {};
+  const campaignBudgetData = data?.campaignBudgetData || {};
+
+  // Group ad sets by campaign, detect CBO vs ABO
   const campaignBudgets = {};
   for (const as of activeAdsets) {
     const cid = as.campaign_id || 'unknown';
-    if (!campaignBudgets[cid]) campaignBudgets[cid] = { adsets: [], totalDaily: 0 };
+    if (!campaignBudgets[cid]) {
+      const cb = campaignBudgetData[cid] || {};
+      const isCBO = !!cb.daily_budget || !!cb.lifetime_budget;
+      campaignBudgets[cid] = {
+        adsets: [],
+        totalDaily: 0,
+        isCBO,
+        campaignDailyBudget: cb.daily_budget ? parseInt(cb.daily_budget, 10) / 100 : 0,
+        campaignLifetimeBudget: cb.lifetime_budget ? parseInt(cb.lifetime_budget, 10) / 100 : 0,
+        campaignBudgetRemaining: cb.budget_remaining ? parseInt(cb.budget_remaining, 10) / 100 : 0,
+        bidStrategy: as.bid_strategy || cb.bid_strategy || null,
+      };
+    }
     const daily = as.daily_budget ? parseInt(as.daily_budget, 10) / 100 : 0;
     campaignBudgets[cid].adsets.push(as);
     campaignBudgets[cid].totalDaily += daily;
+  }
+
+  // Calculate totals: use campaign budget for CBO, adset budgets for ABO
+  let totalDailyBudget = 0;
+  let totalLifetimeBudget = 0;
+  let totalBudgetRemaining = 0;
+  for (const cb of Object.values(campaignBudgets)) {
+    if (cb.isCBO) {
+      totalDailyBudget += cb.campaignDailyBudget;
+      totalLifetimeBudget += cb.campaignLifetimeBudget;
+      totalBudgetRemaining += cb.campaignBudgetRemaining;
+    } else {
+      for (const as of cb.adsets) {
+        totalDailyBudget += as.daily_budget ? parseInt(as.daily_budget, 10) / 100 : 0;
+        totalLifetimeBudget += as.lifetime_budget ? parseInt(as.lifetime_budget, 10) / 100 : 0;
+        totalBudgetRemaining += as.budget_remaining ? parseInt(as.budget_remaining, 10) / 100 : 0;
+      }
+    }
   }
 
   return (
@@ -235,19 +248,30 @@ export default function DashboardTool() {
               {Object.keys(campaignBudgets).length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 240 }}>
                   <span style={{ ...S.label, marginBottom: 0 }}>By Campaign</span>
-                  {Object.entries(campaignBudgets).sort((a, b) => b[1].totalDaily - a[1].totalDaily).slice(0, 6).map(([cid, cb]) => {
-                    const pct = totalDailyBudget > 0 ? (cb.totalDaily / totalDailyBudget) * 100 : 0;
+                  {Object.entries(campaignBudgets).sort((a, b) => {
+                    const aDaily = a[1].isCBO ? a[1].campaignDailyBudget : a[1].totalDaily;
+                    const bDaily = b[1].isCBO ? b[1].campaignDailyBudget : b[1].totalDaily;
+                    return bDaily - aDaily;
+                  }).slice(0, 8).map(([cid, cb]) => {
+                    const dailyForCampaign = cb.isCBO ? cb.campaignDailyBudget : cb.totalDaily;
+                    const pct = totalDailyBudget > 0 ? (dailyForCampaign / totalDailyBudget) * 100 : 0;
                     const campaignName = campaignNames[cid] || cid.slice(-8);
+                    const strategyLabel = cb.bidStrategy === 'COST_CAP' ? 'cost cap'
+                      : cb.bidStrategy === 'BID_CAP' ? 'bid cap'
+                      : cb.isCBO ? 'CBO' : '';
                     return (
                       <div key={cid}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                          <span style={{ fontSize: 9, color: '#c9d1d9', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: 9, color: '#c9d1d9', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {campaignName} <span style={{ color: '#6e7681' }}>({cb.adsets.length})</span>
+                            {strategyLabel && <span style={{ color: '#f5a623', marginLeft: 4 }}>{strategyLabel}</span>}
                           </span>
-                          <span style={{ fontSize: 9, color: '#f0f4f8', fontWeight: 600 }}>${cb.totalDaily.toFixed(0)}/day</span>
+                          <span style={{ fontSize: 9, color: '#f0f4f8', fontWeight: 600 }}>
+                            {dailyForCampaign > 0 ? `$${dailyForCampaign.toFixed(0)}/day` : cb.campaignLifetimeBudget > 0 ? `$${cb.campaignLifetimeBudget.toFixed(0)} LT` : '—'}
+                          </span>
                         </div>
                         <div style={{ height: 3, background: '#1c2330', borderRadius: 2 }}>
-                          <div style={{ height: '100%', width: `${pct}%`, background: '#DC440A', borderRadius: 2 }} />
+                          <div style={{ height: '100%', width: `${Math.max(pct, 2)}%`, background: '#DC440A', borderRadius: 2 }} />
                         </div>
                       </div>
                     );

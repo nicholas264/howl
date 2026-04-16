@@ -66,20 +66,39 @@ export default async function handler(req, res) {
           { field: 'effective_status', operator: 'IN', value: ['ACTIVE'] },
         ]));
 
-        const [adsRes, insightsRes, adsetsRes, campaignsRes] = await Promise.all([
-          fetch(`${BASE}/${adAccountId}/ads?fields=id,name,created_time,status,effective_status,creative{id,object_type,object_story_spec}&limit=500&filtering=${filtering}&access_token=${accessToken}`),
+        const [adsRes, insightsRes, adsetsRes, campaignsRes, creativesRes] = await Promise.all([
+          fetch(`${BASE}/${adAccountId}/ads?fields=id,name,created_time,status,effective_status,creative{id,object_type}&limit=500&filtering=${filtering}&access_token=${accessToken}`),
           fetch(`${BASE}/${adAccountId}/insights?fields=spend,impressions,clicks,ctr,reach&date_preset=last_30d&access_token=${accessToken}`),
-          fetch(`${BASE}/${adAccountId}/adsets?fields=id,name,daily_budget,lifetime_budget,budget_remaining,campaign_id,effective_status&filtering=${activeFilter}&limit=200&access_token=${accessToken}`),
-          fetch(`${BASE}/${adAccountId}/campaigns?fields=id,name,status&filtering=${activeFilter}&limit=100&access_token=${accessToken}`),
+          fetch(`${BASE}/${adAccountId}/adsets?fields=id,name,daily_budget,lifetime_budget,budget_remaining,campaign_id,effective_status,bid_strategy,bid_amount&filtering=${activeFilter}&limit=200&access_token=${accessToken}`),
+          fetch(`${BASE}/${adAccountId}/campaigns?fields=id,name,status,daily_budget,lifetime_budget,budget_remaining,bid_strategy&filtering=${activeFilter}&limit=100&access_token=${accessToken}`),
+          // Fetch creatives directly to get actual asset identifiers
+          fetch(`${BASE}/${adAccountId}/adcreatives?fields=id,image_hash,video_id,object_type&limit=500&access_token=${accessToken}`),
         ]);
-        const [adsData, insightsData, adsetsData, campaignsData] = await Promise.all([adsRes.json(), insightsRes.json(), adsetsRes.json(), campaignsRes.json()]);
+        const [adsData, insightsData, adsetsData, campaignsData, creativesData] = await Promise.all([adsRes.json(), insightsRes.json(), adsetsRes.json(), campaignsRes.json(), creativesRes.json()]);
 
         if (adsData.error) throw new Error(adsData.error.message);
 
-        // Build campaign ID → name lookup
+        // Build creative ID → asset key lookup
+        const creativeAssets = {};
+        for (const c of (creativesData.data || [])) {
+          creativeAssets[c.id] = {
+            image_hash: c.image_hash || null,
+            video_id: c.video_id || null,
+            object_type: c.object_type || null,
+          };
+        }
+
+        // Build campaign ID → name + budget lookup
         const campaignNames = {};
+        const campaignBudgetData = {};
         for (const c of (campaignsData.data || [])) {
           campaignNames[c.id] = c.name;
+          campaignBudgetData[c.id] = {
+            daily_budget: c.daily_budget || null,
+            lifetime_budget: c.lifetime_budget || null,
+            budget_remaining: c.budget_remaining || null,
+            bid_strategy: c.bid_strategy || null,
+          };
         }
 
         return res.json({
@@ -87,6 +106,8 @@ export default async function handler(req, res) {
           insights: insightsData.data?.[0] || null,
           activeAdsets: adsetsData.data || [],
           campaignNames,
+          campaignBudgetData,
+          creativeAssets,
         });
       }
 
