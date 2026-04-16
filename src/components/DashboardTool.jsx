@@ -101,13 +101,17 @@ export default function DashboardTool() {
   const typeCounts = { static: 0, review: 0, video: 0, other: 0 };
   const monthMap   = {}; // key → { total, static, review, video, other }
 
-  // Deduplicate by underlying asset (image_hash or video_id), not creative ID
-  // Duplicating an ad in Meta creates a new creative but reuses the same asset
+  // Deduplicate by underlying asset from object_story_spec
+  // Duplicating an ad creates a new creative but reuses the same image/video
   const seenAssets = new Set();
   const uniqueAds = [];
   for (const ad of ads) {
     const c = ad.creative || {};
-    const assetKey = c.image_hash || c.video_id || c.id;
+    const spec = c.object_story_spec || {};
+    const assetKey = spec.video_data?.video_id
+      || spec.link_data?.image_hash
+      || spec.photo_data?.image_hash
+      || c.id;
     if (assetKey && seenAssets.has(assetKey)) continue;
     if (assetKey) seenAssets.add(assetKey);
     uniqueAds.push(ad);
@@ -129,7 +133,11 @@ export default function DashboardTool() {
   const activeAds = ads.filter(a => {
     if ((a.effective_status || a.status) !== 'ACTIVE') return false;
     const c = a.creative || {};
-    const assetKey = c.image_hash || c.video_id || c.id;
+    const spec = c.object_story_spec || {};
+    const assetKey = spec.video_data?.video_id
+      || spec.link_data?.image_hash
+      || spec.photo_data?.image_hash
+      || c.id;
     if (assetKey && seenActiveAssets.has(assetKey)) return false;
     if (assetKey) seenActiveAssets.add(assetKey);
     return true;
