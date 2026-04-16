@@ -138,6 +138,7 @@ export default async function handler(req, res) {
             objective,
             status: 'PAUSED',
             special_ad_categories: [],
+            is_adset_budget_sharing_enabled: false,
             access_token: accessToken,
           }),
         });
@@ -366,6 +367,7 @@ export default async function handler(req, res) {
           objective: 'OUTCOME_SALES',
           status: 'PAUSED',
           special_ad_categories: [],
+          is_adset_budget_sharing_enabled: false,
           access_token: accessToken,
         };
         const campaignRes = await fetch(`${BASE}/${adAccountId}/campaigns`, {
