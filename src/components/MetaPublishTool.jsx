@@ -65,17 +65,43 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
     testName: '',
     budgetPerCreative: '20',
     pixelId: '',
+    costCapTarget: '',
   }));
   const [ctSelected, setCtSelected] = useState(() => new Set());
   const [ctRunning, setCtRunning] = useState(false);
   const [ctProgress, setCtProgress] = useState('');
   const [ctResult, setCtResult] = useState(null);
+  const [cpaAnalysis, setCpaAnalysis] = useState(null);
+  const [loadingCpa, setLoadingCpa] = useState(false);
 
   const updateCtConfig = (key, val) => {
     const next = { ...ctConfig, [key]: val };
     setCtConfig(next);
     lsSet('howl_ct_config', next);
   };
+
+  const loadCpaAnalysis = useCallback(async () => {
+    setLoadingCpa(true);
+    try {
+      const r = await fetch('/api/meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_cpa_analysis' }),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setCpaAnalysis(d);
+      // Auto-set cost cap to 1.2x the 14-day CPA (or 30-day if no 14d data)
+      const baseCpa = d.last14d?.cpa || d.last30d?.cpa || d.last7d?.cpa;
+      if (baseCpa && !ctConfig.costCapTarget) {
+        updateCtConfig('costCapTarget', Math.ceil(baseCpa * 1.2).toString());
+      }
+    } catch (err) {
+      alert(`Failed to load CPA data: ${err.message}`);
+    } finally {
+      setLoadingCpa(false);
+    }
+  }, [ctConfig.costCapTarget]);
 
   const toggleCtItem = (id) => {
     setCtSelected(prev => {
@@ -94,6 +120,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
     if (!config.pageId.trim()) { alert('Enter your Facebook Page ID in Settings.'); return; }
     if (!config.destUrl.trim()) { alert('Enter a destination URL in Settings.'); return; }
     if (!ctConfig.pixelId.trim()) { alert('Enter your Pixel ID for purchase optimization.'); return; }
+    if (!ctConfig.costCapTarget.trim()) { alert('Enter a cost cap target CPA.'); return; }
 
     setCtRunning(true);
     setCtResult(null);
@@ -110,6 +137,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
           action: 'create_creative_test',
           testName,
           dailyBudgetDollars: ctConfig.budgetPerCreative,
+          costCapCents: Math.round(parseFloat(ctConfig.costCapTarget) * 100),
           pixelId: ctConfig.pixelId,
           pageId: config.pageId,
           destUrl: config.destUrl,
@@ -440,7 +468,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
           <div style={S.section}>
             <span style={S.label}>Test Configuration</span>
             <div style={{ fontSize: 9, color: '#6e7681', marginBottom: 14, letterSpacing: 1, lineHeight: 1.6 }}>
-              Creates 1 ABO campaign with 1 ad set per creative. Equal daily budgets, same broad US audience.
+              Creates 1 ABO campaign with 1 ad set per creative. Cost cap bid strategy — Meta only spends on creatives that can hit your CPA target.
               <br />Everything starts PAUSED — review in Ads Manager before going live.
             </div>
             <div style={{ ...S.row, marginBottom: 12 }}>
@@ -457,9 +485,89 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                 <input style={S.input} placeholder="Pixel ID" value={ctConfig.pixelId} onChange={e => updateCtConfig('pixelId', e.target.value)} />
               </div>
             </div>
+            {/* Cost Cap */}
+            <div style={{ ...S.row, marginBottom: 12, alignItems: 'flex-end' }}>
+              <div style={{ ...S.col, flex: 1 }}>
+                <span style={{ fontSize: 10, color: '#8b949e' }}>Cost Cap Target CPA ($)</span>
+                <input style={{ ...S.input, borderColor: ctConfig.costCapTarget ? '#DC440A' : '#2a3441' }} type="number" min="1" placeholder="e.g. 45" value={ctConfig.costCapTarget} onChange={e => updateCtConfig('costCapTarget', e.target.value)} />
+              </div>
+              <div style={{ flex: 2 }}>
+                <button onClick={loadCpaAnalysis} disabled={loadingCpa} style={S.ghostBtn}>
+                  {loadingCpa ? 'Analyzing...' : cpaAnalysis ? 'Refresh CPA Data' : 'Analyze Account CPA'}
+                </button>
+              </div>
+            </div>
+
+            {/* CPA Analysis */}
+            {cpaAnalysis && (
+              <div style={{ border: '1px solid #2a3441', borderRadius: 6, padding: 14, marginBottom: 14, background: '#0d1117' }}>
+                <span style={{ ...S.label, marginBottom: 10 }}>Account CPA Analysis</span>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 14 }}>
+                  {[
+                    { label: 'Last 7 Days', data: cpaAnalysis.last7d },
+                    { label: 'Last 14 Days', data: cpaAnalysis.last14d },
+                    { label: 'Last 30 Days', data: cpaAnalysis.last30d },
+                  ].map(({ label, data }) => (
+                    <div key={label} style={{ background: '#161b22', borderRadius: 4, padding: '10px 12px' }}>
+                      <div style={{ fontSize: 8, color: '#6e7681', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>{label}</div>
+                      {data?.cpa ? (
+                        <>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: '#f0f4f8' }}>${parseFloat(data.cpa).toFixed(2)}</div>
+                          <div style={{ fontSize: 9, color: '#8b949e', marginTop: 4 }}>
+                            {data.purchases} purchases — ${parseFloat(data.spend).toFixed(0)} spend
+                            {data.roas && <> — {parseFloat(data.roas).toFixed(2)}x ROAS</>}
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ fontSize: 11, color: '#6e7681' }}>{data?.spend > 0 ? `$${parseFloat(data.spend).toFixed(0)} spent, 0 purchases` : 'No data'}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Top campaigns */}
+                {cpaAnalysis.campaigns?.length > 0 && (
+                  <>
+                    <span style={{ ...S.label, marginBottom: 6 }}>Campaign Breakdown (30d)</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
+                      {cpaAnalysis.campaigns.slice(0, 6).map(c => (
+                        <div key={c.campaign_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10 }}>
+                          <span style={{ color: '#c9d1d9', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.campaign_name}</span>
+                          <span style={{ color: '#8b949e', display: 'flex', gap: 16 }}>
+                            <span>${parseFloat(c.spend).toFixed(0)} spend</span>
+                            <span>{c.purchases} purch</span>
+                            <span style={{ color: c.cpa ? '#f0f4f8' : '#6e7681', fontWeight: c.cpa ? 700 : 400 }}>{c.cpa ? `$${parseFloat(c.cpa).toFixed(2)} CPA` : 'No purch'}</span>
+                            {c.roas && <span style={{ color: '#3fb950' }}>{parseFloat(c.roas).toFixed(2)}x</span>}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Recommendation */}
+                {(() => {
+                  const baseCpa = cpaAnalysis.last14d?.cpa || cpaAnalysis.last30d?.cpa || cpaAnalysis.last7d?.cpa;
+                  if (!baseCpa) return null;
+                  const recommended = Math.ceil(parseFloat(baseCpa) * 1.2);
+                  return (
+                    <div style={{ background: 'rgba(220,68,10,0.1)', border: '1px solid rgba(220,68,10,0.3)', borderRadius: 4, padding: '10px 14px', fontSize: 10, color: '#f0f4f8' }}>
+                      Recommended cost cap: <strong style={{ color: '#DC440A' }}>${recommended}</strong> (your 14d CPA of ${parseFloat(baseCpa).toFixed(2)} + 20% headroom for new creatives to exit learning)
+                      {ctConfig.costCapTarget && parseFloat(ctConfig.costCapTarget) < parseFloat(baseCpa) && (
+                        <div style={{ color: '#f5a623', marginTop: 4, fontSize: 9 }}>
+                          Warning: your cost cap (${ctConfig.costCapTarget}) is below your current CPA — new creatives may struggle to deliver.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
             {ctSelectedCount > 0 && (
               <div style={{ fontSize: 10, color: '#8b949e', marginBottom: 12, letterSpacing: 1 }}>
                 {ctSelectedCount} creative{ctSelectedCount !== 1 ? 's' : ''} selected — <span style={{ color: '#f0f4f8', fontWeight: 600 }}>${ctTotalDaily.toFixed(0)}/day</span> total spend
+                {ctConfig.costCapTarget && <> — <span style={{ color: '#DC440A', fontWeight: 600 }}>${ctConfig.costCapTarget} cost cap</span></>}
               </div>
             )}
           </div>
@@ -535,8 +643,8 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
               <div style={{ marginTop: 20 }}>
                 <button
                   onClick={launchCreativeTest}
-                  disabled={ctRunning || ctSelectedCount === 0 || !ctConfig.pixelId.trim()}
-                  style={{ ...S.btn(ctRunning || ctSelectedCount === 0 || !ctConfig.pixelId.trim()), width: '100%', padding: '14px 0', fontSize: 11 }}
+                  disabled={ctRunning || ctSelectedCount === 0 || !ctConfig.pixelId.trim() || !ctConfig.costCapTarget.trim()}
+                  style={{ ...S.btn(ctRunning || ctSelectedCount === 0 || !ctConfig.pixelId.trim() || !ctConfig.costCapTarget.trim()), width: '100%', padding: '14px 0', fontSize: 11 }}
                 >
                   {ctRunning
                     ? ctProgress || 'Building test...'
@@ -544,7 +652,9 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                     ? 'Select creatives to test'
                     : !ctConfig.pixelId.trim()
                     ? 'Enter Pixel ID above'
-                    : `Launch Creative Test — ${ctSelectedCount} creative${ctSelectedCount !== 1 ? 's' : ''} — $${ctTotalDaily.toFixed(0)}/day`
+                    : !ctConfig.costCapTarget.trim()
+                    ? 'Set a cost cap target above'
+                    : `Launch Cost Cap Test — ${ctSelectedCount} creative${ctSelectedCount !== 1 ? 's' : ''} — $${ctTotalDaily.toFixed(0)}/day — $${ctConfig.costCapTarget} cap`
                   }
                 </button>
 

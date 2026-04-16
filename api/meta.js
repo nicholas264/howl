@@ -407,7 +407,7 @@ export default async function handler(req, res) {
       }
 
       case 'create_creative_test': {
-        const { testName, dailyBudgetDollars, pixelId, items } = req.body;
+        const { testName, dailyBudgetDollars, costCapCents, pixelId, items } = req.body;
         const pageId = req.body.pageId || defaultPageId;
         const destUrl = req.body.destUrl;
 
@@ -449,7 +449,8 @@ export default async function handler(req, res) {
             daily_budget: dailyBudgetCents,
             billing_event: 'IMPRESSIONS',
             optimization_goal: 'OFFSITE_CONVERSIONS',
-            bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+            bid_strategy: costCapCents ? 'COST_CAP' : 'LOWEST_COST_WITHOUT_CAP',
+            ...(costCapCents ? { bid_amount: String(costCapCents) } : {}),
             status: 'PAUSED',
             targeting: {
               geo_locations: { countries: ['US'] },
@@ -623,6 +624,68 @@ export default async function handler(req, res) {
         }
 
         return res.json({ success: true, campaignId, results });
+      }
+
+      case 'get_cpa_analysis': {
+        // Pull conversion data across multiple time windows for cost cap recommendation
+        const [insights7d, insights14d, insights30d, campaignInsights, adInsights] = await Promise.all([
+          fetch(`${BASE}/${adAccountId}/insights?fields=spend,actions,cost_per_action_type,purchase_roas&date_preset=last_7d&access_token=${accessToken}`),
+          fetch(`${BASE}/${adAccountId}/insights?fields=spend,actions,cost_per_action_type,purchase_roas&date_preset=last_14d&access_token=${accessToken}`),
+          fetch(`${BASE}/${adAccountId}/insights?fields=spend,actions,cost_per_action_type,purchase_roas&date_preset=last_30d&access_token=${accessToken}`),
+          // Per-campaign breakdown (last 30d, only campaigns that spent)
+          fetch(`${BASE}/${adAccountId}/insights?fields=campaign_id,campaign_name,spend,actions,cost_per_action_type,purchase_roas&date_preset=last_30d&level=campaign&limit=50&access_token=${accessToken}`),
+          // Top ads by spend (last 30d)
+          fetch(`${BASE}/${adAccountId}/insights?fields=ad_id,ad_name,spend,actions,cost_per_action_type&date_preset=last_30d&level=ad&sort=spend_descending&limit=30&access_token=${accessToken}`),
+        ]);
+        const [d7, d14, d30, dCamp, dAds] = await Promise.all([
+          insights7d.json(), insights14d.json(), insights30d.json(), campaignInsights.json(), adInsights.json(),
+        ]);
+
+        if (d7.error) throw new Error(d7.error.message);
+
+        const extractCPA = (data) => {
+          const row = data?.data?.[0];
+          if (!row) return null;
+          const spend = parseFloat(row.spend || 0);
+          const purchases = (row.actions || []).find(a => a.action_type === 'purchase')?.value || 0;
+          const cpa = (row.cost_per_action_type || []).find(a => a.action_type === 'purchase')?.value || null;
+          const roas = (row.purchase_roas || []).find(a => a.action_type === 'omni_purchase')?.value || null;
+          return { spend, purchases: parseInt(purchases), cpa: cpa ? parseFloat(cpa) : null, roas: roas ? parseFloat(roas) : null };
+        };
+
+        const campaignBreakdown = (dCamp.data || []).map(row => {
+          const purchases = (row.actions || []).find(a => a.action_type === 'purchase')?.value || 0;
+          const cpa = (row.cost_per_action_type || []).find(a => a.action_type === 'purchase')?.value || null;
+          const roas = (row.purchase_roas || []).find(a => a.action_type === 'omni_purchase')?.value || null;
+          return {
+            campaign_id: row.campaign_id,
+            campaign_name: row.campaign_name,
+            spend: parseFloat(row.spend || 0),
+            purchases: parseInt(purchases),
+            cpa: cpa ? parseFloat(cpa) : null,
+            roas: roas ? parseFloat(roas) : null,
+          };
+        }).filter(c => c.spend > 0);
+
+        const topAds = (dAds.data || []).map(row => {
+          const purchases = (row.actions || []).find(a => a.action_type === 'purchase')?.value || 0;
+          const cpa = (row.cost_per_action_type || []).find(a => a.action_type === 'purchase')?.value || null;
+          return {
+            ad_id: row.ad_id,
+            ad_name: row.ad_name,
+            spend: parseFloat(row.spend || 0),
+            purchases: parseInt(purchases),
+            cpa: cpa ? parseFloat(cpa) : null,
+          };
+        }).filter(a => a.spend > 0);
+
+        return res.json({
+          last7d: extractCPA(d7),
+          last14d: extractCPA(d14),
+          last30d: extractCPA(d30),
+          campaigns: campaignBreakdown,
+          topAds,
+        });
       }
 
       default:
