@@ -130,17 +130,16 @@ export default async function handler(req, res) {
 
       case 'create_campaign': {
         const { name, objective } = req.body;
-        const params = new URLSearchParams({
-          name,
-          objective,
-          status: 'PAUSED',
-          special_ad_categories: '[]',
-          access_token: accessToken,
-        });
         const r = await fetch(`${BASE}/${adAccountId}/campaigns`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: params,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            objective,
+            status: 'PAUSED',
+            special_ad_categories: [],
+            access_token: accessToken,
+          }),
         });
         const d = await r.json();
         return res.status(r.status).json(d);
@@ -156,34 +155,30 @@ export default async function handler(req, res) {
           daily_budget: String(dailyBudgetCents),
           billing_event: 'IMPRESSIONS',
           status: 'PAUSED',
-          targeting: JSON.stringify({
+          targeting: {
             geo_locations: { countries: ['US'] },
             age_min: 18,
             age_max: 65,
-          }),
+          },
           access_token: accessToken,
         };
 
         if (objective === 'OUTCOME_SALES' && pixel_id) {
           adsetBody.optimization_goal = 'OFFSITE_CONVERSIONS';
-          adsetBody.bid_strategy = 'LOWEST_COST_WITHOUT_CAP';
-          adsetBody.promoted_object = JSON.stringify({
+          adsetBody.promoted_object = {
             pixel_id,
             custom_event_type: 'PURCHASE',
-          });
+          };
         } else if (objective === 'OUTCOME_TRAFFIC') {
           adsetBody.optimization_goal = 'LINK_CLICKS';
-          adsetBody.bid_strategy = 'LOWEST_COST_WITHOUT_CAP';
         } else {
           adsetBody.optimization_goal = 'REACH';
-          adsetBody.bid_strategy = 'LOWEST_COST_WITHOUT_CAP';
         }
 
-        const params = new URLSearchParams(adsetBody);
         const r = await fetch(`${BASE}/${adAccountId}/adsets`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: params,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(adsetBody),
         });
         const d = await r.json();
         return res.status(r.status).json(d);
@@ -366,21 +361,21 @@ export default async function handler(req, res) {
         }
 
         // 1. Create ABO campaign (PAUSED)
-        const campaignParams = new URLSearchParams({
+        const campaignBody = {
           name: testName || `[CT] HOWL — ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
           objective: 'OUTCOME_SALES',
           status: 'PAUSED',
-          special_ad_categories: '[]',
+          special_ad_categories: [],
           access_token: accessToken,
-        });
+        };
         const campaignRes = await fetch(`${BASE}/${adAccountId}/campaigns`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: campaignParams,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(campaignBody),
         });
         const campaignData = await campaignRes.json();
         if (campaignData.error) {
-          return res.status(400).json({ error: campaignData.error.message, step: 'create_campaign' });
+          return res.status(400).json({ error: campaignData.error.error_user_msg || campaignData.error.message, detail: campaignData.error, step: 'create_campaign' });
         }
         const campaignId = campaignData.id;
 
@@ -398,32 +393,30 @@ export default async function handler(req, res) {
             daily_budget: dailyBudgetCents,
             billing_event: 'IMPRESSIONS',
             optimization_goal: 'OFFSITE_CONVERSIONS',
-            bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
             status: 'PAUSED',
-            targeting: JSON.stringify({
+            targeting: {
               geo_locations: { countries: ['US'] },
               age_min: 18,
               age_max: 65,
-            }),
+            },
             access_token: accessToken,
           };
 
           if (pixelId) {
-            adsetBody.promoted_object = JSON.stringify({
+            adsetBody.promoted_object = {
               pixel_id: pixelId,
               custom_event_type: 'PURCHASE',
-            });
+            };
           }
 
-          const adsetParams = new URLSearchParams(adsetBody);
           const adsetRes = await fetch(`${BASE}/${adAccountId}/adsets`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: adsetParams,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(adsetBody),
           });
           const adsetData = await adsetRes.json();
           if (adsetData.error) {
-            results.push({ item: item.name, error: adsetData.error.message, step: 'create_adset' });
+            results.push({ item: item.name, error: adsetData.error.error_user_msg || adsetData.error.message, step: 'create_adset' });
             continue;
           }
 
