@@ -9,10 +9,19 @@ const TYPE_COLORS = {
 
 const TYPE_LABELS = { static: 'Static', review: 'Review', video: 'Video', other: 'Other' };
 
-function parseAdType(name = '') {
+function parseAdType(ad) {
+  const name = ad?.name || '';
+  const objectType = ad?.creative?.object_type || '';
+
+  // Check name convention first
   if (name.includes('| Static |')) return 'static';
   if (name.includes('| Review |')) return 'review';
   if (name.includes('| Video |'))  return 'video';
+
+  // Fall back to creative object_type from Meta
+  if (objectType === 'VIDEO') return 'video';
+  if (objectType === 'PHOTO' || objectType === 'SHARE') return 'static';
+
   return 'other';
 }
 
@@ -93,7 +102,7 @@ export default function DashboardTool() {
   const monthMap   = {}; // key → { total, static, review, video, other }
 
   for (const ad of ads) {
-    const type  = parseAdType(ad.name);
+    const type  = parseAdType(ad);
     const mKey  = getMonthKey(ad.created_time);
     typeCounts[type]++;
     if (!monthMap[mKey]) monthMap[mKey] = { total: 0, static: 0, review: 0, video: 0, other: 0 };
@@ -104,12 +113,12 @@ export default function DashboardTool() {
   const totalShipped  = ads.length;
   const thisMonthCount = monthMap[thisMonthKey]?.total || 0;
   const thisYearCount  = ads.filter(a => new Date(a.created_time).getFullYear() === thisYear).length;
-  const activeAds      = ads.filter(a => a.status === 'ACTIVE');
+  const activeAds      = ads.filter(a => (a.effective_status || a.status) === 'ACTIVE');
   const activeCount    = activeAds.length;
 
   const activeTypeCounts = { static: 0, review: 0, video: 0, other: 0 };
   for (const ad of activeAds) {
-    activeTypeCounts[parseAdType(ad.name)]++;
+    activeTypeCounts[parseAdType(ad)]++;
   }
 
   // Last 6 months for chart
@@ -236,39 +245,40 @@ export default function DashboardTool() {
           </div>
 
           {/* Active ads by type */}
-          {activeCount > 0 && (
-            <div style={{ ...S.card, marginBottom: 20 }}>
-              <span style={S.label}>Live Ads by Format</span>
-              <div style={{ display: 'flex', gap: 24, marginTop: 8, alignItems: 'center' }}>
-                {[
-                  { type: 'video', label: 'Video', icon: '▶' },
-                  { type: 'static', label: 'Static Image', icon: '■' },
-                  { type: 'review', label: 'Review', icon: '★' },
-                  { type: 'other', label: 'Other', icon: '●' },
-                ].filter(({ type }) => activeTypeCounts[type] > 0).map(({ type, label, icon }) => {
-                  const count = activeTypeCounts[type];
-                  const pct = activeCount > 0 ? Math.round((count / activeCount) * 100) : 0;
-                  return (
-                    <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 18, color: TYPE_COLORS[type] }}>{icon}</span>
-                      <div>
-                        <div style={{ fontSize: 22, fontWeight: 700, color: '#f0f4f8', lineHeight: 1 }}>{count}</div>
-                        <div style={{ fontSize: 9, color: TYPE_COLORS[type], letterSpacing: 1, textTransform: 'uppercase', marginTop: 2 }}>
-                          {label} <span style={{ color: '#6e7681' }}>({pct}%)</span>
+          {activeCount > 0 && (() => {
+            const FORMAT_COLORS = { video: '#DC440A', static: '#e8722a', review: '#f5a623', other: '#8b949e' };
+            const maxTypeCount = Math.max(...Object.values(activeTypeCounts), 1);
+            return (
+              <div style={{ ...S.card, marginBottom: 20 }}>
+                <span style={S.label}>Live Ads by Format</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 12 }}>
+                  {[
+                    { type: 'video', label: 'Video' },
+                    { type: 'static', label: 'Static Image' },
+                    { type: 'review', label: 'Review' },
+                    { type: 'other', label: 'Other' },
+                  ].filter(({ type }) => activeTypeCounts[type] > 0).map(({ type, label }) => {
+                    const count = activeTypeCounts[type];
+                    const pct = Math.round((count / activeCount) * 100);
+                    const barPct = (count / maxTypeCount) * 100;
+                    return (
+                      <div key={type}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                          <span style={{ fontSize: 12, color: '#c9d1d9', fontWeight: 600 }}>{label}</span>
+                          <span style={{ fontSize: 20, fontWeight: 700, color: '#f0f4f8' }}>
+                            {count} <span style={{ fontSize: 11, color: '#6e7681', fontWeight: 400 }}>({pct}%)</span>
+                          </span>
+                        </div>
+                        <div style={{ height: 10, background: '#1c2330', borderRadius: 5, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${barPct}%`, background: FORMAT_COLORS[type], borderRadius: 5, transition: 'width 0.4s' }} />
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-              {/* Mini bar showing the ratio */}
-              <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', marginTop: 12, background: '#1c2330' }}>
-                {['video', 'static', 'review', 'other'].filter(t => activeTypeCounts[t] > 0).map(type => (
-                  <div key={type} style={{ width: `${(activeTypeCounts[type] / activeCount) * 100}%`, background: TYPE_COLORS[type], height: '100%' }} />
-                ))}
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Type breakdown + 30-day insights */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
@@ -382,7 +392,7 @@ export default function DashboardTool() {
               </thead>
               <tbody>
                 {recent.map(ad => {
-                  const type = parseAdType(ad.name);
+                  const type = parseAdType(ad);
                   return (
                     <tr key={ad.id} style={{ borderTop: '1px solid #2a3441' }}>
                       <td style={{ padding: '8px 8px 8px 0', fontSize: 11, color: '#c9d1d9', maxWidth: 320 }}>
