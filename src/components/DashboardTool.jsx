@@ -101,13 +101,15 @@ export default function DashboardTool() {
   const typeCounts = { static: 0, review: 0, video: 0, other: 0 };
   const monthMap   = {}; // key → { total, static, review, video, other }
 
-  // Deduplicate by creative ID to count unique assets, not duplicate ad objects
-  const seenCreatives = new Set();
+  // Deduplicate by underlying asset (image_hash or video_id), not creative ID
+  // Duplicating an ad in Meta creates a new creative but reuses the same asset
+  const seenAssets = new Set();
   const uniqueAds = [];
   for (const ad of ads) {
-    const cid = ad.creative?.id;
-    if (cid && seenCreatives.has(cid)) continue;
-    if (cid) seenCreatives.add(cid);
+    const c = ad.creative || {};
+    const assetKey = c.image_hash || c.video_id || c.id;
+    if (assetKey && seenAssets.has(assetKey)) continue;
+    if (assetKey) seenAssets.add(assetKey);
     uniqueAds.push(ad);
   }
 
@@ -123,12 +125,13 @@ export default function DashboardTool() {
   const totalShipped  = uniqueAds.length;
   const thisMonthCount = monthMap[thisMonthKey]?.total || 0;
   const thisYearCount  = uniqueAds.filter(a => new Date(a.created_time).getFullYear() === thisYear).length;
-  const seenActiveCreatives = new Set();
+  const seenActiveAssets = new Set();
   const activeAds = ads.filter(a => {
     if ((a.effective_status || a.status) !== 'ACTIVE') return false;
-    const cid = a.creative?.id;
-    if (cid && seenActiveCreatives.has(cid)) return false;
-    if (cid) seenActiveCreatives.add(cid);
+    const c = a.creative || {};
+    const assetKey = c.image_hash || c.video_id || c.id;
+    if (assetKey && seenActiveAssets.has(assetKey)) return false;
+    if (assetKey) seenActiveAssets.add(assetKey);
     return true;
   });
   const activeCount    = activeAds.length;
