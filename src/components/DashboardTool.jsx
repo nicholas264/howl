@@ -71,6 +71,12 @@ export default function DashboardTool() {
   const [error,   setError]   = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
 
+  // Shopify analytics state
+  const [shopifyData,    setShopifyData]    = useState(null);
+  const [shopifyLoading, setShopifyLoading] = useState(false);
+  const [shopifyError,   setShopifyError]   = useState('');
+  const [shopifyUpdated, setShopifyUpdated] = useState(null);
+
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -88,6 +94,26 @@ export default function DashboardTool() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const loadShopify = useCallback(async () => {
+    setShopifyLoading(true);
+    setShopifyError('');
+    try {
+      const r = await fetch('/api/shopify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_analytics' }),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setShopifyData(d);
+      setShopifyUpdated(new Date());
+    } catch (err) {
+      setShopifyError(err.message);
+    } finally {
+      setShopifyLoading(false);
     }
   }, []);
 
@@ -474,6 +500,213 @@ export default function DashboardTool() {
           </div>
         </>
       )}
+
+      {/* ── Shopify Analytics Section ─────────────────────────────────────── */}
+      <div style={S.divider} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
+        <span style={{ ...S.label, marginBottom: 0 }}>Shopify Analytics</span>
+        <button onClick={loadShopify} disabled={shopifyLoading} style={shopifyLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : S.btn}>
+          {shopifyLoading ? 'Loading…' : shopifyData ? 'Refresh' : 'Load Shopify Data'}
+        </button>
+        {shopifyUpdated && (
+          <span style={{ fontSize: 9, color: '#6e7681', letterSpacing: 1 }}>
+            Updated {shopifyUpdated.toLocaleTimeString()}
+          </span>
+        )}
+      </div>
+
+      {shopifyError && <div style={{ ...S.err, marginBottom: 20 }}>{shopifyError}</div>}
+
+      {!shopifyData && !shopifyLoading && (
+        <div style={{ color: '#6e7681', fontSize: 12, padding: '40px 0' }}>
+          Click "Load Shopify Data" to pull store analytics from Shopify.
+        </div>
+      )}
+
+      {shopifyData && (() => {
+        const months = shopifyData.months || [];
+        const topProducts = shopifyData.topProducts || [];
+
+        // Compute averages and insights
+        const fullMonths = months.filter(m => m.orders > 0);
+        const avgCvr = fullMonths.length > 0 ? fullMonths.reduce((s, m) => s + m.cvr, 0) / fullMonths.length : 0;
+        const totalRevenue = months.reduce((s, m) => s + m.netSales, 0);
+        const totalOrders = months.reduce((s, m) => s + m.orders, 0);
+        const totalSessions = months.reduce((s, m) => s + m.sessions, 0);
+
+        // Best / worst months
+        const bestCvrMonth = fullMonths.length > 0 ? fullMonths.reduce((a, b) => a.cvr > b.cvr ? a : b) : null;
+        const worstCvrMonth = fullMonths.length > 0 ? fullMonths.reduce((a, b) => a.cvr < b.cvr ? a : b) : null;
+        const bestRevMonth = fullMonths.length > 0 ? fullMonths.reduce((a, b) => a.netSales > b.netSales ? a : b) : null;
+
+        // Current month pace
+        const now = new Date();
+        const dayOfMonth = now.getDate();
+        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const currentMonthData = months.length > 0 ? months[months.length - 1] : null;
+        const projectedRevenue = currentMonthData ? (currentMonthData.netSales / dayOfMonth) * daysInMonth : 0;
+
+        // MoM trend
+        const last2 = months.slice(-2);
+        const momTrend = last2.length === 2 && last2[0].netSales > 0
+          ? ((last2[1].netSales - last2[0].netSales) / last2[0].netSales) * 100
+          : null;
+
+        // Chart maxes
+        const maxCvr = Math.max(...months.map(m => m.cvr), 0.1);
+        const maxRevenue = Math.max(...months.map(m => m.netSales), 1);
+        const maxProductRevenue = topProducts.length > 0 ? topProducts[0].totalRevenue : 1;
+
+        const fmtMonth = (mStr) => {
+          if (!mStr) return '—';
+          const parts = mStr.split('-');
+          if (parts.length >= 2) {
+            const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1);
+            return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+          }
+          return mStr;
+        };
+
+        return (
+          <>
+            {/* Seasonality Insights */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 20 }}>
+              {[
+                { label: 'Best CVR Month', value: bestCvrMonth ? `${bestCvrMonth.cvr.toFixed(2)}%` : '—', sub: bestCvrMonth ? fmtMonth(bestCvrMonth.month) : '' },
+                { label: 'Worst CVR Month', value: worstCvrMonth ? `${worstCvrMonth.cvr.toFixed(2)}%` : '—', sub: worstCvrMonth ? fmtMonth(worstCvrMonth.month) : '' },
+                { label: 'Best Revenue Month', value: bestRevMonth ? `$${Math.round(bestRevMonth.netSales).toLocaleString()}` : '—', sub: bestRevMonth ? fmtMonth(bestRevMonth.month) : '' },
+                { label: 'This Month Pace', value: `$${Math.round(projectedRevenue).toLocaleString()}`, sub: currentMonthData ? `$${Math.round(currentMonthData.netSales).toLocaleString()} so far` : '' },
+                { label: 'MoM Trend', value: momTrend !== null ? `${momTrend >= 0 ? '+' : ''}${momTrend.toFixed(1)}%` : '—', sub: momTrend !== null ? (momTrend >= 0 ? 'Revenue up' : 'Revenue down') : '', color: momTrend !== null ? (momTrend >= 0 ? '#3fb950' : '#f85149') : '#f0f4f8' },
+              ].map(({ label, value, sub, color }) => (
+                <div key={label} style={S.card}>
+                  <span style={S.label}>{label}</span>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: color || '#f0f4f8', lineHeight: 1 }}>{value}</div>
+                  {sub && <div style={{ fontSize: 9, color: '#6e7681', marginTop: 6, letterSpacing: 1 }}>{sub}</div>}
+                </div>
+              ))}
+            </div>
+
+            {/* Monthly Trend Table */}
+            <div style={{ ...S.card, marginBottom: 20 }}>
+              <span style={S.label}>Monthly Trend</span>
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8 }}>
+                <thead>
+                  <tr>
+                    {['Month', 'Revenue', 'Orders', 'Sessions', 'CVR%', 'AOV'].map(h => (
+                      <th key={h} style={{ fontSize: 8, letterSpacing: 2, color: '#6e7681', textAlign: h === 'Month' ? 'left' : 'right', padding: '4px 8px 8px 0', textTransform: 'uppercase', fontWeight: 600 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {months.map(m => {
+                    const isCurrentMonth = currentMonthData && m.month === currentMonthData.month && months.indexOf(m) === months.length - 1;
+                    const cvrColor = m.cvr > avgCvr ? '#3fb950' : m.cvr > 0 ? '#f85149' : '#6e7681';
+                    return (
+                      <tr key={m.month} style={{ borderTop: '1px solid #2a3441', background: isCurrentMonth ? 'rgba(220,68,10,0.08)' : 'transparent' }}>
+                        <td style={{ padding: '8px 8px 8px 0', fontSize: 11, color: isCurrentMonth ? '#DC440A' : '#c9d1d9', fontWeight: isCurrentMonth ? 700 : 400 }}>
+                          {fmtMonth(m.month)} {isCurrentMonth && <span style={{ fontSize: 8, color: '#DC440A', letterSpacing: 1 }}>(CURRENT)</span>}
+                        </td>
+                        <td style={{ padding: '8px 8px 8px 0', fontSize: 11, color: '#f0f4f8', textAlign: 'right', fontWeight: 600 }}>
+                          ${Math.round(m.netSales).toLocaleString()}
+                        </td>
+                        <td style={{ padding: '8px 8px 8px 0', fontSize: 11, color: '#c9d1d9', textAlign: 'right' }}>
+                          {m.orders.toLocaleString()}
+                        </td>
+                        <td style={{ padding: '8px 8px 8px 0', fontSize: 11, color: '#c9d1d9', textAlign: 'right' }}>
+                          {m.sessions.toLocaleString()}
+                        </td>
+                        <td style={{ padding: '8px 8px 8px 0', fontSize: 11, color: cvrColor, textAlign: 'right', fontWeight: 600 }}>
+                          {m.cvr > 0 ? m.cvr.toFixed(2) + '%' : '—'}
+                        </td>
+                        <td style={{ padding: '8px 0', fontSize: 11, color: '#c9d1d9', textAlign: 'right' }}>
+                          {m.aov > 0 ? '$' + m.aov.toFixed(0) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <div style={{ fontSize: 9, color: '#6e7681', marginTop: 8, letterSpacing: 1 }}>
+                Avg CVR: {avgCvr.toFixed(2)}% — Total Revenue: ${Math.round(totalRevenue).toLocaleString()} — Total Orders: {totalOrders.toLocaleString()} — Total Sessions: {totalSessions.toLocaleString()}
+              </div>
+            </div>
+
+            {/* CVR Trend + Revenue by Month charts side by side */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+              {/* CVR Trend Chart */}
+              <div style={{ ...S.card }}>
+                <span style={S.label}>CVR by Month</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                  {months.map(m => {
+                    const barPct = maxCvr > 0 ? (m.cvr / maxCvr) * 100 : 0;
+                    return (
+                      <div key={m.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 9, color: '#8b949e', width: 44, flexShrink: 0, textAlign: 'right' }}>
+                          {fmtMonth(m.month)}
+                        </span>
+                        <div style={{ flex: 1, height: 16, background: '#1c2330', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${barPct}%`, background: '#DC440A', borderRadius: 3, transition: 'width 0.4s' }} />
+                        </div>
+                        <span style={{ fontSize: 10, color: m.cvr > 0 ? '#f0f4f8' : '#6e7681', width: 40, textAlign: 'right', fontWeight: m.cvr > 0 ? 700 : 400 }}>
+                          {m.cvr > 0 ? m.cvr.toFixed(2) + '%' : '—'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Revenue by Month Chart */}
+              <div style={{ ...S.card }}>
+                <span style={S.label}>Revenue by Month</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                  {months.map(m => {
+                    const barPct = maxRevenue > 0 ? (m.netSales / maxRevenue) * 100 : 0;
+                    return (
+                      <div key={m.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 9, color: '#8b949e', width: 44, flexShrink: 0, textAlign: 'right' }}>
+                          {fmtMonth(m.month)}
+                        </span>
+                        <div style={{ flex: 1, height: 16, background: '#1c2330', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${barPct}%`, background: '#2ea98f', borderRadius: 3, transition: 'width 0.4s' }} />
+                        </div>
+                        <span style={{ fontSize: 10, color: m.netSales > 0 ? '#f0f4f8' : '#6e7681', width: 52, textAlign: 'right', fontWeight: m.netSales > 0 ? 700 : 400 }}>
+                          {m.netSales > 0 ? '$' + Math.round(m.netSales).toLocaleString() : '—'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Product Mix */}
+            {topProducts.length > 0 && (
+              <div style={{ ...S.card, marginBottom: 20 }}>
+                <span style={S.label}>Product Mix (Top {topProducts.length})</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 12 }}>
+                  {topProducts.map(p => {
+                    const barPct = maxProductRevenue > 0 ? (p.totalRevenue / maxProductRevenue) * 100 : 0;
+                    return (
+                      <div key={p.name}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                          <span style={{ fontSize: 11, color: '#c9d1d9', fontWeight: 600, maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                          <span style={{ fontSize: 11, color: '#f0f4f8', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                            ${Math.round(p.totalRevenue).toLocaleString()} <span style={{ fontSize: 9, color: '#6e7681', fontWeight: 400 }}>({p.totalOrders} orders)</span>
+                          </span>
+                        </div>
+                        <div style={{ height: 8, background: '#1c2330', borderRadius: 4, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${barPct}%`, background: '#2ea98f', borderRadius: 4, transition: 'width 0.4s' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 }
