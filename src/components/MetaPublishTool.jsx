@@ -400,16 +400,30 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
 
     setStatus(item.id, 'pushing');
     try {
+      // Step 1: Upload assets individually to avoid body size limits
       let body;
       if (item.type === 'carousel' && item.cards) {
+        const uploadedCards = [];
+        for (let ci = 0; ci < item.cards.length; ci++) {
+          const card = item.cards[ci];
+          const imgData = card.imageBase64 || card.squareUrl;
+          const ur = await fetch('/api/meta', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'upload_image', imageBase64: imgData }),
+          });
+          const ud = await ur.json();
+          if (ud.error) throw new Error(`Card ${ci + 1} upload: ${ud.error}`);
+          uploadedCards.push({
+            imageHash: ud.hash,
+            headline: card.headline || '',
+            body: card.body || '',
+            destUrl: config.destUrl,
+          });
+        }
         body = {
           action: 'push_carousel',
-          cards: item.cards.map(c => ({
-            imageBase64: c.imageBase64 || c.squareUrl,
-            headline: c.headline || '',
-            body: c.body || '',
-            destUrl: config.destUrl,
-          })),
+          cards: uploadedCards,
           adName: item.name || `HOWL Carousel ${new Date().toLocaleDateString()}`,
           headline: item.hook,
           primaryText: item.body || item.hook,
@@ -417,13 +431,36 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
           pageId: config.pageId,
           adsetId,
         };
-      } else {
+      } else if (item.type === 'video') {
+        const ur = await fetch('/api/meta', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'upload_video', videoBase64: item.videoUrl, name: item.name }),
+        });
+        const ud = await ur.json();
+        if (ud.error) throw new Error(`Video upload: ${ud.error}`);
         body = {
           action: 'push_ad',
-          ...(item.type === 'video'
-            ? { videoBase64: item.videoUrl }
-            : { squareImageBase64: item.squareUrl || item.url || null, storyImageBase64: item.storyUrl || null }
-          ),
+          videoId: ud.videoId,
+          adName: item.name || `HOWL Ad ${new Date().toLocaleDateString()}`,
+          headline: item.hook,
+          primaryText: item.body || item.hook,
+          destUrl: config.destUrl,
+          pageId: config.pageId,
+          adsetId,
+        };
+      } else {
+        const imgData = item.squareUrl || item.url;
+        const ur = await fetch('/api/meta', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'upload_image', imageBase64: imgData }),
+        });
+        const ud = await ur.json();
+        if (ud.error) throw new Error(`Image upload: ${ud.error}`);
+        body = {
+          action: 'push_ad',
+          imageHash: ud.hash,
           adName: item.name || `HOWL Ad ${new Date().toLocaleDateString()}`,
           headline: item.hook,
           primaryText: item.body || item.hook,
@@ -432,6 +469,8 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
           adsetId,
         };
       }
+
+      // Step 2: Create the ad (small JSON payload, no base64)
       const r = await fetch('/api/meta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

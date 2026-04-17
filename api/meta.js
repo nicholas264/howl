@@ -187,25 +187,18 @@ export default async function handler(req, res) {
       }
 
       case 'push_ad': {
-        const { imageBase64, squareImageBase64, storyImageBase64, videoBase64, adName, headline, primaryText, destUrl, adsetId } = req.body;
+        const { imageHash, videoId: preUploadedVideoId, adName, headline, primaryText, destUrl, adsetId } = req.body;
         const pageId = req.body.pageId || defaultPageId;
 
         let creativeParams;
 
-        if (videoBase64) {
-          // ── Video ad flow ─────────────────────────────────────────────────
-          let videoId;
-          try {
-            videoId = await uploadVideo(videoBase64, adName, adAccountId, accessToken, BASE);
-          } catch (err) {
-            return res.status(400).json({ error: err.message, step: 'upload_video' });
-          }
+        if (preUploadedVideoId) {
           creativeParams = new URLSearchParams({
             name: `${adName} Creative`,
             object_story_spec: JSON.stringify({
               page_id: pageId,
               video_data: {
-                video_id: videoId,
+                video_id: preUploadedVideoId,
                 message: primaryText || headline,
                 title: headline,
                 call_to_action: { type: 'SHOP_NOW', value: { link: destUrl } },
@@ -213,21 +206,13 @@ export default async function handler(req, res) {
             }),
             access_token: accessToken,
           });
-        } else {
-          // ── Image ad (1:1 only) ──────────────────────────────────────────
-          const squareBase64 = squareImageBase64 || imageBase64;
-          let squareHash;
-          try {
-            squareHash = await uploadImage(squareBase64, adAccountId, accessToken, BASE);
-          } catch (err) {
-            return res.status(400).json({ error: err.message, step: 'upload_square' });
-          }
+        } else if (imageHash) {
           creativeParams = new URLSearchParams({
             name: `${adName} Creative`,
             object_story_spec: JSON.stringify({
               page_id: pageId,
               link_data: {
-                image_hash: squareHash,
+                image_hash: imageHash,
                 link: destUrl,
                 message: primaryText || headline,
                 name: headline,
@@ -236,6 +221,8 @@ export default async function handler(req, res) {
             }),
             access_token: accessToken,
           });
+        } else {
+          return res.status(400).json({ error: 'No imageHash or videoId provided. Upload asset first.', step: 'validate' });
         }
 
         const creativeRes = await fetch(`${BASE}/${adAccountId}/adcreatives`, {
@@ -284,24 +271,14 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: 'Carousel requires at least 2 cards', step: 'validate' });
         }
 
-        // Upload all card images
-        const childAttachments = [];
-        for (let i = 0; i < cards.length; i++) {
-          const card = cards[i];
-          let hash;
-          try {
-            hash = await uploadImage(card.imageBase64, adAccountId, accessToken, BASE);
-          } catch (err) {
-            return res.status(400).json({ error: err.message, step: `upload_card_${i}` });
-          }
-          childAttachments.push({
-            link: card.destUrl || destUrl,
-            image_hash: hash,
-            name: card.headline || headline || '',
-            description: card.body || '',
-            call_to_action: { type: 'SHOP_NOW' },
-          });
-        }
+        // Cards come with pre-uploaded imageHash (no base64)
+        const childAttachments = cards.map(card => ({
+          link: card.destUrl || destUrl,
+          image_hash: card.imageHash,
+          name: card.headline || headline || '',
+          description: card.body || '',
+          call_to_action: { type: 'SHOP_NOW' },
+        }));
 
         const creativeParams = new URLSearchParams({
           name: `${adName} Creative`,
