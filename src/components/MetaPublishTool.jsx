@@ -157,6 +157,16 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
       if (d.error) throw new Error(d.error);
       setCtResult(d);
       setCtProgress('');
+      // Update metaStatus for each creative
+      d.results?.forEach(r => {
+        const match = items.find(i => (i.name || 'Untitled') === r.item);
+        if (match) {
+          onUpdateCartItem?.(match.id, {
+            metaStatus: r.success ? 'pushed' : 'error',
+            metaPushedAt: r.success ? Date.now() : undefined,
+          });
+        }
+      });
     } catch (err) {
       setCtResult({ error: err.message });
       setCtProgress('');
@@ -384,8 +394,10 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
       const d = await r.json();
       if (d.error) throw new Error(`[${d.step}] ${d.error}`);
       setStatus(item.id, 'success', `Ad ID: ${d.adId}`);
+      onUpdateCartItem?.(item.id, { metaStatus: 'pushed', metaPushedAt: Date.now() });
     } catch (err) {
       setStatus(item.id, 'error', err.message);
+      onUpdateCartItem?.(item.id, { metaStatus: 'error' });
     }
   }, [selectedAdsetId, config]);
 

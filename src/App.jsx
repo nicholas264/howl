@@ -9,6 +9,7 @@ import ImageAdTool from "./components/ImageAdTool";
 import FounderAdTool from "./components/FounderAdTool";
 import MetaPublishTool from "./components/MetaPublishTool";
 import DashboardTool from "./components/DashboardTool";
+import GalleryTab from "./components/GalleryTab";
 import DriveButton from "./components/DriveButton";
 import { useDriveAuth } from "./hooks/useDriveAuth";
 import { cartGetAll, cartPut, cartDelete } from "./utils/cartDb";
@@ -172,6 +173,7 @@ export default function HowlAdEngine() {
         <button className={`tab ${activeTab === "review" ? "on" : ""}`} onClick={() => setActiveTab("review")}>Review Ads</button>
         <button className={`tab ${activeTab === "video" ? "on" : ""}`} onClick={() => setActiveTab("video")}>Video Ads</button>
         <button className={`tab ${activeTab === "founder" ? "on" : ""}`} onClick={() => setActiveTab("founder")}>Founder Ads</button>
+        <button className={`tab ${activeTab === "gallery" ? "on" : ""}`} onClick={() => setActiveTab("gallery")}>Gallery {cartCount > 0 && `(${cartCount})`}</button>
         <button className={`tab ${activeTab === "dashboard" ? "on" : ""}`} onClick={() => setActiveTab("dashboard")}>Dashboard</button>
         <button className={`tab ${activeTab === "publish" ? "on" : ""}`} onClick={() => setActiveTab("publish")} style={{ position: 'relative' }}>
           Publish
@@ -210,6 +212,7 @@ export default function HowlAdEngine() {
       {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} onAddToCart={addToCart} />}
       {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} onAddToCart={addToCart} />}
       {activeTab === "founder" && <FounderAdTool />}
+      {activeTab === "gallery" && <GalleryTab cart={cart} />}
       {activeTab === "dashboard" && <DashboardTool />}
       {activeTab === "publish" && (
         <MetaPublishTool
