@@ -34,7 +34,7 @@ async function uploadImage(base64, adAccountId, accessToken, BASE) {
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: '8mb',
+      sizeLimit: '25mb',
     },
   },
 };
