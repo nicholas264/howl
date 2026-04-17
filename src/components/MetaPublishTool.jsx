@@ -124,12 +124,67 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
 
     setCtRunning(true);
     setCtResult(null);
-    setCtProgress('Creating campaign...');
+    setCtProgress('Uploading assets...');
 
     try {
       const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       const testName = ctConfig.testName.trim() || `[CT] HOWL — ${dateStr}`;
 
+      // Step 1: Upload all assets individually (avoids body size limit)
+      const preparedItems = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        setCtProgress(`Uploading ${i + 1}/${items.length}: ${item.name || 'Untitled'}...`);
+
+        const prepared = {
+          name: item.name || 'Untitled',
+          type: item.type || 'static',
+          hook: item.hook || '',
+          body: item.body || '',
+        };
+
+        if (item.type === 'carousel' && item.cards) {
+          const cardHashes = [];
+          for (let ci = 0; ci < item.cards.length; ci++) {
+            const card = item.cards[ci];
+            const imgData = card.imageBase64 || card.squareUrl;
+            const r = await fetch('/api/meta', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'upload_image', imageBase64: imgData }),
+            });
+            const d = await r.json();
+            if (d.error) throw new Error(`Card ${ci + 1} upload failed: ${d.error}`);
+            cardHashes.push(d.hash);
+          }
+          prepared.cardHashes = cardHashes;
+          prepared.cards = item.cards.map(c => ({ headline: c.headline || '', body: c.body || '' }));
+        } else if (item.type === 'video') {
+          const r = await fetch('/api/meta', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'upload_video', videoBase64: item.videoUrl, name: item.name }),
+          });
+          const d = await r.json();
+          if (d.error) throw new Error(`Video upload failed: ${d.error}`);
+          prepared.videoId = d.videoId;
+        } else {
+          const imgData = item.squareUrl || item.url;
+          const r = await fetch('/api/meta', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'upload_image', imageBase64: imgData }),
+          });
+          const d = await r.json();
+          if (d.error) throw new Error(`Image upload failed: ${d.error}`);
+          prepared.imageHash = d.hash;
+        }
+
+        preparedItems.push(prepared);
+      }
+
+      // Step 2: Create campaign + ad sets + ads (no base64, just hashes)
+      setCtProgress('Creating campaign...');
       const r = await fetch('/api/meta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -141,16 +196,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
           pixelId: ctConfig.pixelId,
           pageId: config.pageId,
           destUrl: config.destUrl,
-          items: items.map(i => ({
-            name: i.name || 'Untitled',
-            type: i.type || 'static',
-            hook: i.hook || '',
-            body: i.body || '',
-            squareUrl: i.squareUrl || i.url || null,
-            storyUrl: i.storyUrl || null,
-            videoUrl: i.videoUrl || null,
-            cards: i.cards || null,
-          })),
+          items: preparedItems,
         }),
       });
       const d = await r.json();

@@ -34,7 +34,7 @@ async function uploadImage(base64, adAccountId, accessToken, BASE) {
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: '25mb',
+      sizeLimit: '4mb',
     },
   },
 };
@@ -353,6 +353,28 @@ export default async function handler(req, res) {
         return res.json({ success: true, adId: adData.id });
       }
 
+      case 'upload_image': {
+        const { imageBase64 } = req.body;
+        if (!imageBase64) return res.status(400).json({ error: 'No image data provided' });
+        try {
+          const hash = await uploadImage(imageBase64, adAccountId, accessToken, BASE);
+          return res.json({ success: true, hash });
+        } catch (err) {
+          return res.status(400).json({ error: err.message, step: 'upload_image' });
+        }
+      }
+
+      case 'upload_video': {
+        const { videoBase64, name } = req.body;
+        if (!videoBase64) return res.status(400).json({ error: 'No video data provided' });
+        try {
+          const videoId = await uploadVideo(videoBase64, name, adAccountId, accessToken, BASE);
+          return res.json({ success: true, videoId });
+        } catch (err) {
+          return res.status(400).json({ error: err.message, step: 'upload_video' });
+        }
+      }
+
       case 'create_creative_test': {
         const { testName, dailyBudgetDollars, costCapCents, pixelId, items } = req.body;
         const pageId = req.body.pageId || defaultPageId;
@@ -425,22 +447,17 @@ export default async function handler(req, res) {
             continue;
           }
 
-          // Upload creative asset
+          // Build creative using pre-uploaded asset hashes/videoIds (no base64 here)
           let creativeParams;
           try {
-            if (item.type === 'carousel' && item.cards) {
-              // Carousel creative
-              const childAttachments = [];
-              for (const card of item.cards) {
-                const hash = await uploadImage(card.imageBase64 || card.squareUrl, adAccountId, accessToken, BASE);
-                childAttachments.push({
-                  link: card.destUrl || destUrl,
-                  image_hash: hash,
-                  name: card.headline || item.hook || '',
-                  description: card.body || '',
-                  call_to_action: { type: 'SHOP_NOW' },
-                });
-              }
+            if (item.type === 'carousel' && item.cardHashes) {
+              const childAttachments = item.cardHashes.map((hash, ci) => ({
+                link: destUrl,
+                image_hash: hash,
+                name: (item.cards && item.cards[ci]?.headline) || item.hook || '',
+                description: (item.cards && item.cards[ci]?.body) || '',
+                call_to_action: { type: 'SHOP_NOW' },
+              }));
               creativeParams = new URLSearchParams({
                 name: `${item.name} Creative`,
                 object_story_spec: JSON.stringify({
@@ -454,14 +471,13 @@ export default async function handler(req, res) {
                 }),
                 access_token: accessToken,
               });
-            } else if (item.type === 'video') {
-              const videoId = await uploadVideo(item.videoUrl, item.name, adAccountId, accessToken, BASE);
+            } else if (item.type === 'video' && item.videoId) {
               creativeParams = new URLSearchParams({
                 name: `${item.name} Creative`,
                 object_story_spec: JSON.stringify({
                   page_id: pageId,
                   video_data: {
-                    video_id: videoId,
+                    video_id: item.videoId,
                     message: item.body || item.hook || '',
                     title: item.hook || '',
                     call_to_action: { type: 'SHOP_NOW', value: { link: destUrl } },
@@ -469,15 +485,13 @@ export default async function handler(req, res) {
                 }),
                 access_token: accessToken,
               });
-            } else {
-              const imgSrc = item.squareUrl || item.url;
-              const hash = await uploadImage(imgSrc, adAccountId, accessToken, BASE);
+            } else if (item.imageHash) {
               creativeParams = new URLSearchParams({
                 name: `${item.name} Creative`,
                 object_story_spec: JSON.stringify({
                   page_id: pageId,
                   link_data: {
-                    image_hash: hash,
+                    image_hash: item.imageHash,
                     link: destUrl,
                     message: item.body || item.hook || '',
                     name: item.hook || '',
@@ -488,7 +502,7 @@ export default async function handler(req, res) {
               });
             }
           } catch (err) {
-            results.push({ item: item.name, error: err.message, step: 'upload_asset' });
+            results.push({ item: item.name, error: err.message, step: 'build_creative' });
             continue;
           }
 
