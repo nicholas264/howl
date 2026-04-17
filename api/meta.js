@@ -425,6 +425,9 @@ export default async function handler(req, res) {
               geo_locations: { countries: ['US'] },
               age_min: 18,
               age_max: 65,
+              exclusions: {
+                custom_audiences: [{ id: req.body.excludeAudienceId || '120244292071530047' }],
+              },
             },
             access_token: accessToken,
           };
