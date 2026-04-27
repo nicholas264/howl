@@ -19,9 +19,16 @@ export default async function handler(req, res) {
       }),
     });
     const d = await r.json();
-    // Check for GraphQL-level errors (auth, scope issues)
+    // Check for GraphQL-level errors (auth, scope issues). errors can be array, object, or string.
     if (d.errors) {
-      throw new Error(`Shopify GraphQL error: ${d.errors.map(e => e.message).join('; ')}`);
+      const msg = Array.isArray(d.errors)
+        ? d.errors.map(e => e.message || JSON.stringify(e)).join('; ')
+        : typeof d.errors === 'string' ? d.errors
+        : JSON.stringify(d.errors);
+      throw new Error(`Shopify GraphQL error (HTTP ${r.status}): ${msg}`);
+    }
+    if (!r.ok) {
+      throw new Error(`Shopify HTTP ${r.status}: ${JSON.stringify(d).slice(0, 400)}`);
     }
     const result = d.data?.shopifyqlQuery;
     if (!result) {

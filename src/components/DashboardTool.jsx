@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 const TYPE_COLORS = {
   static:  '#6e40c9',
@@ -70,6 +70,23 @@ export default function DashboardTool() {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
+
+  // Launch history (DB-backed — more reliable than Meta's filtered list)
+  const [launches, setLaunches] = useState(null);
+  const [launchesError, setLaunchesError] = useState('');
+
+  const loadLaunches = useCallback(async () => {
+    try {
+      const r = await fetch('/api/db/launch-history?limit=1000');
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setLaunches(d.rows || []);
+    } catch (err) {
+      setLaunchesError(err.message);
+    }
+  }, []);
+
+  useEffect(() => { loadLaunches(); }, [loadLaunches]);
 
   // Shopify analytics state
   const [shopifyData,    setShopifyData]    = useState(null);
@@ -251,6 +268,118 @@ export default function DashboardTool() {
       </div>
 
       {error && <div style={{ ...S.err, marginBottom: 20 }}>{error}</div>}
+
+      {/* Launch Log stats — DB-backed, always visible */}
+      {launches && launches.length > 0 && (() => {
+        const now = new Date();
+        const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay()); startOfWeek.setHours(0,0,0,0);
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const startOfYear = new Date(now.getFullYear(), 0, 1);
+        const last24h = new Date(now.getTime() - 24*60*60*1000);
+
+        const tCount = (since) => launches.filter(l => new Date(l.launched_at) >= since).length;
+        const stats = {
+          total: launches.length,
+          last24: tCount(last24h),
+          week: tCount(startOfWeek),
+          month: tCount(startOfMonth),
+          year: tCount(startOfYear),
+        };
+
+        // Last 6 months velocity
+        const monthBuckets = {};
+        for (const l of launches) {
+          const d = new Date(l.launched_at);
+          const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+          monthBuckets[k] = (monthBuckets[k] || 0) + 1;
+        }
+        const last6 = [];
+        for (let i = 5; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+          last6.push({ key: k, count: monthBuckets[k] || 0 });
+        }
+        const maxLaunch = Math.max(...last6.map(m => m.count), 1);
+
+        // Top creators (this month)
+        const creatorMap = {};
+        for (const l of launches.filter(l => new Date(l.launched_at) >= startOfMonth)) {
+          const c = l.creator || 'unknown';
+          creatorMap[c] = (creatorMap[c] || 0) + 1;
+        }
+        const topCreators = Object.entries(creatorMap).sort((a,b) => b[1] - a[1]).slice(0, 5);
+
+        return (
+          <>
+            <div style={{ ...S.card, marginBottom: 20, borderColor: '#3fb950' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24 }}>
+                <div style={{ flex: 1 }}>
+                  <span style={S.label}>Creative Shipped (Launch Log)</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, marginTop: 8 }}>
+                    {[
+                      { label: '24h', value: stats.last24 },
+                      { label: 'This Week', value: stats.week },
+                      { label: 'This Month', value: stats.month },
+                      { label: 'This Year', value: stats.year },
+                      { label: 'All Time', value: stats.total },
+                    ].map(({ label, value }) => (
+                      <div key={label}>
+                        <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#6e7681', marginBottom: 4 }}>{label}</div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#f0f4f8', lineHeight: 1 }}>{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginTop: 20 }}>
+                <div>
+                  <span style={S.label}>Last 6 Months</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                    {last6.map(m => {
+                      const [y, mm] = m.key.split('-');
+                      const lbl = new Date(parseInt(y), parseInt(mm) - 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+                      return (
+                        <div key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 9, color: '#8b949e', width: 44, flexShrink: 0, textAlign: 'right' }}>{lbl}</span>
+                          <div style={{ flex: 1, height: 14, background: '#1c2330', borderRadius: 3, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${(m.count / maxLaunch) * 100}%`, background: '#3fb950', borderRadius: 3, transition: 'width 0.4s' }} />
+                          </div>
+                          <span style={{ fontSize: 11, color: m.count > 0 ? '#f0f4f8' : '#6e7681', width: 28, textAlign: 'right', fontWeight: m.count > 0 ? 700 : 400 }}>{m.count || '—'}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <span style={S.label}>Top Creators (This Month)</span>
+                  {topCreators.length === 0 ? (
+                    <div style={{ fontSize: 11, color: '#6e7681', marginTop: 8 }}>No launches yet this month.</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                      {topCreators.map(([c, n]) => {
+                        const max = topCreators[0][1];
+                        return (
+                          <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontSize: 11, color: '#c9d1d9', width: 100, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c}</span>
+                            <div style={{ flex: 1, height: 12, background: '#1c2330', borderRadius: 3, overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${(n/max)*100}%`, background: '#DC440A', borderRadius: 3 }} />
+                            </div>
+                            <span style={{ fontSize: 11, color: '#f0f4f8', width: 24, textAlign: 'right', fontWeight: 700 }}>{n}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div style={{ fontSize: 9, color: '#6e7681', marginTop: 12, letterSpacing: 1 }}>
+                Source: launch_history table · {launches.length} ads logged · more reliable than Meta's filtered list
+              </div>
+            </div>
+          </>
+        );
+      })()}
+      {launchesError && <div style={{ ...S.err, marginBottom: 20 }}>Launch log: {launchesError}</div>}
 
       {!data && !loading && (
         <div style={{ color: '#6e7681', fontSize: 12, padding: '40px 0' }}>
