@@ -269,7 +269,7 @@ export default function DashboardTool() {
 
       {error && <div style={{ ...S.err, marginBottom: 20 }}>{error}</div>}
 
-      {/* Launch Log stats — DB-backed, always visible */}
+      {/* Launch Log stats — DB-backed, always visible, split by format */}
       {launches && launches.length > 0 && (() => {
         const now = new Date();
         const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay()); startOfWeek.setHours(0,0,0,0);
@@ -277,94 +277,160 @@ export default function DashboardTool() {
         const startOfYear = new Date(now.getFullYear(), 0, 1);
         const last24h = new Date(now.getTime() - 24*60*60*1000);
 
-        const tCount = (since) => launches.filter(l => new Date(l.launched_at) >= since).length;
-        const stats = {
-          total: launches.length,
-          last24: tCount(last24h),
-          week: tCount(startOfWeek),
-          month: tCount(startOfMonth),
-          year: tCount(startOfYear),
+        const classify = (l) => {
+          const mt = (l.mime_type || '').toLowerCase();
+          if (mt.startsWith('video/')) return 'video';
+          if (mt.startsWith('image/')) return 'static';
+          const name = (l.ad_name || '').toLowerCase();
+          if (/\|\s*(video|ugc)\s*\|/.test(name)) return 'video';
+          if (/\|\s*(static|review|founder|image)\s*\|/.test(name)) return 'static';
+          return 'other';
         };
 
-        // Last 6 months velocity
+        const buckets = (since) => {
+          const list = launches.filter(l => new Date(l.launched_at) >= since);
+          const out = { total: list.length, video: 0, static: 0, other: 0 };
+          for (const l of list) out[classify(l)]++;
+          return out;
+        };
+        const allTime = { total: launches.length, video: 0, static: 0, other: 0 };
+        for (const l of launches) allTime[classify(l)]++;
+
+        const periods = [
+          { label: '24h',         data: buckets(last24h) },
+          { label: 'This Week',   data: buckets(startOfWeek) },
+          { label: 'This Month',  data: buckets(startOfMonth) },
+          { label: 'This Year',   data: buckets(startOfYear) },
+          { label: 'All Time',    data: allTime },
+        ];
+
+        // Last 6 months velocity, by format
         const monthBuckets = {};
         for (const l of launches) {
           const d = new Date(l.launched_at);
           const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-          monthBuckets[k] = (monthBuckets[k] || 0) + 1;
+          if (!monthBuckets[k]) monthBuckets[k] = { total: 0, video: 0, static: 0, other: 0 };
+          const t = classify(l);
+          monthBuckets[k].total++;
+          monthBuckets[k][t]++;
         }
         const last6 = [];
         for (let i = 5; i >= 0; i--) {
           const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
           const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-          last6.push({ key: k, count: monthBuckets[k] || 0 });
+          last6.push({ key: k, ...(monthBuckets[k] || { total: 0, video: 0, static: 0, other: 0 }) });
         }
-        const maxLaunch = Math.max(...last6.map(m => m.count), 1);
+        const maxLaunch = Math.max(...last6.map(m => m.total), 1);
 
-        // Top creators (this month)
+        // Top creators (this month) split by format
         const creatorMap = {};
         for (const l of launches.filter(l => new Date(l.launched_at) >= startOfMonth)) {
           const c = l.creator || 'unknown';
-          creatorMap[c] = (creatorMap[c] || 0) + 1;
+          if (!creatorMap[c]) creatorMap[c] = { total: 0, video: 0, static: 0, other: 0 };
+          const t = classify(l);
+          creatorMap[c].total++;
+          creatorMap[c][t]++;
         }
-        const topCreators = Object.entries(creatorMap).sort((a,b) => b[1] - a[1]).slice(0, 5);
+        const topCreators = Object.entries(creatorMap).sort((a,b) => b[1].total - a[1].total).slice(0, 5);
+
+        const FMT_COLORS = { video: '#DC440A', static: '#2ea98f', other: '#8b949e' };
 
         return (
           <>
             <div style={{ ...S.card, marginBottom: 20, borderColor: '#3fb950' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24 }}>
-                <div style={{ flex: 1 }}>
-                  <span style={S.label}>Creative Shipped (Launch Log)</span>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, marginTop: 8 }}>
-                    {[
-                      { label: '24h', value: stats.last24 },
-                      { label: 'This Week', value: stats.week },
-                      { label: 'This Month', value: stats.month },
-                      { label: 'This Year', value: stats.year },
-                      { label: 'All Time', value: stats.total },
-                    ].map(({ label, value }) => (
-                      <div key={label}>
-                        <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#6e7681', marginBottom: 4 }}>{label}</div>
-                        <div style={{ fontSize: 24, fontWeight: 700, color: '#f0f4f8', lineHeight: 1 }}>{value}</div>
+              <span style={S.label}>Creative Shipped (Launch Log)</span>
+
+              {/* Period stats split by format */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, marginTop: 10 }}>
+                {periods.map(({ label, data }) => (
+                  <div key={label} style={{ borderLeft: '2px solid #2a3441', paddingLeft: 12 }}>
+                    <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#6e7681', marginBottom: 4 }}>{label}</div>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: '#f0f4f8', lineHeight: 1, marginBottom: 8 }}>{data.total}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: FMT_COLORS.video, letterSpacing: 1, textTransform: 'uppercase', fontWeight: 600 }}>Video</span>
+                        <span style={{ color: data.video > 0 ? '#f0f4f8' : '#6e7681', fontWeight: 700 }}>{data.video}</span>
                       </div>
-                    ))}
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: FMT_COLORS.static, letterSpacing: 1, textTransform: 'uppercase', fontWeight: 600 }}>Static</span>
+                        <span style={{ color: data.static > 0 ? '#f0f4f8' : '#6e7681', fontWeight: 700 }}>{data.static}</span>
+                      </div>
+                      {data.other > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: FMT_COLORS.other, letterSpacing: 1, textTransform: 'uppercase', fontWeight: 600 }}>Other</span>
+                          <span style={{ color: '#f0f4f8', fontWeight: 700 }}>{data.other}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginTop: 20 }}>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginTop: 24 }}>
+                {/* Last 6 months — stacked */}
                 <div>
-                  <span style={S.label}>Last 6 Months</span>
+                  <span style={S.label}>Last 6 Months (stacked)</span>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
                     {last6.map(m => {
                       const [y, mm] = m.key.split('-');
                       const lbl = new Date(parseInt(y), parseInt(mm) - 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+                      const barPct = (m.total / maxLaunch) * 100;
                       return (
                         <div key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <span style={{ fontSize: 9, color: '#8b949e', width: 44, flexShrink: 0, textAlign: 'right' }}>{lbl}</span>
-                          <div style={{ flex: 1, height: 14, background: '#1c2330', borderRadius: 3, overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: `${(m.count / maxLaunch) * 100}%`, background: '#3fb950', borderRadius: 3, transition: 'width 0.4s' }} />
+                          <div style={{ flex: 1, height: 16, background: '#1c2330', borderRadius: 3, overflow: 'hidden' }}>
+                            <div style={{ display: 'flex', height: '100%', width: `${barPct}%`, transition: 'width 0.4s' }}>
+                              {['video', 'static', 'other'].map(t => {
+                                if (!m[t]) return null;
+                                const w = m.total > 0 ? (m[t] / m.total) * 100 : 0;
+                                return <div key={t} title={`${t}: ${m[t]}`} style={{ width: `${w}%`, background: FMT_COLORS[t], height: '100%' }} />;
+                              })}
+                            </div>
                           </div>
-                          <span style={{ fontSize: 11, color: m.count > 0 ? '#f0f4f8' : '#6e7681', width: 28, textAlign: 'right', fontWeight: m.count > 0 ? 700 : 400 }}>{m.count || '—'}</span>
+                          <span style={{ fontSize: 11, color: m.total > 0 ? '#f0f4f8' : '#6e7681', width: 28, textAlign: 'right', fontWeight: m.total > 0 ? 700 : 400 }}>{m.total || '—'}</span>
+                          {m.total > 0 && (
+                            <div style={{ display: 'flex', gap: 6, width: 60, justifyContent: 'flex-end' }}>
+                              {m.video > 0 && <span style={{ fontSize: 8, color: FMT_COLORS.video, letterSpacing: 1 }}>{m.video}V</span>}
+                              {m.static > 0 && <span style={{ fontSize: 8, color: FMT_COLORS.static, letterSpacing: 1 }}>{m.static}S</span>}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
                   </div>
+                  <div style={{ display: 'flex', gap: 14, marginTop: 10 }}>
+                    {[['video', 'Video'], ['static', 'Static'], ['other', 'Other']].map(([k, l]) => (
+                      <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: 2, background: FMT_COLORS[k] }} />
+                        <span style={{ fontSize: 9, color: '#8b949e', letterSpacing: 1 }}>{l}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
+
+                {/* Top creators */}
                 <div>
                   <span style={S.label}>Top Creators (This Month)</span>
                   {topCreators.length === 0 ? (
                     <div style={{ fontSize: 11, color: '#6e7681', marginTop: 8 }}>No launches yet this month.</div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                      {topCreators.map(([c, n]) => {
-                        const max = topCreators[0][1];
+                      {topCreators.map(([c, d]) => {
+                        const max = topCreators[0][1].total;
+                        const barPct = (d.total / max) * 100;
                         return (
                           <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <span style={{ fontSize: 11, color: '#c9d1d9', width: 100, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c}</span>
-                            <div style={{ flex: 1, height: 12, background: '#1c2330', borderRadius: 3, overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${(n/max)*100}%`, background: '#DC440A', borderRadius: 3 }} />
+                            <div style={{ flex: 1, height: 14, background: '#1c2330', borderRadius: 3, overflow: 'hidden' }}>
+                              <div style={{ display: 'flex', height: '100%', width: `${barPct}%` }}>
+                                {['video', 'static', 'other'].map(t => {
+                                  if (!d[t]) return null;
+                                  const w = d.total > 0 ? (d[t] / d.total) * 100 : 0;
+                                  return <div key={t} title={`${t}: ${d[t]}`} style={{ width: `${w}%`, background: FMT_COLORS[t], height: '100%' }} />;
+                                })}
+                              </div>
                             </div>
-                            <span style={{ fontSize: 11, color: '#f0f4f8', width: 24, textAlign: 'right', fontWeight: 700 }}>{n}</span>
+                            <span style={{ fontSize: 11, color: '#f0f4f8', width: 24, textAlign: 'right', fontWeight: 700 }}>{d.total}</span>
                           </div>
                         );
                       })}
@@ -373,7 +439,7 @@ export default function DashboardTool() {
                 </div>
               </div>
               <div style={{ fontSize: 9, color: '#6e7681', marginTop: 12, letterSpacing: 1 }}>
-                Source: launch_history table · {launches.length} ads logged · more reliable than Meta's filtered list
+                Source: launch_history · {launches.length} ads logged · {allTime.video} video / {allTime.static} static{allTime.other > 0 ? ` / ${allTime.other} other` : ''}
               </div>
             </div>
           </>
