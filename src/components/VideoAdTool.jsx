@@ -369,7 +369,10 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
           timestamp: Math.round((i / fps) * 1_000_000),
           duration:  Math.round(1_000_000 / fps),
         });
-        encoder.encode(frame, { keyFrame: i % 60 === 0 });
+        try {
+          if (encoder.state !== 'configured') { frame.close(); throw encoderError || new Error(`Encoder closed at frame ${i} (${encoder.state})`); }
+          encoder.encode(frame, { keyFrame: i % 60 === 0 });
+        } catch (e) { frame.close(); throw encoderError || e; }
         frame.close();
 
         setExportProgress(Math.round((i / frameCount) * 100));
