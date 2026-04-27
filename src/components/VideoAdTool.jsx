@@ -218,33 +218,43 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
       const fps = 30;
       const frameCount = Math.ceil(vid.duration * fps);
 
+      // H.264 requires even dimensions
+      const ew = w - (w % 2);
+      const eh = h - (h % 2);
+
       const muxer = new Muxer({
         target: new ArrayBufferTarget(),
-        video: { codec: 'avc', width: w, height: h },
+        video: { codec: 'avc', width: ew, height: eh },
         fastStart: 'in-memory',
       });
+      let encoderError = null;
       const encoder = new VideoEncoder({
         output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-        error: (e) => { throw e; },
+        error: (e) => { encoderError = e; console.error('VideoEncoder error', e); },
       });
-      encoder.configure({ codec: 'avc1.42001f', width: w, height: h, bitrate: 2_000_000, framerate: fps });
+      encoder.configure({ codec: 'avc1.42001f', width: ew, height: eh, bitrate: 2_000_000, framerate: fps });
 
       const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
+      canvas.width = ew; canvas.height = eh;
       const ctx = canvas.getContext('2d');
 
       setExportMsg('Encoding…');
       for (let i = 0; i < frameCount; i++) {
+        if (encoderError) throw encoderError;
+        if (encoder.state !== 'configured') throw new Error(`Encoder closed unexpectedly (${encoder.state})`);
         vid.currentTime = i / fps;
         await new Promise(res => vid.addEventListener('seeked', res, { once: true }));
-        ctx.drawImage(vid, 0, 0, w, h);
-        ctx.drawImage(overlayCanvas, 0, 0);
+        ctx.drawImage(vid, 0, 0, ew, eh);
+        ctx.drawImage(overlayCanvas, 0, 0, ew, eh);
+        // Backpressure: don't queue more than 30 frames ahead
+        while (encoder.encodeQueueSize > 30) await new Promise(r => setTimeout(r, 10));
         const frame = new VideoFrame(canvas, { timestamp: Math.round((i / fps) * 1_000_000), duration: Math.round(1_000_000 / fps) });
         encoder.encode(frame, { keyFrame: i % 60 === 0 });
         frame.close();
         setExportProgress(Math.round((i / frameCount) * 100));
       }
       await encoder.flush();
+      if (encoderError) throw encoderError;
       muxer.finalize();
 
       // Convert ArrayBuffer → base64 data URL
@@ -315,38 +325,45 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
       const fps = 30;
       const frameCount = Math.ceil(duration * fps);
 
-      // 3. Set up muxer + encoder
+      // 3. Set up muxer + encoder. H.264 requires even dimensions.
       setExportMsg('Setting up encoder…');
+      const ew = w - (w % 2);
+      const eh = h - (h % 2);
       const muxer = new Muxer({
         target: new ArrayBufferTarget(),
-        video: { codec: 'avc', width: w, height: h },
+        video: { codec: 'avc', width: ew, height: eh },
         fastStart: 'in-memory',
       });
 
+      let encoderError = null;
       const encoder = new VideoEncoder({
         output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-        error: (e) => { throw e; },
+        error: (e) => { encoderError = e; console.error('VideoEncoder error', e); },
       });
       encoder.configure({
         codec: 'avc1.42001f',
-        width: w, height: h,
+        width: ew, height: eh,
         bitrate: 8_000_000,
         framerate: fps,
       });
 
       // 4. Frame canvas
       const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
+      canvas.width = ew; canvas.height = eh;
       const ctx = canvas.getContext('2d');
 
       // 5. Seek and encode every frame
       setExportMsg('Encoding…');
       for (let i = 0; i < frameCount; i++) {
+        if (encoderError) throw encoderError;
+        if (encoder.state !== 'configured') throw new Error(`Encoder closed unexpectedly (${encoder.state})`);
         vid.currentTime = i / fps;
         await new Promise(res => vid.addEventListener('seeked', res, { once: true }));
 
-        ctx.drawImage(vid, 0, 0, w, h);
-        ctx.drawImage(overlayCanvas, 0, 0);
+        ctx.drawImage(vid, 0, 0, ew, eh);
+        ctx.drawImage(overlayCanvas, 0, 0, ew, eh);
+
+        while (encoder.encodeQueueSize > 30) await new Promise(r => setTimeout(r, 10));
 
         const frame = new VideoFrame(canvas, {
           timestamp: Math.round((i / fps) * 1_000_000),
@@ -359,6 +376,7 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
       }
 
       await encoder.flush();
+      if (encoderError) throw encoderError;
       muxer.finalize();
 
       // 6. Download
