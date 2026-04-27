@@ -1,5 +1,11 @@
 {
   "framework": "vite",
+  "functions": {
+    "api/drive/ugc.js": {
+      "maxDuration": 800,
+      "memory": 3008
+    }
+  },
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],

@@ -401,7 +401,12 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   const pvScale = formatKeys[0] === 'story' ? storyScale : squareScale;
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 108px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <div style={{ padding: '20px 28px', borderBottom: '1px solid #2a3441', flexShrink: 0 }}>
+        <div className="eyebrow" style={{ marginBottom: 4 }}>Create</div>
+        <div className="display-md" style={{ color: '#f0f4f8' }}>Review Ads</div>
+      </div>
+      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
       {/* Left panel — flex column with fixed header/footer, scrollable list */}
       <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #2a3441', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
 
@@ -577,6 +582,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
             );
           });
         })}
+      </div>
       </div>
     </div>
   );

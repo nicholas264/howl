@@ -1,3 +1,20 @@
+// Best-effort launch logger — swallows errors so a DB outage doesn't break Meta publishes.
+async function logLaunch(row) {
+  try {
+    if (!process.env.DATABASE_URL) return;
+    const { neon } = await import('@neondatabase/serverless');
+    const sql = neon(process.env.DATABASE_URL);
+    await sql`
+      INSERT INTO launch_history
+        (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type)
+      VALUES
+        (${row.ad_id}, ${row.adset_id || null}, ${row.campaign_id || null}, ${row.drive_file_id || null}, ${row.drive_file_name || null}, ${row.creator || null}, ${row.product_id || null}, ${row.angle_id || null}, ${row.ad_name || null}, ${row.headline || null}, ${row.primary_text || null}, ${row.dest_url || null}, ${row.mime_type || null})
+    `;
+  } catch (err) {
+    console.error('launch_history insert failed:', err.message);
+  }
+}
+
 async function uploadVideo(base64, name, adAccountId, accessToken, BASE) {
   const clean = base64.replace(/^data:video\/\w+;base64,/, '');
   const videoBuffer = Buffer.from(clean, 'base64');
@@ -112,8 +129,11 @@ export default async function handler(req, res) {
       }
 
       case 'list_campaigns': {
+        const activeFilter = encodeURIComponent(JSON.stringify([
+          { field: 'effective_status', operator: 'IN', value: ['ACTIVE'] },
+        ]));
         const r = await fetch(
-          `${BASE}/${adAccountId}/campaigns?fields=id,name,status,objective&limit=100&access_token=${accessToken}`
+          `${BASE}/${adAccountId}/campaigns?fields=id,name,status,effective_status,objective&filtering=${activeFilter}&limit=200&access_token=${accessToken}`
         );
         const d = await r.json();
         return res.status(r.status).json(d);
@@ -121,8 +141,9 @@ export default async function handler(req, res) {
 
       case 'list_adsets': {
         const { campaign_id } = req.body;
+        // Fetch from the campaign's own adsets edge so the list is scoped to it.
         const r = await fetch(
-          `${BASE}/${adAccountId}/adsets?campaign_id=${campaign_id}&fields=id,name,status&limit=100&access_token=${accessToken}`
+          `${BASE}/${campaign_id}/adsets?fields=id,name,status,effective_status&limit=200&access_token=${accessToken}`
         );
         const d = await r.json();
         return res.status(r.status).json(d);
@@ -260,6 +281,16 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: adData.error.message, step: 'create_ad' });
         }
 
+        await logLaunch({
+          ad_id: adData.id,
+          adset_id: adsetId,
+          ad_name: adName,
+          headline,
+          primary_text: primaryText,
+          dest_url: destUrl,
+          mime_type: preUploadedVideoId ? 'video/mp4' : 'image',
+        });
+
         return res.json({ success: true, adId: adData.id });
       }
 
@@ -326,6 +357,16 @@ export default async function handler(req, res) {
         if (adData.error) {
           return res.status(400).json({ error: adData.error.message, step: 'create_ad' });
         }
+
+        await logLaunch({
+          ad_id: adData.id,
+          adset_id: adsetId,
+          ad_name: adName,
+          headline,
+          primary_text: primaryText,
+          dest_url: destUrl,
+          mime_type: 'carousel',
+        });
 
         return res.json({ success: true, adId: adData.id });
       }
@@ -515,6 +556,19 @@ export default async function handler(req, res) {
             results.push({ item: item.name, error: adData.error.message, step: 'create_ad' });
             continue;
           }
+
+          await logLaunch({
+            ad_id: adData.id,
+            adset_id: adsetData.id,
+            campaign_id: campaignId,
+            ad_name: item.name || `Creative ${i + 1}`,
+            headline: item.hook || '',
+            primary_text: item.body || '',
+            dest_url: destUrl,
+            angle_id: item.angle || null,
+            product_id: item.product || null,
+            mime_type: item.type || 'static',
+          });
 
           results.push({ item: item.name, adsetId: adsetData.id, adId: adData.id, success: true });
         }

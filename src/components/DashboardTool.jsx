@@ -230,16 +230,24 @@ export default function DashboardTool() {
   return (
     <div style={S.wrap}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-        <span style={{ ...S.label, marginBottom: 0 }}>Ads Dashboard</span>
-        <button onClick={loadDashboard} disabled={loading} style={loading ? { ...S.ghostBtn, cursor: 'not-allowed' } : S.btn}>
-          {loading ? 'Loading…' : data ? 'Refresh' : 'Load Dashboard'}
-        </button>
-        {lastUpdated && (
-          <span style={{ fontSize: 9, color: '#6e7681', letterSpacing: 1 }}>
-            Updated {lastUpdated.toLocaleTimeString()}
-          </span>
-        )}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>Insights</div>
+          <div className="display-lg" style={{ color: '#f0f4f8' }}>Ads Dashboard</div>
+          <div className="display-italic" style={{ fontSize: 14, color: '#8b949e', marginTop: 6 }}>
+            Live view of what's running and what it's costing.
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {lastUpdated && (
+            <span style={{ fontSize: 9, color: '#6e7681', letterSpacing: 1 }}>
+              Updated {lastUpdated.toLocaleTimeString()}
+            </span>
+          )}
+          <button onClick={loadDashboard} disabled={loading} style={loading ? { ...S.ghostBtn, cursor: 'not-allowed' } : S.btn}>
+            {loading ? 'Loading…' : data ? 'Refresh' : 'Load Dashboard'}
+          </button>
+        </div>
       </div>
 
       {error && <div style={{ ...S.err, marginBottom: 20 }}>{error}</div>}

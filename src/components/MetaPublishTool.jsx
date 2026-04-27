@@ -510,6 +510,13 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
 
   return (
     <div style={S.wrap}>
+      <div style={{ marginBottom: 28 }}>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>Launch</div>
+        <div className="display-lg" style={{ color: '#f0f4f8' }}>Publish</div>
+        <div className="display-italic" style={{ fontSize: 14, color: '#8b949e', marginTop: 6 }}>
+          Push creatives from the gallery out to Meta — manual one-off or creative-test batch.
+        </div>
+      </div>
 
       {/* Settings */}
       <div style={S.section}>

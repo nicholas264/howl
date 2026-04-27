@@ -11,6 +11,8 @@
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
+    "@neondatabase/serverless": "^1.1.0",
+    "@vercel/functions": "^3.4.4",
     "html-to-image": "^1.11.13",
     "jszip": "^3.10.1",
     "mp4-muxer": "^5.2.2",

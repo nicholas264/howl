@@ -161,7 +161,15 @@ export default function FounderAdTool() {
   const selectedType = SCRIPT_TYPES.find(t => t.id === scriptType);
 
   return (
-    <div style={{ display: 'flex', minHeight: 'calc(100vh - 112px)', background: '#0d1117' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#0d1117' }}>
+      <div style={{ padding: '20px 28px', borderBottom: '1px solid #2a3441' }}>
+        <div className="eyebrow" style={{ marginBottom: 4 }}>Create</div>
+        <div className="display-md" style={{ color: '#f0f4f8' }}>Founder Ads</div>
+        <div className="display-italic" style={{ fontSize: 13, color: '#8b949e', marginTop: 4 }}>
+          First-person scripts in your voice — hook, story, proof, CTA.
+        </div>
+      </div>
+      <div style={{ display: 'flex', flex: 1 }}>
 
       {/* Left config panel */}
       <div style={{ width: 320, flexShrink: 0, borderRight: '1px solid #2a3441', padding: '28px 24px', display: 'flex', flexDirection: 'column', gap: 24, overflowY: 'auto' }}>
@@ -328,6 +336,7 @@ export default function FounderAdTool() {
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

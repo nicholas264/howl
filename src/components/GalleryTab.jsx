@@ -79,8 +79,15 @@ export default function GalleryTab({ cart }) {
 
   return (
     <div style={S.wrap}>
+      <div style={{ marginBottom: 24 }}>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>Launch</div>
+        <div className="display-lg" style={{ color: '#f0f4f8' }}>Gallery</div>
+        <div className="display-italic" style={{ fontSize: 14, color: '#8b949e', marginTop: 6 }}>
+          Everything in your publish cart — drafts, pushed, and failures.
+        </div>
+      </div>
       <div style={S.header}>
-        <span style={S.label}>Gallery ({cart.length} creatives)</span>
+        <span style={S.label}>{cart.length} creatives</span>
         <div style={S.filters}>
           {FILTERS.map(f => (
             <button key={f.value} onClick={() => setFilter(f.value)} style={S.chip(filter === f.value)}>

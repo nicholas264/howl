@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { PRODUCTS, ANGLES, PLATFORMS } from "./data";
 import { buildSystemPrompt, buildUserPrompt } from "./prompts";
 import ConfigPanel from "./components/ConfigPanel";
@@ -9,8 +9,9 @@ import ImageAdTool from "./components/ImageAdTool";
 import FounderAdTool from "./components/FounderAdTool";
 import MetaPublishTool from "./components/MetaPublishTool";
 import DashboardTool from "./components/DashboardTool";
+import LaunchLogTool from "./components/LaunchLogTool";
+import UgcInboxTool from "./components/UgcInboxTool";
 import GalleryTab from "./components/GalleryTab";
-import DriveButton from "./components/DriveButton";
 import { useDriveAuth } from "./hooks/useDriveAuth";
 import { cartGetAll, cartPut, cartDelete } from "./utils/cartDb";
 import "./styles.css";
@@ -154,37 +155,57 @@ export default function HowlAdEngine() {
   const uniqueProducts = [...new Set(variations.map((v) => v.product))];
   const cartCount = cart.length;
 
+  const NAV = [
+    { group: 'Generate', items: [
+      { key: 'config', label: 'Configure' },
+      { key: 'results', label: 'Results', disabled: variations.length === 0, count: variations.length || null },
+    ]},
+    { group: 'Create', items: [
+      { key: 'image', label: 'Image Ads' },
+      { key: 'review', label: 'Review Ads' },
+      { key: 'video', label: 'Video Ads' },
+      { key: 'founder', label: 'Founder Ads' },
+    ]},
+    { group: 'Launch', items: [
+      { key: 'ugc', label: 'UGC Inbox' },
+      { key: 'gallery', label: 'Gallery', count: cartCount || null },
+      { key: 'publish', label: 'Publish', count: cartCount || null },
+    ]},
+    { group: 'Insights', items: [
+      { key: 'dashboard', label: 'Dashboard' },
+      { key: 'log', label: 'Launch Log' },
+    ]},
+  ];
+
   return (
     <div style={{ minHeight: "100vh", background: "#0d1117", color: "#f0f4f8", fontFamily: "'JetBrains Mono', 'SF Mono', monospace" }}>
-      <div className="hd">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <img src="/logos/howl-horizontal-wht.png" alt="HOWL Campfires" style={{ height: 32, width: 'auto', objectFit: 'contain' }} />
-          <div className="hd-sub">Creative Studio</div>
-        </div>
-        <DriveButton connected={driveAuth.connected} connect={driveAuth.connect} disconnect={driveAuth.disconnect} />
-      </div>
+      <div className="shell">
+        <aside className="sidebar">
+          <div className="sidebar-top">
+            <img src="/logos/howl-horizontal-wht.png" alt="HOWL Campfires" />
+            <div className="sidebar-sub">Creative Studio</div>
+          </div>
+          <nav className="side-nav">
+            {NAV.map(group => (
+              <React.Fragment key={group.group}>
+                <div className="sidebar-section">{group.group}</div>
+                {group.items.map(item => (
+                  <button
+                    key={item.key}
+                    className={`side-item ${activeTab === item.key ? 'on' : ''}`}
+                    onClick={() => setActiveTab(item.key)}
+                    disabled={item.disabled}
+                  >
+                    <span>{item.label}</span>
+                    {item.count ? <span className="count">{item.count > 99 ? '99+' : item.count}</span> : null}
+                  </button>
+                ))}
+              </React.Fragment>
+            ))}
+          </nav>
+        </aside>
 
-      <div className="tabs">
-        <button className={`tab ${activeTab === "config" ? "on" : ""}`} onClick={() => setActiveTab("config")}>Configure</button>
-        <button className={`tab ${activeTab === "results" ? "on" : ""}`} onClick={() => setActiveTab("results")} disabled={variations.length === 0}>
-          Results {variations.length > 0 && `(${variations.length})`}
-        </button>
-        <button className={`tab ${activeTab === "image" ? "on" : ""}`} onClick={() => setActiveTab("image")}>Image Ads</button>
-        <button className={`tab ${activeTab === "review" ? "on" : ""}`} onClick={() => setActiveTab("review")}>Review Ads</button>
-        <button className={`tab ${activeTab === "video" ? "on" : ""}`} onClick={() => setActiveTab("video")}>Video Ads</button>
-        <button className={`tab ${activeTab === "founder" ? "on" : ""}`} onClick={() => setActiveTab("founder")}>Founder Ads</button>
-        <button className={`tab ${activeTab === "gallery" ? "on" : ""}`} onClick={() => setActiveTab("gallery")}>Gallery {cartCount > 0 && `(${cartCount})`}</button>
-        <button className={`tab ${activeTab === "dashboard" ? "on" : ""}`} onClick={() => setActiveTab("dashboard")}>Dashboard</button>
-        <button className={`tab ${activeTab === "publish" ? "on" : ""}`} onClick={() => setActiveTab("publish")} style={{ position: 'relative' }}>
-          Publish
-          {cartCount > 0 && (
-            <span style={{ position: 'absolute', top: 6, right: 6, background: '#DC440A', color: '#fff', borderRadius: '50%', width: 15, height: 15, fontSize: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, lineHeight: 1 }}>
-              {cartCount > 99 ? '99+' : cartCount}
-            </span>
-          )}
-        </button>
-      </div>
-
+        <main className="main-panel">
       {activeTab === "config" && (
         <ConfigPanel
           selectedProducts={selectedProducts} toggleProduct={toggleProduct}
@@ -214,6 +235,8 @@ export default function HowlAdEngine() {
       {activeTab === "founder" && <FounderAdTool />}
       {activeTab === "gallery" && <GalleryTab cart={cart} />}
       {activeTab === "dashboard" && <DashboardTool />}
+      {activeTab === "log" && <LaunchLogTool />}
+      {activeTab === "ugc" && <UgcInboxTool />}
       {activeTab === "publish" && (
         <MetaPublishTool
           cart={cart}
@@ -222,6 +245,8 @@ export default function HowlAdEngine() {
           onRemoveCartItem={removeCartItem}
         />
       )}
+        </main>
+      </div>
     </div>
   );
 }
