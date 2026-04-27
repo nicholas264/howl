@@ -232,7 +232,7 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
         output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
         error: (e) => { encoderError = e; console.error('VideoEncoder error', e); },
       });
-      encoder.configure({ codec: 'avc1.42001f', width: ew, height: eh, bitrate: 2_000_000, framerate: fps });
+      encoder.configure({ codec: 'avc1.640028', width: ew, height: eh, bitrate: 2_000_000, framerate: fps });
 
       const canvas = document.createElement('canvas');
       canvas.width = ew; canvas.height = eh;
@@ -341,7 +341,7 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
         error: (e) => { encoderError = e; console.error('VideoEncoder error', e); },
       });
       encoder.configure({
-        codec: 'avc1.42001f',
+        codec: 'avc1.640028',
         width: ew, height: eh,
         bitrate: 8_000_000,
         framerate: fps,
