@@ -3,6 +3,7 @@
 // Actions: list, download, mark_launched, ensure_subfolders, launch_meta_ad
 import { getVercelOidcToken } from '@vercel/functions/oidc';
 import { neon } from '@neondatabase/serverless';
+import { requireAuth } from '../_lib/auth.js';
 
 const DRIVE = 'https://www.googleapis.com/drive/v3';
 const STS_URL = 'https://sts.googleapis.com/v1/token';
@@ -86,6 +87,7 @@ async function ensureFolder(token, parentId, name) {
 }
 
 export default async function handler(req, res) {
+  if (!(await requireAuth(req, res))) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const rootId = process.env.UGC_INBOX_FOLDER_ID;

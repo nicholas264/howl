@@ -56,7 +56,10 @@ export const config = {
   },
 };
 
+import { requireAuth } from './_lib/auth.js';
+
 export default async function handler(req, res) {
+  if (!(await requireAuth(req, res))) return;
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

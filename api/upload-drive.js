@@ -1,9 +1,12 @@
 // Uploads a base64-encoded file to Google Drive
+import { requireAuth } from './_lib/auth.js';
+
 export const config = {
   api: { bodyParser: { sizeLimit: '12mb' } },
 };
 
 export default async function handler(req, res) {
+  if (!(await requireAuth(req, res))) return;
   if (req.method !== 'POST') return res.status(405).end();
 
   const { refreshToken, fileName, fileData, mimeType } = req.body;

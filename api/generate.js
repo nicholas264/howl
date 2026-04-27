@@ -1,8 +1,24 @@
+import { verifyToken } from '@clerk/backend';
+
 export const config = {
   runtime: 'edge',
 };
 
+async function checkAuth(req) {
+  if (process.env.AUTH_DISABLED === 'true') return true;
+  const header = req.headers.get('authorization') || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return false;
+  try {
+    await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY });
+    return true;
+  } catch { return false; }
+}
+
 export default async function handler(req) {
+  if (!(await checkAuth(req))) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+  }
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,

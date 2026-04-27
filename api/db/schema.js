@@ -1,7 +1,9 @@
 // One-shot endpoint to ensure schema exists. Idempotent — safe to call repeatedly.
 import { neon } from '@neondatabase/serverless';
+import { requireAuth } from '../_lib/auth.js';
 
 export default async function handler(req, res) {
+  if (!(await requireAuth(req, res))) return;
   if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).end();
 
   const sql = neon(process.env.DATABASE_URL);

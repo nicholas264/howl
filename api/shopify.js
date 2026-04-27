@@ -1,4 +1,7 @@
+import { requireAuth } from './_lib/auth.js';
+
 export default async function handler(req, res) {
+  if (!(await requireAuth(req, res))) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const store = process.env.SHOPIFY_STORE || 'howl-campfires.myshopify.com';

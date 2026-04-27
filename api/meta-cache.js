@@ -29,7 +29,10 @@ function parseUsageHeader(res) {
   return out;
 }
 
+import { requireAuth } from './_lib/auth.js';
+
 export default async function handler(req, res) {
+  if (!(await requireAuth(req, res))) return;
   const sql = neon(process.env.DATABASE_URL);
   await ensureTable(sql);
 
