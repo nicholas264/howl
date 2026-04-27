@@ -6,7 +6,7 @@ export default async function handler(req, res) {
 
   if (!token) return res.status(500).json({ error: 'SHOPIFY_ACCESS_TOKEN not configured' });
 
-  const GQL = `https://${store}/admin/api/2025-01/graphql.json`;
+  const GQL = `https://${store}/admin/api/2024-07/graphql.json`;
   const headers = { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': token };
 
   const runQuery = async (shopifyql) => {
