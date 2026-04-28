@@ -12,6 +12,8 @@ const DEFAULTS = {
   opexByMonth: {},           // YYYY-MM → dollar opex from P&L; falls back to monthlyOpex
   revenueAddByMonth: {},     // YYYY-MM → additional revenue (dealer store, historical pre-window months) added on top of Shopify primary
   ordersAddByMonth: {},      // YYYY-MM → additional orders for the same months (drives correct fees/ship/pick)
+  newCustomersAddByMonth: {},      // YYYY-MM → additional new customers for pre-window months
+  returningCustomersAddByMonth: {}, // YYYY-MM → additional returning customers for pre-window months
   cfoStartMonth: '2026-03',  // CFO View hides months before this (Shopify only returns last 60d so we snapshot history)
   forecastSheetId: '1uzteHW4sWB6Q49Rt7pOFzmIMD_s0Dxec0lQwgTfFHRI', // HOWL '26-'27 Projections sheet
   forecastSheetName: 'P&L Monthly',
