@@ -129,6 +129,7 @@ export default async function handler(req, res) {
         }
 
         // Reduce monthly insights to {month: 'YYYY-MM', spend, purchases, roas, ...}
+        const monthlyInsightsError = monthlyInsightsData?.error?.message || null;
         const monthlyInsights = (monthlyInsightsData.data || []).map(row => {
           const month = (row.date_start || '').slice(0, 7);
           const purchases = parseInt(((row.actions || []).find(a => a.action_type === 'purchase')?.value) || 0);
@@ -149,6 +150,7 @@ export default async function handler(req, res) {
           ads: adsData.data || [],
           insights: insightsData.data?.[0] || null,
           monthlyInsights,
+          monthlyInsightsError,
           activeAdsets: adsetsData.data || [],
           campaignNames,
           campaignBudgetData,

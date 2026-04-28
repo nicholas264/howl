@@ -12,16 +12,33 @@ const DEFAULTS = {
   opexByMonth: {},           // YYYY-MM → dollar opex from P&L; falls back to monthlyOpex
 };
 
+async function ensureTable(sql) {
+  await sql`
+    CREATE TABLE IF NOT EXISTS dashboard_settings (
+      key        TEXT PRIMARY KEY,
+      value      JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+}
+
 export default async function handler(req, res) {
   if (!(await requireAuth(req, res))) return;
   const sql = neon(process.env.DATABASE_URL);
   try {
     if (req.method === 'GET') {
-      const rows = await sql`SELECT value FROM dashboard_settings WHERE key = 'cfo'`;
-      const value = rows[0]?.value || {};
-      return res.json({ settings: { ...DEFAULTS, ...value } });
+      try {
+        await ensureTable(sql);
+        const rows = await sql`SELECT value FROM dashboard_settings WHERE key = 'cfo'`;
+        const value = rows[0]?.value || {};
+        return res.json({ settings: { ...DEFAULTS, ...value } });
+      } catch (err) {
+        // Never block the dashboard on settings — fall back to defaults.
+        return res.json({ settings: DEFAULTS, _warning: err.message });
+      }
     }
     if (req.method === 'POST') {
+      await ensureTable(sql);
       const incoming = req.body?.settings || {};
       const merged = { ...DEFAULTS, ...incoming };
       await sql`

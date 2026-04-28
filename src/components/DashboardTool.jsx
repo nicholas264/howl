@@ -94,8 +94,13 @@ export default function DashboardTool() {
   const [shopifyError,   setShopifyError]   = useState('');
   const [shopifyUpdated, setShopifyUpdated] = useState(null);
 
-  // CFO assumptions (loaded from /api/db/dashboard-settings)
-  const [settings, setSettings] = useState(null);
+  // CFO assumptions (loaded from /api/db/dashboard-settings).
+  // Initialize with defaults so the panel renders even if the fetch is still pending or fails.
+  const [settings, setSettings] = useState({
+    grossMarginPct: 60, paymentFeePct: 2.9, paymentFeeFixed: 0.30,
+    shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000,
+    googleSpend: {}, opexByMonth: {},
+  });
   const [showAssumptions, setShowAssumptions] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -476,6 +481,11 @@ export default function DashboardTool() {
           <a href="/api/shopify-install?shop=howl-campfires.myshopify.com" style={{ color: '#f5a623', textDecoration: 'underline' }}>
             /api/shopify-install
           </a>{' '}to fix.
+        </div>
+      )}
+      {data?.monthlyInsightsError && (
+        <div style={{ ...S.err, marginBottom: 20, color: '#f5a623', borderColor: 'rgba(245,166,35,0.4)', background: 'rgba(245,166,35,0.1)' }}>
+          Meta monthly spend pull failed: {data.monthlyInsightsError}. CFO View ad-spend column will be blank until this is fixed.
         </div>
       )}
       {shopifyData?._meta?.inventoryScopeMissing && (
