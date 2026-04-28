@@ -7,6 +7,7 @@ const DEFAULTS = {
   paymentFeeFixed: 0.30,     // per-order processor fixed
   shippingCostPerOrder: 8,   // outbound fulfillment cost
   fulfillmentCostPerOrder: 3, // pick/pack labor
+  monthlyOpex: 50000,        // fixed monthly opex (salaries, rent, software, etc.)
   // ad spend pulled live from Meta
 };
 
