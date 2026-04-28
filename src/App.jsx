@@ -173,10 +173,11 @@ export default function HowlAdEngine() {
       { key: 'publish', label: 'Publish', count: cartCount || null },
     ]},
     { group: 'Insights', items: [
-      { key: 'dashboard-cfo',     label: 'Dashboard',         parent: true },
-      { key: 'dashboard-cfo',     label: 'CFO View',          indent: true },
-      { key: 'dashboard-meta',    label: 'Meta',              indent: true },
-      { key: 'dashboard-shopify', label: 'Shopify',           indent: true },
+      { key: 'dashboard-cfo',      label: 'Dashboard',         parent: true },
+      { key: 'dashboard-cfo',      label: 'CFO View',          indent: true },
+      { key: 'dashboard-meta',     label: 'Meta',              indent: true },
+      { key: 'dashboard-shopify',  label: 'Shopify',           indent: true },
+      { key: 'dashboard-creative', label: 'Creative',          indent: true },
       { key: 'log', label: 'Launch Log' },
     ]},
   ];
@@ -255,6 +256,7 @@ export default function HowlAdEngine() {
       {activeTab === "dashboard-cfo" && <DashboardTool view="cfo" />}
       {activeTab === "dashboard-meta" && <DashboardTool view="meta" />}
       {activeTab === "dashboard-shopify" && <DashboardTool view="shopify" />}
+      {activeTab === "dashboard-creative" && <DashboardTool view="creative" />}
       {activeTab === "log" && <LaunchLogTool />}
       {activeTab === "ugc" && <UgcInboxTool />}
       {activeTab === "publish" && (

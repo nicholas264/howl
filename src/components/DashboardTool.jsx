@@ -104,11 +104,20 @@ export default function DashboardTool({ view = 'cfo' }) {
 
   // DB-snapshotted monthly metrics — preserves history past Shopify's 60-day window.
   const [historySnapshots, setHistorySnapshots] = useState([]); // [{month, shopify, meta, updated_at}]
+  const [snapshotsLoaded, setSnapshotsLoaded] = useState(false);
   useEffect(() => {
     fetch('/api/db/monthly-metrics').then(r => r.json()).then(d => {
       if (Array.isArray(d.rows)) setHistorySnapshots(d.rows);
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => setSnapshotsLoaded(true));
   }, []);
+
+  // Most recent snapshot timestamp — used to decide whether to auto-refresh.
+  const newestSnapshotAt = historySnapshots.reduce((max, r) => {
+    const t = r.updated_at ? new Date(r.updated_at).getTime() : 0;
+    return t > max ? t : max;
+  }, 0);
+  const STALE_MS = 24 * 60 * 60 * 1000;
+  const dataIsStale = !newestSnapshotAt || (Date.now() - newestSnapshotAt) > STALE_MS;
   const [showAssumptions, setShowAssumptions] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -204,6 +213,18 @@ export default function DashboardTool({ view = 'cfo' }) {
       setShopifyLoading(false);
     }
   }, []);
+
+  // Auto-refresh when snapshots are missing or >24h stale. Runs once after
+  // the snapshot fetch resolves so we know whether to auto-pull.
+  const [autoTried, setAutoTried] = useState(false);
+  useEffect(() => {
+    if (!snapshotsLoaded || autoTried) return;
+    if (dataIsStale) {
+      if (!data && !loading) loadDashboard();
+      if (!shopifyData && !shopifyLoading) loadShopify();
+    }
+    setAutoTried(true);
+  }, [snapshotsLoaded, autoTried, dataIsStale, data, shopifyData, loading, shopifyLoading, loadDashboard, loadShopify]);
 
   // ── Derived stats ──────────────────────────────────────────────────────────
   const ads = data?.ads || [];
@@ -316,9 +337,10 @@ export default function DashboardTool({ view = 'cfo' }) {
   }
 
   const VIEW_TITLES = {
-    cfo:     { title: 'CFO View',         subtitle: 'New vs returning, NCAC, contribution margin, OpEx coverage.' },
-    meta:    { title: 'Meta Ads',         subtitle: 'Live budget, formats, monthly velocity, recent launches.' },
-    shopify: { title: 'Shopify',          subtitle: 'Seasonality, monthly trend, CVR, product mix.' },
+    cfo:      { title: 'CFO View',  subtitle: 'New vs returning, NCAC, contribution margin, OpEx coverage.' },
+    meta:     { title: 'Meta Ads',  subtitle: 'Live budget, formats, monthly velocity, recent launches.' },
+    shopify:  { title: 'Shopify',   subtitle: 'Seasonality, monthly trend, CVR, product mix.' },
+    creative: { title: 'Creative',  subtitle: 'Velocity, format mix, top creators — sourced from launch_history.' },
   };
   const v = VIEW_TITLES[view] || VIEW_TITLES.cfo;
 
@@ -334,9 +356,17 @@ export default function DashboardTool({ view = 'cfo' }) {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {lastUpdated && (
-            <span style={{ fontSize: 9, color: '#6e7681', letterSpacing: 1 }}>
-              Meta {lastUpdated.toLocaleTimeString()}
+          {newestSnapshotAt > 0 && (
+            <span style={{ fontSize: 9, color: dataIsStale ? '#f5a623' : '#6e7681', letterSpacing: 1 }}>
+              Cache: {(() => {
+                const ageMs = Date.now() - newestSnapshotAt;
+                const m = Math.floor(ageMs / 60000);
+                if (m < 60) return `${m}m ago`;
+                const h = Math.floor(m / 60);
+                if (h < 24) return `${h}h ago`;
+                const d = Math.floor(h / 24);
+                return `${d}d ago`;
+              })()}
             </span>
           )}
           <button onClick={loadDashboard} disabled={loading} style={loading ? { ...S.ghostBtn, cursor: 'not-allowed' } : (data ? S.ghostBtn : S.btn)}>
@@ -350,8 +380,8 @@ export default function DashboardTool({ view = 'cfo' }) {
 
       {error && <div style={{ ...S.err, marginBottom: 20 }}>{error}</div>}
 
-      {/* Launch Log stats — DB-backed, on CFO sub-tab */}
-      {view === 'cfo' && launches && launches.length > 0 && (() => {
+      {/* Launch Log stats — DB-backed, on Creative sub-tab */}
+      {view === 'creative' && launches && launches.length > 0 && (() => {
         const now = new Date();
         const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay()); startOfWeek.setHours(0,0,0,0);
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -526,7 +556,10 @@ export default function DashboardTool({ view = 'cfo' }) {
           </>
         );
       })()}
-      {view === 'cfo' && launchesError && <div style={{ ...S.err, marginBottom: 20 }}>Launch log: {launchesError}</div>}
+      {view === 'creative' && launchesError && <div style={{ ...S.err, marginBottom: 20 }}>Launch log: {launchesError}</div>}
+      {view === 'creative' && (!launches || launches.length === 0) && !launchesError && (
+        <div style={{ ...S.card, color: '#8b949e', fontSize: 12 }}>No launches logged yet. Push an ad via UGC Inbox or Publish to populate this view.</div>
+      )}
 
       {shopifyData?._meta?.customerScopeMissing && (
         <div style={{ ...S.err, marginBottom: 20, color: '#f5a623', borderColor: 'rgba(245,166,35,0.4)', background: 'rgba(245,166,35,0.1)' }}>
@@ -554,8 +587,14 @@ export default function DashboardTool({ view = 'cfo' }) {
       {view === 'cfo' && (() => {
         const monthlyInsights = data?.monthlyInsights || [];
         const shopifyMonths = shopifyData?.months || [];
-        if (!settings || (monthlyInsights.length === 0 && shopifyMonths.length === 0)) {
-          if (!data && !shopifyData) return null;
+        // Render whenever we have ANY data: live OR snapshots OR settings can fall back to defaults.
+        const hasAnyData = monthlyInsights.length > 0 || shopifyMonths.length > 0 || (historySnapshots && historySnapshots.length > 0);
+        if (!hasAnyData) {
+          return (
+            <div style={{ ...S.card, color: '#8b949e', fontSize: 12 }}>
+              {(loading || shopifyLoading) ? 'Loading…' : 'No data yet. Click Load Meta or Load Shopify above to populate the CFO View.'}
+            </div>
+          );
         }
 
         // Live data (current pull)
@@ -689,7 +728,7 @@ export default function DashboardTool({ view = 'cfo' }) {
           return new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
         };
 
-        const dataReady = (data || shopifyData);
+        const dataReady = (data || shopifyData || (historySnapshots && historySnapshots.length > 0));
 
         return (
           <>
