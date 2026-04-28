@@ -649,6 +649,13 @@ export default function DashboardTool({ view = 'cfo' }) {
         const shopByMonth = { ...snapshotShopByMonth, ...liveShopByMonth };
         const spendByMonth = { ...snapshotMetaByMonth, ...liveSpendByMonth };
 
+        // Settings-derived maps (declared before allMonthKeys to avoid TDZ).
+        const s = settings || { grossMarginPct: 60, paymentFeePct: 2.9, paymentFeeFixed: 0.30, shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000, googleSpend: {}, opexByMonth: {}, revenueAddByMonth: {}, ordersAddByMonth: {} };
+        const googleByMonth = s.googleSpend || {};
+        const opexByMonth = s.opexByMonth || {};
+        const revenueAddByMonth = s.revenueAddByMonth || {};
+        const ordersAddByMonth = s.ordersAddByMonth || {};
+
         // Union of all months (live + snapshotted + manual overrides), filtered to start month
         const startMonth = settings?.cfoStartMonth || '2026-03';
         const allMonthKeys = Array.from(new Set([
@@ -661,12 +668,6 @@ export default function DashboardTool({ view = 'cfo' }) {
         ])).filter(Boolean).filter(m => m >= startMonth).sort();
         // Hard cap to keep tables readable; will grow as we accumulate snapshots forward
         const recent13 = allMonthKeys.slice(-24);
-
-        const s = settings || { grossMarginPct: 60, paymentFeePct: 2.9, paymentFeeFixed: 0.30, shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000, googleSpend: {}, opexByMonth: {}, revenueAddByMonth: {}, ordersAddByMonth: {} };
-        const googleByMonth = s.googleSpend || {};
-        const opexByMonth = s.opexByMonth || {};
-        const revenueAddByMonth = s.revenueAddByMonth || {};
-        const ordersAddByMonth = s.ordersAddByMonth || {};
         const defaultOpex = s.monthlyOpex || 0;
         const opexFor = (mk) => {
           const v = opexByMonth[mk];
