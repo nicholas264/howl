@@ -114,12 +114,17 @@ export default function DashboardTool({ view = 'cfo' }) {
       if (d.updatedAt) setForecastUpdatedAt(new Date(d.updatedAt));
     }).catch(() => {});
   }, []);
-  const refreshForecast = useCallback(async () => {
+  const refreshForecast = useCallback(async (overrideSettings) => {
     setForecastLoading(true); setForecastError('');
     try {
+      const eff = overrideSettings || settings || {};
       const r = await fetch('/api/forecast', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'refresh' }),
+        body: JSON.stringify({
+          action: 'refresh',
+          sheetId: eff.forecastSheetId || undefined,
+          sheetName: eff.forecastSheetName || undefined,
+        }),
       });
       const d = await r.json();
       if (d.error) throw new Error(d.error);
@@ -130,7 +135,7 @@ export default function DashboardTool({ view = 'cfo' }) {
     } finally {
       setForecastLoading(false);
     }
-  }, []);
+  }, [settings]);
 
   // DB-snapshotted monthly metrics — preserves history past Shopify's 60-day window.
   const [historySnapshots, setHistorySnapshots] = useState([]); // [{month, shopify, meta, updated_at}]
@@ -1092,25 +1097,58 @@ export default function DashboardTool({ view = 'cfo' }) {
 
       {/* ── Forecast / Pacing Section ─────────────────────────────────────── */}
       {view === 'forecast' && (() => {
+        const sheetIdField = (
+          <div style={{ ...S.card, marginBottom: 16 }}>
+            <span style={S.label}>Forecast Sheet ID</span>
+            <div style={{ fontSize: 9, color: '#6e7681', marginBottom: 8, letterSpacing: 1 }}>
+              From the URL: docs.google.com/spreadsheets/d/<strong style={{ color: '#f5a623' }}>SHEET_ID</strong>/edit
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="text"
+                value={settings?.forecastSheetId || ''}
+                onChange={e => setSettings({ ...settings, forecastSheetId: e.target.value.trim() })}
+                placeholder="1uzteHW4sWB6Q49Rt7pOFzmIMD_s0Dxec0lQwgTfFHRI"
+                style={{ flex: 1, padding: '8px 10px', background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11, borderRadius: 4 }}
+              />
+              <input
+                type="text"
+                value={settings?.forecastSheetName || 'P&L Monthly'}
+                onChange={e => setSettings({ ...settings, forecastSheetName: e.target.value })}
+                placeholder="P&L Monthly"
+                style={{ width: 160, padding: '8px 10px', background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11, borderRadius: 4 }}
+              />
+              <button onClick={() => saveSettings(settings)} disabled={savingSettings} style={S.btn}>
+                {savingSettings ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+            <div style={{ fontSize: 9, color: '#6e7681', marginTop: 8, letterSpacing: 1 }}>
+              Make sure the sheet is shared (Viewer) with <code style={{ color: '#f5a623' }}>howl-drive-uploader@howl-creative-studio.iam.gserviceaccount.com</code>. After saving, click Refresh Forecast.
+            </div>
+          </div>
+        );
+
         if (forecastError) {
-          return <div style={{ ...S.err, marginBottom: 20 }}>Forecast: {forecastError}</div>;
+          return <>{sheetIdField}<div style={{ ...S.err, marginBottom: 20 }}>Forecast: {forecastError}</div></>;
         }
         if (!forecast) {
           return (
-            <div style={{ ...S.card, color: '#8b949e', fontSize: 12 }}>
-              <div style={{ fontSize: 13, color: '#f0f4f8', marginBottom: 10 }}>No forecast loaded yet.</div>
-              <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6 }}>
-                <li>Share the projections sheet (Viewer access) with{' '}
-                  <code style={{ color: '#f5a623' }}>howl-drive-uploader@howl-creative-studio.iam.gserviceaccount.com</code>.</li>
-                <li>Click <strong>Pull Forecast</strong> in the header above.</li>
-                <li>Edit the sheet anytime, then re-pull to refresh.</li>
-              </ol>
-              {forecastUpdatedAt && (
-                <div style={{ marginTop: 14, fontSize: 9, color: '#6e7681', letterSpacing: 1 }}>
-                  Last cached: {forecastUpdatedAt.toLocaleString()}
-                </div>
-              )}
-            </div>
+            <>
+              {sheetIdField}
+              <div style={{ ...S.card, color: '#8b949e', fontSize: 12 }}>
+                <div style={{ fontSize: 13, color: '#f0f4f8', marginBottom: 10 }}>No forecast loaded yet.</div>
+                <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6 }}>
+                  <li>Paste the Sheet ID above and Save.</li>
+                  <li>Make sure the sheet is shared (Viewer) with the service account.</li>
+                  <li>Click <strong>Pull Forecast</strong> in the header.</li>
+                </ol>
+                {forecastUpdatedAt && (
+                  <div style={{ marginTop: 14, fontSize: 9, color: '#6e7681', letterSpacing: 1 }}>
+                    Last cached: {forecastUpdatedAt.toLocaleString()}
+                  </div>
+                )}
+              </div>
+            </>
           );
         }
 
