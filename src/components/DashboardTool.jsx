@@ -99,8 +99,16 @@ export default function DashboardTool() {
   const [settings, setSettings] = useState({
     grossMarginPct: 60, paymentFeePct: 2.9, paymentFeeFixed: 0.30,
     shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000,
-    googleSpend: {}, opexByMonth: {},
+    googleSpend: {}, opexByMonth: {}, cfoStartMonth: '2026-03',
   });
+
+  // DB-snapshotted monthly metrics — preserves history past Shopify's 60-day window.
+  const [historySnapshots, setHistorySnapshots] = useState([]); // [{month, shopify, meta, updated_at}]
+  useEffect(() => {
+    fetch('/api/db/monthly-metrics').then(r => r.json()).then(d => {
+      if (Array.isArray(d.rows)) setHistorySnapshots(d.rows);
+    }).catch(() => {});
+  }, []);
   const [showAssumptions, setShowAssumptions] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -109,6 +117,41 @@ export default function DashboardTool() {
       if (d.settings) setSettings(d.settings);
     }).catch(() => {});
   }, []);
+
+  // Snapshot fresh Shopify months to DB so they survive the 60-day window.
+  useEffect(() => {
+    if (!shopifyData?.months?.length) return;
+    const snapshots = shopifyData.months.map(m => ({
+      month: m.month,
+      shopify: {
+        netSales: m.netSales, orders: m.orders, shipping: m.shipping,
+        newCustomers: m.newCustomers, returningCustomers: m.returningCustomers,
+        newRevenue: m.newRevenue, returningRevenue: m.returningRevenue,
+        cogs: m.cogs, costedRevenue: m.costedRevenue, uncostedRevenue: m.uncostedRevenue,
+      },
+    }));
+    fetch('/api/db/monthly-metrics', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'snapshot', snapshots }),
+    }).then(() => fetch('/api/db/monthly-metrics'))
+      .then(r => r?.json()).then(d => { if (Array.isArray(d?.rows)) setHistorySnapshots(d.rows); })
+      .catch(() => {});
+  }, [shopifyData]);
+
+  // Snapshot fresh Meta months to DB.
+  useEffect(() => {
+    if (!data?.monthlyInsights?.length) return;
+    const snapshots = data.monthlyInsights.map(m => ({
+      month: m.month,
+      meta: { spend: m.spend, impressions: m.impressions, clicks: m.clicks, purchases: m.purchases, cpa: m.cpa, roas: m.roas },
+    }));
+    fetch('/api/db/monthly-metrics', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'snapshot', snapshots }),
+    }).then(() => fetch('/api/db/monthly-metrics'))
+      .then(r => r?.json()).then(d => { if (Array.isArray(d?.rows)) setHistorySnapshots(d.rows); })
+      .catch(() => {});
+  }, [data]);
 
   const saveSettings = useCallback(async (next) => {
     setSavingSettings(true);
@@ -505,15 +548,25 @@ export default function DashboardTool() {
           if (!data && !shopifyData) return null;
         }
 
-        const spendByMonth = Object.fromEntries(monthlyInsights.map(m => [m.month, m]));
-        const shopByMonth = Object.fromEntries(shopifyMonths.map(m => [m.month, m]));
+        // Live data (current pull)
+        const liveSpendByMonth = Object.fromEntries(monthlyInsights.map(m => [m.month, m]));
+        const liveShopByMonth = Object.fromEntries(shopifyMonths.map(m => [m.month, m]));
 
-        // Union of months across Meta + Shopify (last 13)
+        // Snapshotted history from DB (overlay BEHIND live data — live always wins for current months)
+        const snapshotShopByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.shopify).map(r => [r.month, r.shopify]));
+        const snapshotMetaByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.meta).map(r => [r.month, r.meta]));
+
+        const shopByMonth = { ...snapshotShopByMonth, ...liveShopByMonth };
+        const spendByMonth = { ...snapshotMetaByMonth, ...liveSpendByMonth };
+
+        // Union of all months (live + snapshotted), filtered to start month
+        const startMonth = settings?.cfoStartMonth || '2026-03';
         const allMonthKeys = Array.from(new Set([
-          ...monthlyInsights.map(m => m.month),
-          ...shopifyMonths.map(m => m.month),
-        ])).filter(Boolean).sort();
-        const recent13 = allMonthKeys.slice(-13);
+          ...Object.keys(shopByMonth),
+          ...Object.keys(spendByMonth),
+        ])).filter(Boolean).filter(m => m >= startMonth).sort();
+        // Hard cap to keep tables readable; will grow as we accumulate snapshots forward
+        const recent13 = allMonthKeys.slice(-24);
 
         const s = settings || { grossMarginPct: 60, paymentFeePct: 2.9, paymentFeeFixed: 0.30, shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000, googleSpend: {}, opexByMonth: {} };
         const googleByMonth = s.googleSpend || {};
@@ -666,6 +719,16 @@ export default function DashboardTool() {
                       <span style={{ fontSize: 9, color: '#6e7681' }}>{suffix}</span>
                     </div>
                   ))}
+                  <div>
+                    <span style={{ ...S.label, marginBottom: 4 }}>CFO View Start</span>
+                    <input
+                      type="month"
+                      value={settings.cfoStartMonth || '2026-03'}
+                      onChange={e => setSettings({ ...settings, cfoStartMonth: e.target.value || '2026-03' })}
+                      style={{ width: '100%', padding: '6px 8px', background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 12, borderRadius: 4 }}
+                    />
+                    <span style={{ fontSize: 9, color: '#6e7681' }}>YYYY-MM</span>
+                  </div>
                 </div>
                 {/* Monthly Google spend + OpEx overrides */}
                 <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid #2a3441' }}>

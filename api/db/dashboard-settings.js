@@ -10,6 +10,7 @@ const DEFAULTS = {
   monthlyOpex: 50000,        // fallback monthly opex when no per-month override is set
   googleSpend: {},           // YYYY-MM → dollar spend (manual until we wire the Google Ads API)
   opexByMonth: {},           // YYYY-MM → dollar opex from P&L; falls back to monthlyOpex
+  cfoStartMonth: '2026-03',  // CFO View hides months before this (Shopify only returns last 60d so we snapshot history)
 };
 
 async function ensureTable(sql) {
