@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from "react";
+import { UserButton } from "@clerk/clerk-react";
 import { PRODUCTS, ANGLES, PLATFORMS } from "./data";
 import { buildSystemPrompt, buildUserPrompt } from "./prompts";
 import ConfigPanel from "./components/ConfigPanel";
@@ -203,6 +204,16 @@ export default function HowlAdEngine() {
               </React.Fragment>
             ))}
           </nav>
+          <div style={{ padding: '14px 16px', borderTop: '1px solid #2a3441', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <UserButton
+              afterSignOutUrl="/"
+              appearance={{
+                variables: { colorPrimary: '#DC440A', colorBackground: '#0d1117', colorText: '#f0f4f8' },
+                elements: { userButtonAvatarBox: { width: 28, height: 28 } },
+              }}
+            />
+            <span style={{ fontSize: 10, color: '#6e7681', letterSpacing: 1, textTransform: 'uppercase' }}>Account</span>
+          </div>
         </aside>
 
         <main className="main-panel">
