@@ -16,16 +16,20 @@ export default async function handler(req, res) {
     const r = await fetch(GQL, { method: 'POST', headers, body: JSON.stringify({ query, variables }) });
     const d = await r.json();
     if (d.errors) {
-      // Surface missing-scope errors via a typed throw so callers can adapt the query.
-      const hasCustomerScopeErr = Array.isArray(d.errors) &&
-        d.errors.some(e => /access denied for customer field/i.test(e.message || ''));
-      if (hasCustomerScopeErr) {
+      // Surface missing-scope errors via typed throws so callers can adapt the query.
+      const errs = Array.isArray(d.errors) ? d.errors : [];
+      if (errs.some(e => /access denied for customer field/i.test(e.message || ''))) {
         const err = new Error('missing_scope:read_customers');
         err.code = 'MISSING_CUSTOMER_SCOPE';
         throw err;
       }
-      const msg = Array.isArray(d.errors)
-        ? d.errors.map(e => e.message || JSON.stringify(e)).join('; ')
+      if (errs.some(e => /access denied for (inventoryitem|unitcost) field|read_inventory/i.test(e.message || ''))) {
+        const err = new Error('missing_scope:read_inventory');
+        err.code = 'MISSING_INVENTORY_SCOPE';
+        throw err;
+      }
+      const msg = errs.length
+        ? errs.map(e => e.message || JSON.stringify(e)).join('; ')
         : typeof d.errors === 'string' ? d.errors : JSON.stringify(d.errors);
       throw new Error(`Shopify GraphQL error (HTTP ${r.status}): ${msg}`);
     }
@@ -44,7 +48,7 @@ export default async function handler(req, res) {
       const sinceISO = since.toISOString();
 
       // Paginate through orders. 250 max per page.
-      const buildQuery = (includeCustomer) => `query Orders($cursor: String) {
+      const buildQuery = (includeCustomer, includeUnitCost) => `query Orders($cursor: String) {
         orders(first: 250, after: $cursor, query: "created_at:>=${sinceISO} financial_status:paid", sortKey: CREATED_AT) {
           pageInfo { hasNextPage endCursor }
           edges { node {
@@ -59,6 +63,7 @@ export default async function handler(req, res) {
                 name
                 quantity
                 originalTotalSet { shopMoney { amount } }
+                ${includeUnitCost ? 'variant { id inventoryItem { unitCost { amount } } }' : ''}
               } }
             }
           } }
@@ -69,20 +74,25 @@ export default async function handler(req, res) {
       let cursor = null;
       let pages = 0;
       let includeCustomer = true;
+      let includeUnitCost = true;
       let customerScopeMissing = false;
+      let inventoryScopeMissing = false;
       // Hard cap to avoid runaway: 40 pages = 10,000 orders
       while (pages < 40) {
         let data;
         try {
-          data = await gql(buildQuery(includeCustomer), { cursor });
+          data = await gql(buildQuery(includeCustomer, includeUnitCost), { cursor });
         } catch (err) {
           if (err.code === 'MISSING_CUSTOMER_SCOPE' && includeCustomer) {
-            // Drop the customer field and retry the same page from scratch.
             includeCustomer = false;
             customerScopeMissing = true;
-            orders.length = 0;
-            cursor = null;
-            pages = 0;
+            orders.length = 0; cursor = null; pages = 0;
+            continue;
+          }
+          if (err.code === 'MISSING_INVENTORY_SCOPE' && includeUnitCost) {
+            includeUnitCost = false;
+            inventoryScopeMissing = true;
+            orders.length = 0; cursor = null; pages = 0;
             continue;
           }
           throw err;
@@ -94,7 +104,7 @@ export default async function handler(req, res) {
         pages++;
       }
 
-      const monthMap = {}; // YYYY-MM → { netSales, orders, shipping, newCustomers, returningCustomers, newRevenue, returningRevenue }
+      const monthMap = {}; // YYYY-MM → { netSales, orders, shipping, newCustomers, returningCustomers, newRevenue, returningRevenue, cogs, costedRevenue, uncostedRevenue }
       const productMap = {}; // title → { totalRevenue, totalOrders, months }
 
       // Group orders by customer for new/returning classification.
@@ -123,7 +133,7 @@ export default async function handler(req, res) {
         const orderRev = parseFloat(o.netPaymentSet?.shopMoney?.amount || o.currentTotalPriceSet?.shopMoney?.amount || 0);
         const shipping = parseFloat(o.totalShippingPriceSet?.shopMoney?.amount || 0);
         const isNew = newOrderIds.has(o.id);
-        if (!monthMap[mKey]) monthMap[mKey] = { netSales: 0, orders: 0, shipping: 0, newCustomers: 0, returningCustomers: 0, newRevenue: 0, returningRevenue: 0 };
+        if (!monthMap[mKey]) monthMap[mKey] = { netSales: 0, orders: 0, shipping: 0, newCustomers: 0, returningCustomers: 0, newRevenue: 0, returningRevenue: 0, cogs: 0, costedRevenue: 0, uncostedRevenue: 0 };
         monthMap[mKey].netSales += orderRev;
         monthMap[mKey].orders += 1;
         monthMap[mKey].shipping += shipping;
@@ -133,6 +143,18 @@ export default async function handler(req, res) {
         } else if (o.customer?.id) {
           monthMap[mKey].returningCustomers += 1;
           monthMap[mKey].returningRevenue += orderRev;
+        }
+        // Per-line-item actual COGS from variant.inventoryItem.unitCost
+        for (const li of (o.lineItems?.edges || [])) {
+          const liRev = parseFloat(li.node.originalTotalSet?.shopMoney?.amount || 0);
+          const unitCost = parseFloat(li.node.variant?.inventoryItem?.unitCost?.amount || 0);
+          const qty = parseInt(li.node.quantity || 0);
+          if (unitCost > 0 && qty > 0) {
+            monthMap[mKey].cogs += unitCost * qty;
+            monthMap[mKey].costedRevenue += liRev;
+          } else {
+            monthMap[mKey].uncostedRevenue += liRev;
+          }
         }
 
         const productTotalsThisOrder = {};
@@ -169,6 +191,9 @@ export default async function handler(req, res) {
           newAov: v.newCustomers > 0 ? v.newRevenue / v.newCustomers : 0,
           returningAov: v.returningCustomers > 0 ? v.returningRevenue / v.returningCustomers : 0,
           repeatRate: v.orders > 0 ? v.returningCustomers / v.orders : 0,
+          cogs: v.cogs,                     // actual COGS from unitCost × qty (line items that had unitCost set)
+          costedRevenue: v.costedRevenue,   // revenue from line items that had unitCost
+          uncostedRevenue: v.uncostedRevenue, // revenue without unitCost — falls back to GM% assumption client-side
         }))
         .sort((a, b) => a.month.localeCompare(b.month));
 
@@ -177,7 +202,7 @@ export default async function handler(req, res) {
         .slice(0, 8)
         .map(([name, data]) => ({ name, ...data }));
 
-      return res.json({ months, topProducts, _meta: { ordersScanned: orders.length, pages, customerScopeMissing } });
+      return res.json({ months, topProducts, _meta: { ordersScanned: orders.length, pages, customerScopeMissing, inventoryScopeMissing } });
     }
 
     return res.status(400).json({ error: `Unknown action: ${action}` });

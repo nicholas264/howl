@@ -2,13 +2,14 @@ import { neon } from '@neondatabase/serverless';
 import { requireAuth } from '../_lib/auth.js';
 
 const DEFAULTS = {
-  grossMarginPct: 60,        // % of net revenue retained after COGS
+  grossMarginPct: 60,        // % of net revenue retained after COGS — fallback when Shopify unitCost is missing
   paymentFeePct: 2.9,        // payment processor %
   paymentFeeFixed: 0.30,     // per-order processor fixed
   shippingCostPerOrder: 8,   // outbound fulfillment cost
   fulfillmentCostPerOrder: 3, // pick/pack labor
-  monthlyOpex: 50000,        // fixed monthly opex (salaries, rent, software, etc.)
-  // ad spend pulled live from Meta
+  monthlyOpex: 50000,        // fallback monthly opex when no per-month override is set
+  googleSpend: {},           // YYYY-MM → dollar spend (manual until we wire the Google Ads API)
+  opexByMonth: {},           // YYYY-MM → dollar opex from P&L; falls back to monthlyOpex
 };
 
 export default async function handler(req, res) {
