@@ -16,6 +16,11 @@ export default async function handler(req, res) {
     const r = await fetch(GQL, { method: 'POST', headers, body: JSON.stringify({ query, variables }) });
     const d = await r.json();
     if (d.errors) {
+      // If the only errors are missing-scope on the customer field, drop them and proceed
+      // with whatever data did come back (orders without customer info).
+      const allCustomerScope = Array.isArray(d.errors) && d.errors.length > 0 &&
+        d.errors.every(e => /access denied for customer field/i.test(e.message || ''));
+      if (allCustomerScope && d.data) return d.data;
       const msg = Array.isArray(d.errors)
         ? d.errors.map(e => e.message || JSON.stringify(e)).join('; ')
         : typeof d.errors === 'string' ? d.errors : JSON.stringify(d.errors);
