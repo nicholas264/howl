@@ -44,6 +44,8 @@ export default async function handler(req, res) {
             createdAt
             netPaymentSet { shopMoney { amount } }
             currentTotalPriceSet { shopMoney { amount } }
+            totalShippingPriceSet { shopMoney { amount } }
+            customer { id numberOfOrders }
             lineItems(first: 50) {
               edges { node {
                 name
@@ -68,16 +70,46 @@ export default async function handler(req, res) {
         pages++;
       }
 
-      const monthMap = {}; // YYYY-MM → { netSales, orders }
+      const monthMap = {}; // YYYY-MM → { netSales, orders, shipping, newCustomers, returningCustomers, newRevenue, returningRevenue }
       const productMap = {}; // title → { totalRevenue, totalOrders, months }
+
+      // Group orders by customer for new/returning classification.
+      // numberOfOrders is a lifetime snapshot. If we see N orders in-window for a customer
+      // whose lifetime count is L, then L > N implies they had pre-window orders → all in-window are returning.
+      // L == N → their earliest in-window is new, the rest are returning.
+      const customerOrders = {}; // customerId → [order, ...] (chronological since sortKey: CREATED_AT)
+      for (const o of orders) {
+        const cid = o.customer?.id;
+        if (!cid) continue;
+        if (!customerOrders[cid]) customerOrders[cid] = [];
+        customerOrders[cid].push(o);
+      }
+      const newOrderIds = new Set();
+      for (const [cid, list] of Object.entries(customerOrders)) {
+        const lifetime = list[0].customer?.numberOfOrders ?? list.length;
+        if (lifetime <= list.length) {
+          // first order in our window is the customer's first lifetime order
+          newOrderIds.add(list[0].id);
+        }
+      }
 
       for (const o of orders) {
         const d = new Date(o.createdAt);
         const mKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         const orderRev = parseFloat(o.netPaymentSet?.shopMoney?.amount || o.currentTotalPriceSet?.shopMoney?.amount || 0);
-        if (!monthMap[mKey]) monthMap[mKey] = { netSales: 0, orders: 0 };
+        const shipping = parseFloat(o.totalShippingPriceSet?.shopMoney?.amount || 0);
+        const isNew = newOrderIds.has(o.id);
+        if (!monthMap[mKey]) monthMap[mKey] = { netSales: 0, orders: 0, shipping: 0, newCustomers: 0, returningCustomers: 0, newRevenue: 0, returningRevenue: 0 };
         monthMap[mKey].netSales += orderRev;
         monthMap[mKey].orders += 1;
+        monthMap[mKey].shipping += shipping;
+        if (isNew) {
+          monthMap[mKey].newCustomers += 1;
+          monthMap[mKey].newRevenue += orderRev;
+        } else if (o.customer?.id) {
+          monthMap[mKey].returningCustomers += 1;
+          monthMap[mKey].returningRevenue += orderRev;
+        }
 
         const productTotalsThisOrder = {};
         for (const li of (o.lineItems?.edges || [])) {
@@ -102,9 +134,17 @@ export default async function handler(req, res) {
           netSales: v.netSales,
           grossSales: v.netSales,
           orders: v.orders,
+          shipping: v.shipping,
           sessions: 0, // not available via Admin API
           cvr: 0,
           aov: v.orders > 0 ? v.netSales / v.orders : 0,
+          newCustomers: v.newCustomers,
+          returningCustomers: v.returningCustomers,
+          newRevenue: v.newRevenue,
+          returningRevenue: v.returningRevenue,
+          newAov: v.newCustomers > 0 ? v.newRevenue / v.newCustomers : 0,
+          returningAov: v.returningCustomers > 0 ? v.returningRevenue / v.returningCustomers : 0,
+          repeatRate: v.orders > 0 ? v.returningCustomers / v.orders : 0,
         }))
         .sort((a, b) => a.month.localeCompare(b.month));
 

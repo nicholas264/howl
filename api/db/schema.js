@@ -41,6 +41,14 @@ export default async function handler(req, res) {
       )
     `;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS dashboard_settings (
+        key        TEXT PRIMARY KEY,
+        value      JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `;
+
     return res.json({ ok: true });
   } catch (err) {
     return res.status(500).json({ error: err.message });

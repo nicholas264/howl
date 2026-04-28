@@ -94,6 +94,29 @@ export default function DashboardTool() {
   const [shopifyError,   setShopifyError]   = useState('');
   const [shopifyUpdated, setShopifyUpdated] = useState(null);
 
+  // CFO assumptions (loaded from /api/db/dashboard-settings)
+  const [settings, setSettings] = useState(null);
+  const [showAssumptions, setShowAssumptions] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/db/dashboard-settings').then(r => r.json()).then(d => {
+      if (d.settings) setSettings(d.settings);
+    }).catch(() => {});
+  }, []);
+
+  const saveSettings = useCallback(async (next) => {
+    setSavingSettings(true);
+    try {
+      const r = await fetch('/api/db/dashboard-settings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings: next }),
+      });
+      const d = await r.json();
+      if (d.settings) setSettings(d.settings);
+    } finally { setSavingSettings(false); }
+  }, []);
+
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -446,6 +469,293 @@ export default function DashboardTool() {
         );
       })()}
       {launchesError && <div style={{ ...S.err, marginBottom: 20 }}>Launch log: {launchesError}</div>}
+
+      {/* ── CFO / Head of Growth Section ──────────────────────────────────── */}
+      {(() => {
+        const monthlyInsights = data?.monthlyInsights || [];
+        const shopifyMonths = shopifyData?.months || [];
+        if (!settings || (monthlyInsights.length === 0 && shopifyMonths.length === 0)) {
+          if (!data && !shopifyData) return null;
+        }
+
+        const spendByMonth = Object.fromEntries(monthlyInsights.map(m => [m.month, m]));
+        const shopByMonth = Object.fromEntries(shopifyMonths.map(m => [m.month, m]));
+
+        // Union of months across Meta + Shopify (last 13)
+        const allMonthKeys = Array.from(new Set([
+          ...monthlyInsights.map(m => m.month),
+          ...shopifyMonths.map(m => m.month),
+        ])).filter(Boolean).sort();
+        const recent13 = allMonthKeys.slice(-13);
+
+        const s = settings || { grossMarginPct: 60, paymentFeePct: 2.9, paymentFeeFixed: 0.30, shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3 };
+
+        const rows = recent13.map(mk => {
+          const sh = shopByMonth[mk] || { netSales: 0, orders: 0, newCustomers: 0, returningCustomers: 0, newRevenue: 0, returningRevenue: 0 };
+          const meta = spendByMonth[mk] || { spend: 0, purchases: 0 };
+          const revenue = sh.netSales || 0;
+          const orders = sh.orders || 0;
+          const cogs = revenue * (1 - (s.grossMarginPct / 100));
+          const paymentFees = revenue * (s.paymentFeePct / 100) + orders * s.paymentFeeFixed;
+          const shipCost = orders * s.shippingCostPerOrder;
+          const fulfill = orders * s.fulfillmentCostPerOrder;
+          const adSpend = meta.spend || 0;
+          const cm3 = revenue - cogs - paymentFees - shipCost - fulfill - adSpend;
+          const ncac = sh.newCustomers > 0 ? adSpend / sh.newCustomers : null;
+          const blendedRoas = adSpend > 0 ? revenue / adSpend : null;
+          const newRoas = adSpend > 0 ? (sh.newRevenue || 0) / adSpend : null;
+          return { month: mk, revenue, orders, newCustomers: sh.newCustomers || 0, returningCustomers: sh.returningCustomers || 0, newRevenue: sh.newRevenue || 0, returningRevenue: sh.returningRevenue || 0, adSpend, cogs, paymentFees, shipCost, fulfill, cm3, ncac, blendedRoas, newRoas };
+        });
+
+        const ltm = rows.reduce((a, r) => ({
+          revenue: a.revenue + r.revenue,
+          orders: a.orders + r.orders,
+          newCustomers: a.newCustomers + r.newCustomers,
+          returningCustomers: a.returningCustomers + r.returningCustomers,
+          adSpend: a.adSpend + r.adSpend,
+          cm3: a.cm3 + r.cm3,
+          newRevenue: a.newRevenue + r.newRevenue,
+        }), { revenue: 0, orders: 0, newCustomers: 0, returningCustomers: 0, adSpend: 0, cm3: 0, newRevenue: 0 });
+
+        const ltmNcac = ltm.newCustomers > 0 ? ltm.adSpend / ltm.newCustomers : null;
+        const ltmRoas = ltm.adSpend > 0 ? ltm.revenue / ltm.adSpend : null;
+        const ltmRepeatRate = (ltm.newCustomers + ltm.returningCustomers) > 0
+          ? ltm.returningCustomers / (ltm.newCustomers + ltm.returningCustomers) : 0;
+        const ltmCmMargin = ltm.revenue > 0 ? ltm.cm3 / ltm.revenue : 0;
+
+        const fmtPct = (n) => (n == null || isNaN(n)) ? '—' : (n * 100).toFixed(1) + '%';
+        const fmt$ = (n) => (n == null || isNaN(n)) ? '—' : '$' + Math.round(n).toLocaleString();
+
+        const maxCustomers = Math.max(...rows.map(r => r.newCustomers + r.returningCustomers), 1);
+        const ncacRange = rows.filter(r => r.ncac != null).map(r => r.ncac);
+        const maxNcac = Math.max(...ncacRange, 1);
+        const cmRange = rows.map(r => r.cm3);
+        const cmMax = Math.max(...cmRange, 1);
+        const cmMin = Math.min(...cmRange, 0);
+        const cmAbsMax = Math.max(Math.abs(cmMax), Math.abs(cmMin), 1);
+
+        const fmtMo = (mk) => {
+          if (!mk) return '—';
+          const [y, m] = mk.split('-');
+          return new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+        };
+
+        const dataReady = (data || shopifyData);
+
+        return (
+          <>
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 16, marginTop: 28 }}>
+              <div>
+                <div className="eyebrow" style={{ marginBottom: 6 }}>CFO View</div>
+                <div className="display-md" style={{ color: '#f0f4f8' }}>Growth & Contribution</div>
+                <div className="display-italic" style={{ fontSize: 12, color: '#8b949e', marginTop: 4 }}>
+                  New vs returning, NCAC, and CM3 (revenue net of COGS, fees, shipping, fulfillment, ad spend).
+                </div>
+              </div>
+              <button onClick={() => setShowAssumptions(v => !v)} style={S.ghostBtn}>
+                {showAssumptions ? 'Hide' : 'Edit'} Assumptions
+              </button>
+            </div>
+
+            {showAssumptions && settings && (
+              <div style={{ ...S.card, marginBottom: 16 }}>
+                <span style={S.label}>Assumptions (used for COGS, fees, CM3)</span>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginTop: 10 }}>
+                  {[
+                    { k: 'grossMarginPct',         label: 'Gross Margin %',     suffix: '%'  },
+                    { k: 'paymentFeePct',          label: 'Payment Fee %',      suffix: '%'  },
+                    { k: 'paymentFeeFixed',        label: 'Payment $ / order',  suffix: '$'  },
+                    { k: 'shippingCostPerOrder',   label: 'Shipping $ / order', suffix: '$'  },
+                    { k: 'fulfillmentCostPerOrder',label: 'Pick/Pack $ / order',suffix: '$'  },
+                  ].map(({ k, label, suffix }) => (
+                    <div key={k}>
+                      <span style={{ ...S.label, marginBottom: 4 }}>{label}</span>
+                      <input
+                        type="number" step="0.01"
+                        value={settings[k]}
+                        onChange={e => setSettings({ ...settings, [k]: parseFloat(e.target.value) || 0 })}
+                        style={{ width: '100%', padding: '6px 8px', background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 12, borderRadius: 4 }}
+                      />
+                      <span style={{ fontSize: 9, color: '#6e7681' }}>{suffix}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <button onClick={() => saveSettings(settings)} disabled={savingSettings} style={S.btn}>
+                    {savingSettings ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!dataReady && (
+              <div style={{ ...S.card, marginBottom: 20, color: '#8b949e', fontSize: 12 }}>
+                Load Meta + Shopify data above to populate this view.
+              </div>
+            )}
+
+            {dataReady && (
+              <>
+                {/* LTM KPI strip */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 20 }}>
+                  {[
+                    { label: 'LTM Revenue',     value: fmt$(ltm.revenue) },
+                    { label: 'LTM Ad Spend',    value: fmt$(ltm.adSpend) },
+                    { label: 'LTM CM3',         value: fmt$(ltm.cm3), color: ltm.cm3 >= 0 ? '#3fb950' : '#f85149', sub: fmtPct(ltmCmMargin) + ' margin' },
+                    { label: 'LTM New Custs',   value: ltm.newCustomers.toLocaleString(), sub: ltm.returningCustomers.toLocaleString() + ' returning' },
+                    { label: 'Avg NCAC',        value: ltmNcac == null ? '—' : '$' + ltmNcac.toFixed(0) },
+                    { label: 'Repeat Rate',     value: fmtPct(ltmRepeatRate), sub: 'Blended ROAS ' + (ltmRoas == null ? '—' : ltmRoas.toFixed(2)) },
+                  ].map(({ label, value, sub, color }) => (
+                    <div key={label} style={S.card}>
+                      <span style={S.label}>{label}</span>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: color || '#f0f4f8', lineHeight: 1 }}>{value}</div>
+                      {sub && <div style={{ fontSize: 9, color: '#6e7681', marginTop: 6, letterSpacing: 1 }}>{sub}</div>}
+                    </div>
+                  ))}
+                </div>
+
+                {/* New vs Returning customers */}
+                <div style={{ ...S.card, marginBottom: 20 }}>
+                  <span style={S.label}>New vs Returning Customers — Monthly</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+                    {rows.map(r => {
+                      const tot = r.newCustomers + r.returningCustomers;
+                      const barPct = (tot / maxCustomers) * 100;
+                      const newPct = tot > 0 ? (r.newCustomers / tot) * 100 : 0;
+                      return (
+                        <div key={r.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 9, color: '#8b949e', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}</span>
+                          <div style={{ flex: 1, height: 16, background: '#1c2330', borderRadius: 3, overflow: 'hidden' }}>
+                            <div style={{ display: 'flex', height: '100%', width: `${barPct}%`, transition: 'width 0.4s' }}>
+                              <div title={`New: ${r.newCustomers}`} style={{ width: `${newPct}%`, background: '#DC440A', height: '100%' }} />
+                              <div title={`Returning: ${r.returningCustomers}`} style={{ width: `${100 - newPct}%`, background: '#2ea98f', height: '100%' }} />
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 11, color: '#f0f4f8', width: 32, textAlign: 'right', fontWeight: 700 }}>{tot || '—'}</span>
+                          <div style={{ display: 'flex', gap: 6, width: 96, justifyContent: 'flex-end', fontSize: 9 }}>
+                            {r.newCustomers > 0 && <span style={{ color: '#DC440A', letterSpacing: 1 }}>{r.newCustomers}N</span>}
+                            {r.returningCustomers > 0 && <span style={{ color: '#2ea98f', letterSpacing: 1 }}>{r.returningCustomers}R</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: 'flex', gap: 14, marginTop: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#DC440A' }} /><span style={{ fontSize: 9, color: '#8b949e', letterSpacing: 1 }}>New</span></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#2ea98f' }} /><span style={{ fontSize: 9, color: '#8b949e', letterSpacing: 1 }}>Returning</span></div>
+                  </div>
+                </div>
+
+                {/* NCAC + CM3 side by side */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+                  <div style={S.card}>
+                    <span style={S.label}>NCAC by Month (Meta spend ÷ new customers)</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                      {rows.map(r => {
+                        const barPct = r.ncac != null ? (r.ncac / maxNcac) * 100 : 0;
+                        return (
+                          <div key={r.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontSize: 9, color: '#8b949e', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}</span>
+                            <div style={{ flex: 1, height: 14, background: '#1c2330', borderRadius: 3, overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${barPct}%`, background: '#f5a623', borderRadius: 3 }} />
+                            </div>
+                            <span style={{ fontSize: 10, color: r.ncac != null ? '#f0f4f8' : '#6e7681', width: 56, textAlign: 'right', fontWeight: r.ncac != null ? 700 : 400 }}>
+                              {r.ncac != null ? '$' + r.ncac.toFixed(0) : '—'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div style={S.card}>
+                    <span style={S.label}>CM3 by Month (covers OpEx)</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                      {rows.map(r => {
+                        const pos = r.cm3 >= 0;
+                        const barPct = (Math.abs(r.cm3) / cmAbsMax) * 50; // 50% half-width either side of midline
+                        return (
+                          <div key={r.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontSize: 9, color: '#8b949e', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}</span>
+                            <div style={{ flex: 1, height: 14, background: '#1c2330', borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
+                              <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: '#2a3441' }} />
+                              <div style={{
+                                position: 'absolute', top: 0, bottom: 0,
+                                ...(pos ? { left: '50%', width: `${barPct}%` } : { right: '50%', width: `${barPct}%` }),
+                                background: pos ? '#3fb950' : '#f85149',
+                              }} />
+                            </div>
+                            <span style={{ fontSize: 10, color: pos ? '#3fb950' : '#f85149', width: 72, textAlign: 'right', fontWeight: 700 }}>
+                              {fmt$(r.cm3)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Detailed monthly P&L table */}
+                <div style={{ ...S.card, marginBottom: 20 }}>
+                  <span style={S.label}>Monthly P&L (CM3 build)</span>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8, minWidth: 900 }}>
+                      <thead>
+                        <tr>
+                          {['Month', 'Revenue', 'Orders', 'New', 'Ret', 'Ad Spend', 'NCAC', 'COGS', 'Fees', 'Ship', 'Pick', 'CM3', 'CM%', 'ROAS'].map(h => (
+                            <th key={h} style={{ fontSize: 8, letterSpacing: 1, color: '#6e7681', textAlign: h === 'Month' ? 'left' : 'right', padding: '4px 6px 8px 0', textTransform: 'uppercase', fontWeight: 600 }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map(r => {
+                          const margin = r.revenue > 0 ? r.cm3 / r.revenue : 0;
+                          return (
+                            <tr key={r.month} style={{ borderTop: '1px solid #2a3441' }}>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#c9d1d9' }}>{fmtMo(r.month)}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#f0f4f8', textAlign: 'right', fontWeight: 600 }}>{fmt$(r.revenue)}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#c9d1d9', textAlign: 'right' }}>{r.orders || '—'}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#DC440A', textAlign: 'right', fontWeight: 600 }}>{r.newCustomers || '—'}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#2ea98f', textAlign: 'right', fontWeight: 600 }}>{r.returningCustomers || '—'}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#c9d1d9', textAlign: 'right' }}>{fmt$(r.adSpend)}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#f5a623', textAlign: 'right', fontWeight: 600 }}>{r.ncac != null ? '$' + r.ncac.toFixed(0) : '—'}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#8b949e', textAlign: 'right' }}>{fmt$(r.cogs)}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#8b949e', textAlign: 'right' }}>{fmt$(r.paymentFees)}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#8b949e', textAlign: 'right' }}>{fmt$(r.shipCost)}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#8b949e', textAlign: 'right' }}>{fmt$(r.fulfill)}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.cm3 >= 0 ? '#3fb950' : '#f85149', textAlign: 'right', fontWeight: 700 }}>{fmt$(r.cm3)}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: margin >= 0 ? '#3fb950' : '#f85149', textAlign: 'right' }}>{r.revenue > 0 ? fmtPct(margin) : '—'}</td>
+                              <td style={{ padding: '6px 0', fontSize: 11, color: '#c9d1d9', textAlign: 'right' }}>{r.blendedRoas != null ? r.blendedRoas.toFixed(2) : '—'}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ borderTop: '2px solid #2a3441' }}>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 9, letterSpacing: 1, color: '#6e7681', textTransform: 'uppercase', fontWeight: 700 }}>LTM</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#f0f4f8', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.revenue)}</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#c9d1d9', textAlign: 'right' }}>{ltm.orders.toLocaleString()}</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#DC440A', textAlign: 'right', fontWeight: 700 }}>{ltm.newCustomers.toLocaleString()}</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#2ea98f', textAlign: 'right', fontWeight: 700 }}>{ltm.returningCustomers.toLocaleString()}</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#c9d1d9', textAlign: 'right' }}>{fmt$(ltm.adSpend)}</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#f5a623', textAlign: 'right', fontWeight: 700 }}>{ltmNcac == null ? '—' : '$' + ltmNcac.toFixed(0)}</td>
+                          <td colSpan={4} />
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: ltm.cm3 >= 0 ? '#3fb950' : '#f85149', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.cm3)}</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: ltmCmMargin >= 0 ? '#3fb950' : '#f85149', textAlign: 'right', fontWeight: 700 }}>{fmtPct(ltmCmMargin)}</td>
+                          <td style={{ padding: '8px 0 4px', fontSize: 11, color: '#c9d1d9', textAlign: 'right', fontWeight: 700 }}>{ltmRoas == null ? '—' : ltmRoas.toFixed(2)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                  <div style={{ fontSize: 9, color: '#6e7681', marginTop: 8, letterSpacing: 1 }}>
+                    CM3 = Revenue − COGS − Payment Fees − Shipping − Pick/Pack − Ad Spend. NCAC = Meta spend ÷ new lifetime customers (numberOfOrders==1 at order time).
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        );
+      })()}
 
       {!data && !loading && (
         <div style={{ color: '#6e7681', fontSize: 12, padding: '40px 0' }}>

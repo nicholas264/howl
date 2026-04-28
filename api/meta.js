@@ -86,15 +86,22 @@ export default async function handler(req, res) {
           { field: 'effective_status', operator: 'IN', value: ['ACTIVE'] },
         ]));
 
-        const [adsRes, insightsRes, adsetsRes, campaignsRes, creativesRes] = await Promise.all([
+        // Monthly insights time series — 13 months back to first of that month
+        const tsNow = new Date();
+        const tsSince = new Date(tsNow.getFullYear(), tsNow.getMonth() - 12, 1);
+        const fmtYmd = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        const monthlyTimeRange = encodeURIComponent(JSON.stringify({ since: fmtYmd(tsSince), until: fmtYmd(tsNow) }));
+
+        const [adsRes, insightsRes, monthlyInsightsRes, adsetsRes, campaignsRes, creativesRes] = await Promise.all([
           fetch(`${BASE}/${adAccountId}/ads?fields=id,name,created_time,status,effective_status,creative{id,object_type}&limit=500&filtering=${filtering}&access_token=${accessToken}`),
-          fetch(`${BASE}/${adAccountId}/insights?fields=spend,impressions,clicks,ctr,reach&date_preset=last_30d&access_token=${accessToken}`),
+          fetch(`${BASE}/${adAccountId}/insights?fields=spend,impressions,clicks,ctr,reach,actions,cost_per_action_type,purchase_roas&date_preset=last_30d&access_token=${accessToken}`),
+          fetch(`${BASE}/${adAccountId}/insights?fields=spend,impressions,clicks,actions,cost_per_action_type,purchase_roas&time_range=${monthlyTimeRange}&time_increment=monthly&access_token=${accessToken}`),
           fetch(`${BASE}/${adAccountId}/adsets?fields=id,name,daily_budget,lifetime_budget,budget_remaining,campaign_id,effective_status,bid_strategy,bid_amount&filtering=${activeFilter}&limit=200&access_token=${accessToken}`),
           fetch(`${BASE}/${adAccountId}/campaigns?fields=id,name,status,daily_budget,lifetime_budget,budget_remaining,bid_strategy&filtering=${activeFilter}&limit=100&access_token=${accessToken}`),
           // Fetch creatives directly to get actual asset identifiers
           fetch(`${BASE}/${adAccountId}/adcreatives?fields=id,image_hash,video_id,object_type&limit=500&access_token=${accessToken}`),
         ]);
-        const [adsData, insightsData, adsetsData, campaignsData, creativesData] = await Promise.all([adsRes.json(), insightsRes.json(), adsetsRes.json(), campaignsRes.json(), creativesRes.json()]);
+        const [adsData, insightsData, monthlyInsightsData, adsetsData, campaignsData, creativesData] = await Promise.all([adsRes.json(), insightsRes.json(), monthlyInsightsRes.json(), adsetsRes.json(), campaignsRes.json(), creativesRes.json()]);
 
         if (adsData.error) throw new Error(adsData.error.message);
 
@@ -121,9 +128,27 @@ export default async function handler(req, res) {
           };
         }
 
+        // Reduce monthly insights to {month: 'YYYY-MM', spend, purchases, roas, ...}
+        const monthlyInsights = (monthlyInsightsData.data || []).map(row => {
+          const month = (row.date_start || '').slice(0, 7);
+          const purchases = parseInt(((row.actions || []).find(a => a.action_type === 'purchase')?.value) || 0);
+          const cpaRaw = (row.cost_per_action_type || []).find(a => a.action_type === 'purchase')?.value;
+          const roasRaw = (row.purchase_roas || []).find(a => a.action_type === 'omni_purchase' || a.action_type === 'purchase')?.value;
+          return {
+            month,
+            spend: parseFloat(row.spend || 0),
+            impressions: parseInt(row.impressions || 0),
+            clicks: parseInt(row.clicks || 0),
+            purchases,
+            cpa: cpaRaw ? parseFloat(cpaRaw) : null,
+            roas: roasRaw ? parseFloat(roasRaw) : null,
+          };
+        });
+
         return res.json({
           ads: adsData.data || [],
           insights: insightsData.data?.[0] || null,
+          monthlyInsights,
           activeAdsets: adsetsData.data || [],
           campaignNames,
           campaignBudgetData,
