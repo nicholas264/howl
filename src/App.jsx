@@ -10,6 +10,7 @@ import ImageAdTool from "./components/ImageAdTool";
 import FounderAdTool from "./components/FounderAdTool";
 import MetaPublishTool from "./components/MetaPublishTool";
 import DashboardTool from "./components/DashboardTool";
+import WelcomeScreen from "./components/WelcomeScreen";
 import LaunchLogTool from "./components/LaunchLogTool";
 import UgcInboxTool from "./components/UgcInboxTool";
 import GalleryTab from "./components/GalleryTab";
@@ -28,7 +29,7 @@ export default function HowlAdEngine() {
   const [variations, setVariations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState("config");
+  const [activeTab, setActiveTab] = useState("welcome");
   const [filterAngle, setFilterAngle] = useState("all");
   const [filterProduct, setFilterProduct] = useState("all");
   const [videoText, setVideoText] = useState(null);
@@ -157,6 +158,9 @@ export default function HowlAdEngine() {
   const cartCount = cart.length;
 
   const NAV = [
+    { group: 'Home', items: [
+      { key: 'welcome', label: 'Campfire' },
+    ]},
     { group: 'Generate', items: [
       { key: 'config', label: 'Configure' },
       { key: 'results', label: 'Results', disabled: variations.length === 0, count: variations.length || null },
@@ -188,7 +192,7 @@ export default function HowlAdEngine() {
         <aside className="sidebar">
           <div className="sidebar-top">
             <img src="/logos/howl-horizontal-wht.png" alt="HOWL Campfires" />
-            <div className="sidebar-sub">Creative Studio</div>
+            <div className="sidebar-sub">The Campfire</div>
           </div>
           <nav className="side-nav">
             {NAV.map(group => (
@@ -225,6 +229,8 @@ export default function HowlAdEngine() {
         </aside>
 
         <main className="main-panel">
+      {activeTab === "welcome" && <WelcomeScreen setActiveTab={setActiveTab} />}
+
       {activeTab === "config" && (
         <ConfigPanel
           selectedProducts={selectedProducts} toggleProduct={toggleProduct}
