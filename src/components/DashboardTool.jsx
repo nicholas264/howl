@@ -470,6 +470,15 @@ export default function DashboardTool() {
       })()}
       {launchesError && <div style={{ ...S.err, marginBottom: 20 }}>Launch log: {launchesError}</div>}
 
+      {shopifyData?._meta?.customerScopeMissing && (
+        <div style={{ ...S.err, marginBottom: 20, color: '#f5a623', borderColor: 'rgba(245,166,35,0.4)', background: 'rgba(245,166,35,0.1)' }}>
+          Shopify token is missing the <code>read_customers</code> scope — new vs returning columns will be zero. Re-install at{' '}
+          <a href="/api/shopify-install?shop=howl-campfires.myshopify.com" style={{ color: '#f5a623', textDecoration: 'underline' }}>
+            /api/shopify-install
+          </a>{' '}to fix.
+        </div>
+      )}
+
       {/* ── CFO / Head of Growth Section ──────────────────────────────────── */}
       {(() => {
         const monthlyInsights = data?.monthlyInsights || [];

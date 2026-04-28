@@ -16,11 +16,14 @@ export default async function handler(req, res) {
     const r = await fetch(GQL, { method: 'POST', headers, body: JSON.stringify({ query, variables }) });
     const d = await r.json();
     if (d.errors) {
-      // If the only errors are missing-scope on the customer field, drop them and proceed
-      // with whatever data did come back (orders without customer info).
-      const allCustomerScope = Array.isArray(d.errors) && d.errors.length > 0 &&
-        d.errors.every(e => /access denied for customer field/i.test(e.message || ''));
-      if (allCustomerScope && d.data) return d.data;
+      // Surface missing-scope errors via a typed throw so callers can adapt the query.
+      const hasCustomerScopeErr = Array.isArray(d.errors) &&
+        d.errors.some(e => /access denied for customer field/i.test(e.message || ''));
+      if (hasCustomerScopeErr) {
+        const err = new Error('missing_scope:read_customers');
+        err.code = 'MISSING_CUSTOMER_SCOPE';
+        throw err;
+      }
       const msg = Array.isArray(d.errors)
         ? d.errors.map(e => e.message || JSON.stringify(e)).join('; ')
         : typeof d.errors === 'string' ? d.errors : JSON.stringify(d.errors);
@@ -41,7 +44,7 @@ export default async function handler(req, res) {
       const sinceISO = since.toISOString();
 
       // Paginate through orders. 250 max per page.
-      const Q = `query Orders($cursor: String) {
+      const buildQuery = (includeCustomer) => `query Orders($cursor: String) {
         orders(first: 250, after: $cursor, query: "created_at:>=${sinceISO} financial_status:paid", sortKey: CREATED_AT) {
           pageInfo { hasNextPage endCursor }
           edges { node {
@@ -50,7 +53,7 @@ export default async function handler(req, res) {
             netPaymentSet { shopMoney { amount } }
             currentTotalPriceSet { shopMoney { amount } }
             totalShippingPriceSet { shopMoney { amount } }
-            customer { id numberOfOrders }
+            ${includeCustomer ? 'customer { id numberOfOrders }' : ''}
             lineItems(first: 50) {
               edges { node {
                 name
@@ -65,9 +68,25 @@ export default async function handler(req, res) {
       const orders = [];
       let cursor = null;
       let pages = 0;
+      let includeCustomer = true;
+      let customerScopeMissing = false;
       // Hard cap to avoid runaway: 40 pages = 10,000 orders
       while (pages < 40) {
-        const data = await gql(Q, { cursor });
+        let data;
+        try {
+          data = await gql(buildQuery(includeCustomer), { cursor });
+        } catch (err) {
+          if (err.code === 'MISSING_CUSTOMER_SCOPE' && includeCustomer) {
+            // Drop the customer field and retry the same page from scratch.
+            includeCustomer = false;
+            customerScopeMissing = true;
+            orders.length = 0;
+            cursor = null;
+            pages = 0;
+            continue;
+          }
+          throw err;
+        }
         const conn = data.orders;
         for (const e of conn.edges) orders.push(e.node);
         if (!conn.pageInfo.hasNextPage) break;
@@ -158,7 +177,7 @@ export default async function handler(req, res) {
         .slice(0, 8)
         .map(([name, data]) => ({ name, ...data }));
 
-      return res.json({ months, topProducts, _meta: { ordersScanned: orders.length, pages } });
+      return res.json({ months, topProducts, _meta: { ordersScanned: orders.length, pages, customerScopeMissing } });
     }
 
     return res.status(400).json({ error: `Unknown action: ${action}` });
