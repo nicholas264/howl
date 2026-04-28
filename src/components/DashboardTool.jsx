@@ -65,7 +65,7 @@ const S = {
   err:     { padding: '8px 12px', border: '1px solid rgba(220,68,10,0.4)', background: 'rgba(220,68,10,0.1)', color: '#DC440A', fontSize: 10, borderRadius: 4 },
 };
 
-export default function DashboardTool() {
+export default function DashboardTool({ view = 'cfo' }) {
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
@@ -315,33 +315,43 @@ export default function DashboardTool() {
     }
   }
 
+  const VIEW_TITLES = {
+    cfo:     { title: 'CFO View',         subtitle: 'New vs returning, NCAC, contribution margin, OpEx coverage.' },
+    meta:    { title: 'Meta Ads',         subtitle: 'Live budget, formats, monthly velocity, recent launches.' },
+    shopify: { title: 'Shopify',          subtitle: 'Seasonality, monthly trend, CVR, product mix.' },
+  };
+  const v = VIEW_TITLES[view] || VIEW_TITLES.cfo;
+
   return (
     <div style={S.wrap}>
-      {/* Header */}
+      {/* Header — shared across sub-tabs, with both load buttons */}
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <div className="eyebrow" style={{ marginBottom: 6 }}>Insights</div>
-          <div className="display-lg" style={{ color: '#f0f4f8' }}>Ads Dashboard</div>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>Dashboard</div>
+          <div className="display-lg" style={{ color: '#f0f4f8' }}>{v.title}</div>
           <div className="display-italic" style={{ fontSize: 14, color: '#8b949e', marginTop: 6 }}>
-            Live view of what's running and what it's costing.
+            {v.subtitle}
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {lastUpdated && (
             <span style={{ fontSize: 9, color: '#6e7681', letterSpacing: 1 }}>
-              Updated {lastUpdated.toLocaleTimeString()}
+              Meta {lastUpdated.toLocaleTimeString()}
             </span>
           )}
-          <button onClick={loadDashboard} disabled={loading} style={loading ? { ...S.ghostBtn, cursor: 'not-allowed' } : S.btn}>
-            {loading ? 'Loading…' : data ? 'Refresh' : 'Load Dashboard'}
+          <button onClick={loadDashboard} disabled={loading} style={loading ? { ...S.ghostBtn, cursor: 'not-allowed' } : (data ? S.ghostBtn : S.btn)}>
+            {loading ? 'Loading…' : data ? 'Refresh Meta' : 'Load Meta'}
+          </button>
+          <button onClick={loadShopify} disabled={shopifyLoading} style={shopifyLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : (shopifyData ? S.ghostBtn : S.btn)}>
+            {shopifyLoading ? 'Loading…' : shopifyData ? 'Refresh Shopify' : 'Load Shopify'}
           </button>
         </div>
       </div>
 
       {error && <div style={{ ...S.err, marginBottom: 20 }}>{error}</div>}
 
-      {/* Launch Log stats — DB-backed, always visible, split by format */}
-      {launches && launches.length > 0 && (() => {
+      {/* Launch Log stats — DB-backed, on CFO sub-tab */}
+      {view === 'cfo' && launches && launches.length > 0 && (() => {
         const now = new Date();
         const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay()); startOfWeek.setHours(0,0,0,0);
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -516,7 +526,7 @@ export default function DashboardTool() {
           </>
         );
       })()}
-      {launchesError && <div style={{ ...S.err, marginBottom: 20 }}>Launch log: {launchesError}</div>}
+      {view === 'cfo' && launchesError && <div style={{ ...S.err, marginBottom: 20 }}>Launch log: {launchesError}</div>}
 
       {shopifyData?._meta?.customerScopeMissing && (
         <div style={{ ...S.err, marginBottom: 20, color: '#f5a623', borderColor: 'rgba(245,166,35,0.4)', background: 'rgba(245,166,35,0.1)' }}>
@@ -541,7 +551,7 @@ export default function DashboardTool() {
       )}
 
       {/* ── CFO / Head of Growth Section ──────────────────────────────────── */}
-      {(() => {
+      {view === 'cfo' && (() => {
         const monthlyInsights = data?.monthlyInsights || [];
         const shopifyMonths = shopifyData?.months || [];
         if (!settings || (monthlyInsights.length === 0 && shopifyMonths.length === 0)) {
@@ -1005,13 +1015,13 @@ export default function DashboardTool() {
         );
       })()}
 
-      {!data && !loading && (
+      {view === 'meta' && !data && !loading && (
         <div style={{ color: '#6e7681', fontSize: 12, padding: '40px 0' }}>
-          Click "Load Dashboard" to pull your ad shipping data from Meta.
+          Click "Load Meta" above to pull your ad shipping data from Meta.
         </div>
       )}
 
-      {data && (
+      {view === 'meta' && data && (
         <>
           {/* Live daily budget */}
           <div style={{ ...S.card, marginBottom: 20, borderColor: totalDailyBudget > 0 ? '#DC440A' : '#2a3441' }}>
@@ -1263,28 +1273,21 @@ export default function DashboardTool() {
       )}
 
       {/* ── Shopify Analytics Section ─────────────────────────────────────── */}
-      <div style={S.divider} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-        <span style={{ ...S.label, marginBottom: 0 }}>Shopify Analytics</span>
-        <button onClick={loadShopify} disabled={shopifyLoading} style={shopifyLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : S.btn}>
-          {shopifyLoading ? 'Loading…' : shopifyData ? 'Refresh' : 'Load Shopify Data'}
-        </button>
-        {shopifyUpdated && (
-          <span style={{ fontSize: 9, color: '#6e7681', letterSpacing: 1 }}>
-            Updated {shopifyUpdated.toLocaleTimeString()}
-          </span>
-        )}
-      </div>
-
-      {shopifyError && <div style={{ ...S.err, marginBottom: 20 }}>{shopifyError}</div>}
-
-      {!shopifyData && !shopifyLoading && (
-        <div style={{ color: '#6e7681', fontSize: 12, padding: '40px 0' }}>
-          Click "Load Shopify Data" to pull store analytics from Shopify.
+      {view === 'shopify' && shopifyUpdated && (
+        <div style={{ fontSize: 9, color: '#6e7681', letterSpacing: 1, marginBottom: 16 }}>
+          Updated {shopifyUpdated.toLocaleTimeString()}
         </div>
       )}
 
-      {shopifyData && (() => {
+      {view === 'shopify' && shopifyError && <div style={{ ...S.err, marginBottom: 20 }}>{shopifyError}</div>}
+
+      {view === 'shopify' && !shopifyData && !shopifyLoading && (
+        <div style={{ color: '#6e7681', fontSize: 12, padding: '40px 0' }}>
+          Click "Load Shopify" above to pull store analytics from Shopify.
+        </div>
+      )}
+
+      {view === 'shopify' && shopifyData && (() => {
         const months = shopifyData.months || [];
         const topProducts = shopifyData.topProducts || [];
 

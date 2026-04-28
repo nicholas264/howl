@@ -173,7 +173,10 @@ export default function HowlAdEngine() {
       { key: 'publish', label: 'Publish', count: cartCount || null },
     ]},
     { group: 'Insights', items: [
-      { key: 'dashboard', label: 'Dashboard' },
+      { key: 'dashboard-cfo',     label: 'Dashboard',         parent: true },
+      { key: 'dashboard-cfo',     label: 'CFO View',          indent: true },
+      { key: 'dashboard-meta',    label: 'Meta',              indent: true },
+      { key: 'dashboard-shopify', label: 'Shopify',           indent: true },
       { key: 'log', label: 'Launch Log' },
     ]},
   ];
@@ -190,16 +193,20 @@ export default function HowlAdEngine() {
             {NAV.map(group => (
               <React.Fragment key={group.group}>
                 <div className="sidebar-section">{group.group}</div>
-                {group.items.map(item => (
-                  <button
-                    key={item.key}
-                    className={`side-item ${activeTab === item.key ? 'on' : ''}`}
-                    onClick={() => setActiveTab(item.key)}
-                    disabled={item.disabled}
-                  >
-                    <span>{item.label}</span>
-                    {item.count ? <span className="count">{item.count > 99 ? '99+' : item.count}</span> : null}
-                  </button>
+                {group.items.map((item, idx) => (
+                  item.parent ? (
+                    <div key={`${item.label}-${idx}`} className="side-parent">{item.label}</div>
+                  ) : (
+                    <button
+                      key={`${item.key}-${idx}`}
+                      className={`side-item ${item.indent ? 'indent' : ''} ${activeTab === item.key ? 'on' : ''}`}
+                      onClick={() => setActiveTab(item.key)}
+                      disabled={item.disabled}
+                    >
+                      <span>{item.label}</span>
+                      {item.count ? <span className="count">{item.count > 99 ? '99+' : item.count}</span> : null}
+                    </button>
+                  )
                 ))}
               </React.Fragment>
             ))}
@@ -245,7 +252,9 @@ export default function HowlAdEngine() {
       {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} onAddToCart={addToCart} />}
       {activeTab === "founder" && <FounderAdTool />}
       {activeTab === "gallery" && <GalleryTab cart={cart} />}
-      {activeTab === "dashboard" && <DashboardTool />}
+      {activeTab === "dashboard-cfo" && <DashboardTool view="cfo" />}
+      {activeTab === "dashboard-meta" && <DashboardTool view="meta" />}
+      {activeTab === "dashboard-shopify" && <DashboardTool view="shopify" />}
       {activeTab === "log" && <LaunchLogTool />}
       {activeTab === "ugc" && <UgcInboxTool />}
       {activeTab === "publish" && (

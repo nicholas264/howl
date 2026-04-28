@@ -64,6 +64,8 @@ input, textarea, select, button { font-family: inherit; }
 .side-item:disabled { opacity: 0.35; cursor: not-allowed; }
 .side-item .count { font-size: 11px; font-weight: 600; color: var(--muted2); background: var(--bg); padding: 2px 8px; border-radius: 10px; letter-spacing: 0; }
 .side-item.on .count { color: var(--flame); background: var(--bg); }
+.side-item.indent { padding-left: 30px; font-size: 12px; }
+.side-parent { padding: 8px 14px 4px; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: 0; }
 .main-panel { flex: 1; min-width: 0; overflow-x: auto; }
 
 .body { padding: 28px 36px; max-width: 1280px; }
