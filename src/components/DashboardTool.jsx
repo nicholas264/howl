@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import DealerCsvImport from './DealerCsvImport';
 
 const TYPE_COLORS = {
   static:  '#6e40c9',
@@ -645,8 +646,26 @@ export default function DashboardTool({ view = 'cfo' }) {
         // Snapshotted history from DB (overlay BEHIND live data — live always wins for current months)
         const snapshotShopByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.shopify).map(r => [r.month, r.shopify]));
         const snapshotMetaByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.meta).map(r => [r.month, r.meta]));
+        const dealerByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.shopify_dealer).map(r => [r.month, r.shopify_dealer]));
 
-        const shopByMonth = { ...snapshotShopByMonth, ...liveShopByMonth };
+        // Sum primary (snapshot or live) + dealer (CSV) per month.
+        const sumShopify = (a, b) => {
+          if (!a && !b) return null;
+          a = a || {}; b = b || {};
+          const keys = ['netSales','orders','shipping','newCustomers','returningCustomers','newRevenue','returningRevenue','cogs','costedRevenue','uncostedRevenue'];
+          const out = {};
+          for (const k of keys) out[k] = (a[k] || 0) + (b[k] || 0);
+          return out;
+        };
+        const allShopMonths = new Set([
+          ...Object.keys(snapshotShopByMonth), ...Object.keys(liveShopByMonth), ...Object.keys(dealerByMonth),
+        ]);
+        const shopByMonth = {};
+        for (const mk of allShopMonths) {
+          const primary = liveShopByMonth[mk] || snapshotShopByMonth[mk] || null;
+          const dealer = dealerByMonth[mk] || null;
+          shopByMonth[mk] = sumShopify(primary, dealer);
+        }
         const spendByMonth = { ...snapshotMetaByMonth, ...liveSpendByMonth };
 
         // Settings-derived maps (declared before allMonthKeys to avoid TDZ).
@@ -1184,7 +1203,19 @@ export default function DashboardTool({ view = 'cfo' }) {
         const liveShopByMonth = Object.fromEntries((shopifyData?.months || []).map(m => [m.month, m]));
         const snapShopByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.shopify).map(r => [r.month, r.shopify]));
         const snapMetaByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.meta).map(r => [r.month, r.meta]));
-        const shopByMonth = { ...snapShopByMonth, ...liveShopByMonth };
+        const dealerByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.shopify_dealer).map(r => [r.month, r.shopify_dealer]));
+        const sumShop = (a, b) => {
+          if (!a && !b) return null;
+          a = a || {}; b = b || {};
+          const out = {};
+          for (const k of ['netSales','orders','shipping','newCustomers','returningCustomers','newRevenue','returningRevenue','cogs','costedRevenue','uncostedRevenue']) out[k] = (a[k] || 0) + (b[k] || 0);
+          return out;
+        };
+        const allShopMonths = new Set([...Object.keys(snapShopByMonth), ...Object.keys(liveShopByMonth), ...Object.keys(dealerByMonth)]);
+        const shopByMonth = {};
+        for (const mk of allShopMonths) {
+          shopByMonth[mk] = sumShop(liveShopByMonth[mk] || snapShopByMonth[mk] || null, dealerByMonth[mk] || null);
+        }
         const metaByMonth = { ...snapMetaByMonth, ...liveSpendByMonth };
         const googleByMonth = settings?.googleSpend || {};
         const opexByMonth = settings?.opexByMonth || {};
@@ -1667,6 +1698,14 @@ export default function DashboardTool({ view = 'cfo' }) {
       )}
 
       {view === 'shopify' && shopifyError && <div style={{ ...S.err, marginBottom: 20 }}>{shopifyError}</div>}
+
+      {view === 'shopify' && (
+        <DealerCsvImport onUploaded={() => {
+          fetch('/api/db/monthly-metrics').then(r => r.json()).then(d => {
+            if (Array.isArray(d.rows)) setHistorySnapshots(d.rows);
+          }).catch(() => {});
+        }} />
+      )}
 
       {view === 'shopify' && !shopifyData && !shopifyLoading && (
         <div style={{ color: '#6e7681', fontSize: 12, padding: '40px 0' }}>
