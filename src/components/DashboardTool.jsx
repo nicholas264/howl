@@ -649,18 +649,24 @@ export default function DashboardTool({ view = 'cfo' }) {
         const shopByMonth = { ...snapshotShopByMonth, ...liveShopByMonth };
         const spendByMonth = { ...snapshotMetaByMonth, ...liveSpendByMonth };
 
-        // Union of all months (live + snapshotted), filtered to start month
+        // Union of all months (live + snapshotted + manual overrides), filtered to start month
         const startMonth = settings?.cfoStartMonth || '2026-03';
         const allMonthKeys = Array.from(new Set([
           ...Object.keys(shopByMonth),
           ...Object.keys(spendByMonth),
+          ...Object.keys(revenueAddByMonth),
+          ...Object.keys(ordersAddByMonth),
+          ...Object.keys(googleByMonth),
+          ...Object.keys(opexByMonth),
         ])).filter(Boolean).filter(m => m >= startMonth).sort();
         // Hard cap to keep tables readable; will grow as we accumulate snapshots forward
         const recent13 = allMonthKeys.slice(-24);
 
-        const s = settings || { grossMarginPct: 60, paymentFeePct: 2.9, paymentFeeFixed: 0.30, shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000, googleSpend: {}, opexByMonth: {} };
+        const s = settings || { grossMarginPct: 60, paymentFeePct: 2.9, paymentFeeFixed: 0.30, shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000, googleSpend: {}, opexByMonth: {}, revenueAddByMonth: {}, ordersAddByMonth: {} };
         const googleByMonth = s.googleSpend || {};
         const opexByMonth = s.opexByMonth || {};
+        const revenueAddByMonth = s.revenueAddByMonth || {};
+        const ordersAddByMonth = s.ordersAddByMonth || {};
         const defaultOpex = s.monthlyOpex || 0;
         const opexFor = (mk) => {
           const v = opexByMonth[mk];
@@ -684,12 +690,14 @@ export default function DashboardTool({ view = 'cfo' }) {
         const rows = recent13.map(mk => {
           const sh = shopByMonth[mk] || { netSales: 0, orders: 0, newCustomers: 0, returningCustomers: 0, newRevenue: 0, returningRevenue: 0, cogs: 0, costedRevenue: 0, uncostedRevenue: 0 };
           const meta = spendByMonth[mk] || { spend: 0, purchases: 0 };
-          const revenue = sh.netSales || 0;
-          const orders = sh.orders || 0;
+          const addRev = Number(revenueAddByMonth[mk] || 0);
+          const addOrders = Number(ordersAddByMonth[mk] || 0);
+          const revenue = (sh.netSales || 0) + addRev;
+          const orders = (sh.orders || 0) + addOrders;
           // Hybrid COGS: actual unitCost × qty for line items where Shopify has cost set,
-          // GM% assumption applied to revenue from line items without cost.
+          // GM% assumption applied to (uncosted Shopify revenue + manual additions).
           const realCogs = sh.cogs || 0;
-          const fallbackCogs = (sh.uncostedRevenue || 0) * (1 - (s.grossMarginPct / 100));
+          const fallbackCogs = ((sh.uncostedRevenue || 0) + addRev) * (1 - (s.grossMarginPct / 100));
           const cogs = realCogs + fallbackCogs;
           const cogsActualPct = revenue > 0 ? (sh.costedRevenue || 0) / revenue : 0; // 1.0 = 100% real, 0 = all fallback
           const paymentFees = revenue * (s.paymentFeePct / 100) + orders * s.paymentFeeFixed;
@@ -820,16 +828,18 @@ export default function DashboardTool({ view = 'cfo' }) {
                     <span style={{ fontSize: 9, color: '#6e7681' }}>YYYY-MM</span>
                   </div>
                 </div>
-                {/* Monthly Google spend + OpEx overrides */}
+                {/* Monthly OpEx, Google spend, additional revenue (dealer + historical) */}
                 <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid #2a3441' }}>
-                  <span style={S.label}>Monthly OpEx (from P&L) + Google Ad Spend</span>
+                  <span style={S.label}>Monthly Overrides — OpEx, Google, Add'l Revenue</span>
                   <div style={{ fontSize: 9, color: '#6e7681', marginBottom: 10, letterSpacing: 1 }}>
-                    Leave blank to use the default. Google Ads will become an API integration later.
+                    Leave blank to use defaults. <strong>Add'l Revenue</strong> is added on top of Shopify primary — use it for dealer-store sales and pre-window months (Jan/Feb '26). Add'l Orders drives correct fees/ship/pick math.
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr', gap: 6, alignItems: 'center', maxHeight: 360, overflowY: 'auto' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr 1fr 1fr 80px', gap: 6, alignItems: 'center', maxHeight: 420, overflowY: 'auto' }}>
                     <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>Month</div>
                     <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>OpEx ($)</div>
-                    <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>Google Spend ($)</div>
+                    <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>Google ($)</div>
+                    <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>Add'l Rev ($)</div>
+                    <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>Add'l Ord</div>
                     {recent13.map(mk => (
                       <React.Fragment key={mk}>
                         <span style={{ fontSize: 11, color: '#c9d1d9' }}>{fmtMo(mk)}</span>
@@ -843,6 +853,18 @@ export default function DashboardTool({ view = 'cfo' }) {
                           type="number" step="1" placeholder="0"
                           value={settings.googleSpend?.[mk] ?? ''}
                           onChange={e => setSettings({ ...settings, googleSpend: { ...(settings.googleSpend || {}), [mk]: e.target.value === '' ? undefined : parseFloat(e.target.value) || 0 } })}
+                          style={{ width: '100%', padding: '4px 6px', background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11, borderRadius: 3 }}
+                        />
+                        <input
+                          type="number" step="1" placeholder="0"
+                          value={settings.revenueAddByMonth?.[mk] ?? ''}
+                          onChange={e => setSettings({ ...settings, revenueAddByMonth: { ...(settings.revenueAddByMonth || {}), [mk]: e.target.value === '' ? undefined : parseFloat(e.target.value) || 0 } })}
+                          style={{ width: '100%', padding: '4px 6px', background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11, borderRadius: 3 }}
+                        />
+                        <input
+                          type="number" step="1" placeholder="0"
+                          value={settings.ordersAddByMonth?.[mk] ?? ''}
+                          onChange={e => setSettings({ ...settings, ordersAddByMonth: { ...(settings.ordersAddByMonth || {}), [mk]: e.target.value === '' ? undefined : parseFloat(e.target.value) || 0 } })}
                           style={{ width: '100%', padding: '4px 6px', background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11, borderRadius: 3 }}
                         />
                       </React.Fragment>
@@ -1162,6 +1184,8 @@ export default function DashboardTool({ view = 'cfo' }) {
         const metaByMonth = { ...snapMetaByMonth, ...liveSpendByMonth };
         const googleByMonth = settings?.googleSpend || {};
         const opexByMonth = settings?.opexByMonth || {};
+        const revenueAddByMonth = settings?.revenueAddByMonth || {};
+        const ordersAddByMonth = settings?.ordersAddByMonth || {};
         const defaultOpex = settings?.monthlyOpex || 0;
         const s = settings;
 
@@ -1180,11 +1204,13 @@ export default function DashboardTool({ view = 'cfo' }) {
           const isCurrent = f.month === currentMonthKey;
           const isPast = f.month < currentMonthKey;
 
-          // Actuals
-          const actRevenue = sh.netSales || 0;
-          const orders = sh.orders || 0;
+          // Actuals — include manual revenue/orders adds (dealer + pre-window historical)
+          const addRev = Number(revenueAddByMonth[f.month] || 0);
+          const addOrders = Number(ordersAddByMonth[f.month] || 0);
+          const actRevenue = (sh.netSales || 0) + addRev;
+          const orders = (sh.orders || 0) + addOrders;
           const realCogs = sh.cogs || 0;
-          const fallbackCogs = (sh.uncostedRevenue || 0) * (1 - ((s?.grossMarginPct || 60) / 100));
+          const fallbackCogs = ((sh.uncostedRevenue || 0) + addRev) * (1 - ((s?.grossMarginPct || 60) / 100));
           const actCogs = realCogs + fallbackCogs;
           const actMetaSpend = meta.spend || 0;
           const actGoogleSpend = Number(googleByMonth[f.month] || 0);

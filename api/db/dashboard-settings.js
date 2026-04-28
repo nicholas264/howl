@@ -10,6 +10,8 @@ const DEFAULTS = {
   monthlyOpex: 50000,        // fallback monthly opex when no per-month override is set
   googleSpend: {},           // YYYY-MM → dollar spend (manual until we wire the Google Ads API)
   opexByMonth: {},           // YYYY-MM → dollar opex from P&L; falls back to monthlyOpex
+  revenueAddByMonth: {},     // YYYY-MM → additional revenue (dealer store, historical pre-window months) added on top of Shopify primary
+  ordersAddByMonth: {},      // YYYY-MM → additional orders for the same months (drives correct fees/ship/pick)
   cfoStartMonth: '2026-03',  // CFO View hides months before this (Shopify only returns last 60d so we snapshot history)
   forecastSheetId: '1uzteHW4sWB6Q49Rt7pOFzmIMD_s0Dxec0lQwgTfFHRI', // HOWL '26-'27 Projections sheet
   forecastSheetName: 'P&L Monthly',
