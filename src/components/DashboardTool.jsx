@@ -571,7 +571,8 @@ export default function DashboardTool() {
           newCustomers: Math.round(currentRow.newCustomers * paceFactor),
           returningCustomers: Math.round(currentRow.returningCustomers * paceFactor),
           cm3: currentRow.cm3 * paceFactor,
-          opexCoverage: opex > 0 ? (currentRow.cm3 * paceFactor) / opex : null,
+          opex: currentRow.opex,
+          opexCoverage: currentRow.opex > 0 ? (currentRow.cm3 * paceFactor) / currentRow.opex : null,
           ncac: currentRow.newCustomers > 0 ? currentRow.metaSpend / currentRow.newCustomers : null, // run-rate NCAC, Meta only
         } : null;
 
@@ -733,7 +734,7 @@ export default function DashboardTool() {
                         { label: 'Projected Revenue', value: fmt$(pace.revenue), sub: fmt$(currentRow.revenue) + ' MTD' },
                         { label: 'Projected Ad Spend', value: fmt$(pace.adSpend), sub: fmt$(currentRow.adSpend) + ' MTD' },
                         { label: 'Projected CM3', value: fmt$(pace.cm3), color: pace.cm3 >= 0 ? '#3fb950' : '#f85149', sub: fmt$(currentRow.cm3) + ' MTD' },
-                        { label: 'OpEx Coverage', value: pace.opexCoverage == null ? '—' : fmtPct(pace.opexCoverage), color: (pace.opexCoverage || 0) >= 1 ? '#3fb950' : (pace.opexCoverage || 0) >= 0.5 ? '#f5a623' : '#f85149', sub: 'vs ' + fmt$(opex) },
+                        { label: 'OpEx Coverage', value: pace.opexCoverage == null ? '—' : fmtPct(pace.opexCoverage), color: (pace.opexCoverage || 0) >= 1 ? '#3fb950' : (pace.opexCoverage || 0) >= 0.5 ? '#f5a623' : '#f85149', sub: 'vs ' + fmt$(pace.opex) },
                         { label: 'Projected New', value: pace.newCustomers.toLocaleString(), sub: currentRow.newCustomers + ' MTD' },
                         { label: 'NCAC (run rate)', value: pace.ncac == null ? '—' : '$' + pace.ncac.toFixed(0), sub: currentRow.newCustomers ? '' : 'no new yet' },
                       ].map(({ label, value, sub, color }) => (
