@@ -182,6 +182,7 @@ export default function HowlAdEngine() {
       { key: 'dashboard-meta',     label: 'Meta',              indent: true },
       { key: 'dashboard-shopify',  label: 'Shopify',           indent: true },
       { key: 'dashboard-creative', label: 'Creative',          indent: true },
+      { key: 'dashboard-forecast', label: 'Forecast',          indent: true },
       { key: 'log', label: 'Launch Log' },
     ]},
   ];
@@ -263,6 +264,7 @@ export default function HowlAdEngine() {
       {activeTab === "dashboard-meta" && <DashboardTool view="meta" />}
       {activeTab === "dashboard-shopify" && <DashboardTool view="shopify" />}
       {activeTab === "dashboard-creative" && <DashboardTool view="creative" />}
+      {activeTab === "dashboard-forecast" && <DashboardTool view="forecast" />}
       {activeTab === "log" && <LaunchLogTool />}
       {activeTab === "ugc" && <UgcInboxTool />}
       {activeTab === "publish" && (

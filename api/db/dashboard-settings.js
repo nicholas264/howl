@@ -11,6 +11,8 @@ const DEFAULTS = {
   googleSpend: {},           // YYYY-MM → dollar spend (manual until we wire the Google Ads API)
   opexByMonth: {},           // YYYY-MM → dollar opex from P&L; falls back to monthlyOpex
   cfoStartMonth: '2026-03',  // CFO View hides months before this (Shopify only returns last 60d so we snapshot history)
+  forecastSheetId: '1uzteHW4sWB6Q49Rt7pOFzmIMD_s0Dxec0lQwgTfFHRI', // HOWL '26-'27 Projections sheet
+  forecastSheetName: 'P&L Monthly',
 };
 
 async function ensureTable(sql) {

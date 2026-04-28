@@ -102,6 +102,36 @@ export default function DashboardTool({ view = 'cfo' }) {
     googleSpend: {}, opexByMonth: {}, cfoStartMonth: '2026-03',
   });
 
+  // Forecast (parsed from HOWL projections Google Sheet).
+  const [forecast, setForecast] = useState(null);          // { sheetId, sheetName, months: [...] }
+  const [forecastUpdatedAt, setForecastUpdatedAt] = useState(null);
+  const [forecastLoading, setForecastLoading] = useState(false);
+  const [forecastError, setForecastError] = useState('');
+  // Hydrate cached forecast on mount.
+  useEffect(() => {
+    fetch('/api/forecast').then(r => r.json()).then(d => {
+      if (d.forecast) setForecast(d.forecast);
+      if (d.updatedAt) setForecastUpdatedAt(new Date(d.updatedAt));
+    }).catch(() => {});
+  }, []);
+  const refreshForecast = useCallback(async () => {
+    setForecastLoading(true); setForecastError('');
+    try {
+      const r = await fetch('/api/forecast', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'refresh' }),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setForecast(d.forecast);
+      setForecastUpdatedAt(new Date());
+    } catch (err) {
+      setForecastError(err.message);
+    } finally {
+      setForecastLoading(false);
+    }
+  }, []);
+
   // DB-snapshotted monthly metrics — preserves history past Shopify's 60-day window.
   const [historySnapshots, setHistorySnapshots] = useState([]); // [{month, shopify, meta, updated_at}]
   const [snapshotsLoaded, setSnapshotsLoaded] = useState(false);
@@ -341,6 +371,7 @@ export default function DashboardTool({ view = 'cfo' }) {
     meta:     { title: 'Meta Ads',  subtitle: 'Live budget, formats, monthly velocity, recent launches.' },
     shopify:  { title: 'Shopify',   subtitle: 'Seasonality, monthly trend, CVR, product mix.' },
     creative: { title: 'Creative',  subtitle: 'Velocity, format mix, top creators — sourced from launch_history.' },
+    forecast: { title: 'Forecast',  subtitle: 'Pacing actuals against the HOWL \'26 projections.' },
   };
   const v = VIEW_TITLES[view] || VIEW_TITLES.cfo;
 
@@ -375,6 +406,11 @@ export default function DashboardTool({ view = 'cfo' }) {
           <button onClick={loadShopify} disabled={shopifyLoading} style={shopifyLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : (shopifyData ? S.ghostBtn : S.btn)}>
             {shopifyLoading ? 'Loading…' : shopifyData ? 'Refresh Shopify' : 'Load Shopify'}
           </button>
+          {view === 'forecast' && (
+            <button onClick={refreshForecast} disabled={forecastLoading} style={forecastLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : (forecast ? S.ghostBtn : S.btn)}>
+              {forecastLoading ? 'Pulling…' : forecast ? 'Refresh Forecast' : 'Pull Forecast'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1050,6 +1086,250 @@ export default function DashboardTool({ view = 'cfo' }) {
                 </div>
               </>
             )}
+          </>
+        );
+      })()}
+
+      {/* ── Forecast / Pacing Section ─────────────────────────────────────── */}
+      {view === 'forecast' && (() => {
+        if (forecastError) {
+          return <div style={{ ...S.err, marginBottom: 20 }}>Forecast: {forecastError}</div>;
+        }
+        if (!forecast) {
+          return (
+            <div style={{ ...S.card, color: '#8b949e', fontSize: 12 }}>
+              <div style={{ fontSize: 13, color: '#f0f4f8', marginBottom: 10 }}>No forecast loaded yet.</div>
+              <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6 }}>
+                <li>Share the projections sheet (Viewer access) with{' '}
+                  <code style={{ color: '#f5a623' }}>howl-drive-uploader@howl-creative-studio.iam.gserviceaccount.com</code>.</li>
+                <li>Click <strong>Pull Forecast</strong> in the header above.</li>
+                <li>Edit the sheet anytime, then re-pull to refresh.</li>
+              </ol>
+              {forecastUpdatedAt && (
+                <div style={{ marginTop: 14, fontSize: 9, color: '#6e7681', letterSpacing: 1 }}>
+                  Last cached: {forecastUpdatedAt.toLocaleString()}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // Build pacing rows: filter forecast months to start month forward, intersect with snapshots+live actuals.
+        const startMonth = settings?.cfoStartMonth || '2026-03';
+        const liveSpendByMonth = Object.fromEntries((data?.monthlyInsights || []).map(m => [m.month, m]));
+        const liveShopByMonth = Object.fromEntries((shopifyData?.months || []).map(m => [m.month, m]));
+        const snapShopByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.shopify).map(r => [r.month, r.shopify]));
+        const snapMetaByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.meta).map(r => [r.month, r.meta]));
+        const shopByMonth = { ...snapShopByMonth, ...liveShopByMonth };
+        const metaByMonth = { ...snapMetaByMonth, ...liveSpendByMonth };
+        const googleByMonth = settings?.googleSpend || {};
+        const opexByMonth = settings?.opexByMonth || {};
+        const defaultOpex = settings?.monthlyOpex || 0;
+        const s = settings;
+
+        // Filter forecast to start month forward; current calendar year only.
+        const nowD = new Date();
+        const thisYear = String(nowD.getFullYear());
+        const currentMonthKey = `${thisYear}-${String(nowD.getMonth() + 1).padStart(2, '0')}`;
+        const dayOfMonth = nowD.getDate();
+        const daysInMonth = new Date(nowD.getFullYear(), nowD.getMonth() + 1, 0).getDate();
+
+        const forecastMonths = (forecast.months || []).filter(m => m.month >= startMonth && m.month.startsWith(thisYear));
+
+        const rows = forecastMonths.map(f => {
+          const sh = shopByMonth[f.month] || {};
+          const meta = metaByMonth[f.month] || {};
+          const isCurrent = f.month === currentMonthKey;
+          const isPast = f.month < currentMonthKey;
+
+          // Actuals
+          const actRevenue = sh.netSales || 0;
+          const orders = sh.orders || 0;
+          const realCogs = sh.cogs || 0;
+          const fallbackCogs = (sh.uncostedRevenue || 0) * (1 - ((s?.grossMarginPct || 60) / 100));
+          const actCogs = realCogs + fallbackCogs;
+          const actMetaSpend = meta.spend || 0;
+          const actGoogleSpend = Number(googleByMonth[f.month] || 0);
+          const actCac = actMetaSpend + actGoogleSpend;
+          const actOpex = opexByMonth[f.month] != null && opexByMonth[f.month] !== ''
+            ? Number(opexByMonth[f.month]) : defaultOpex;
+          const actFees = actRevenue * ((s?.paymentFeePct || 2.9) / 100) + orders * (s?.paymentFeeFixed || 0.30);
+          const actShip = orders * (s?.shippingCostPerOrder || 8);
+          const actPick = orders * (s?.fulfillmentCostPerOrder || 3);
+          const actCm3 = actRevenue - actCogs - actFees - actShip - actPick - actCac;
+
+          // Project current-month actual to full month.
+          const paceFactor = isCurrent ? daysInMonth / Math.max(dayOfMonth, 1) : 1;
+          const projRevenue = isCurrent ? actRevenue * paceFactor : actRevenue;
+          const projCac = isCurrent ? actCac * paceFactor : actCac;
+          const projCm3 = isCurrent ? actCm3 * paceFactor : actCm3;
+
+          // Targets (use DTC revenue as the comparable to Shopify netSales)
+          const tgtRevenue = f.dtcRevenue ?? f.netRevenue ?? 0;
+          const tgtCac = f.cac || 0;
+          const tgtCm3 = f.contributionProfit || 0;
+          const tgtOpex = f.totalOpex || 0;
+
+          return {
+            month: f.month, isCurrent, isPast,
+            actRevenue, projRevenue, tgtRevenue,
+            actCac, projCac, tgtCac,
+            actOpex, tgtOpex,
+            actCm3, projCm3, tgtCm3,
+            forecast: f,
+          };
+        });
+
+        // YTD totals (sum of past months actual + current MTD actual). Targets = sum of all forecast months in range.
+        const ytdActual = rows.filter(r => r.isPast || r.isCurrent).reduce((a, r) => ({
+          revenue: a.revenue + r.actRevenue,
+          cac:     a.cac + r.actCac,
+          opex:    a.opex + r.actOpex,
+          cm3:     a.cm3 + r.actCm3,
+        }), { revenue: 0, cac: 0, opex: 0, cm3: 0 });
+
+        const ytdTargetSoFar = rows.filter(r => r.isPast || r.isCurrent).reduce((a, r) => ({
+          revenue: a.revenue + r.tgtRevenue,
+          cac:     a.cac + r.tgtCac,
+          opex:    a.opex + r.tgtOpex,
+          cm3:     a.cm3 + r.tgtCm3,
+        }), { revenue: 0, cac: 0, opex: 0, cm3: 0 });
+
+        // Year-end projection: sum of past actuals + current MTD projected + future targets
+        const eoyProjected = rows.reduce((a, r) => ({
+          revenue: a.revenue + (r.isPast ? r.actRevenue : r.isCurrent ? r.projRevenue : r.tgtRevenue),
+          cac:     a.cac + (r.isPast ? r.actCac : r.isCurrent ? r.projCac : r.tgtCac),
+          opex:    a.opex + (r.isPast ? r.actOpex : r.isCurrent ? r.actOpex : r.tgtOpex), // future opex still uses target
+          cm3:     a.cm3 + (r.isPast ? r.actCm3 : r.isCurrent ? r.projCm3 : r.tgtCm3),
+        }), { revenue: 0, cac: 0, opex: 0, cm3: 0 });
+
+        const eoyTarget = rows.reduce((a, r) => ({
+          revenue: a.revenue + r.tgtRevenue,
+          cac:     a.cac + r.tgtCac,
+          opex:    a.opex + r.tgtOpex,
+          cm3:     a.cm3 + r.tgtCm3,
+        }), { revenue: 0, cac: 0, opex: 0, cm3: 0 });
+
+        const fmt$ = (n) => n == null || isNaN(n) ? '—' : '$' + Math.round(n).toLocaleString();
+        const fmtPct = (n) => n == null || isNaN(n) ? '—' : (n * 100).toFixed(1) + '%';
+        const pctOf = (a, t) => t > 0 ? a / t : null;
+        const fmtMo = (mk) => {
+          const [y, m] = mk.split('-');
+          return new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString('en-US', { month: 'short' });
+        };
+
+        const KPI_DEFS = [
+          { key: 'revenue', label: 'Revenue',  goodWhen: 'higher' },
+          { key: 'cac',     label: 'Ad Spend (CAC)', goodWhen: 'tracking' },  // hitting target = good
+          { key: 'opex',    label: 'OpEx',     goodWhen: 'lower' },
+          { key: 'cm3',     label: 'CM3',      goodWhen: 'higher' },
+        ];
+        const colorFor = (actual, target, goodWhen) => {
+          if (target == null || target === 0) return '#8b949e';
+          const ratio = actual / target;
+          if (goodWhen === 'higher')  return ratio >= 1 ? '#3fb950' : ratio >= 0.85 ? '#f5a623' : '#f85149';
+          if (goodWhen === 'lower')   return ratio <= 1 ? '#3fb950' : ratio <= 1.15 ? '#f5a623' : '#f85149';
+          return Math.abs(ratio - 1) < 0.15 ? '#3fb950' : '#f5a623'; // tracking: ±15% of target
+        };
+
+        return (
+          <>
+            {forecastUpdatedAt && (
+              <div style={{ fontSize: 9, color: '#6e7681', letterSpacing: 1, marginBottom: 14 }}>
+                Forecast last pulled {forecastUpdatedAt.toLocaleString()} · Sheet: {forecast.sheetName} · {(forecast.months || []).length} months parsed
+              </div>
+            )}
+
+            {/* YTD Pacing strip */}
+            <div style={{ ...S.card, marginBottom: 16 }}>
+              <span style={S.label}>YTD Pacing — {thisYear} (through {fmtMo(currentMonthKey)})</span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginTop: 12 }}>
+                {KPI_DEFS.map(({ key, label, goodWhen }) => {
+                  const a = ytdActual[key], t = ytdTargetSoFar[key];
+                  const ratio = pctOf(a, t);
+                  const color = colorFor(a, t, goodWhen);
+                  return (
+                    <div key={key} style={{ borderLeft: '2px solid #2a3441', paddingLeft: 14 }}>
+                      <div style={{ ...S.label, marginBottom: 4 }}>{label}</div>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: '#f0f4f8', lineHeight: 1 }}>{fmt$(a)}</div>
+                      <div style={{ fontSize: 10, color: '#6e7681', marginTop: 4, letterSpacing: 1 }}>vs {fmt$(t)} target</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color, marginTop: 6 }}>
+                        {ratio == null ? '—' : (ratio * 100).toFixed(0) + '% to plan'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Year-end projection */}
+            <div style={{ ...S.card, marginBottom: 20 }}>
+              <span style={S.label}>{thisYear} Year-End Projection (past actuals + MTD pace + future targets)</span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginTop: 12 }}>
+                {KPI_DEFS.map(({ key, label, goodWhen }) => {
+                  const proj = eoyProjected[key], tgt = eoyTarget[key];
+                  const ratio = pctOf(proj, tgt);
+                  const color = colorFor(proj, tgt, goodWhen);
+                  return (
+                    <div key={key} style={{ borderLeft: '2px solid #2a3441', paddingLeft: 14 }}>
+                      <div style={{ ...S.label, marginBottom: 4 }}>{label}</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: '#f0f4f8', lineHeight: 1 }}>{fmt$(proj)}</div>
+                      <div style={{ fontSize: 10, color: '#6e7681', marginTop: 4, letterSpacing: 1 }}>vs {fmt$(tgt)} plan</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color, marginTop: 6 }}>
+                        {ratio == null ? '—' : (ratio * 100).toFixed(0) + '% of plan'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Per-month pacing table */}
+            <div style={{ ...S.card }}>
+              <span style={S.label}>Monthly Pacing — Actual vs Target</span>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8, minWidth: 880 }}>
+                  <thead>
+                    <tr>
+                      {['Month', 'Status', 'Revenue Act', 'Rev Tgt', 'Δ', 'CAC Act', 'CAC Tgt', 'Δ', 'CM3 Act', 'CM3 Tgt', 'Δ'].map((h, i) => (
+                        <th key={i} style={{ fontSize: 8, letterSpacing: 1, color: '#6e7681', textAlign: i === 0 || i === 1 ? 'left' : 'right', padding: '4px 6px 8px 0', textTransform: 'uppercase', fontWeight: 600 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(r => {
+                      const status = r.isPast ? 'actual' : r.isCurrent ? 'pace' : 'plan';
+                      const statusColor = r.isPast ? '#3fb950' : r.isCurrent ? '#DC440A' : '#6e7681';
+                      const revRow = r.isPast ? r.actRevenue : r.isCurrent ? r.projRevenue : r.tgtRevenue;
+                      const cacRow = r.isPast ? r.actCac : r.isCurrent ? r.projCac : r.tgtCac;
+                      const cm3Row = r.isPast ? r.actCm3 : r.isCurrent ? r.projCm3 : r.tgtCm3;
+                      const dRev = r.tgtRevenue > 0 ? (revRow / r.tgtRevenue) - 1 : null;
+                      const dCac = r.tgtCac > 0 ? (cacRow / r.tgtCac) - 1 : null;
+                      const dCm3 = r.tgtCm3 > 0 ? (cm3Row / r.tgtCm3) - 1 : (r.tgtCm3 < 0 ? null : null);
+                      const cell = (txt, color) => <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: color || '#c9d1d9', textAlign: 'right' }}>{txt}</td>;
+                      const deltaCell = (d, goodWhen) => {
+                        if (d == null) return cell('—', '#6e7681');
+                        const sign = d > 0 ? '+' : '';
+                        const good = goodWhen === 'lower' ? d <= 0 : d >= 0;
+                        return cell(`${sign}${(d * 100).toFixed(0)}%`, good ? '#3fb950' : '#f85149');
+                      };
+                      return (
+                        <tr key={r.month} style={{ borderTop: '1px solid #2a3441' }}>
+                          <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.isCurrent ? '#DC440A' : '#c9d1d9', fontWeight: r.isCurrent ? 700 : 400 }}>{fmtMo(r.month)}</td>
+                          <td style={{ padding: '6px 6px 6px 0', fontSize: 9, color: statusColor, letterSpacing: 1, textTransform: 'uppercase', fontWeight: 600 }}>{status}</td>
+                          {cell(fmt$(revRow), '#f0f4f8')} {cell(fmt$(r.tgtRevenue))}{deltaCell(dRev, 'higher')}
+                          {cell(fmt$(cacRow))} {cell(fmt$(r.tgtCac))}{deltaCell(dCac, 'lower')}
+                          {cell(fmt$(cm3Row), cm3Row >= 0 ? '#3fb950' : '#f85149')} {cell(fmt$(r.tgtCm3))}{deltaCell(dCm3, 'higher')}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ fontSize: 9, color: '#6e7681', marginTop: 10, letterSpacing: 1 }}>
+                STATUS — actual: closed month, pace: current month projected to month-end, plan: forecast value used. CAC delta uses "lower is better"; revenue & CM3 use "higher is better". Forecast revenue line = DTC Revenue (closest comp to Shopify net sales).
+              </div>
+            </div>
           </>
         );
       })()}
