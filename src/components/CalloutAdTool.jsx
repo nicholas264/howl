@@ -38,7 +38,7 @@ const DEFAULT_CALLOUT = (heading, body, side, x, y) => ({
 });
 
 // Render the entire callout ad to a canvas — bypasses html-to-image entirely.
-async function renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts }) {
+async function renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts, titlePos = { x: 0.05, y: 0.04 } }) {
   const titleSize = format.w * 0.075;
   const subSize = format.w * 0.022;
   const headSize = format.w * 0.028;
@@ -74,9 +74,9 @@ async function renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts }
   ctx.fillStyle = '#F9F3DF';
   ctx.textBaseline = 'top';
 
-  // Title (top-left)
-  const titleX = format.w * 0.05;
-  const titleY = format.h * 0.04;
+  // Title (draggable)
+  const titleX = format.w * titlePos.x;
+  const titleY = format.h * titlePos.y;
   ctx.font = `800 ${titleSize}px Montserrat, sans-serif`;
   ctx.letterSpacing = `${titleSize * 0.02}px`;
   ctx.textAlign = 'left';
@@ -236,6 +236,7 @@ export default function CalloutAdTool({ onAddToCart }) {
   const [subtitle, setSubtitle] = useState('');
   const [callouts, setCallouts] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
+  const [titlePos, setTitlePos] = useState({ x: 0.05, y: 0.04 });
   const [exporting, setExporting] = useState(false);
   const stageRef = useRef(null);
   const draggingRef = useRef(null); // { id, type: 'anchor' }
@@ -290,6 +291,13 @@ export default function CalloutAdTool({ onAddToCart }) {
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
     const { id, type } = draggingRef.current;
+    if (type === 'title') {
+      setTitlePos({
+        x: Math.max(0.02, Math.min(0.95, x)),
+        y: Math.max(0.01, Math.min(0.95, y)),
+      });
+      return;
+    }
     setCallouts(prev => prev.map(c => {
       if (c.id !== id) return c;
       const clampedY = Math.max(0.05, Math.min(0.95, y));
@@ -317,7 +325,7 @@ export default function CalloutAdTool({ onAddToCart }) {
   const exportPng = async () => {
     setExporting(true);
     try {
-      const canvas = await renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts });
+      const canvas = await renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts, titlePos });
       const dataUrl = canvas.toDataURL('image/png');
       const a = document.createElement('a');
       a.href = dataUrl;
@@ -335,7 +343,7 @@ export default function CalloutAdTool({ onAddToCart }) {
     if (!onAddToCart) return;
     setExporting(true);
     try {
-      const canvas = await renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts });
+      const canvas = await renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts, titlePos });
       const dataUrl = canvas.toDataURL('image/png');
       onAddToCart({
         id: Date.now(),
@@ -390,11 +398,16 @@ export default function CalloutAdTool({ onAddToCart }) {
               />
             )}
 
-            {/* Title block */}
-            <div style={{
-              position: 'absolute', top: '4%', left: '5%', right: '5%',
-              color: '#F9F3DF', textAlign: 'left', pointerEvents: 'none',
-            }}>
+            {/* Title block — draggable */}
+            <div
+              onMouseDown={(e) => { e.stopPropagation(); draggingRef.current = { id: '__title', type: 'title' }; }}
+              style={{
+                position: 'absolute',
+                top: `${titlePos.y * 100}%`,
+                left: `${titlePos.x * 100}%`,
+                right: 'auto',
+                color: '#F9F3DF', textAlign: 'left', cursor: 'grab',
+              }}>
               <div style={{
                 fontFamily: "'Montserrat', sans-serif", fontWeight: 800,
                 fontSize: stageDisplayWidth * 0.075, letterSpacing: '0.02em',
