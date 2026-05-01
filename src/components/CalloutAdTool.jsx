@@ -133,14 +133,16 @@ export default function CalloutAdTool({ onAddToCart }) {
         pixelRatio: scale,
         cacheBust: true,
         backgroundColor: '#1a1612',
+        skipFonts: true,
       });
       const a = document.createElement('a');
       a.href = blob;
       a.download = `howl_callout_${product.id}_${Date.now()}.png`;
       a.click();
     } catch (err) {
-      console.error(err);
-      alert('Export failed: ' + err.message);
+      console.error('Callout export error:', err);
+      const msg = err?.message || (typeof err === 'string' ? err : JSON.stringify(err));
+      alert('Export failed: ' + msg);
     } finally {
       setExporting(false);
     }
