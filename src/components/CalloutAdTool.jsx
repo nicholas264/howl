@@ -37,6 +37,153 @@ const DEFAULT_CALLOUT = (heading, body, side, x, y) => ({
   textY: y ?? 0.5, // text block vertical position — independent of anchor
 });
 
+// Render the entire callout ad to a canvas — bypasses html-to-image entirely.
+async function renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts }) {
+  await Promise.all([
+    document.fonts.load('800 80px Montserrat'),
+    document.fonts.load('700 24px "Libre Franklin"'),
+    document.fonts.load('400 22px "Source Sans 3"'),
+  ]);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = format.w;
+  canvas.height = format.h;
+  const ctx = canvas.getContext('2d');
+
+  // Background fallback
+  ctx.fillStyle = '#1a1612';
+  ctx.fillRect(0, 0, format.w, format.h);
+
+  // Product image cover-fit
+  if (imgUrl) {
+    const img = await loadImg(imgUrl);
+    const imgAR = img.naturalWidth / img.naturalHeight;
+    const canAR = format.w / format.h;
+    let sx, sy, sw, sh;
+    if (imgAR > canAR) { sh = img.naturalHeight; sw = sh * canAR; sx = (img.naturalWidth - sw) / 2; sy = 0; }
+    else { sw = img.naturalWidth; sh = sw / canAR; sx = 0; sy = (img.naturalHeight - sh) / 2; }
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, format.w, format.h);
+  }
+
+  // Title block (top-left, ~5% margin, ~4% from top)
+  const margin = format.w * 0.05;
+  const titleSize = format.w * 0.075;
+  const subSize = format.w * 0.022;
+  ctx.fillStyle = '#F9F3DF';
+  ctx.textBaseline = 'top';
+  ctx.font = `800 ${titleSize}px Montserrat, sans-serif`;
+  drawSpacedText(ctx, (title || '').toUpperCase(), margin, format.h * 0.04, 0.02);
+  if (subtitle) {
+    ctx.font = `700 ${subSize}px "Libre Franklin", sans-serif`;
+    drawSpacedText(ctx, subtitle.toUpperCase(), margin, format.h * 0.04 + titleSize * 1.05, 0.08);
+  }
+
+  // Callouts
+  const headSize = format.w * 0.028;
+  const bodySize = format.w * 0.020;
+  const headLineH = headSize * 1.05;
+  const bodyLineH = bodySize * 1.3;
+  const maxBlockW = format.w * 0.28;
+
+  for (const c of callouts) {
+    const isLeft = c.side === 'left';
+    const ty = c.textY ?? c.anchorY;
+    const textCenterY = ty * format.h;
+    const ax = c.anchorX * format.w;
+    const ay = c.anchorY * format.h;
+
+    // Wrap heading + body
+    ctx.font = `800 ${headSize}px Montserrat, sans-serif`;
+    const headLines = wrapText(ctx, (c.heading || '').toUpperCase(), maxBlockW);
+    ctx.font = `400 ${bodySize}px "Source Sans 3", sans-serif`;
+    const bodyLines = wrapText(ctx, c.body || '', maxBlockW);
+
+    const blockH = headLines.length * headLineH + 8 + bodyLines.length * bodyLineH;
+    const blockTop = textCenterY - blockH / 2;
+    const xLeft = isLeft ? format.w * 0.03 : format.w * 0.97 - maxBlockW;
+    const xRight = isLeft ? format.w * 0.03 + maxBlockW : format.w * 0.97;
+
+    ctx.fillStyle = '#F9F3DF';
+    ctx.textBaseline = 'top';
+    ctx.textAlign = isLeft ? 'left' : 'right';
+    const headX = isLeft ? xLeft : xRight;
+
+    ctx.font = `800 ${headSize}px Montserrat, sans-serif`;
+    headLines.forEach((line, i) => {
+      drawSpacedText(ctx, line, headX, blockTop + i * headLineH, 0.04, ctx.textAlign);
+    });
+
+    ctx.font = `400 ${bodySize}px "Source Sans 3", sans-serif`;
+    const bodyTop = blockTop + headLines.length * headLineH + 8;
+    bodyLines.forEach((line, i) => {
+      ctx.fillText(line, headX, bodyTop + i * bodyLineH);
+    });
+
+    // Leader line — from inner edge of the text block at textCenterY → anchor dot
+    const lineStartX = isLeft ? xLeft + maxBlockW * 0.42 : xRight - maxBlockW * 0.42;
+    ctx.strokeStyle = '#F9F3DF';
+    ctx.lineWidth = Math.max(1, format.w / 720);
+    ctx.beginPath();
+    ctx.moveTo(lineStartX, textCenterY);
+    ctx.lineTo(ax, ay);
+    ctx.stroke();
+
+    // Anchor dot
+    ctx.fillStyle = '#F9F3DF';
+    ctx.beginPath();
+    ctx.arc(ax, ay, format.w * 0.008, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  return canvas;
+}
+
+function loadImg(src) {
+  return new Promise((resolve, reject) => {
+    const i = new Image();
+    i.crossOrigin = 'anonymous';
+    i.onload = () => resolve(i);
+    i.onerror = () => reject(new Error('Image failed to load'));
+    i.src = src;
+  });
+}
+
+function wrapText(ctx, text, maxWidth) {
+  const words = (text || '').split(' ');
+  const lines = [];
+  let cur = '';
+  for (const word of words) {
+    const test = cur ? `${cur} ${word}` : word;
+    if (ctx.measureText(test).width > maxWidth && cur) { lines.push(cur); cur = word; }
+    else cur = test;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+function drawSpacedText(ctx, text, x, y, letterSpacingEm, align) {
+  const size = parseFloat(ctx.font);
+  const ls = size * letterSpacingEm;
+  const chars = [...text];
+  if (align === 'right') {
+    let totalW = 0;
+    for (const ch of chars) totalW += ctx.measureText(ch).width + ls;
+    let cx = x - totalW + ls;
+    for (const ch of chars) {
+      ctx.textAlign = 'left';
+      ctx.fillText(ch, cx, y);
+      cx += ctx.measureText(ch).width + ls;
+    }
+  } else {
+    ctx.textAlign = 'left';
+    let cx = x;
+    for (const ch of chars) {
+      ctx.fillText(ch, cx, y);
+      cx += ctx.measureText(ch).width + ls;
+    }
+  }
+}
+
 async function resizeImage(file, maxEdge) {
   const url = URL.createObjectURL(file);
   try {
@@ -177,43 +324,28 @@ export default function CalloutAdTool({ onAddToCart }) {
   }, [handleStageMouseMove, stopDrag]);
 
   const exportPng = async () => {
-    if (!stageRef.current) return;
     setExporting(true);
     try {
-      const node = stageRef.current;
-      const scale = format.w / node.offsetWidth;
-      const fontEmbedCSS = await getFontEmbedCss();
-      const blob = await toPng(node, {
-        pixelRatio: scale,
-        cacheBust: true,
-        backgroundColor: '#1a1612',
-        skipFonts: true, // skip the network sheet inliner
-        fontEmbedCSS,    // but inline our brand fonts explicitly
-      });
+      const canvas = await renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts });
+      const dataUrl = canvas.toDataURL('image/png');
       const a = document.createElement('a');
-      a.href = blob;
+      a.href = dataUrl;
       a.download = `howl_callout_${product.id}_${Date.now()}.png`;
       a.click();
     } catch (err) {
       console.error('Callout export error:', err);
-      let msg;
-      if (err?.message) msg = err.message;
-      else if (err && err.isTrusted) msg = 'Image too large to embed. Try a smaller product photo.';
-      else if (typeof err === 'string') msg = err;
-      else msg = JSON.stringify(err);
-      alert('Export failed: ' + msg);
+      alert('Export failed: ' + (err?.message || JSON.stringify(err)));
     } finally {
       setExporting(false);
     }
   };
 
   const sendToCart = async () => {
-    if (!stageRef.current || !onAddToCart) return;
+    if (!onAddToCart) return;
     setExporting(true);
     try {
-      const node = stageRef.current;
-      const scale = format.w / node.offsetWidth;
-      const dataUrl = await toPng(node, { pixelRatio: scale, cacheBust: true, backgroundColor: '#1a1612' });
+      const canvas = await renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts });
+      const dataUrl = canvas.toDataURL('image/png');
       onAddToCart({
         id: Date.now(),
         type: 'image',
