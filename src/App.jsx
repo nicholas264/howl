@@ -7,6 +7,7 @@ import ResultsPanel from "./components/ResultsPanel";
 import ReviewAdTool from "./components/ReviewAdTool";
 import VideoAdTool from "./components/VideoAdTool";
 import ImageAdTool from "./components/ImageAdTool";
+import CalloutAdTool from "./components/CalloutAdTool";
 import FounderAdTool from "./components/FounderAdTool";
 import MetaPublishTool from "./components/MetaPublishTool";
 import DashboardTool from "./components/DashboardTool";
@@ -186,6 +187,7 @@ export default function HowlAdEngine() {
     ]},
     { group: 'Create', items: [
       { key: 'image', label: 'Image Ads' },
+      { key: 'callout', label: 'Callout Ads' },
       { key: 'review', label: 'Review Ads' },
       { key: 'video', label: 'Video Ads' },
       { key: 'founder', label: 'Founder Ads' },
@@ -276,6 +278,7 @@ export default function HowlAdEngine() {
       )}
 
       {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} driveAuth={driveAuth} onAddToCart={addToCart} />}
+      {activeTab === "callout" && <CalloutAdTool onAddToCart={addToCart} />}
       {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} onAddToCart={addToCart} />}
       {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} onAddToCart={addToCart} />}
       {activeTab === "founder" && <FounderAdTool />}
