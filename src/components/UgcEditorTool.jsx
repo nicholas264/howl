@@ -33,9 +33,12 @@ export default function UgcEditorTool({ onAddToCart }) {
     if (outputUrl) URL.revokeObjectURL(outputUrl);
   }, [videoUrl, outputUrl]);
 
-  const handleFile = (e) => {
-    const f = e.target.files?.[0];
+  const acceptFile = (f) => {
     if (!f) return;
+    if (!f.type.startsWith('video/')) {
+      setError('Please upload a video file.');
+      return;
+    }
     setFile(f);
     setOutputUrl(null);
     setWords([]);
@@ -44,6 +47,18 @@ export default function UgcEditorTool({ onAddToCart }) {
     if (videoUrl) URL.revokeObjectURL(videoUrl);
     setVideoUrl(URL.createObjectURL(f));
   };
+
+  const handleFile = (e) => acceptFile(e.target.files?.[0]);
+
+  const [dragOver, setDragOver] = useState(false);
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    acceptFile(f);
+  };
+  const handleDragOver = (e) => { e.preventDefault(); setDragOver(true); };
+  const handleDragLeave = () => setDragOver(false);
 
   const transcribe = async () => {
     if (!file) return;
@@ -178,9 +193,14 @@ export default function UgcEditorTool({ onAddToCart }) {
       </p>
 
       {!file && (
-        <label style={uploadBox}>
+        <label
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          style={{ ...uploadBox, borderColor: dragOver ? '#DC440A' : '#2a3441', background: dragOver ? '#1f1410' : '#161b22' }}
+        >
           <input type="file" accept="video/*" onChange={handleFile} style={{ display: 'none' }} />
-          <div style={{ fontSize: 14 }}>Click to upload a video (mp4, mov, webm)</div>
+          <div style={{ fontSize: 14 }}>Click or drag a video here (mp4, mov, webm)</div>
         </label>
       )}
 
