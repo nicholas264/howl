@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Player } from '@remotion/player';
 import { extractAudio, renderCuts, buildSrtFromWords } from '../utils/ffmpegClient';
+import { UgcVideo, calcDurationInFrames } from '../remotion/UgcVideo';
 
 const SILENCE_THRESHOLD_S = 0.6;
 
@@ -16,6 +18,15 @@ export default function UgcEditorTool({ onAddToCart }) {
   const [outputUrl, setOutputUrl] = useState(null);
   const [logTail, setLogTail] = useState('');
   const videoRef = useRef(null);
+
+  // Remotion preview state
+  const [remotionMode, setRemotionMode] = useState(false);
+  const [showIntro, setShowIntro] = useState(true);
+  const [showOutro, setShowOutro] = useState(true);
+  const [introTitle, setIntroTitle] = useState('HOWL');
+  const [introSubtitle, setIntroSubtitle] = useState("World's hottest fire pit");
+  const [outroHeadline, setOutroHeadline] = useState('Get yours.');
+  const [outroCta, setOutroCta] = useState('howlcampfires.com');
 
   useEffect(() => () => {
     if (videoUrl) URL.revokeObjectURL(videoUrl);
@@ -81,6 +92,23 @@ export default function UgcEditorTool({ onAddToCart }) {
   const segments = useMemo(() => buildSegments(words, duration), [words, duration]);
   const keptDuration = segments.reduce((s, seg) => s + (seg.end - seg.start), 0);
   const cutDuration = duration - keptDuration;
+
+  const REMOTION_FPS = 30;
+  const keptWords = useMemo(() => words.filter(w => w.kept), [words]);
+  const remotionDuration = useMemo(
+    () => calcDurationInFrames({ segments, fps: REMOTION_FPS, showIntro, showOutro }),
+    [segments, showIntro, showOutro],
+  );
+  const remotionInputProps = useMemo(() => ({
+    videoSrc: videoUrl,
+    segments,
+    words: keptWords,
+    showCaptions: burnCaptions,
+    showIntro,
+    showOutro,
+    intro: { title: introTitle, subtitle: introSubtitle },
+    outro: { headline: outroHeadline, cta: outroCta },
+  }), [videoUrl, segments, keptWords, burnCaptions, showIntro, showOutro, introTitle, introSubtitle, outroHeadline, outroCta]);
 
   const render = async () => {
     if (!file || !segments.length) return;
@@ -159,7 +187,21 @@ export default function UgcEditorTool({ onAddToCart }) {
       {file && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginTop: 16 }}>
           <div>
-            <video ref={videoRef} src={videoUrl} controls style={{ width: '100%', borderRadius: 8, background: '#000' }} />
+            {remotionMode && (stage === 'ready' || stage === 'done') && segments.length > 0 ? (
+              <Player
+                component={UgcVideo}
+                inputProps={remotionInputProps}
+                durationInFrames={remotionDuration}
+                fps={REMOTION_FPS}
+                compositionWidth={1080}
+                compositionHeight={1920}
+                style={{ width: '100%', borderRadius: 8, background: '#000', aspectRatio: '9/16' }}
+                controls
+                loop
+              />
+            ) : (
+              <video ref={videoRef} src={videoUrl} controls style={{ width: '100%', borderRadius: 8, background: '#000' }} />
+            )}
             <div style={{ fontSize: 12, color: '#8b949e', marginTop: 6 }}>
               {file.name} · {(file.size / 1024 / 1024).toFixed(1)} MB
             </div>
@@ -187,12 +229,47 @@ export default function UgcEditorTool({ onAddToCart }) {
                     {duration ? `${duration.toFixed(1)}s raw · ${keptDuration.toFixed(1)}s kept · ${cutDuration.toFixed(1)}s removed` : null}
                   </div>
 
+                  <label style={checkboxRow}>
+                    <input type="checkbox" checked={remotionMode} onChange={(e) => setRemotionMode(e.target.checked)} />
+                    Remotion preview (animated captions + brand intro/outro)
+                  </label>
+
+                  {remotionMode && (
+                    <div style={{ background: '#161b22', border: '1px solid #2a3441', borderRadius: 6, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <label style={checkboxRow}>
+                        <input type="checkbox" checked={showIntro} onChange={(e) => setShowIntro(e.target.checked)} />
+                        Brand intro (1.5s)
+                      </label>
+                      {showIntro && (
+                        <>
+                          <input value={introTitle} onChange={(e) => setIntroTitle(e.target.value)} placeholder="Intro title" style={smallInput} />
+                          <input value={introSubtitle} onChange={(e) => setIntroSubtitle(e.target.value)} placeholder="Intro subtitle" style={smallInput} />
+                        </>
+                      )}
+                      <label style={checkboxRow}>
+                        <input type="checkbox" checked={showOutro} onChange={(e) => setShowOutro(e.target.checked)} />
+                        Outro CTA (2s)
+                      </label>
+                      {showOutro && (
+                        <>
+                          <input value={outroHeadline} onChange={(e) => setOutroHeadline(e.target.value)} placeholder="Outro headline" style={smallInput} />
+                          <input value={outroCta} onChange={(e) => setOutroCta(e.target.value)} placeholder="Outro CTA (URL)" style={smallInput} />
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   {stage !== 'rendering' && (
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={render} style={primaryBtn} disabled={!segments.length}>
+                      <button onClick={render} style={primaryBtn} disabled={!segments.length || remotionMode}>
                         {stage === 'done' ? 'Re-render' : 'Render'}
                       </button>
                       <button onClick={resetWords} style={secondaryBtn}>Reset cuts</button>
+                    </div>
+                  )}
+                  {remotionMode && (
+                    <div style={{ fontSize: 11, color: '#8b949e' }}>
+                      Remotion render-to-mp4 ships once Lambda is wired (env + AWS account). Preview-only for now.
                     </div>
                   )}
 
@@ -327,6 +404,10 @@ const checkboxRow = { fontSize: 13, color: '#f0f4f8', display: 'flex', gap: 8, a
 const statusBox = {
   background: '#161b22', border: '1px solid #2a3441', borderRadius: 6,
   padding: 12, fontSize: 13, color: '#f0f4f8',
+};
+const smallInput = {
+  background: '#0d1117', border: '1px solid #2a3441', color: '#f0f4f8',
+  padding: '6px 8px', borderRadius: 4, fontSize: 12, fontFamily: 'inherit',
 };
 const transcriptBox = {
   background: '#0d1117', border: '1px solid #2a3441', borderRadius: 8,
