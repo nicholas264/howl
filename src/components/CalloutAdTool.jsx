@@ -3,6 +3,25 @@ import { toPng } from 'html-to-image';
 import { PRODUCTS } from '../data';
 import { COLORS } from '../brand';
 
+const LS_DRAFTS = 'howl_callout_drafts';
+const MAX_DRAFTS = 30;
+
+function loadDrafts() {
+  try { return JSON.parse(localStorage.getItem(LS_DRAFTS) || '[]'); } catch { return []; }
+}
+function saveDrafts(drafts) {
+  try { localStorage.setItem(LS_DRAFTS, JSON.stringify(drafts.slice(0, MAX_DRAFTS))); } catch (err) { console.error('Draft save failed:', err); }
+}
+
+async function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onloadend = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(blob);
+  });
+}
+
 const BRAND_FONTS = [
   { family: 'Montserrat',     weight: 800, url: '/fonts/montserrat-800.woff2' },
   { family: 'Libre Franklin', weight: 700, url: '/fonts/libre-franklin-700.woff2' },
@@ -231,7 +250,10 @@ export default function CalloutAdTool({ onAddToCart }) {
   const [productId, setProductId] = useState('r4mkii');
   const product = PRODUCTS.find(p => p.id === productId) || PRODUCTS[0];
   const [format, setFormat] = useState(FORMATS[0]);
-  const [imgUrl, setImgUrl] = useState(null);
+  const [imgUrl, setImgUrl] = useState(null);   // object URL for fast in-editor display
+  const [imgData, setImgData] = useState(null); // base64 data URL for persistence
+  const [drafts, setDrafts] = useState(() => loadDrafts());
+  const [draftId, setDraftId] = useState(null); // currently-loaded draft, if any
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [callouts, setCallouts] = useState([]);
@@ -240,9 +262,14 @@ export default function CalloutAdTool({ onAddToCart }) {
   const [exporting, setExporting] = useState(false);
   const stageRef = useRef(null);
   const draggingRef = useRef(null); // { id, type: 'anchor' }
+  const skipNextProductInitRef = useRef(false);
 
-  // Initialize from product
+  // Initialize from product (skipped when loading a draft)
   useEffect(() => {
+    if (skipNextProductInitRef.current) {
+      skipNextProductInitRef.current = false;
+      return;
+    }
     setTitle(`THE ${product.name.toUpperCase()}`);
     setSubtitle(product.tagline.toUpperCase());
     const features = product.features.slice(0, 4);
@@ -262,10 +289,55 @@ export default function CalloutAdTool({ onAddToCart }) {
     try {
       const resized = await resizeImage(f, 2000); // long-edge cap
       setImgUrl(URL.createObjectURL(resized));
+      setImgData(await blobToDataUrl(resized));
     } catch (err) {
       console.error('Image resize failed, falling back to original:', err);
       setImgUrl(URL.createObjectURL(f));
+      setImgData(await blobToDataUrl(f));
     }
+  };
+
+  const saveDraft = () => {
+    const id = draftId || `draft-${Date.now()}`;
+    const draft = {
+      id,
+      productId,
+      formatId: format.id,
+      title, subtitle, titlePos,
+      callouts,
+      imgData,
+      savedAt: Date.now(),
+      label: `${product.name} · ${new Date().toLocaleString()}`,
+    };
+    const next = [draft, ...drafts.filter(d => d.id !== id)];
+    setDrafts(next);
+    saveDrafts(next);
+    setDraftId(id);
+  };
+
+  const loadDraft = (id) => {
+    const d = drafts.find(x => x.id === id);
+    if (!d) return;
+    skipNextProductInitRef.current = true;
+    setProductId(d.productId);
+    setFormat(FORMATS.find(f => f.id === d.formatId) || FORMATS[0]);
+    setTitle(d.title);
+    setSubtitle(d.subtitle);
+    setTitlePos(d.titlePos || { x: 0.05, y: 0.04 });
+    setCallouts(d.callouts || []);
+    if (d.imgData) {
+      if (imgUrl) URL.revokeObjectURL(imgUrl);
+      setImgData(d.imgData);
+      setImgUrl(d.imgData); // data URLs work as src directly
+    }
+    setDraftId(id);
+  };
+
+  const deleteDraft = (id) => {
+    const next = drafts.filter(d => d.id !== id);
+    setDrafts(next);
+    saveDrafts(next);
+    if (draftId === id) setDraftId(null);
   };
 
   const updateCallout = (id, patch) => {
@@ -345,10 +417,13 @@ export default function CalloutAdTool({ onAddToCart }) {
     try {
       const canvas = await renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts, titlePos });
       const dataUrl = canvas.toDataURL('image/png');
+      // auto-save the editor state so it can be re-opened later
+      saveDraft();
       onAddToCart({
         id: Date.now(),
         type: 'image',
         kind: 'callout-ad',
+        calloutDraftId: draftId || `draft-${Date.now()}`,
         squareUrl: dataUrl,
         url: dataUrl,
         name: `${product.name} callout · ${new Date().toLocaleString()}`,
@@ -521,6 +596,25 @@ export default function CalloutAdTool({ onAddToCart }) {
 
         {/* RIGHT — controls */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <Row label="Saved layouts">
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <select
+                value={draftId || ''}
+                onChange={(e) => { if (e.target.value) loadDraft(e.target.value); else setDraftId(null); }}
+                style={{ ...input, flex: 1 }}
+              >
+                <option value="">— New layout —</option>
+                {drafts.map(d => (
+                  <option key={d.id} value={d.id}>{d.label}</option>
+                ))}
+              </select>
+              <button onClick={saveDraft} style={chipOff}>{draftId ? 'Update' : 'Save'}</button>
+              {draftId && (
+                <button onClick={() => deleteDraft(draftId)} style={{ ...chipOff, color: '#f85149' }}>Delete</button>
+              )}
+            </div>
+          </Row>
+
           <Row label="Product">
             <select value={productId} onChange={(e) => setProductId(e.target.value)} style={input}>
               {PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.name} — {p.tagline}</option>)}
