@@ -39,10 +39,16 @@ const DEFAULT_CALLOUT = (heading, body, side, x, y) => ({
 
 // Render the entire callout ad to a canvas — bypasses html-to-image entirely.
 async function renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts }) {
+  const titleSize = format.w * 0.075;
+  const subSize = format.w * 0.022;
+  const headSize = format.w * 0.028;
+  const bodySize = format.w * 0.020;
+
   await Promise.all([
-    document.fonts.load('800 80px Montserrat'),
-    document.fonts.load('700 24px "Libre Franklin"'),
-    document.fonts.load('400 22px "Source Sans 3"'),
+    document.fonts.load(`800 ${titleSize}px Montserrat`),
+    document.fonts.load(`800 ${headSize}px Montserrat`),
+    document.fonts.load(`700 ${subSize}px "Libre Franklin"`),
+    document.fonts.load(`400 ${bodySize}px "Source Sans 3"`),
   ]);
 
   const canvas = document.createElement('canvas');
@@ -65,25 +71,30 @@ async function renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts }
     ctx.drawImage(img, sx, sy, sw, sh, 0, 0, format.w, format.h);
   }
 
-  // Title block (top-left, ~5% margin, ~4% from top)
-  const margin = format.w * 0.05;
-  const titleSize = format.w * 0.075;
-  const subSize = format.w * 0.022;
   ctx.fillStyle = '#F9F3DF';
   ctx.textBaseline = 'top';
+
+  // Title (top-left)
+  const titleX = format.w * 0.05;
+  const titleY = format.h * 0.04;
   ctx.font = `800 ${titleSize}px Montserrat, sans-serif`;
-  drawSpacedText(ctx, (title || '').toUpperCase(), margin, format.h * 0.04, 0.02);
+  ctx.letterSpacing = `${titleSize * 0.02}px`;
+  ctx.textAlign = 'left';
+  ctx.fillText((title || '').toUpperCase(), titleX, titleY);
+
   if (subtitle) {
     ctx.font = `700 ${subSize}px "Libre Franklin", sans-serif`;
-    drawSpacedText(ctx, subtitle.toUpperCase(), margin, format.h * 0.04 + titleSize * 1.05, 0.08);
+    ctx.letterSpacing = `${subSize * 0.08}px`;
+    ctx.fillText(subtitle.toUpperCase(), titleX, titleY + titleSize * 1.05);
   }
 
   // Callouts
-  const headSize = format.w * 0.028;
-  const bodySize = format.w * 0.020;
-  const headLineH = headSize * 1.05;
+  const headLineH = headSize * 1.1;
   const bodyLineH = bodySize * 1.3;
   const maxBlockW = format.w * 0.28;
+  const sideMargin = format.w * 0.04;
+  const headSpacing = headSize * 0.04;
+  const bodySpacing = bodySize * 0.01;
 
   for (const c of callouts) {
     const isLeft = c.side === 'left';
@@ -92,37 +103,40 @@ async function renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts }
     const ax = c.anchorX * format.w;
     const ay = c.anchorY * format.h;
 
-    // Wrap heading + body
+    // Wrap heading + body using the SAME letterSpacing the renderer will use,
+    // so measureText returns accurate widths.
     ctx.font = `800 ${headSize}px Montserrat, sans-serif`;
+    ctx.letterSpacing = `${headSpacing}px`;
     const headLines = wrapText(ctx, (c.heading || '').toUpperCase(), maxBlockW);
+    const headMaxW = Math.max(0, ...headLines.map(l => ctx.measureText(l).width));
+
     ctx.font = `400 ${bodySize}px "Source Sans 3", sans-serif`;
+    ctx.letterSpacing = `${bodySpacing}px`;
     const bodyLines = wrapText(ctx, c.body || '', maxBlockW);
+    const bodyMaxW = Math.max(0, ...bodyLines.map(l => ctx.measureText(l).width));
 
-    const blockH = headLines.length * headLineH + 8 + bodyLines.length * bodyLineH;
+    const blockH = headLines.length * headLineH + (headLines.length && bodyLines.length ? 8 : 0) + bodyLines.length * bodyLineH;
     const blockTop = textCenterY - blockH / 2;
-    const xLeft = isLeft ? format.w * 0.03 : format.w * 0.97 - maxBlockW;
-    const xRight = isLeft ? format.w * 0.03 + maxBlockW : format.w * 0.97;
 
-    ctx.fillStyle = '#F9F3DF';
-    ctx.textBaseline = 'top';
+    // Anchor edge of text (where leader line starts)
+    const widestW = Math.max(headMaxW, bodyMaxW);
+    const xText = isLeft ? sideMargin : format.w - sideMargin;
     ctx.textAlign = isLeft ? 'left' : 'right';
-    const headX = isLeft ? xLeft : xRight;
 
     ctx.font = `800 ${headSize}px Montserrat, sans-serif`;
-    headLines.forEach((line, i) => {
-      drawSpacedText(ctx, line, headX, blockTop + i * headLineH, 0.04, ctx.textAlign);
-    });
+    ctx.letterSpacing = `${headSpacing}px`;
+    headLines.forEach((line, i) => ctx.fillText(line, xText, blockTop + i * headLineH));
 
     ctx.font = `400 ${bodySize}px "Source Sans 3", sans-serif`;
-    const bodyTop = blockTop + headLines.length * headLineH + 8;
-    bodyLines.forEach((line, i) => {
-      ctx.fillText(line, headX, bodyTop + i * bodyLineH);
-    });
+    ctx.letterSpacing = `${bodySpacing}px`;
+    const bodyTop = blockTop + headLines.length * headLineH + (headLines.length && bodyLines.length ? 8 : 0);
+    bodyLines.forEach((line, i) => ctx.fillText(line, xText, bodyTop + i * bodyLineH));
 
-    // Leader line — from inner edge of the text block at textCenterY → anchor dot
-    const lineStartX = isLeft ? xLeft + maxBlockW * 0.42 : xRight - maxBlockW * 0.42;
+    // Leader line — start at the inner edge of the widest text line, end at the dot.
+    const lineStartX = isLeft ? xText + widestW + format.w * 0.012 : xText - widestW - format.w * 0.012;
     ctx.strokeStyle = '#F9F3DF';
-    ctx.lineWidth = Math.max(1, format.w / 720);
+    ctx.lineWidth = Math.max(1, format.w / 900);
+    ctx.letterSpacing = '0px';
     ctx.beginPath();
     ctx.moveTo(lineStartX, textCenterY);
     ctx.lineTo(ax, ay);
@@ -131,7 +145,7 @@ async function renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts }
     // Anchor dot
     ctx.fillStyle = '#F9F3DF';
     ctx.beginPath();
-    ctx.arc(ax, ay, format.w * 0.008, 0, Math.PI * 2);
+    ctx.arc(ax, ay, format.w * 0.007, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -159,29 +173,6 @@ function wrapText(ctx, text, maxWidth) {
   }
   if (cur) lines.push(cur);
   return lines;
-}
-
-function drawSpacedText(ctx, text, x, y, letterSpacingEm, align) {
-  const size = parseFloat(ctx.font);
-  const ls = size * letterSpacingEm;
-  const chars = [...text];
-  if (align === 'right') {
-    let totalW = 0;
-    for (const ch of chars) totalW += ctx.measureText(ch).width + ls;
-    let cx = x - totalW + ls;
-    for (const ch of chars) {
-      ctx.textAlign = 'left';
-      ctx.fillText(ch, cx, y);
-      cx += ctx.measureText(ch).width + ls;
-    }
-  } else {
-    ctx.textAlign = 'left';
-    let cx = x;
-    for (const ch of chars) {
-      ctx.fillText(ch, cx, y);
-      cx += ctx.measureText(ch).width + ls;
-    }
-  }
 }
 
 async function resizeImage(file, maxEdge) {
