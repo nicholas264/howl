@@ -15,6 +15,7 @@ const DEFAULT_CALLOUT = (heading, body, side, x, y) => ({
   side: side || 'left',
   anchorX: x ?? 0.5,
   anchorY: y ?? 0.5,
+  textY: y ?? 0.5, // text block vertical position — independent of anchor
 });
 
 function cryptoId() {
@@ -97,12 +98,18 @@ export default function CalloutAdTool({ onAddToCart }) {
     const rect = stage.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
-    const id = draggingRef.current.id;
-    setCallouts(prev => prev.map(c => c.id === id ? {
-      ...c,
-      anchorX: Math.max(0.02, Math.min(0.98, x)),
-      anchorY: Math.max(0.02, Math.min(0.98, y)),
-    } : c));
+    const { id, type } = draggingRef.current;
+    setCallouts(prev => prev.map(c => {
+      if (c.id !== id) return c;
+      const clampedY = Math.max(0.05, Math.min(0.95, y));
+      if (type === 'anchor') {
+        return { ...c, anchorX: Math.max(0.02, Math.min(0.98, x)), anchorY: clampedY };
+      }
+      if (type === 'label') {
+        return { ...c, textY: clampedY };
+      }
+      return c;
+    }));
   }, []);
 
   const stopDrag = useCallback(() => { draggingRef.current = null; }, []);
@@ -223,9 +230,9 @@ export default function CalloutAdTool({ onAddToCart }) {
               {callouts.map(c => {
                 const ax = c.anchorX * stageDisplayWidth;
                 const ay = c.anchorY * stageDisplayHeight;
-                // Box edge anchor near callout text
+                // Box edge anchor near callout text — uses textY so line can be diagonal
                 const boxX = c.side === 'left' ? stageDisplayWidth * 0.32 : stageDisplayWidth * 0.68;
-                const boxY = c.anchorY * stageDisplayHeight;
+                const boxY = (c.textY ?? c.anchorY) * stageDisplayHeight;
                 return (
                   <line
                     key={c.id}
@@ -254,23 +261,28 @@ export default function CalloutAdTool({ onAddToCart }) {
               />
             ))}
 
-            {/* Callout text blocks */}
+            {/* Callout text blocks — drag to move vertically */}
             {callouts.map(c => {
               const isLeft = c.side === 'left';
               const xPct = isLeft ? 3 : 97;
+              const ty = c.textY ?? c.anchorY;
               return (
                 <div
                   key={`label-${c.id}`}
-                  onClick={(e) => { e.stopPropagation(); setSelectedId(c.id); }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    draggingRef.current = { id: c.id, type: 'label' };
+                    setSelectedId(c.id);
+                  }}
                   style={{
                     position: 'absolute',
                     [isLeft ? 'left' : 'right']: `${isLeft ? xPct : 100 - xPct}%`,
-                    top: `${c.anchorY * 100}%`,
+                    top: `${ty * 100}%`,
                     transform: 'translateY(-50%)',
                     maxWidth: '28%',
                     color: '#F9F3DF',
                     textAlign: isLeft ? 'left' : 'right',
-                    cursor: 'pointer',
+                    cursor: 'grab',
                     outline: selectedId === c.id ? `1px dashed ${COLORS.flame}` : 'none',
                     outlineOffset: 4,
                     padding: 2,
@@ -384,8 +396,8 @@ export default function CalloutAdTool({ onAddToCart }) {
                 </div>
               ))}
             </div>
-            <div style={{ fontSize: 11, color: '#6e7681', marginTop: 8 }}>
-              Drag the cream dots on the image to anchor each callout to a feature.
+            <div style={{ fontSize: 11, color: '#6e7681', marginTop: 8, lineHeight: 1.5 }}>
+              Drag the cream dot to anchor the leader line to a feature. Drag the text block itself to move the callout up or down — the line goes diagonal automatically. Use the Left/Right button to flip a callout to the other side.
             </div>
           </div>
         </div>
