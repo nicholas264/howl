@@ -13,6 +13,7 @@ import DashboardTool from "./components/DashboardTool";
 import WelcomeScreen from "./components/WelcomeScreen";
 import LaunchLogTool from "./components/LaunchLogTool";
 import UgcInboxTool from "./components/UgcInboxTool";
+import UgcEditorTool from "./components/UgcEditorTool";
 import GalleryTab from "./components/GalleryTab";
 import { useDriveAuth } from "./hooks/useDriveAuth";
 import { cartGetAll, cartPut, cartDelete } from "./utils/cartDb";
@@ -157,6 +158,24 @@ export default function HowlAdEngine() {
   const uniqueProducts = [...new Set(variations.map((v) => v.product))];
   const cartCount = cart.length;
 
+  // UGC Inbox waiting count — single Drive call, refreshed on app mount and when leaving the UGC tab.
+  const [ugcCount, setUgcCount] = useState(0);
+  const refreshUgcCount = useCallback(async () => {
+    try {
+      const r = await fetch('/api/drive/ugc', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'count' }),
+      });
+      const d = await r.json();
+      if (typeof d.count === 'number') setUgcCount(d.count);
+    } catch {}
+  }, []);
+  useEffect(() => { refreshUgcCount(); }, [refreshUgcCount]);
+  useEffect(() => {
+    // Refetch when user navigates away from the UGC tab (likely after launching some files).
+    if (activeTab !== 'ugc') refreshUgcCount();
+  }, [activeTab, refreshUgcCount]);
+
   const NAV = [
     { group: 'Home', items: [
       { key: 'welcome', label: 'Campfire' },
@@ -172,7 +191,8 @@ export default function HowlAdEngine() {
       { key: 'founder', label: 'Founder Ads' },
     ]},
     { group: 'Launch', items: [
-      { key: 'ugc', label: 'UGC Inbox' },
+      { key: 'ugc', label: 'UGC Inbox', count: ugcCount || null },
+      { key: 'ugc-editor', label: 'UGC Editor' },
       { key: 'gallery', label: 'Gallery', count: cartCount || null },
       { key: 'publish', label: 'Publish', count: cartCount || null },
     ]},
@@ -267,6 +287,7 @@ export default function HowlAdEngine() {
       {activeTab === "dashboard-forecast" && <DashboardTool view="forecast" />}
       {activeTab === "log" && <LaunchLogTool />}
       {activeTab === "ugc" && <UgcInboxTool />}
+      {activeTab === "ugc-editor" && <UgcEditorTool onAddToCart={addToCart} />}
       {activeTab === "publish" && (
         <MetaPublishTool
           cart={cart}
