@@ -3,6 +3,25 @@ import { toPng } from 'html-to-image';
 import { PRODUCTS } from '../data';
 import { COLORS } from '../brand';
 
+const BRAND_FONTS = [
+  { family: 'Montserrat',     weight: 800, url: '/fonts/montserrat-800.woff2' },
+  { family: 'Libre Franklin', weight: 700, url: '/fonts/libre-franklin-700.woff2' },
+  { family: 'Source Sans 3',  weight: 400, url: '/fonts/source-sans-3-400.woff2' },
+];
+
+let cachedFontCss = null;
+async function getFontEmbedCss() {
+  if (cachedFontCss) return cachedFontCss;
+  const blocks = await Promise.all(BRAND_FONTS.map(async f => {
+    const res = await fetch(f.url);
+    const buf = await res.arrayBuffer();
+    const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+    return `@font-face { font-family: '${f.family}'; font-weight: ${f.weight}; font-style: normal; src: url(data:font/woff2;base64,${b64}) format('woff2'); }`;
+  }));
+  cachedFontCss = blocks.join('\n');
+  return cachedFontCss;
+}
+
 const FORMATS = [
   { id: 'square', label: '4:5',  w: 1080, h: 1350 },
   { id: 'story',  label: '9:16', w: 1080, h: 1920 },
@@ -129,11 +148,13 @@ export default function CalloutAdTool({ onAddToCart }) {
     try {
       const node = stageRef.current;
       const scale = format.w / node.offsetWidth;
+      const fontEmbedCSS = await getFontEmbedCss();
       const blob = await toPng(node, {
         pixelRatio: scale,
         cacheBust: true,
         backgroundColor: '#1a1612',
-        skipFonts: true,
+        skipFonts: true, // skip the network sheet inliner
+        fontEmbedCSS,    // but inline our brand fonts explicitly
       });
       const a = document.createElement('a');
       a.href = blob;
