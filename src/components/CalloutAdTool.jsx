@@ -37,6 +37,34 @@ const DEFAULT_CALLOUT = (heading, body, side, x, y) => ({
   textY: y ?? 0.5, // text block vertical position — independent of anchor
 });
 
+async function resizeImage(file, maxEdge) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = url;
+    });
+    const longEdge = Math.max(img.naturalWidth, img.naturalHeight);
+    if (longEdge <= maxEdge) {
+      const blob = await fetch(url).then(r => r.blob());
+      return blob;
+    }
+    const scale = maxEdge / longEdge;
+    const w = Math.round(img.naturalWidth * scale);
+    const h = Math.round(img.naturalHeight * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9));
+    return blob;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 function cryptoId() {
   return (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `id-${Math.random().toString(36).slice(2)}`;
 }
@@ -88,11 +116,17 @@ export default function CalloutAdTool({ onAddToCart }) {
     )));
   }, [productId]);
 
-  const handleFile = (e) => {
+  const handleFile = async (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
     if (imgUrl) URL.revokeObjectURL(imgUrl);
-    setImgUrl(URL.createObjectURL(f));
+    try {
+      const resized = await resizeImage(f, 2000); // long-edge cap
+      setImgUrl(URL.createObjectURL(resized));
+    } catch (err) {
+      console.error('Image resize failed, falling back to original:', err);
+      setImgUrl(URL.createObjectURL(f));
+    }
   };
 
   const updateCallout = (id, patch) => {
@@ -162,7 +196,11 @@ export default function CalloutAdTool({ onAddToCart }) {
       a.click();
     } catch (err) {
       console.error('Callout export error:', err);
-      const msg = err?.message || (typeof err === 'string' ? err : JSON.stringify(err));
+      let msg;
+      if (err?.message) msg = err.message;
+      else if (err && err.isTrusted) msg = 'Image too large to embed. Try a smaller product photo.';
+      else if (typeof err === 'string') msg = err;
+      else msg = JSON.stringify(err);
       alert('Export failed: ' + msg);
     } finally {
       setExporting(false);
