@@ -279,6 +279,7 @@ async function fetchStoreInventory(store, token) {
         title
         displayName
         price
+        inventoryQuantity
         product { id title handle status }
         inventoryItem {
           tracked
@@ -329,6 +330,12 @@ async function fetchStoreInventory(store, token) {
           incoming: q.incoming || 0,
         };
       });
+      // Prefer the variant-level inventoryQuantity (this is what Shopify admin shows
+      // as "Available"). Fall back to summed location levels only if it's null
+      // (which happens when the variant isn't tracked or scope is missing).
+      const variantAvailable = typeof v.inventoryQuantity === 'number'
+        ? v.inventoryQuantity
+        : levels.reduce((s, l) => s + l.available, 0);
       variants.push({
         variantId: v.id,
         sku: v.sku || '',
@@ -340,7 +347,7 @@ async function fetchStoreInventory(store, token) {
         productHandle: v.product.handle,
         productStatus: v.product.status,
         levels,
-        totalAvailable: levels.reduce((s, l) => s + l.available, 0),
+        totalAvailable: variantAvailable,
         totalOnHand: levels.reduce((s, l) => s + l.onHand, 0),
         totalCommitted: levels.reduce((s, l) => s + l.committed, 0),
         totalIncoming: levels.reduce((s, l) => s + l.incoming, 0),
