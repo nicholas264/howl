@@ -258,6 +258,11 @@ async function fetchStoreInventory(store, token) {
         err.code = 'MISSING_INVENTORY_SCOPE';
         throw err;
       }
+      if (errs.some(e => /access denied for name field|read_locations/i.test(e.message || ''))) {
+        const err = new Error('missing_scope:read_locations');
+        err.code = 'MISSING_LOCATIONS_SCOPE';
+        throw err;
+      }
       const msg = errs.map(e => e.message || JSON.stringify(e)).join('; ');
       throw new Error(`Shopify GraphQL error (${store} HTTP ${r.status}): ${msg}`);
     }
@@ -265,7 +270,7 @@ async function fetchStoreInventory(store, token) {
     return d.data;
   };
 
-  const query = `query Variants($cursor: String) {
+  const buildQuery = (includeLocationName) => `query Variants($cursor: String) {
     productVariants(first: 100, after: $cursor) {
       pageInfo { hasNextPage endCursor }
       edges { node {
@@ -279,7 +284,7 @@ async function fetchStoreInventory(store, token) {
           tracked
           inventoryLevels(first: 20) {
             edges { node {
-              location { id name }
+              location { id ${includeLocationName ? 'name' : ''} }
               quantities(names: ["available", "on_hand", "committed", "incoming"]) { name quantity }
             } }
           }
@@ -288,11 +293,24 @@ async function fetchStoreInventory(store, token) {
     }
   }`;
 
+  let includeLocationName = true;
+  let locationsScopeMissing = false;
+
   const variants = [];
   let cursor = null;
   let pages = 0;
   while (pages < 100) {
-    const data = await gql(query, { cursor });
+    let data;
+    try {
+      data = await gql(buildQuery(includeLocationName), { cursor });
+    } catch (err) {
+      if (err.code === 'MISSING_LOCATIONS_SCOPE' && includeLocationName) {
+        includeLocationName = false; locationsScopeMissing = true;
+        variants.length = 0; cursor = null; pages = 0;
+        continue;
+      }
+      throw err;
+    }
     const conn = data.productVariants;
     for (const e of conn.edges) {
       const v = e.node;
@@ -300,9 +318,11 @@ async function fetchStoreInventory(store, token) {
       const levels = (v.inventoryItem.inventoryLevels?.edges || []).map(le => {
         const q = {};
         for (const { name, quantity } of (le.node.quantities || [])) q[name] = quantity;
+        const locId = le.node.location.id;
+        const shortId = (locId || '').split('/').pop();
         return {
-          locationId: le.node.location.id,
-          locationName: le.node.location.name,
+          locationId: locId,
+          locationName: le.node.location.name || `Location ${shortId}`,
           available: q.available || 0,
           onHand: q.on_hand || 0,
           committed: q.committed || 0,
@@ -331,7 +351,7 @@ async function fetchStoreInventory(store, token) {
     pages++;
   }
 
-  return { variants, _meta: { variantsScanned: variants.length, pages } };
+  return { variants, _meta: { variantsScanned: variants.length, pages, locationsScopeMissing } };
 }
 
 function mergeInventoryResults(stores) {

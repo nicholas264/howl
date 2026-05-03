@@ -41,7 +41,6 @@ export default function InventoryTool() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [storeFilter, setStoreFilter] = useState('all');
-  const [locationFilter, setLocationFilter] = useState('all');
   const [stockFilter, setStockFilter] = useState('all');
   const [sortKey, setSortKey] = useState('totalAvailable');
   const [sortDir, setSortDir] = useState('asc');
@@ -77,20 +76,12 @@ export default function InventoryTool() {
     return rows;
   }, [data]);
 
-  const allLocations = useMemo(() => {
-    const set = new Set();
-    for (const v of flatVariants) for (const l of v.levels) set.add(l.locationName);
-    return [...set].sort();
-  }, [flatVariants]);
-
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     let rows = flatVariants.filter(v => {
       if (storeFilter !== 'all' && v.storeRole !== storeFilter) return false;
       if (q && !`${v.productTitle} ${v.variantTitle} ${v.sku}`.toLowerCase().includes(q)) return false;
-      if (locationFilter !== 'all' && !v.levels.some(l => l.locationName === locationFilter)) return false;
-      const qty = locationFilter === 'all' ? v.totalAvailable
-        : (v.levels.find(l => l.locationName === locationFilter)?.available || 0);
+      const qty = v.totalAvailable;
       if (stockFilter === 'out' && qty > 0) return false;
       if (stockFilter === 'low' && (qty <= 0 || qty >= LOW_STOCK_THRESHOLD)) return false;
       if (stockFilter === 'ok' && qty < LOW_STOCK_THRESHOLD) return false;
@@ -103,7 +94,7 @@ export default function InventoryTool() {
       return sortDir === 'asc' ? av - bv : bv - av;
     });
     return rows;
-  }, [flatVariants, search, storeFilter, locationFilter, stockFilter, sortKey, sortDir]);
+  }, [flatVariants, search, storeFilter, stockFilter, sortKey, sortDir]);
 
   const totals = useMemo(() => {
     const t = { variants: filtered.length, available: 0, onHand: 0, committed: 0, incoming: 0, retailValue: 0 };
@@ -123,11 +114,10 @@ export default function InventoryTool() {
   };
 
   const exportCSV = () => {
-    const headers = ['Store', 'Product', 'Variant', 'SKU', 'Status', 'Price', 'Available', 'On Hand', 'Committed', 'Incoming', 'Locations'];
+    const headers = ['Store', 'Product', 'Variant', 'SKU', 'Status', 'Price', 'Available', 'On Hand', 'Committed', 'Incoming'];
     const rows = filtered.map(v => [
       v.storeRole, v.productTitle, v.variantTitle, v.sku, v.productStatus,
       v.price, v.totalAvailable, v.totalOnHand, v.totalCommitted, v.totalIncoming,
-      v.levels.map(l => `${l.locationName}:${l.available}`).join(' | '),
     ]);
     const csv = [headers, ...rows].map(r => r.map(x => `"${String(x ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -162,12 +152,6 @@ export default function InventoryTool() {
             {storeRoles.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
         )}
-        {allLocations.length > 1 && (
-          <select style={S.select} value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
-            <option value="all">All locations</option>
-            {allLocations.map(l => <option key={l} value={l}>{l}</option>)}
-          </select>
-        )}
         <select style={S.select} value={stockFilter} onChange={(e) => setStockFilter(e.target.value)}>
           <option value="all">All stock levels</option>
           <option value="out">Out of stock</option>
@@ -200,8 +184,8 @@ export default function InventoryTool() {
                   <th style={S.th}>Status</th>
                   <th style={{ ...S.th, ...S.thNum, cursor: 'pointer' }} onClick={() => toggleSort('totalAvailable')}>Available{sortArrow('totalAvailable')}</th>
                   <th style={{ ...S.th, ...S.thNum, cursor: 'pointer' }} onClick={() => toggleSort('totalCommitted')}>Committed{sortArrow('totalCommitted')}</th>
+                  <th style={{ ...S.th, ...S.thNum, cursor: 'pointer' }} onClick={() => toggleSort('totalOnHand')}>On Hand{sortArrow('totalOnHand')}</th>
                   <th style={{ ...S.th, ...S.thNum, cursor: 'pointer' }} onClick={() => toggleSort('totalIncoming')}>Incoming{sortArrow('totalIncoming')}</th>
-                  <th style={S.th}>Locations</th>
                 </tr>
               </thead>
               <tbody>
@@ -220,19 +204,13 @@ export default function InventoryTool() {
                       </td>
                       <td style={{ ...S.td, ...S.tdNum, fontWeight: 600 }}>{v.totalAvailable.toLocaleString()}</td>
                       <td style={{ ...S.td, ...S.tdNum, ...S.tdMuted }}>{v.totalCommitted.toLocaleString()}</td>
+                      <td style={{ ...S.td, ...S.tdNum, ...S.tdMuted }}>{v.totalOnHand.toLocaleString()}</td>
                       <td style={{ ...S.td, ...S.tdNum, ...S.tdMuted }}>{v.totalIncoming || '—'}</td>
-                      <td style={{ ...S.td, ...S.tdMuted, fontSize: 11 }}>
-                        {v.levels.length === 0 ? '—' : v.levels.map(l => (
-                          <span key={l.locationId} style={{ marginRight: 10, whiteSpace: 'nowrap' }}>
-                            {l.locationName}: <span style={{ color: l.available <= 0 ? '#DC440A' : l.available < LOW_STOCK_THRESHOLD ? '#DC440A' : '#f0f4f8' }}>{l.available}</span>
-                          </span>
-                        ))}
-                      </td>
                     </tr>
                   );
                 })}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={8} style={{ ...S.td, ...S.tdMuted, textAlign: 'center', padding: 40 }}>
+                  <tr><td colSpan={7} style={{ ...S.td, ...S.tdMuted, textAlign: 'center', padding: 40 }}>
                     {loading ? 'Loading…' : 'No variants match these filters.'}
                   </td></tr>
                 )}
