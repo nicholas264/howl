@@ -243,6 +243,107 @@ function mergeStoreResults(stores) {
   return { months, topProducts, _meta: meta };
 }
 
+// Inventory snapshot: per-variant on-hand / available / committed / incoming, broken down by location.
+async function fetchStoreInventory(store, token) {
+  const GQL = `https://${store}/admin/api/2025-01/graphql.json`;
+  const headers = { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': token };
+
+  const gql = async (query, variables = {}) => {
+    const r = await fetch(GQL, { method: 'POST', headers, body: JSON.stringify({ query, variables }) });
+    const d = await r.json();
+    if (d.errors) {
+      const errs = Array.isArray(d.errors) ? d.errors : [];
+      if (errs.some(e => /access denied for (inventoryitem|inventorylevel|inventoryquantity)|read_inventory/i.test(e.message || ''))) {
+        const err = new Error('missing_scope:read_inventory');
+        err.code = 'MISSING_INVENTORY_SCOPE';
+        throw err;
+      }
+      const msg = errs.map(e => e.message || JSON.stringify(e)).join('; ');
+      throw new Error(`Shopify GraphQL error (${store} HTTP ${r.status}): ${msg}`);
+    }
+    if (!r.ok) throw new Error(`Shopify HTTP ${r.status}: ${JSON.stringify(d).slice(0, 400)}`);
+    return d.data;
+  };
+
+  const query = `query Variants($cursor: String) {
+    productVariants(first: 100, after: $cursor) {
+      pageInfo { hasNextPage endCursor }
+      edges { node {
+        id
+        sku
+        title
+        displayName
+        price
+        product { id title handle status }
+        inventoryItem {
+          tracked
+          inventoryLevels(first: 20) {
+            edges { node {
+              location { id name }
+              quantities(names: ["available", "on_hand", "committed", "incoming"]) { name quantity }
+            } }
+          }
+        }
+      } }
+    }
+  }`;
+
+  const variants = [];
+  let cursor = null;
+  let pages = 0;
+  while (pages < 100) {
+    const data = await gql(query, { cursor });
+    const conn = data.productVariants;
+    for (const e of conn.edges) {
+      const v = e.node;
+      if (!v.inventoryItem?.tracked) continue;
+      const levels = (v.inventoryItem.inventoryLevels?.edges || []).map(le => {
+        const q = {};
+        for (const { name, quantity } of (le.node.quantities || [])) q[name] = quantity;
+        return {
+          locationId: le.node.location.id,
+          locationName: le.node.location.name,
+          available: q.available || 0,
+          onHand: q.on_hand || 0,
+          committed: q.committed || 0,
+          incoming: q.incoming || 0,
+        };
+      });
+      variants.push({
+        variantId: v.id,
+        sku: v.sku || '',
+        variantTitle: v.title,
+        displayName: v.displayName,
+        price: parseFloat(v.price || 0),
+        productId: v.product.id,
+        productTitle: v.product.title,
+        productHandle: v.product.handle,
+        productStatus: v.product.status,
+        levels,
+        totalAvailable: levels.reduce((s, l) => s + l.available, 0),
+        totalOnHand: levels.reduce((s, l) => s + l.onHand, 0),
+        totalCommitted: levels.reduce((s, l) => s + l.committed, 0),
+        totalIncoming: levels.reduce((s, l) => s + l.incoming, 0),
+      });
+    }
+    if (!conn.pageInfo.hasNextPage) break;
+    cursor = conn.pageInfo.endCursor;
+    pages++;
+  }
+
+  return { variants, _meta: { variantsScanned: variants.length, pages } };
+}
+
+function mergeInventoryResults(stores) {
+  const out = { stores: {}, _meta: { variantsScanned: 0, pages: 0 } };
+  for (const { role, store, result } of stores) {
+    out.stores[role] = { store, variants: result.variants };
+    out._meta.variantsScanned += result._meta.variantsScanned;
+    out._meta.pages += result._meta.pages;
+  }
+  return out;
+}
+
 export default async function handler(req, res) {
   if (!(await requireAuth(req, res))) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -260,6 +361,14 @@ export default async function handler(req, res) {
 
   try {
     const { action } = req.body;
+
+    if (action === 'get_inventory') {
+      const results = await Promise.all(stores.map(async ({ role, store, token }) => {
+        const result = await fetchStoreInventory(store, token);
+        return { role, store, result };
+      }));
+      return res.json(mergeInventoryResults(results));
+    }
 
     if (action === 'get_analytics') {
       const results = await Promise.all(stores.map(async ({ role, store, token }) => {

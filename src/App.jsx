@@ -11,6 +11,7 @@ import CalloutAdTool from "./components/CalloutAdTool";
 import FounderAdTool from "./components/FounderAdTool";
 import MetaPublishTool from "./components/MetaPublishTool";
 import DashboardTool from "./components/DashboardTool";
+import InventoryTool from "./components/InventoryTool";
 import WelcomeScreen from "./components/WelcomeScreen";
 import LaunchLogTool from "./components/LaunchLogTool";
 import UgcInboxTool from "./components/UgcInboxTool";
@@ -205,6 +206,7 @@ export default function HowlAdEngine() {
       { key: 'dashboard-shopify',  label: 'Shopify',           indent: true },
       { key: 'dashboard-creative', label: 'Creative',          indent: true },
       { key: 'dashboard-forecast', label: 'Forecast',          indent: true },
+      { key: 'inventory', label: 'Inventory' },
       { key: 'log', label: 'Launch Log' },
     ]},
   ];
@@ -288,6 +290,7 @@ export default function HowlAdEngine() {
       {activeTab === "dashboard-shopify" && <DashboardTool view="shopify" />}
       {activeTab === "dashboard-creative" && <DashboardTool view="creative" />}
       {activeTab === "dashboard-forecast" && <DashboardTool view="forecast" />}
+      {activeTab === "inventory" && <InventoryTool />}
       {activeTab === "log" && <LaunchLogTool />}
       {activeTab === "ugc" && <UgcInboxTool />}
       {activeTab === "ugc-editor" && <UgcEditorTool onAddToCart={addToCart} />}
