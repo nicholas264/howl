@@ -1,20 +1,16 @@
-import { useState, useRef, useCallback, useLayoutEffect } from 'react';
+import { useState, useRef, useCallback, useLayoutEffect, useEffect } from 'react';
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 import { COLORS, FONTS, canvasFont, cssLetterSpacing, loadBrandFonts } from '../brand';
 
 const LS_REVIEWS = 'howl_review_ads_reviews';
 
-const POSITIONS = [
-  { id: 'tl', label: '↖', v: 'top',    h: 'left'   },
-  { id: 'tc', label: '↑', v: 'top',    h: 'center' },
-  { id: 'tr', label: '↗', v: 'top',    h: 'right'  },
-  { id: 'ml', label: '←', v: 'middle', h: 'left'   },
-  { id: 'mc', label: '·', v: 'middle', h: 'center' },
-  { id: 'mr', label: '→', v: 'middle', h: 'right'  },
-  { id: 'bl', label: '↙', v: 'bottom', h: 'left'   },
-  { id: 'bc', label: '↓', v: 'bottom', h: 'center' },
-  { id: 'br', label: '↘', v: 'bottom', h: 'right'  },
-];
+const DEFAULT_TEXT_POS = { x: 0.5, y: 0.86 };
+
+function alignFor(x) {
+  if (x < 0.33) return 'left';
+  if (x > 0.67) return 'right';
+  return 'center';
+}
 
 const TEXT_COLORS = [
   { id: 'white',  label: 'White',  value: '#ffffff' },
@@ -68,7 +64,6 @@ async function buildOverlayCanvas(text, videoW, videoH, opts) {
   const quoteLineH  = Math.round(quoteSz * 1.25);
   const attribLineH = Math.round(attribSz * 1.4);
   const maxWidth = videoW * 0.82;
-  const margin   = videoW * 0.09;
   const gap      = Math.round(quoteSz * 0.55);
 
   ctx.font = canvasFont('headline', quoteSz);
@@ -82,16 +77,10 @@ async function buildOverlayCanvas(text, videoW, videoH, opts) {
     : 0;
   const blockH = quoteH + attribH;
 
-  let x, align;
-  if (opts.h === 'left')       { x = margin;          align = 'left'; }
-  else if (opts.h === 'right') { x = videoW - margin; align = 'right'; }
-  else                         { x = videoW / 2;      align = 'center'; }
-
-  const vPad = videoH * 0.08;
-  let y;
-  if (opts.v === 'top')         y = vPad;
-  else if (opts.v === 'bottom') y = videoH - vPad - blockH;
-  else                          y = (videoH - blockH) / 2;
+  const tp = opts.textPos || DEFAULT_TEXT_POS;
+  const align = alignFor(tp.x);
+  const x = Math.round(tp.x * videoW);
+  const y = Math.round(tp.y * videoH - blockH / 2);
 
   const setShadow = () => {
     if (opts.shadow) {
@@ -151,16 +140,40 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
   const [manualText, setManualText]       = useState(initialText || '');
   const [fontSize, setFontSize]           = useState(72);
   const [colorId, setColorId]             = useState('white');
-  const [positionId, setPositionId]       = useState('bc');
+  const [textPos, setTextPos]             = useState(DEFAULT_TEXT_POS);
   const [shadow, setShadow]               = useState(true);
   const [exporting, setExporting]         = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportMsg, setExportMsg]         = useState('');
   const [addingToCart, setAddingToCart]   = useState(false);
   const [dragging, setDragging]           = useState(false);
+  const [textDragging, setTextDragging]   = useState(false);
 
   const videoRef    = useRef(null);
   const fileInputRef = useRef(null);
+  const previewBoxRef = useRef(null);
+
+  useEffect(() => {
+    if (!textDragging) return;
+    const onMove = (e) => {
+      const box = previewBoxRef.current;
+      if (!box) return;
+      const rect = box.getBoundingClientRect();
+      const nx = (e.clientX - rect.left) / rect.width;
+      const ny = (e.clientY - rect.top) / rect.height;
+      setTextPos({
+        x: Math.max(0.02, Math.min(0.98, nx)),
+        y: Math.max(0.04, Math.min(0.96, ny)),
+      });
+    };
+    const onUp = () => setTextDragging(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [textDragging]);
 
   useLayoutEffect(() => {
     if (initialText) {
@@ -199,12 +212,11 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
     setExportProgress(0);
     setExportMsg('Rendering for cart…');
     try {
-      const posObj  = POSITIONS.find(p => p.id === positionId);
       const colorVal = TEXT_COLORS.find(c => c.id === colorId).value;
       const { w, h } = videoDims;
 
       const overlayCanvas = await buildOverlayCanvas(`\u201c${overlayText}\u201d`, w, h, {
-        fontSize, color: colorVal, v: posObj.v, h: posObj.h, shadow,
+        fontSize, color: colorVal, textPos, shadow,
         reviewerName: selectedReview?.nickname || null,
         verifiedLabel: selectedReview ? `Verified HOWL ${PRODUCT_NAMES[selectedReview.handle] || 'HOWL'} Customer` : null,
       });
@@ -288,7 +300,7 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
       setAddingToCart(false);
       setExportProgress(0);
     }
-  }, [videoFile, videoUrl, overlayText, fontSize, colorId, positionId, shadow, videoDims, selectedReview, onAddToCart]);
+  }, [videoFile, videoUrl, overlayText, fontSize, colorId, textPos, shadow, videoDims, selectedReview, onAddToCart]);
 
   const handleExport = useCallback(async () => {
     if (!videoFile || !overlayText.trim()) return;
@@ -297,13 +309,12 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
     setExportMsg('Rendering text overlay…');
 
     try {
-      const pos   = POSITIONS.find(p => p.id === positionId);
       const color = TEXT_COLORS.find(c => c.id === colorId).value;
       const { w, h } = videoDims;
 
       // 1. Build overlay canvas once
       const overlayCanvas = await buildOverlayCanvas(`\u201c${overlayText}\u201d`, w, h, {
-        fontSize, color, v: pos.v, h: pos.h, shadow,
+        fontSize, color, textPos, shadow,
         reviewerName: selectedReview?.nickname || null,
         verifiedLabel: selectedReview
           ? `Verified HOWL ${PRODUCT_NAMES[selectedReview.handle] || 'HOWL'} Customer`
@@ -396,9 +407,8 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
       setExportProgress(0);
       setExportMsg('');
     }
-  }, [videoFile, videoUrl, overlayText, fontSize, colorId, positionId, shadow, videoDims, selectedReview]);
+  }, [videoFile, videoUrl, overlayText, fontSize, colorId, textPos, shadow, videoDims, selectedReview]);
 
-  const pos   = POSITIONS.find(p => p.id === positionId);
   const color = TEXT_COLORS.find(c => c.id === colorId).value;
   const canExport = supported && !!videoFile && !!overlayText.trim() && !exporting;
 
@@ -412,23 +422,25 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
   const displayH = Math.round(videoDims.h * previewScale);
   const previewFontSize = fontSize * previewScale;
 
+  const previewAlign = alignFor(textPos.x);
+  const previewTx = previewAlign === 'left' ? '0%' : previewAlign === 'right' ? '-100%' : '-50%';
+
   const overlayStyle = {
-    position: 'absolute', pointerEvents: 'none',
-    left: pos.h === 'left' ? '9%' : pos.h === 'right' ? 'auto' : '50%',
-    right: pos.h === 'right' ? '9%' : 'auto',
-    top: pos.v === 'top' ? '8%' : pos.v === 'middle' ? '50%' : 'auto',
-    bottom: pos.v === 'bottom' ? '8%' : 'auto',
-    transform: [
-      pos.h === 'center' ? 'translateX(-50%)' : '',
-      pos.v === 'middle' ? 'translateY(-50%)' : '',
-    ].filter(Boolean).join(' ') || 'none',
-    textAlign: pos.h === 'center' ? 'center' : pos.h,
+    position: 'absolute',
+    left: `${textPos.x * 100}%`,
+    top: `${textPos.y * 100}%`,
+    transform: `translate(${previewTx}, -50%)`,
+    textAlign: previewAlign,
     maxWidth: '82%', color,
     fontFamily: FONTS.headline.family, fontWeight: FONTS.headline.weight,
     fontSize: `${previewFontSize}px`, lineHeight: 1.25,
     textTransform: 'uppercase', letterSpacing: cssLetterSpacing('headline'),
     textShadow: shadow ? '0 2px 8px rgba(0,0,0,0.8)' : 'none',
     wordBreak: 'break-word',
+    cursor: textDragging ? 'grabbing' : 'grab',
+    userSelect: 'none',
+    outline: textDragging ? `1px dashed ${COLORS.flame}` : 'none',
+    outlineOffset: 6,
   };
 
   return (
@@ -546,19 +558,17 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
             </div>
           </div>
 
-          {/* Position */}
+          {/* Position — drag the text on the preview to reposition */}
           <div>
-            <div style={S.label}>Position</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
-              {POSITIONS.map(p => (
-                <button key={p.id} onClick={() => setPositionId(p.id)} style={{
-                  padding: '8px 0', borderRadius: 4, cursor: 'pointer',
-                  border: `1px solid ${positionId === p.id ? '#DC440A' : '#2a3441'}`,
-                  background: positionId === p.id ? 'rgba(220,68,10,0.15)' : '#1c2330',
-                  color: positionId === p.id ? '#DC440A' : '#8b949e',
-                  fontFamily: 'inherit', fontSize: 14,
-                }}>{p.label}</button>
-              ))}
+            <div style={{ ...S.label, display: 'flex', justifyContent: 'space-between' }}>
+              <span>Position</span>
+              <button onClick={() => setTextPos(DEFAULT_TEXT_POS)} style={{
+                background: 'none', border: 'none', color: '#DC440A',
+                fontFamily: 'inherit', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer',
+              }}>Reset</button>
+            </div>
+            <div style={{ fontSize: 9, color: '#8b949e', lineHeight: 1.5 }}>
+              Drag the text on the preview to reposition.
             </div>
           </div>
 
@@ -608,10 +618,13 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
       {/* Right: preview */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1a1a1a', overflow: 'hidden' }}>
         {videoUrl ? (
-          <div style={{ position: 'relative', width: displayW, height: displayH, flexShrink: 0 }}>
+          <div ref={previewBoxRef} style={{ position: 'relative', width: displayW, height: displayH, flexShrink: 0 }}>
             <video ref={videoRef} src={videoUrl} onLoadedMetadata={handleVideoMeta} controls loop style={{ width: displayW, height: displayH, display: 'block' }} />
             {overlayText && (
-              <div style={overlayStyle}>
+              <div
+                style={overlayStyle}
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setTextDragging(true); }}
+              >
                 <div>{'\u201c'}{overlayText.toUpperCase()}{'\u201d'}</div>
                 {selectedReview && (
                   <div style={{ marginTop: '0.45em' }}>

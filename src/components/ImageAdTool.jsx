@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useLayoutEffect } from 'react';
+import { useState, useRef, useCallback, useLayoutEffect, useEffect } from 'react';
 import JSZip from 'jszip';
 import { COLORS, FONTS, canvasFont, cssLetterSpacing, loadBrandFonts } from '../brand';
 
@@ -11,17 +11,15 @@ const FORMATS = [
   { id: 'story',  label: '9:16', w: 1080, h: 1920 },
 ];
 
-const POSITIONS = [
-  { id: 'tl', label: '↖', v: 'top',    h: 'left'   },
-  { id: 'tc', label: '↑', v: 'top',    h: 'center' },
-  { id: 'tr', label: '↗', v: 'top',    h: 'right'  },
-  { id: 'ml', label: '←', v: 'middle', h: 'left'   },
-  { id: 'mc', label: '·', v: 'middle', h: 'center' },
-  { id: 'mr', label: '→', v: 'middle', h: 'right'  },
-  { id: 'bl', label: '↙', v: 'bottom', h: 'left'   },
-  { id: 'bc', label: '↓', v: 'bottom', h: 'center' },
-  { id: 'br', label: '↘', v: 'bottom', h: 'right'  },
-];
+// Default text position: bottom-center.
+const DEFAULT_TEXT_POS = { x: 0.5, y: 0.86 };
+
+// Auto-align based on horizontal position so text reads naturally near edges.
+function alignFor(x) {
+  if (x < 0.33) return 'left';
+  if (x > 0.67) return 'right';
+  return 'center';
+}
 
 const TEXT_COLORS = [
   { id: 'white',  label: 'White',  value: '#ffffff' },
@@ -70,7 +68,6 @@ async function renderToCanvas(imgSrc, text, bodyText, fw, fh, opts) {
   const quoteLineH = Math.round(quoteSz * 1.25);
   const bodyLineH  = Math.round(bodySz * 1.4);
   const maxWidth   = fw * 0.82;
-  const margin     = fw * 0.09;
   const gap        = Math.round(quoteSz * 0.45);
 
   ctx.font = canvasFont('headline', quoteSz);
@@ -83,16 +80,11 @@ async function renderToCanvas(imgSrc, text, bodyText, fw, fh, opts) {
   const bodyH = bodyLines.length ? gap + bodyLines.length * bodyLineH : 0;
   const blockH = quoteH + bodyH;
 
-  let x, align;
-  if (opts.h === 'left')       { x = margin;      align = 'left'; }
-  else if (opts.h === 'right') { x = fw - margin; align = 'right'; }
-  else                         { x = fw / 2;      align = 'center'; }
-
-  const vPad = fh * 0.08;
-  let y;
-  if (opts.v === 'top')         y = vPad;
-  else if (opts.v === 'bottom') y = fh - vPad - blockH;
-  else                          y = (fh - blockH) / 2;
+  // textPos is the center of the text block in normalized coords.
+  const tp = opts.textPos || DEFAULT_TEXT_POS;
+  const align = alignFor(tp.x);
+  const x = Math.round(tp.x * fw);
+  const y = Math.round(tp.y * fh - blockH / 2);
 
   const setShadow = () => {
     if (opts.shadow) { ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = Math.round(quoteSz * 0.4); ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2; }
@@ -130,19 +122,19 @@ function loadImg(src) {
 // ── Batch preview card (CSS overlay, no canvas) ───────────────────────────
 const CARD_H = 180;
 
-function BatchCard({ img, hook, body, fmt, pos, color, fontSize, shadow, onExport }) {
+function BatchCard({ img, hook, body, fmt, textPos, color, fontSize, shadow, onExport }) {
   const cardW = fmt.id === 'square' ? CARD_H : Math.round(CARD_H * fmt.w / fmt.h);
   const scale = CARD_H / fmt.h;
   const pxFont = fontSize * scale;
+  const align = alignFor(textPos.x);
+  const tx = align === 'left' ? '0%' : align === 'right' ? '-100%' : '-50%';
 
   const overlayStyle = {
     position: 'absolute', pointerEvents: 'none',
-    left: pos.h === 'left' ? '9%' : pos.h === 'right' ? 'auto' : '50%',
-    right: pos.h === 'right' ? '9%' : 'auto',
-    top: pos.v === 'top' ? '8%' : pos.v === 'middle' ? '50%' : 'auto',
-    bottom: pos.v === 'bottom' ? '8%' : 'auto',
-    transform: [pos.h === 'center' ? 'translateX(-50%)' : '', pos.v === 'middle' ? 'translateY(-50%)' : ''].filter(Boolean).join(' ') || 'none',
-    textAlign: pos.h === 'center' ? 'center' : pos.h,
+    left: `${textPos.x * 100}%`,
+    top: `${textPos.y * 100}%`,
+    transform: `translate(${tx}, -50%)`,
+    textAlign: align,
     maxWidth: '82%', color,
     fontFamily: FONTS.headline.family, fontWeight: FONTS.headline.weight,
     fontSize: `${pxFont}px`, lineHeight: 1.25,
@@ -174,9 +166,11 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
   const [bodyText, setBodyText]     = useState('');
   const [fontSize, setFontSize]     = useState(80);
   const [colorId, setColorId]       = useState('white');
-  const [positionId, setPositionId] = useState('bc');
+  const [textPos, setTextPos]       = useState(DEFAULT_TEXT_POS);
   const [shadow, setShadow]         = useState(true);
   const [dragging, setDragging]     = useState(false);
+  const [textDragging, setTextDragging] = useState(false);
+  const previewBoxRef = useRef(null);
   const [exporting, setExporting]   = useState(false);
   const [exportMsg, setExportMsg]   = useState('');
   const [presets, setPresets]       = useState(() => ls(LS_PRESETS, []));
@@ -195,9 +189,31 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
   }, [initialText]);
 
   const fmt = FORMATS.find(f => f.id === formatId);
-  const pos = POSITIONS.find(p => p.id === positionId);
   const color = TEXT_COLORS.find(c => c.id === colorId).value;
-  const styleOpts = { fontSize, color, v: pos.v, h: pos.h, shadow };
+  const styleOpts = { fontSize, color, textPos, shadow };
+
+  // Drag the text overlay anywhere on the preview.
+  useEffect(() => {
+    if (!textDragging) return;
+    const onMove = (e) => {
+      const box = previewBoxRef.current;
+      if (!box) return;
+      const rect = box.getBoundingClientRect();
+      const nx = (e.clientX - rect.left) / rect.width;
+      const ny = (e.clientY - rect.top) / rect.height;
+      setTextPos({
+        x: Math.max(0.02, Math.min(0.98, nx)),
+        y: Math.max(0.04, Math.min(0.96, ny)),
+      });
+    };
+    const onUp = () => setTextDragging(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [textDragging]);
 
   // ── Image management ──────────────────────────────────────────────────
   const addImage = useCallback((file) => {
@@ -244,7 +260,7 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
   // ── Presets ───────────────────────────────────────────────────────────
   const savePreset = () => {
     if (!presetName.trim()) return;
-    const p = { id: Date.now(), name: presetName.trim(), fontSize, colorId, positionId, shadow };
+    const p = { id: Date.now(), name: presetName.trim(), fontSize, colorId, textPos, shadow };
     const next = [p, ...presets].slice(0, 10);
     setPresets(next);
     lsSet(LS_PRESETS, next);
@@ -255,7 +271,7 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
   const applyPreset = (p) => {
     setFontSize(p.fontSize);
     setColorId(p.colorId);
-    setPositionId(p.positionId);
+    if (p.textPos) setTextPos(p.textPos);
     setShadow(p.shadow);
   };
 
@@ -405,20 +421,25 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
   const displayH = Math.round(fmt.h * previewScale);
   const previewFontSize = fontSize * previewScale;
 
+  const previewAlign = alignFor(textPos.x);
+  const previewTx = previewAlign === 'left' ? '0%' : previewAlign === 'right' ? '-100%' : '-50%';
+
   const overlayStyle = {
-    position: 'absolute', pointerEvents: 'none',
-    left: pos.h === 'left' ? '9%' : pos.h === 'right' ? 'auto' : '50%',
-    right: pos.h === 'right' ? '9%' : 'auto',
-    top: pos.v === 'top' ? '8%' : pos.v === 'middle' ? '50%' : 'auto',
-    bottom: pos.v === 'bottom' ? '8%' : 'auto',
-    transform: [pos.h === 'center' ? 'translateX(-50%)' : '', pos.v === 'middle' ? 'translateY(-50%)' : ''].filter(Boolean).join(' ') || 'none',
-    textAlign: pos.h === 'center' ? 'center' : pos.h,
+    position: 'absolute',
+    left: `${textPos.x * 100}%`,
+    top: `${textPos.y * 100}%`,
+    transform: `translate(${previewTx}, -50%)`,
+    textAlign: previewAlign,
     maxWidth: '82%', color,
     fontFamily: FONTS.headline.family, fontWeight: FONTS.headline.weight,
     fontSize: `${previewFontSize}px`, lineHeight: 1.25,
     textTransform: 'uppercase', letterSpacing: cssLetterSpacing('headline'),
     textShadow: shadow ? '0 2px 8px rgba(0,0,0,0.8)' : 'none',
     wordBreak: 'break-word',
+    cursor: textDragging ? 'grabbing' : 'grab',
+    userSelect: 'none',
+    outline: textDragging ? `1px dashed ${COLORS.flame}` : 'none',
+    outlineOffset: 6,
   };
 
   // ── Batch grid data ───────────────────────────────────────────────────
@@ -455,17 +476,12 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
       </div>
 
       <div>
-        <div style={S.label}>Position</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
-          {POSITIONS.map(p => (
-            <button key={p.id} onClick={() => setPositionId(p.id)} style={{
-              padding: '8px 0', borderRadius: 4, cursor: 'pointer',
-              border: `1px solid ${positionId === p.id ? '#DC440A' : '#2a3441'}`,
-              background: positionId === p.id ? 'rgba(220,68,10,0.15)' : '#1c2330',
-              color: positionId === p.id ? '#DC440A' : '#8b949e',
-              fontFamily: 'inherit', fontSize: 14,
-            }}>{p.label}</button>
-          ))}
+        <div style={{ ...S.label, display: 'flex', justifyContent: 'space-between' }}>
+          <span>Position</span>
+          <button onClick={() => setTextPos(DEFAULT_TEXT_POS)} style={S.link}>Reset</button>
+        </div>
+        <div style={{ fontSize: 9, color: '#8b949e', lineHeight: 1.5 }}>
+          Drag the text on the preview to reposition.
         </div>
       </div>
 
@@ -506,7 +522,7 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
                   flex: 1, textAlign: 'left', padding: '5px 8px', borderRadius: 4, cursor: 'pointer',
                   border: '1px solid #2a3441', background: '#1c2330', color: '#f0f4f8',
                   fontFamily: 'inherit', fontSize: 10,
-                }}>{p.name} <span style={{ color: '#b0a898', fontSize: 9 }}>{p.fontSize}px · {p.colorId} · {p.positionId}</span></button>
+                }}>{p.name} <span style={{ color: '#b0a898', fontSize: 9 }}>{p.fontSize}px · {p.colorId}</span></button>
                 <button onClick={() => deletePreset(p.id)} style={{ ...S.link, color: '#374151', fontSize: 12 }}>×</button>
               </div>
             ))}
@@ -688,10 +704,13 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
       <div style={{ flex: 1, minWidth: 0, background: '#1a1a1a', overflow: 'auto', display: 'flex', alignItems: mode === 'batch' ? 'flex-start' : 'center', justifyContent: mode === 'batch' ? 'flex-start' : 'center' }}>
         {mode === 'single' ? (
           activeImg ? (
-            <div style={{ position: 'relative', width: displayW, height: displayH, flexShrink: 0 }}>
-              <img ref={imgRef} src={activeImg.url} alt="" style={{ width: displayW, height: displayH, objectFit: 'cover', display: 'block' }} />
+            <div ref={previewBoxRef} style={{ position: 'relative', width: displayW, height: displayH, flexShrink: 0 }}>
+              <img ref={imgRef} src={activeImg.url} alt="" draggable={false} style={{ width: displayW, height: displayH, objectFit: 'cover', display: 'block' }} />
               {overlayText && (
-                <div style={overlayStyle}>
+                <div
+                  style={overlayStyle}
+                  onMouseDown={(e) => { e.preventDefault(); setTextDragging(true); }}
+                >
                   <div>{overlayText.toUpperCase()}</div>
                   {bodyText && <div style={{ marginTop: '0.35em', fontSize: '0.52em', fontFamily: FONTS.body.family, fontWeight: FONTS.body.weight, opacity: 0.85, letterSpacing: cssLetterSpacing('body'), lineHeight: 1.4 }}>{bodyText}</div>}
                 </div>
@@ -708,7 +727,7 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
           ) : (
             <div style={{ padding: 20, display: 'flex', flexWrap: 'wrap', gap: 10, alignContent: 'flex-start' }}>
               {batchCombos.map(({ img, hook }, i) => (
-                <BatchCard key={i} img={img} hook={hook} body={bodyText} fmt={fmt} pos={pos} color={color} fontSize={fontSize} shadow={shadow} onExport={() => exportCard(img, hook)} />
+                <BatchCard key={i} img={img} hook={hook} body={bodyText} fmt={fmt} textPos={textPos} color={color} fontSize={fontSize} shadow={shadow} onExport={() => exportCard(img, hook)} />
               ))}
             </div>
           )
