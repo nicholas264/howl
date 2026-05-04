@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { toPng } from 'html-to-image';
 import { PRODUCTS } from '../data';
-import { COLORS } from '../brand';
+import { COLORS, FONTS, BRAND_FONT_FILES, canvasFont, cssLetterSpacing, pxLetterSpacing, loadBrandFonts } from '../brand';
 
 const LS_DRAFTS = 'howl_callout_drafts';
 const MAX_DRAFTS = 30;
@@ -22,16 +22,10 @@ async function blobToDataUrl(blob) {
   });
 }
 
-const BRAND_FONTS = [
-  { family: 'Montserrat',     weight: 800, url: '/fonts/montserrat-800.woff2' },
-  { family: 'Libre Franklin', weight: 700, url: '/fonts/libre-franklin-700.woff2' },
-  { family: 'Source Sans 3',  weight: 400, url: '/fonts/source-sans-3-400.woff2' },
-];
-
 let cachedFontCss = null;
 async function getFontEmbedCss() {
   if (cachedFontCss) return cachedFontCss;
-  const blocks = await Promise.all(BRAND_FONTS.map(async f => {
+  const blocks = await Promise.all(BRAND_FONT_FILES.map(async f => {
     const res = await fetch(f.url);
     const buf = await res.arrayBuffer();
     const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
@@ -53,8 +47,14 @@ const DEFAULT_CALLOUT = (heading, body, side, x, y) => ({
   side: side || 'left',
   anchorX: x ?? 0.5,
   anchorY: y ?? 0.5,
-  textY: y ?? 0.5, // text block vertical position — independent of anchor
+  // Text block position — independent of anchor. textX undefined falls back
+  // to the side-margin default; once the user drags the label it pins here.
+  textX: undefined,
+  textY: y ?? 0.5,
 });
+
+// Default text X for a given side (matches the legacy side-margin layout).
+const defaultTextX = (side) => (side === 'left' ? 0.04 : 0.96);
 
 // Render the entire callout ad to a canvas — bypasses html-to-image entirely.
 async function renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts, titlePos = { x: 0.05, y: 0.04 } }) {
@@ -64,10 +64,8 @@ async function renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts, 
   const bodySize = format.w * 0.020;
 
   await Promise.all([
-    document.fonts.load(`800 ${titleSize}px Montserrat`),
-    document.fonts.load(`800 ${headSize}px Montserrat`),
-    document.fonts.load(`700 ${subSize}px "Libre Franklin"`),
-    document.fonts.load(`400 ${bodySize}px "Source Sans 3"`),
+    loadBrandFonts({ headline: titleSize, subHeadline: subSize, body: bodySize }),
+    document.fonts.load(canvasFont('headline', headSize)),
   ]);
 
   const canvas = document.createElement('canvas');
@@ -96,14 +94,14 @@ async function renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts, 
   // Title (draggable)
   const titleX = format.w * titlePos.x;
   const titleY = format.h * titlePos.y;
-  ctx.font = `800 ${titleSize}px Montserrat, sans-serif`;
-  ctx.letterSpacing = `${titleSize * 0.02}px`;
+  ctx.font = canvasFont('headline', titleSize);
+  ctx.letterSpacing = `${pxLetterSpacing('headline', titleSize)}px`;
   ctx.textAlign = 'left';
   ctx.fillText((title || '').toUpperCase(), titleX, titleY);
 
   if (subtitle) {
-    ctx.font = `700 ${subSize}px "Libre Franklin", sans-serif`;
-    ctx.letterSpacing = `${subSize * 0.08}px`;
+    ctx.font = canvasFont('subHeadline', subSize);
+    ctx.letterSpacing = `${pxLetterSpacing('subHeadline', subSize)}px`;
     ctx.fillText(subtitle.toUpperCase(), titleX, titleY + titleSize * 1.05);
   }
 
@@ -111,9 +109,8 @@ async function renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts, 
   const headLineH = headSize * 1.1;
   const bodyLineH = bodySize * 1.3;
   const maxBlockW = format.w * 0.28;
-  const sideMargin = format.w * 0.04;
-  const headSpacing = headSize * 0.04;
-  const bodySpacing = bodySize * 0.01;
+  const headSpacing = pxLetterSpacing('headline', headSize);
+  const bodySpacing = pxLetterSpacing('body', bodySize);
 
   for (const c of callouts) {
     const isLeft = c.side === 'left';
@@ -124,12 +121,12 @@ async function renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts, 
 
     // Wrap heading + body using the SAME letterSpacing the renderer will use,
     // so measureText returns accurate widths.
-    ctx.font = `800 ${headSize}px Montserrat, sans-serif`;
+    ctx.font = canvasFont('headline', headSize);
     ctx.letterSpacing = `${headSpacing}px`;
     const headLines = wrapText(ctx, (c.heading || '').toUpperCase(), maxBlockW);
     const headMaxW = Math.max(0, ...headLines.map(l => ctx.measureText(l).width));
 
-    ctx.font = `400 ${bodySize}px "Source Sans 3", sans-serif`;
+    ctx.font = canvasFont('body', bodySize);
     ctx.letterSpacing = `${bodySpacing}px`;
     const bodyLines = wrapText(ctx, c.body || '', maxBlockW);
     const bodyMaxW = Math.max(0, ...bodyLines.map(l => ctx.measureText(l).width));
@@ -139,14 +136,15 @@ async function renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts, 
 
     // Anchor edge of text (where leader line starts)
     const widestW = Math.max(headMaxW, bodyMaxW);
-    const xText = isLeft ? sideMargin : format.w - sideMargin;
+    const tx = c.textX ?? defaultTextX(c.side);
+    const xText = tx * format.w;
     ctx.textAlign = isLeft ? 'left' : 'right';
 
-    ctx.font = `800 ${headSize}px Montserrat, sans-serif`;
+    ctx.font = canvasFont('headline', headSize);
     ctx.letterSpacing = `${headSpacing}px`;
     headLines.forEach((line, i) => ctx.fillText(line, xText, blockTop + i * headLineH));
 
-    ctx.font = `400 ${bodySize}px "Source Sans 3", sans-serif`;
+    ctx.font = canvasFont('body', bodySize);
     ctx.letterSpacing = `${bodySpacing}px`;
     const bodyTop = blockTop + headLines.length * headLineH + (headLines.length && bodyLines.length ? 8 : 0);
     bodyLines.forEach((line, i) => ctx.fillText(line, xText, bodyTop + i * bodyLineH));
@@ -377,7 +375,11 @@ export default function CalloutAdTool({ onAddToCart }) {
         return { ...c, anchorX: Math.max(0.02, Math.min(0.98, x)), anchorY: clampedY };
       }
       if (type === 'label') {
-        return { ...c, textY: clampedY };
+        const clampedX = Math.max(0.02, Math.min(0.98, x));
+        // Auto-flip text alignment when the user drags across the midline,
+        // so the leader line still attaches to the inner edge of the text.
+        const nextSide = clampedX < 0.5 ? 'left' : 'right';
+        return { ...c, textX: clampedX, textY: clampedY, side: nextSide };
       }
       return c;
     }));
@@ -485,14 +487,14 @@ export default function CalloutAdTool({ onAddToCart }) {
                 color: '#F9F3DF', textAlign: 'left', cursor: 'grab',
               }}>
               <div style={{
-                fontFamily: "'Montserrat', sans-serif", fontWeight: 800,
-                fontSize: stageDisplayWidth * 0.075, letterSpacing: '0.02em',
+                fontFamily: FONTS.headline.family, fontWeight: FONTS.headline.weight,
+                fontSize: stageDisplayWidth * 0.075, letterSpacing: cssLetterSpacing('headline'),
                 lineHeight: 1, textTransform: 'uppercase',
               }}>{title}</div>
               {subtitle && (
                 <div style={{
-                  fontFamily: "'Libre Franklin', sans-serif", fontWeight: 700,
-                  fontSize: stageDisplayWidth * 0.022, letterSpacing: '0.08em',
+                  fontFamily: FONTS.subHeadline.family, fontWeight: FONTS.subHeadline.weight,
+                  fontSize: stageDisplayWidth * 0.022, letterSpacing: cssLetterSpacing('subHeadline'),
                   marginTop: 6, textTransform: 'uppercase',
                 }}>{subtitle}</div>
               )}
@@ -503,8 +505,11 @@ export default function CalloutAdTool({ onAddToCart }) {
               {callouts.map(c => {
                 const ax = c.anchorX * stageDisplayWidth;
                 const ay = c.anchorY * stageDisplayHeight;
-                // Box edge anchor near callout text — uses textY so line can be diagonal
-                const boxX = c.side === 'left' ? stageDisplayWidth * 0.32 : stageDisplayWidth * 0.68;
+                // Leader line starts at the inner edge of the text block — the
+                // edge nearest the anchor. Text block left edge if side=left,
+                // right edge if side=right.
+                const tx = c.textX ?? defaultTextX(c.side);
+                const boxX = tx * stageDisplayWidth;
                 const boxY = (c.textY ?? c.anchorY) * stageDisplayHeight;
                 return (
                   <line
@@ -534,10 +539,10 @@ export default function CalloutAdTool({ onAddToCart }) {
               />
             ))}
 
-            {/* Callout text blocks — drag to move vertically */}
+            {/* Callout text blocks — drag to move freely (X + Y) */}
             {callouts.map(c => {
               const isLeft = c.side === 'left';
-              const xPct = isLeft ? 3 : 97;
+              const tx = c.textX ?? defaultTextX(c.side);
               const ty = c.textY ?? c.anchorY;
               return (
                 <div
@@ -549,9 +554,11 @@ export default function CalloutAdTool({ onAddToCart }) {
                   }}
                   style={{
                     position: 'absolute',
-                    [isLeft ? 'left' : 'right']: `${isLeft ? xPct : 100 - xPct}%`,
+                    left: `${tx * 100}%`,
                     top: `${ty * 100}%`,
-                    transform: 'translateY(-50%)',
+                    // Anchor by inner edge: left side grows rightward, right
+                    // side grows leftward. Both centered vertically on textY.
+                    transform: isLeft ? 'translate(0, -50%)' : 'translate(-100%, -50%)',
                     maxWidth: '28%',
                     color: '#F9F3DF',
                     textAlign: isLeft ? 'left' : 'right',
@@ -562,13 +569,14 @@ export default function CalloutAdTool({ onAddToCart }) {
                   }}
                 >
                   <div style={{
-                    fontFamily: "'Montserrat', sans-serif", fontWeight: 800,
-                    fontSize: stageDisplayWidth * 0.028, letterSpacing: '0.04em',
+                    fontFamily: FONTS.headline.family, fontWeight: FONTS.headline.weight,
+                    fontSize: stageDisplayWidth * 0.028, letterSpacing: cssLetterSpacing('headline'),
                     textTransform: 'uppercase', lineHeight: 1.05,
                   }}>{c.heading}</div>
                   <div style={{
-                    fontFamily: "'Source Sans 3', sans-serif", fontWeight: 400,
+                    fontFamily: FONTS.body.family, fontWeight: FONTS.body.weight,
                     fontSize: stageDisplayWidth * 0.020, marginTop: 4, lineHeight: 1.3,
+                    letterSpacing: cssLetterSpacing('body'),
                   }}>{c.body}</div>
                 </div>
               );
@@ -689,7 +697,7 @@ export default function CalloutAdTool({ onAddToCart }) {
               ))}
             </div>
             <div style={{ fontSize: 11, color: '#6e7681', marginTop: 8, lineHeight: 1.5 }}>
-              Drag the cream dot to anchor the leader line to a feature. Drag the text block itself to move the callout up or down — the line goes diagonal automatically. Use the Left/Right button to flip a callout to the other side.
+              Drag the cream dot to anchor the leader line to a feature. Drag the text block freely to position the callout anywhere on the canvas — the line follows. Crossing the centerline auto-flips the text alignment.
             </div>
           </div>
         </div>

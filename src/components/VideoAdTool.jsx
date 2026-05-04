@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useLayoutEffect } from 'react';
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
-import { COLORS } from '../brand';
+import { COLORS, FONTS, canvasFont, cssLetterSpacing, loadBrandFonts } from '../brand';
 
 const LS_REVIEWS = 'howl_review_ads_reviews';
 
@@ -53,10 +53,9 @@ function wrapText(ctx, text, maxWidth) {
 
 // Render text + attribution to a canvas (returned for reuse across frames)
 async function buildOverlayCanvas(text, videoW, videoH, opts) {
-  await Promise.all([
-    document.fonts.load(`800 ${opts.fontSize}px Montserrat`),
-    document.fonts.load(`700 ${Math.round(opts.fontSize * 0.42)}px "Libre Franklin"`),
-  ]);
+  const attribSzPre = Math.round(opts.fontSize * 0.42);
+  const verifySzPre = Math.round(opts.fontSize * 0.34);
+  await loadBrandFonts({ headline: opts.fontSize, body: attribSzPre, subHeadline: verifySzPre });
 
   const canvas = document.createElement('canvas');
   canvas.width = videoW;
@@ -72,7 +71,7 @@ async function buildOverlayCanvas(text, videoW, videoH, opts) {
   const margin   = videoW * 0.09;
   const gap      = Math.round(quoteSz * 0.55);
 
-  ctx.font = `800 ${quoteSz}px Montserrat, sans-serif`;
+  ctx.font = canvasFont('headline', quoteSz);
   ctx.textBaseline = 'top';
   const quoteLines = wrapText(ctx, text, maxWidth);
   const quoteH = quoteLines.length * quoteLineH;
@@ -109,7 +108,7 @@ async function buildOverlayCanvas(text, videoW, videoH, opts) {
   ctx.textAlign = align;
 
   // Quote
-  ctx.font = `800 ${quoteSz}px Montserrat, sans-serif`;
+  ctx.font = canvasFont('headline', quoteSz);
   ctx.fillStyle = opts.color;
   setShadow();
   quoteLines.forEach((line, i) => ctx.fillText(line, x, y + i * quoteLineH));
@@ -119,7 +118,7 @@ async function buildOverlayCanvas(text, videoW, videoH, opts) {
     let ay = y + quoteH + gap;
     if (opts.reviewerName) {
       clrShadow();
-      ctx.font = `700 ${attribSz}px "Libre Franklin", sans-serif`;
+      ctx.font = canvasFont('body', attribSz);
       ctx.fillStyle = opts.color;
       setShadow();
       ctx.fillText(opts.reviewerName, x, ay);
@@ -127,7 +126,7 @@ async function buildOverlayCanvas(text, videoW, videoH, opts) {
     }
     if (opts.verifiedLabel) {
       clrShadow();
-      ctx.font = `700 ${verifySz}px "Libre Franklin", sans-serif`;
+      ctx.font = canvasFont('subHeadline', verifySz);
       ctx.fillStyle = opts.color === '#ffffff' ? 'rgba(255,255,255,0.72)'
         : opts.color === COLORS.flame ? 'rgba(220,68,10,0.72)'
         : 'rgba(51,63,76,0.65)';
@@ -425,9 +424,9 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
     ].filter(Boolean).join(' ') || 'none',
     textAlign: pos.h === 'center' ? 'center' : pos.h,
     maxWidth: '82%', color,
-    fontFamily: "'Montserrat', sans-serif", fontWeight: 800,
+    fontFamily: FONTS.headline.family, fontWeight: FONTS.headline.weight,
     fontSize: `${previewFontSize}px`, lineHeight: 1.25,
-    textTransform: 'uppercase', letterSpacing: '0.04em',
+    textTransform: 'uppercase', letterSpacing: cssLetterSpacing('headline'),
     textShadow: shadow ? '0 2px 8px rgba(0,0,0,0.8)' : 'none',
     wordBreak: 'break-word',
   };

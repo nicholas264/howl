@@ -1,4 +1,4 @@
-import { COLORS, FONTS, LOGOS } from '../brand';
+import { COLORS, FONTS, LOGOS, cssLetterSpacing } from '../brand';
 import { scaleFontSize } from '../utils/scaleFontSize';
 
 export default function EditorialTemplate({ variation, photoUrl, format, dimensions, textPosition }) {
@@ -72,7 +72,7 @@ export default function EditorialTemplate({ variation, photoUrl, format, dimensi
           fontWeight: FONTS.headline.weight,
           fontSize: headlineSize,
           textTransform: FONTS.headline.transform,
-          letterSpacing: FONTS.headline.letterSpacing,
+          letterSpacing: cssLetterSpacing('headline'),
           color: headlineColor,
           lineHeight: 1.15,
           overflowWrap: 'break-word',
@@ -87,7 +87,7 @@ export default function EditorialTemplate({ variation, photoUrl, format, dimensi
           fontWeight: FONTS.subHeadline.weight,
           fontSize: ctaSize,
           textTransform: FONTS.subHeadline.transform,
-          letterSpacing: FONTS.subHeadline.letterSpacing,
+          letterSpacing: cssLetterSpacing('subHeadline'),
           color: ctaColor,
           flexShrink: 0,
           whiteSpace: 'nowrap',

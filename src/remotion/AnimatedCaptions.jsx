@@ -1,4 +1,5 @@
 import { AbsoluteFill, useCurrentFrame, interpolate, spring, useVideoConfig } from 'remotion';
+import { FONTS, cssLetterSpacing } from '../brand';
 
 // words: [{ word, start, end }] — timestamps in SECONDS, RELATIVE to the start of this sequence
 export function AnimatedCaptions({ words, style = 'pop', position = 'bottom' }) {
@@ -40,10 +41,10 @@ export function AnimatedCaptions({ words, style = 'pop', position = 'bottom' }) 
           const color = isActive ? '#DC440A' : isPast ? '#F9F3DF' : '#F9F3DF';
           return (
             <span key={i} style={{
-              fontFamily: "'Montserrat', sans-serif",
-              fontWeight: 800,
+              fontFamily: FONTS.headline.family,
+              fontWeight: FONTS.headline.weight,
               fontSize: 64,
-              letterSpacing: '0.02em',
+              letterSpacing: cssLetterSpacing('headline'),
               textTransform: 'uppercase',
               color,
               textShadow: '0 4px 16px rgba(0,0,0,0.65)',

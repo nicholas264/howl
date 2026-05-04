@@ -1,4 +1,4 @@
-import { COLORS, FONTS, LOGOS } from '../brand';
+import { COLORS, FONTS, LOGOS, cssLetterSpacing } from '../brand';
 import { scaleFontSize } from '../utils/scaleFontSize';
 
 export default function OverlayTemplate({ variation, photoUrl, format, dimensions, textPosition }) {
@@ -58,7 +58,7 @@ export default function OverlayTemplate({ variation, photoUrl, format, dimension
           fontWeight: FONTS.headline.weight,
           fontSize: headlineSize,
           textTransform: FONTS.headline.transform,
-          letterSpacing: FONTS.headline.letterSpacing,
+          letterSpacing: cssLetterSpacing('headline'),
           color: headlineColor,
           lineHeight: 1.1,
           marginBottom: 20,
@@ -74,7 +74,7 @@ export default function OverlayTemplate({ variation, photoUrl, format, dimension
           fontWeight: FONTS.subHeadline.weight,
           fontSize: ctaSize,
           textTransform: FONTS.subHeadline.transform,
-          letterSpacing: FONTS.subHeadline.letterSpacing,
+          letterSpacing: cssLetterSpacing('subHeadline'),
           color: ctaColor,
         }}>
           →

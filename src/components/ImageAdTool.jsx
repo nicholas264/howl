@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useLayoutEffect } from 'react';
 import JSZip from 'jszip';
-import { COLORS } from '../brand';
+import { COLORS, FONTS, canvasFont, cssLetterSpacing, loadBrandFonts } from '../brand';
 
 const LS_IMAGES  = 'howl_saved_images';
 const LS_PRESETS = 'howl_style_presets';
@@ -48,10 +48,8 @@ function wrapText(ctx, text, maxWidth) {
 }
 
 async function renderToCanvas(imgSrc, text, bodyText, fw, fh, opts) {
-  await Promise.all([
-    document.fonts.load(`800 ${opts.fontSize}px Montserrat`),
-    document.fonts.load(`700 ${Math.round(opts.fontSize * 0.42)}px "Libre Franklin"`),
-  ]);
+  const bodySzPre = Math.round(opts.fontSize * 0.42);
+  await loadBrandFonts({ headline: opts.fontSize, body: bodySzPre });
 
   const imgEl = typeof imgSrc === 'string' ? await loadImg(imgSrc) : imgSrc;
 
@@ -75,12 +73,12 @@ async function renderToCanvas(imgSrc, text, bodyText, fw, fh, opts) {
   const margin     = fw * 0.09;
   const gap        = Math.round(quoteSz * 0.45);
 
-  ctx.font = `800 ${quoteSz}px Montserrat, sans-serif`;
+  ctx.font = canvasFont('headline', quoteSz);
   ctx.textBaseline = 'top';
   const quoteLines = wrapText(ctx, text.toUpperCase(), maxWidth);
   const quoteH = quoteLines.length * quoteLineH;
 
-  ctx.font = `700 ${bodySz}px "Libre Franklin", sans-serif`;
+  ctx.font = canvasFont('body', bodySz);
   const bodyLines = bodyText ? wrapText(ctx, bodyText, maxWidth) : [];
   const bodyH = bodyLines.length ? gap + bodyLines.length * bodyLineH : 0;
   const blockH = quoteH + bodyH;
@@ -102,14 +100,14 @@ async function renderToCanvas(imgSrc, text, bodyText, fw, fh, opts) {
   const clrShadow = () => { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0; };
 
   ctx.textAlign = align;
-  ctx.font = `800 ${quoteSz}px Montserrat, sans-serif`;
+  ctx.font = canvasFont('headline', quoteSz);
   ctx.fillStyle = opts.color;
   setShadow();
   quoteLines.forEach((line, i) => ctx.fillText(line, x, y + i * quoteLineH));
 
   if (bodyLines.length) {
     clrShadow();
-    ctx.font = `700 ${bodySz}px "Libre Franklin", sans-serif`;
+    ctx.font = canvasFont('body', bodySz);
     ctx.fillStyle = opts.color === '#ffffff' ? 'rgba(255,255,255,0.82)'
       : opts.color === COLORS.flame ? 'rgba(220,68,10,0.82)'
       : 'rgba(51,63,76,0.75)';
@@ -146,9 +144,9 @@ function BatchCard({ img, hook, body, fmt, pos, color, fontSize, shadow, onExpor
     transform: [pos.h === 'center' ? 'translateX(-50%)' : '', pos.v === 'middle' ? 'translateY(-50%)' : ''].filter(Boolean).join(' ') || 'none',
     textAlign: pos.h === 'center' ? 'center' : pos.h,
     maxWidth: '82%', color,
-    fontFamily: "'Montserrat', sans-serif", fontWeight: 800,
+    fontFamily: FONTS.headline.family, fontWeight: FONTS.headline.weight,
     fontSize: `${pxFont}px`, lineHeight: 1.25,
-    textTransform: 'uppercase', letterSpacing: '0.04em',
+    textTransform: 'uppercase', letterSpacing: cssLetterSpacing('headline'),
     textShadow: shadow ? '0 2px 6px rgba(0,0,0,0.85)' : 'none',
     wordBreak: 'break-word',
   };
@@ -158,7 +156,7 @@ function BatchCard({ img, hook, body, fmt, pos, color, fontSize, shadow, onExpor
       <img src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
       <div style={overlayStyle}>
         <div>{hook.toUpperCase()}</div>
-        {body && <div style={{ marginTop: '0.35em', fontSize: '0.52em', fontFamily: "'Libre Franklin', sans-serif", fontWeight: 700, opacity: 0.85, letterSpacing: '0.06em', lineHeight: 1.4 }}>{body}</div>}
+        {body && <div style={{ marginTop: '0.35em', fontSize: '0.52em', fontFamily: FONTS.body.family, fontWeight: FONTS.body.weight, opacity: 0.85, letterSpacing: cssLetterSpacing('body'), lineHeight: 1.4 }}>{body}</div>}
       </div>
       <div style={{ position: 'absolute', bottom: 4, right: 4, background: 'rgba(0,0,0,0.55)', borderRadius: 3, padding: '2px 5px', fontSize: 8, color: '#fff', letterSpacing: 1 }}>↓</div>
     </div>
@@ -416,9 +414,9 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
     transform: [pos.h === 'center' ? 'translateX(-50%)' : '', pos.v === 'middle' ? 'translateY(-50%)' : ''].filter(Boolean).join(' ') || 'none',
     textAlign: pos.h === 'center' ? 'center' : pos.h,
     maxWidth: '82%', color,
-    fontFamily: "'Montserrat', sans-serif", fontWeight: 800,
+    fontFamily: FONTS.headline.family, fontWeight: FONTS.headline.weight,
     fontSize: `${previewFontSize}px`, lineHeight: 1.25,
-    textTransform: 'uppercase', letterSpacing: '0.04em',
+    textTransform: 'uppercase', letterSpacing: cssLetterSpacing('headline'),
     textShadow: shadow ? '0 2px 8px rgba(0,0,0,0.8)' : 'none',
     wordBreak: 'break-word',
   };
@@ -695,7 +693,7 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
               {overlayText && (
                 <div style={overlayStyle}>
                   <div>{overlayText.toUpperCase()}</div>
-                  {bodyText && <div style={{ marginTop: '0.35em', fontSize: '0.52em', fontFamily: "'Libre Franklin', sans-serif", fontWeight: 700, opacity: 0.85, letterSpacing: '0.06em', lineHeight: 1.4 }}>{bodyText}</div>}
+                  {bodyText && <div style={{ marginTop: '0.35em', fontSize: '0.52em', fontFamily: FONTS.body.family, fontWeight: FONTS.body.weight, opacity: 0.85, letterSpacing: cssLetterSpacing('body'), lineHeight: 1.4 }}>{bodyText}</div>}
                 </div>
               )}
             </div>

@@ -1,4 +1,4 @@
-import { COLORS, FONTS, LOGOS } from '../brand';
+import { COLORS, FONTS, LOGOS, cssLetterSpacing } from '../brand';
 import { scaleFontSize } from '../utils/scaleFontSize';
 
 export default function UGCTemplate({ variation, photoUrl, format, dimensions, attribution, socialProof, reviewerName, backgroundImage, scrimColor, textColor }) {
@@ -59,7 +59,7 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
           fontWeight: FONTS.headline.weight,
           fontSize: headlineSize,
           textTransform: FONTS.headline.transform,
-          letterSpacing: FONTS.headline.letterSpacing,
+          letterSpacing: cssLetterSpacing('headline'),
           color: txtColor,
           lineHeight: 1.12,
           overflowWrap: 'break-word',
