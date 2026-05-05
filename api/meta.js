@@ -67,7 +67,7 @@ export default async function handler(req, res) {
   const accessToken = process.env.META_ACCESS_TOKEN;
   const rawId = (process.env.META_AD_ACCOUNT_ID || '').replace('act_', '');
   const adAccountId = `act_${rawId}`;
-  const defaultPageId = process.env.META_PAGE_ID || '404789730317028';
+  const defaultPageId = process.env.META_PAGE_ID;
 
   if (!accessToken || !rawId) {
     return res.status(500).json({ error: 'META_ACCESS_TOKEN and META_AD_ACCOUNT_ID not configured' });
@@ -78,6 +78,128 @@ export default async function handler(req, res) {
 
   try {
     switch (action) {
+
+      case 'get_tool_roi': {
+        // Pulls all ads in launch_history within `sinceDays` (default 90), queries Meta
+        // Insights once per chunk (500 ad_ids per call), aggregates spend/revenue/ROAS.
+        if (!process.env.DATABASE_URL) {
+          return res.json({ error: 'DATABASE_URL not configured' });
+        }
+        const sinceDays = parseInt(req.body.sinceDays || 90, 10);
+        const { neon } = await import('@neondatabase/serverless');
+        const sql = neon(process.env.DATABASE_URL);
+
+        const launches = await sql`
+          SELECT ad_id, creator, mime_type, ad_name, launched_at
+          FROM launch_history
+          WHERE ad_id IS NOT NULL
+            AND launched_at >= NOW() - (${sinceDays} || ' days')::interval
+        `;
+
+        if (launches.length === 0) {
+          return res.json({ totals: { spend: 0, revenue: 0, purchases: 0, roas: 0, adsLaunched: 0 }, byMimeType: [], byCreator: [], sinceDays });
+        }
+
+        // Build lookup so we can attribute insights back to mime_type / creator
+        const launchById = new Map();
+        for (const l of launches) launchById.set(l.ad_id, l);
+        const adIds = [...launchById.keys()];
+
+        // Fetch Meta insights — single call per chunk of 500 ad IDs
+        const PURCHASE_TYPES = new Set([
+          'omni_purchase',
+          'offsite_conversion.fb_pixel_purchase',
+          'purchase',
+          'web_in_store_purchase',
+        ]);
+        const pickPurchaseValue = (arr) => {
+          if (!Array.isArray(arr)) return 0;
+          // Prefer omni_purchase (deduped), fall back through preference order
+          const preference = ['omni_purchase', 'offsite_conversion.fb_pixel_purchase', 'purchase', 'web_in_store_purchase'];
+          for (const t of preference) {
+            const hit = arr.find(a => a.action_type === t);
+            if (hit) return parseFloat(hit.value || 0);
+          }
+          return 0;
+        };
+        const pickPurchaseCount = (arr) => {
+          if (!Array.isArray(arr)) return 0;
+          const preference = ['omni_purchase', 'offsite_conversion.fb_pixel_purchase', 'purchase', 'web_in_store_purchase'];
+          for (const t of preference) {
+            const hit = arr.find(a => a.action_type === t);
+            if (hit) return parseFloat(hit.value || 0);
+          }
+          return 0;
+        };
+
+        const CHUNK = 500;
+        const insightsRows = [];
+        for (let i = 0; i < adIds.length; i += CHUNK) {
+          const chunk = adIds.slice(i, i + CHUNK);
+          const filtering = encodeURIComponent(JSON.stringify([
+            { field: 'ad.id', operator: 'IN', value: chunk },
+          ]));
+          // Use a date_preset that matches sinceDays as closely as possible; fall back to
+          // an explicit time_range for arbitrary windows.
+          const tsNow = new Date();
+          const tsSince = new Date(tsNow.getTime() - sinceDays * 24 * 60 * 60 * 1000);
+          const fmtYmd = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+          const timeRange = encodeURIComponent(JSON.stringify({ since: fmtYmd(tsSince), until: fmtYmd(tsNow) }));
+
+          const url = `${BASE}/${adAccountId}/insights?level=ad&fields=ad_id,spend,actions,action_values&filtering=${filtering}&time_range=${timeRange}&limit=500&access_token=${accessToken}`;
+          const r = await fetch(url);
+          const d = await r.json();
+          if (d.error) {
+            return res.status(400).json({ error: d.error.message, step: 'meta_insights' });
+          }
+          if (Array.isArray(d.data)) insightsRows.push(...d.data);
+        }
+
+        const totals = { spend: 0, revenue: 0, purchases: 0, roas: 0, adsLaunched: launches.length };
+        const mimeAgg = {};
+        const creatorAgg = {};
+
+        for (const row of insightsRows) {
+          const launch = launchById.get(row.ad_id);
+          if (!launch) continue;
+          const spend = parseFloat(row.spend || 0);
+          const revenue = pickPurchaseValue(row.action_values);
+          const purchases = pickPurchaseCount(row.actions);
+
+          totals.spend += spend;
+          totals.revenue += revenue;
+          totals.purchases += purchases;
+
+          const mt = launch.mime_type || 'unknown';
+          if (!mimeAgg[mt]) mimeAgg[mt] = { spend: 0, revenue: 0, purchases: 0, ads: 0 };
+          mimeAgg[mt].spend += spend;
+          mimeAgg[mt].revenue += revenue;
+          mimeAgg[mt].purchases += purchases;
+
+          const cr = launch.creator || 'Unknown';
+          if (!creatorAgg[cr]) creatorAgg[cr] = { spend: 0, revenue: 0, purchases: 0, ads: 0 };
+          creatorAgg[cr].spend += spend;
+          creatorAgg[cr].revenue += revenue;
+          creatorAgg[cr].purchases += purchases;
+        }
+
+        // Count ads per mime_type/creator from launch_history (not insights — captures
+        // ads that ran but had zero spend/insights)
+        for (const l of launches) {
+          const mt = l.mime_type || 'unknown';
+          const cr = l.creator || 'Unknown';
+          if (!mimeAgg[mt]) mimeAgg[mt] = { spend: 0, revenue: 0, purchases: 0, ads: 0 };
+          mimeAgg[mt].ads += 1;
+          if (!creatorAgg[cr]) creatorAgg[cr] = { spend: 0, revenue: 0, purchases: 0, ads: 0 };
+          creatorAgg[cr].ads += 1;
+        }
+
+        totals.roas = totals.spend > 0 ? totals.revenue / totals.spend : 0;
+        const byMimeType = Object.entries(mimeAgg).map(([k, v]) => ({ mimeType: k, ...v, roas: v.spend > 0 ? v.revenue / v.spend : 0 })).sort((a, b) => b.revenue - a.revenue);
+        const byCreator = Object.entries(creatorAgg).map(([k, v]) => ({ creator: k, ...v, roas: v.spend > 0 ? v.revenue / v.spend : 0 })).sort((a, b) => b.revenue - a.revenue);
+
+        return res.json({ totals, byMimeType, byCreator, sinceDays, _meta: { adsWithInsights: insightsRows.length, metaCalls: Math.ceil(adIds.length / CHUNK) } });
+      }
 
       case 'get_dashboard': {
         const sinceTs = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 365; // 1 year ago
@@ -237,6 +359,113 @@ export default async function handler(req, res) {
         return res.status(r.status).json(d);
       }
 
+      case 'create_creative': {
+        // Build + create the ad creative. Supports image, video, and carousel.
+        // Returns { creativeId } so the client can call create_ad_from_creative next.
+        const { imageHash, videoId: preUploadedVideoId, cards, adName, headline, primaryText, destUrl } = req.body;
+        const pageId = req.body.pageId || defaultPageId;
+
+        let creativeParams;
+        if (cards && cards.length >= 2) {
+          const childAttachments = cards.map(card => ({
+            link: card.destUrl || destUrl,
+            image_hash: card.imageHash,
+            name: card.headline || headline || '',
+            description: card.body || '',
+            call_to_action: { type: 'SHOP_NOW' },
+          }));
+          creativeParams = new URLSearchParams({
+            name: `${adName} Creative`,
+            object_story_spec: JSON.stringify({
+              page_id: pageId,
+              link_data: {
+                link: destUrl,
+                message: primaryText || headline,
+                child_attachments: childAttachments,
+                multi_share_optimized: false,
+              },
+            }),
+            access_token: accessToken,
+          });
+        } else if (preUploadedVideoId) {
+          creativeParams = new URLSearchParams({
+            name: `${adName} Creative`,
+            object_story_spec: JSON.stringify({
+              page_id: pageId,
+              video_data: {
+                video_id: preUploadedVideoId,
+                message: primaryText || headline,
+                title: headline,
+                call_to_action: { type: 'SHOP_NOW', value: { link: destUrl } },
+              },
+            }),
+            access_token: accessToken,
+          });
+        } else if (imageHash) {
+          creativeParams = new URLSearchParams({
+            name: `${adName} Creative`,
+            object_story_spec: JSON.stringify({
+              page_id: pageId,
+              link_data: {
+                image_hash: imageHash,
+                link: destUrl,
+                message: primaryText || headline,
+                name: headline,
+                call_to_action: { type: 'SHOP_NOW' },
+              },
+            }),
+            access_token: accessToken,
+          });
+        } else {
+          return res.status(400).json({ error: 'No imageHash, videoId, or cards provided', step: 'create_creative' });
+        }
+
+        const r = await fetch(`${BASE}/${adAccountId}/adcreatives`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: creativeParams,
+        });
+        const d = await r.json();
+        if (d.error) {
+          return res.status(400).json({ error: d.error.error_user_msg || d.error.message, detail: d.error, step: 'create_creative' });
+        }
+        return res.json({ success: true, creativeId: d.id });
+      }
+
+      case 'create_ad_from_creative': {
+        const { creativeId, adName, adsetId, headline, primaryText, destUrl, mimeType } = req.body;
+        if (!creativeId || !adsetId) {
+          return res.status(400).json({ error: 'creativeId and adsetId required', step: 'create_ad' });
+        }
+        const adParams = new URLSearchParams({
+          name: adName,
+          adset_id: adsetId,
+          creative: JSON.stringify({ creative_id: creativeId }),
+          status: 'PAUSED',
+          access_token: accessToken,
+        });
+        const r = await fetch(`${BASE}/${adAccountId}/ads`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: adParams,
+        });
+        const d = await r.json();
+        if (d.error) {
+          return res.status(400).json({ error: d.error.message, step: 'create_ad' });
+        }
+        await logLaunch({
+          ad_id: d.id,
+          adset_id: adsetId,
+          ad_name: adName,
+          headline,
+          primary_text: primaryText,
+          dest_url: destUrl,
+          mime_type: mimeType || 'image',
+          creator: req.body.creator || 'Static Builder',
+        });
+        return res.json({ success: true, adId: d.id });
+      }
+
       case 'push_ad': {
         const { imageHash, videoId: preUploadedVideoId, adName, headline, primaryText, destUrl, adsetId } = req.body;
         const pageId = req.body.pageId || defaultPageId;
@@ -319,6 +548,7 @@ export default async function handler(req, res) {
           primary_text: primaryText,
           dest_url: destUrl,
           mime_type: preUploadedVideoId ? 'video/mp4' : 'image',
+          creator: req.body.creator || 'Static Builder',
         });
 
         return res.json({ success: true, adId: adData.id });
@@ -396,6 +626,7 @@ export default async function handler(req, res) {
           primary_text: primaryText,
           dest_url: destUrl,
           mime_type: 'carousel',
+          creator: req.body.creator || 'Static Builder',
         });
 
         return res.json({ success: true, adId: adData.id });
@@ -473,9 +704,9 @@ export default async function handler(req, res) {
               geo_locations: { countries: ['US'] },
               age_min: 18,
               age_max: 65,
-              exclusions: {
-                custom_audiences: [{ id: req.body.excludeAudienceId || '120244292071530047' }],
-              },
+              ...(req.body.excludeAudienceId
+                ? { exclusions: { custom_audiences: [{ id: req.body.excludeAudienceId }] } }
+                : {}),
             },
             access_token: accessToken,
           };
@@ -598,6 +829,7 @@ export default async function handler(req, res) {
             angle_id: item.angle || null,
             product_id: item.product || null,
             mime_type: item.type || 'static',
+            creator: item.creator || req.body.creator || 'Static Builder',
           });
 
           results.push({ item: item.name, adsetId: adsetData.id, adId: adData.id, success: true });

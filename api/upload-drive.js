@@ -9,9 +9,15 @@ export default async function handler(req, res) {
   if (!(await requireAuth(req, res))) return;
   if (req.method !== 'POST') return res.status(405).end();
 
-  const { refreshToken, fileName, fileData, mimeType } = req.body;
+  const { fileName, fileData, mimeType } = req.body;
+  const refreshToken = req.cookies?.drive_refresh
+    ? decodeURIComponent(req.cookies.drive_refresh)
+    : null;
 
-  if (!refreshToken || !fileName || !fileData) {
+  if (!refreshToken) {
+    return res.status(401).json({ error: 'Drive not connected' });
+  }
+  if (!fileName || !fileData) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 

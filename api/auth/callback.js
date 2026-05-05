@@ -1,4 +1,4 @@
-// Handles Google OAuth2 callback — exchanges code for tokens, redirects to app
+// Handles Google OAuth2 callback — exchanges code for tokens, sets HttpOnly cookie
 export default async function handler(req, res) {
   const { code, error } = req.query;
 
@@ -25,8 +25,13 @@ export default async function handler(req, res) {
       return res.redirect('/?drive_error=no_refresh_token');
     }
 
-    // Pass refresh token back to frontend via URL param
-    res.redirect(`/?drive_token=${encodeURIComponent(tokens.refresh_token)}`);
+    const isProd = process.env.NODE_ENV === 'production';
+    const baseAttrs = `Path=/; Max-Age=31536000; SameSite=Lax${isProd ? '; Secure' : ''}`;
+    res.setHeader('Set-Cookie', [
+      `drive_refresh=${encodeURIComponent(tokens.refresh_token)}; HttpOnly; ${baseAttrs}`,
+      `drive_connected=1; ${baseAttrs}`,
+    ]);
+    res.redirect('/?drive_connected=1');
   } catch {
     res.redirect('/?drive_error=1');
   }

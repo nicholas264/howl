@@ -89,11 +89,37 @@ export default function DashboardTool({ view = 'cfo' }) {
 
   useEffect(() => { loadLaunches(); }, [loadLaunches]);
 
+  // Tool ROI — single fetch, lazy on first creative-view visit. Single Meta call per 500 ads.
+  const [toolRoi, setToolRoi] = useState(null);
+  const [toolRoiLoading, setToolRoiLoading] = useState(false);
+  const [toolRoiError, setToolRoiError] = useState('');
+  const [toolRoiSinceDays, setToolRoiSinceDays] = useState(90);
+  const loadToolRoi = useCallback(async (days = 90) => {
+    setToolRoiLoading(true); setToolRoiError('');
+    try {
+      const r = await fetch('/api/meta', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_tool_roi', sinceDays: days }),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setToolRoi(d);
+      setToolRoiSinceDays(days);
+    } catch (err) { setToolRoiError(err.message); }
+    finally { setToolRoiLoading(false); }
+  }, []);
+
   // Shopify analytics state
   const [shopifyData,    setShopifyData]    = useState(null);
   const [shopifyLoading, setShopifyLoading] = useState(false);
   const [shopifyError,   setShopifyError]   = useState('');
   const [shopifyUpdated, setShopifyUpdated] = useState(null);
+
+  // Google Ads state
+  const [googleData,    setGoogleData]    = useState(null);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleError,   setGoogleError]   = useState('');
+  const [googleUpdated, setGoogleUpdated] = useState(null);
 
   // CFO assumptions (loaded from /api/db/dashboard-settings).
   // Initialize with defaults so the panel renders even if the fetch is still pending or fails.
@@ -227,6 +253,32 @@ export default function DashboardTool({ view = 'cfo' }) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const loadGoogle = useCallback(async () => {
+    setGoogleLoading(true);
+    setGoogleError('');
+    try {
+      const r = await fetch('/api/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_monthly' }),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setGoogleData(d);
+      setGoogleUpdated(new Date());
+      // Refresh snapshots so the merged view reflects the upsert.
+      try {
+        const r2 = await fetch('/api/db/monthly-metrics');
+        const d2 = await r2.json();
+        if (Array.isArray(d2.rows)) setHistorySnapshots(d2.rows);
+      } catch {}
+    } catch (err) {
+      setGoogleError(err.message);
+    } finally {
+      setGoogleLoading(false);
     }
   }, []);
 
@@ -412,6 +464,9 @@ export default function DashboardTool({ view = 'cfo' }) {
           <button onClick={loadShopify} disabled={shopifyLoading} style={shopifyLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : (shopifyData ? S.ghostBtn : S.btn)}>
             {shopifyLoading ? 'Loading…' : shopifyData ? 'Refresh Shopify' : 'Load Shopify'}
           </button>
+          <button onClick={loadGoogle} disabled={googleLoading} style={googleLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : (googleData ? S.ghostBtn : S.btn)}>
+            {googleLoading ? 'Loading…' : googleData ? 'Refresh Google' : 'Load Google'}
+          </button>
           {view === 'forecast' && (
             <button onClick={refreshForecast} disabled={forecastLoading} style={forecastLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : (forecast ? S.ghostBtn : S.btn)}>
               {forecastLoading ? 'Pulling…' : forecast ? 'Refresh Forecast' : 'Pull Forecast'}
@@ -421,6 +476,113 @@ export default function DashboardTool({ view = 'cfo' }) {
       </div>
 
       {error && <div style={{ ...S.err, marginBottom: 20 }}>{error}</div>}
+      {googleError && <div style={{ ...S.err, marginBottom: 20 }}>Google Ads: {googleError}</div>}
+      {googleData && !googleError && (
+        <div style={{ padding: '8px 12px', border: '1px solid rgba(63,185,80,0.4)', background: 'rgba(63,185,80,0.08)', color: '#3fb950', fontSize: 10, borderRadius: 4, marginBottom: 20 }}>
+          Google Ads: pulled {googleData.months?.length || 0} months · ${(googleData.months || []).reduce((a, m) => a + (m.spend || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} total spend
+        </div>
+      )}
+
+      {/* Tool ROI — Creative sub-tab only */}
+      {view === 'creative' && (
+        <div style={{ ...S.card, marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={S.label}>Tool-Built Ads · ROI</span>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              {[30, 90, 365].map(d => (
+                <button key={d} onClick={() => loadToolRoi(d)} disabled={toolRoiLoading} style={{
+                  padding: '5px 10px', background: toolRoiSinceDays === d && toolRoi ? 'rgba(220,68,10,0.15)' : 'none',
+                  border: `1px solid ${toolRoiSinceDays === d && toolRoi ? '#DC440A' : '#2a3441'}`,
+                  color: toolRoiSinceDays === d && toolRoi ? '#DC440A' : '#8b949e',
+                  fontFamily: 'inherit', fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase',
+                  cursor: toolRoiLoading ? 'not-allowed' : 'pointer', borderRadius: 3,
+                }}>{d === 365 ? '1Y' : `${d}d`}</button>
+              ))}
+              <button onClick={() => loadToolRoi(toolRoiSinceDays)} disabled={toolRoiLoading} style={S.ghostBtn}>
+                {toolRoiLoading ? 'Pulling…' : toolRoi ? 'Refresh' : 'Pull ROI'}
+              </button>
+            </div>
+          </div>
+          {toolRoiError && <div style={{ ...S.err, marginBottom: 10 }}>{toolRoiError}</div>}
+          {!toolRoi && !toolRoiLoading && !toolRoiError && (
+            <div style={{ fontSize: 11, color: '#6e7681', marginTop: 6 }}>Click Pull ROI to query Meta Insights for every ad the tool has launched. One API call per 500 ads.</div>
+          )}
+          {toolRoi && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, marginTop: 4 }}>
+                {[
+                  { label: 'Spend',     val: `$${(toolRoi.totals.spend || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}` },
+                  { label: 'Revenue',   val: `$${(toolRoi.totals.revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}` },
+                  { label: 'ROAS',      val: `${(toolRoi.totals.roas || 0).toFixed(2)}x`, accent: toolRoi.totals.roas >= 2 ? '#3fb950' : toolRoi.totals.roas >= 1 ? '#f5a623' : '#f85149' },
+                  { label: 'Purchases', val: `${(toolRoi.totals.purchases || 0).toLocaleString()}` },
+                  { label: 'Ads Live',  val: `${toolRoi.totals.adsLaunched}` },
+                ].map(({ label, val, accent }) => (
+                  <div key={label} style={{ borderLeft: '2px solid #2a3441', paddingLeft: 12 }}>
+                    <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#6e7681', marginBottom: 4 }}>{label}</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: accent || '#f0f4f8', lineHeight: 1.1 }}>{val}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginTop: 22 }}>
+                <div>
+                  <span style={S.label}>By Format</span>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8, fontSize: 11 }}>
+                    <thead>
+                      <tr style={{ color: '#6e7681', textAlign: 'left', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase' }}>
+                        <th style={{ padding: '4px 6px 4px 0' }}>Type</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'right' }}>Ads</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'right' }}>Spend</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'right' }}>Revenue</th>
+                        <th style={{ padding: '4px 0 4px 6px', textAlign: 'right' }}>ROAS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {toolRoi.byMimeType.map(r => (
+                        <tr key={r.mimeType} style={{ borderTop: '1px solid #2a3441' }}>
+                          <td style={{ padding: '6px 6px 6px 0', color: '#c9d1d9' }}>{r.mimeType}</td>
+                          <td style={{ padding: '6px 6px', textAlign: 'right', color: '#8b949e' }}>{r.ads}</td>
+                          <td style={{ padding: '6px 6px', textAlign: 'right', color: '#8b949e' }}>${r.spend.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                          <td style={{ padding: '6px 6px', textAlign: 'right', color: '#f0f4f8', fontWeight: 600 }}>${r.revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                          <td style={{ padding: '6px 0 6px 6px', textAlign: 'right', color: r.roas >= 2 ? '#3fb950' : r.roas >= 1 ? '#f5a623' : '#f85149', fontWeight: 700 }}>{r.roas.toFixed(2)}x</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div>
+                  <span style={S.label}>By Creator</span>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8, fontSize: 11 }}>
+                    <thead>
+                      <tr style={{ color: '#6e7681', textAlign: 'left', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase' }}>
+                        <th style={{ padding: '4px 6px 4px 0' }}>Creator</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'right' }}>Ads</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'right' }}>Spend</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'right' }}>Revenue</th>
+                        <th style={{ padding: '4px 0 4px 6px', textAlign: 'right' }}>ROAS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {toolRoi.byCreator.slice(0, 8).map(r => (
+                        <tr key={r.creator} style={{ borderTop: '1px solid #2a3441' }}>
+                          <td style={{ padding: '6px 6px 6px 0', color: '#c9d1d9', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.creator}</td>
+                          <td style={{ padding: '6px 6px', textAlign: 'right', color: '#8b949e' }}>{r.ads}</td>
+                          <td style={{ padding: '6px 6px', textAlign: 'right', color: '#8b949e' }}>${r.spend.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                          <td style={{ padding: '6px 6px', textAlign: 'right', color: '#f0f4f8', fontWeight: 600 }}>${r.revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                          <td style={{ padding: '6px 0 6px 6px', textAlign: 'right', color: r.roas >= 2 ? '#3fb950' : r.roas >= 1 ? '#f5a623' : '#f85149', fontWeight: 700 }}>{r.roas.toFixed(2)}x</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div style={{ fontSize: 9, color: '#6e7681', letterSpacing: 1, marginTop: 12 }}>
+                Window: last {toolRoi.sinceDays}d · {toolRoi._meta?.metaCalls || 0} Meta API call{(toolRoi._meta?.metaCalls || 0) === 1 ? '' : 's'} · {toolRoi._meta?.adsWithInsights || 0} of {toolRoi.totals.adsLaunched} ads with insights
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Launch Log stats — DB-backed, on Creative sub-tab */}
       {view === 'creative' && launches && launches.length > 0 && (() => {
@@ -646,6 +808,7 @@ export default function DashboardTool({ view = 'cfo' }) {
         // Snapshotted history from DB (overlay BEHIND live data — live always wins for current months)
         const snapshotShopByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.shopify).map(r => [r.month, r.shopify]));
         const snapshotMetaByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.meta).map(r => [r.month, r.meta]));
+        const snapshotGoogleByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.google).map(r => [r.month, r.google]));
         const dealerByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.shopify_dealer).map(r => [r.month, r.shopify_dealer]));
 
         // Sum primary (snapshot or live) + dealer (CSV) per month.
@@ -670,7 +833,12 @@ export default function DashboardTool({ view = 'cfo' }) {
 
         // Settings-derived maps (declared before allMonthKeys to avoid TDZ).
         const s = settings || { grossMarginPct: 60, paymentFeePct: 2.9, paymentFeeFixed: 0.30, shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000, googleSpend: {}, opexByMonth: {}, revenueAddByMonth: {}, ordersAddByMonth: {} };
-        const googleByMonth = s.googleSpend || {};
+        // Google spend: live API rows (from snapshot) override manual settings.googleSpend.
+        // Live data flows: /api/google → upserts monthly_metrics.google → snapshotGoogleByMonth.
+        const liveGoogleSpend = Object.fromEntries(
+          Object.entries(snapshotGoogleByMonth).map(([k, v]) => [k, Number(v?.spend || 0)])
+        );
+        const googleByMonth = { ...(s.googleSpend || {}), ...liveGoogleSpend };
         const opexByMonth = s.opexByMonth || {};
         const revenueAddByMonth = s.revenueAddByMonth || {};
         const ordersAddByMonth = s.ordersAddByMonth || {};
@@ -731,10 +899,10 @@ export default function DashboardTool({ view = 'cfo' }) {
           const googleSpend = Number(googleByMonth[mk] || 0);
           const adSpend = metaSpend + googleSpend;
           const cm3 = revenue - cogs - paymentFees - shipCost - fulfill - adSpend;
-          // NCAC stays Meta-only (Google not driving new customers per current understanding)
+          // NCAC = total ad spend (Meta + Google) ÷ new customers.
           const totalNewCust = (sh.newCustomers || 0) + addNewCust;
-          const ncac = totalNewCust > 0 ? metaSpend / totalNewCust : null;
-          const blendedNcac = totalNewCust > 0 ? adSpend / totalNewCust : null;
+          const ncac = totalNewCust > 0 ? adSpend / totalNewCust : null;
+          const blendedNcac = ncac;
           const blendedRoas = adSpend > 0 ? revenue / adSpend : null;
           const newRoas = adSpend > 0 ? (sh.newRevenue || 0) / adSpend : null;
           // First-order payback: variable margin generated by new-customer first orders ÷ NCAC.
@@ -742,7 +910,7 @@ export default function DashboardTool({ view = 'cfo' }) {
           const newOrderMargin = (sh.newRevenue || 0) * (s.grossMarginPct / 100)
                                 - (sh.newRevenue || 0) * (s.paymentFeePct / 100)
                                 - (sh.newCustomers || 0) * (s.paymentFeeFixed + s.shippingCostPerOrder + s.fulfillmentCostPerOrder);
-          const firstOrderPayback = metaSpend > 0 ? newOrderMargin / metaSpend : null;
+          const firstOrderPayback = adSpend > 0 ? newOrderMargin / adSpend : null;
           const opexThis = opexFor(mk);
           const opexCoverage = opexThis > 0 ? cm3 / opexThis : null;
           const isCurrent = mk === currentMonthKey;
@@ -761,7 +929,7 @@ export default function DashboardTool({ view = 'cfo' }) {
           cm3: currentRow.cm3 * paceFactor,
           opex: currentRow.opex,
           opexCoverage: currentRow.opex > 0 ? (currentRow.cm3 * paceFactor) / currentRow.opex : null,
-          ncac: currentRow.newCustomers > 0 ? currentRow.metaSpend / currentRow.newCustomers : null, // run-rate NCAC, Meta only
+          ncac: currentRow.newCustomers > 0 ? currentRow.adSpend / currentRow.newCustomers : null,
         } : null;
 
         const ltm = rows.reduce((a, r) => ({
@@ -777,9 +945,15 @@ export default function DashboardTool({ view = 'cfo' }) {
           opex: a.opex + r.opex,
         }), { revenue: 0, orders: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, cm3: 0, newRevenue: 0, opex: 0 });
 
-        const ltmNcac = ltm.newCustomers > 0 ? ltm.metaSpend / ltm.newCustomers : null;
-        const ltmBlendedNcac = ltm.newCustomers > 0 ? ltm.adSpend / ltm.newCustomers : null;
+        const ltmNcac = ltm.newCustomers > 0 ? ltm.adSpend / ltm.newCustomers : null;
+        const ltmBlendedNcac = ltmNcac;
         const ltmRoas = ltm.adSpend > 0 ? ltm.revenue / ltm.adSpend : null;
+        // Blended CPA = ad spend ÷ all orders (new + returning, since blended)
+        const ltmCpa = ltm.orders > 0 ? ltm.adSpend / ltm.orders : null;
+        // MER = total revenue ÷ total ad spend (mathematically equal to blended ROAS, surfaced separately for finance convention)
+        const ltmMer = ltmRoas;
+        // aMER (acquisition MER) = new-customer revenue ÷ total ad spend
+        const ltmAmer = ltm.adSpend > 0 ? ltm.newRevenue / ltm.adSpend : null;
         const ltmRepeatRate = (ltm.newCustomers + ltm.returningCustomers) > 0
           ? ltm.returningCustomers / (ltm.newCustomers + ltm.returningCustomers) : 0;
         const ltmCmMargin = ltm.revenue > 0 ? ltm.cm3 / ltm.revenue : 0;
@@ -912,15 +1086,19 @@ export default function DashboardTool({ view = 'cfo' }) {
             {dataReady && (
               <>
                 {/* LTM KPI strip */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 10, marginBottom: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 12 }}>
                   {[
                     { label: 'LTM Revenue',     value: fmt$(ltm.revenue) },
-                    { label: 'LTM Ad Spend',    value: fmt$(ltm.adSpend) },
+                    { label: 'LTM Ad Spend',    value: fmt$(ltm.adSpend), sub: fmt$(ltm.metaSpend) + ' Meta · ' + fmt$(ltm.googleSpend) + ' Google' },
                     { label: 'LTM CM3',         value: fmt$(ltm.cm3), color: ltm.cm3 >= 0 ? '#3fb950' : '#f85149', sub: fmtPct(ltmCmMargin) + ' margin' },
                     { label: 'LTM OpEx Cov.',   value: ltmOpexCoverage == null ? '—' : fmtPct(ltmOpexCoverage), color: ltmOpexCoverage >= 1 ? '#3fb950' : '#f5a623', sub: fmt$(opex) + ' / mo opex' },
                     { label: 'LTM New Custs',   value: ltm.newCustomers.toLocaleString(), sub: ltm.returningCustomers.toLocaleString() + ' returning' },
                     { label: 'Avg NCAC',        value: ltmNcac == null ? '—' : '$' + ltmNcac.toFixed(0) },
-                    { label: 'Repeat Rate',     value: fmtPct(ltmRepeatRate), sub: 'Blended ROAS ' + (ltmRoas == null ? '—' : ltmRoas.toFixed(2)) },
+                    { label: 'Blended CPA',     value: ltmCpa == null ? '—' : '$' + ltmCpa.toFixed(0), sub: 'ad spend ÷ all orders' },
+                    { label: 'MER',             value: ltmMer == null ? '—' : ltmMer.toFixed(2) + 'x', color: (ltmMer || 0) >= 2 ? '#3fb950' : (ltmMer || 0) >= 1 ? '#f5a623' : '#f85149', sub: 'revenue ÷ ad spend' },
+                    { label: 'aMER',            value: ltmAmer == null ? '—' : ltmAmer.toFixed(2) + 'x', color: (ltmAmer || 0) >= 1 ? '#3fb950' : (ltmAmer || 0) >= 0.5 ? '#f5a623' : '#f85149', sub: 'new rev ÷ ad spend' },
+                    { label: 'Mktg % Rev',      value: ltm.revenue > 0 ? fmtPct(ltm.adSpend / ltm.revenue) : '—', color: ltm.revenue > 0 && (ltm.adSpend / ltm.revenue) <= 0.30 ? '#3fb950' : ltm.revenue > 0 && (ltm.adSpend / ltm.revenue) <= 0.50 ? '#f5a623' : '#f85149', sub: 'ad spend ÷ revenue' },
+                    { label: 'Repeat Rate',     value: fmtPct(ltmRepeatRate) },
                   ].map(({ label, value, sub, color }) => (
                     <div key={label} style={S.card}>
                       <span style={S.label}>{label}</span>
@@ -937,7 +1115,7 @@ export default function DashboardTool({ view = 'cfo' }) {
                       <span style={S.label}>{fmtMo(currentMonthKey)} Pace — Day {dayOfMonth} of {daysInCurrentMonth}</span>
                       <span style={{ fontSize: 9, color: '#6e7681', letterSpacing: 1 }}>(MTD × {paceFactor.toFixed(2)})</span>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
                       {[
                         { label: 'Projected Revenue', value: fmt$(pace.revenue), sub: fmt$(currentRow.revenue) + ' MTD' },
                         { label: 'Projected Ad Spend', value: fmt$(pace.adSpend), sub: fmt$(currentRow.adSpend) + ' MTD' },
@@ -945,6 +1123,9 @@ export default function DashboardTool({ view = 'cfo' }) {
                         { label: 'OpEx Coverage', value: pace.opexCoverage == null ? '—' : fmtPct(pace.opexCoverage), color: (pace.opexCoverage || 0) >= 1 ? '#3fb950' : (pace.opexCoverage || 0) >= 0.5 ? '#f5a623' : '#f85149', sub: 'vs ' + fmt$(pace.opex) },
                         { label: 'Projected New', value: pace.newCustomers.toLocaleString(), sub: currentRow.newCustomers + ' MTD' },
                         { label: 'NCAC (run rate)', value: pace.ncac == null ? '—' : '$' + pace.ncac.toFixed(0), sub: currentRow.newCustomers ? '' : 'no new yet' },
+                        { label: 'MER (MTD)', value: currentRow.blendedRoas == null ? '—' : currentRow.blendedRoas.toFixed(2) + 'x', color: (currentRow.blendedRoas || 0) >= 2 ? '#3fb950' : (currentRow.blendedRoas || 0) >= 1 ? '#f5a623' : '#f85149' },
+                        { label: 'Blended CPA (MTD)', value: currentRow.orders > 0 ? '$' + (currentRow.adSpend / currentRow.orders).toFixed(0) : '—', sub: currentRow.orders + ' orders' },
+                        { label: 'Mktg % Rev (MTD)', value: currentRow.revenue > 0 ? fmtPct(currentRow.adSpend / currentRow.revenue) : '—', color: currentRow.revenue > 0 && (currentRow.adSpend / currentRow.revenue) <= 0.30 ? '#3fb950' : currentRow.revenue > 0 && (currentRow.adSpend / currentRow.revenue) <= 0.50 ? '#f5a623' : '#f85149' },
                       ].map(({ label, value, sub, color }) => (
                         <div key={label}>
                           <span style={S.label}>{label}</span>
@@ -988,6 +1169,88 @@ export default function DashboardTool({ view = 'cfo' }) {
                   </div>
                 </div>
 
+                {/* Media Mix — Meta vs Google */}
+                <div style={{ ...S.card, marginBottom: 20 }}>
+                  {(() => {
+                    const maxSpend = Math.max(...rows.map(r => r.adSpend), 1);
+                    const mixMetaPct = ltm.adSpend > 0 ? ltm.metaSpend / ltm.adSpend : 0;
+                    const mixGooglePct = ltm.adSpend > 0 ? ltm.googleSpend / ltm.adSpend : 0;
+                    // Per-channel purchases (Meta) / conversions (Google) — pulled from snapshots.
+                    const metaPurchasesByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.meta).map(r => [r.month, Number(r.meta.purchases || 0)]));
+                    const googleConvByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.google).map(r => [r.month, Number(r.google.conversions || 0)]));
+                    const ltmMetaPurchases = rows.reduce((a, r) => a + (metaPurchasesByMonth[r.month] || 0), 0);
+                    const ltmGoogleConv = rows.reduce((a, r) => a + (googleConvByMonth[r.month] || 0), 0);
+                    const ltmMetaCpa = ltmMetaPurchases > 0 ? ltm.metaSpend / ltmMetaPurchases : null;
+                    const ltmGoogleCpa = ltmGoogleConv > 0 ? ltm.googleSpend / ltmGoogleConv : null;
+                    return (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+                          <span style={S.label}>Media Mix — Meta vs Google</span>
+                          <span style={{ fontSize: 10, color: '#8b949e', letterSpacing: 1 }}>
+                            LTM: <span style={{ color: '#1877f2', fontWeight: 700 }}>{fmtPct(mixMetaPct)} Meta</span>
+                            {' · '}
+                            <span style={{ color: '#fbbc05', fontWeight: 700 }}>{fmtPct(mixGooglePct)} Google</span>
+                            {' · '}
+                            <span style={{ color: '#c9d1d9' }}>{fmt$(ltm.adSpend)} total</span>
+                          </span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid #2a3441' }}>
+                          <div>
+                            <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#1877f2', marginBottom: 4, fontWeight: 600 }}>Meta CPA</div>
+                            <div style={{ fontSize: 18, fontWeight: 700, color: '#f0f4f8', lineHeight: 1 }}>{ltmMetaCpa == null ? '—' : '$' + ltmMetaCpa.toFixed(0)}</div>
+                            <div style={{ fontSize: 9, color: '#6e7681', marginTop: 4, letterSpacing: 1 }}>{ltmMetaPurchases.toLocaleString()} purchases</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#fbbc05', marginBottom: 4, fontWeight: 600 }}>Google CPA</div>
+                            <div style={{ fontSize: 18, fontWeight: 700, color: '#f0f4f8', lineHeight: 1 }}>{ltmGoogleCpa == null ? '—' : '$' + ltmGoogleCpa.toFixed(0)}</div>
+                            <div style={{ fontSize: 9, color: '#6e7681', marginTop: 4, letterSpacing: 1 }}>{ltmGoogleConv.toLocaleString(undefined, { maximumFractionDigits: 1 })} conversions</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8b949e', marginBottom: 4, fontWeight: 600 }}>Blended CPA</div>
+                            <div style={{ fontSize: 18, fontWeight: 700, color: '#f0f4f8', lineHeight: 1 }}>{ltmCpa == null ? '—' : '$' + ltmCpa.toFixed(0)}</div>
+                            <div style={{ fontSize: 9, color: '#6e7681', marginTop: 4, letterSpacing: 1 }}>{ltm.orders.toLocaleString()} orders (Shopify)</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8b949e', marginBottom: 4, fontWeight: 600 }}>Channel CPA Δ</div>
+                            <div style={{ fontSize: 18, fontWeight: 700, color: (ltmGoogleCpa != null && ltmMetaCpa != null) ? (ltmGoogleCpa < ltmMetaCpa ? '#3fb950' : '#f85149') : '#f0f4f8', lineHeight: 1 }}>
+                              {(ltmGoogleCpa != null && ltmMetaCpa != null) ? (ltmGoogleCpa < ltmMetaCpa ? 'Google ' : 'Meta ') + 'wins' : '—'}
+                            </div>
+                            <div style={{ fontSize: 9, color: '#6e7681', marginTop: 4, letterSpacing: 1 }}>
+                              {(ltmGoogleCpa != null && ltmMetaCpa != null) ? '$' + Math.abs(ltmGoogleCpa - ltmMetaCpa).toFixed(0) + ' difference' : 'need both channels'}
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                          {rows.map(r => {
+                            const barPct = (r.adSpend / maxSpend) * 100;
+                            const metaPct = r.adSpend > 0 ? (r.metaSpend / r.adSpend) * 100 : 0;
+                            return (
+                              <div key={r.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <span style={{ fontSize: 9, color: '#8b949e', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}</span>
+                                <div style={{ flex: 1, height: 16, background: '#1c2330', borderRadius: 3, overflow: 'hidden' }}>
+                                  <div style={{ display: 'flex', height: '100%', width: `${barPct}%`, transition: 'width 0.4s' }}>
+                                    <div title={`Meta: ${fmt$(r.metaSpend)}`} style={{ width: `${metaPct}%`, background: '#1877f2', height: '100%' }} />
+                                    <div title={`Google: ${fmt$(r.googleSpend)}`} style={{ width: `${100 - metaPct}%`, background: '#fbbc05', height: '100%' }} />
+                                  </div>
+                                </div>
+                                <span style={{ fontSize: 11, color: '#f0f4f8', width: 70, textAlign: 'right', fontWeight: 700 }}>{fmt$(r.adSpend)}</span>
+                                <div style={{ display: 'flex', gap: 6, width: 140, justifyContent: 'flex-end', fontSize: 9 }}>
+                                  {r.metaSpend > 0 && <span style={{ color: '#1877f2', letterSpacing: 1 }}>{fmt$(r.metaSpend)}M</span>}
+                                  {r.googleSpend > 0 && <span style={{ color: '#fbbc05', letterSpacing: 1 }}>{fmt$(r.googleSpend)}G</span>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div style={{ display: 'flex', gap: 14, marginTop: 10 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#1877f2' }} /><span style={{ fontSize: 9, color: '#8b949e', letterSpacing: 1 }}>Meta</span></div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#fbbc05' }} /><span style={{ fontSize: 9, color: '#8b949e', letterSpacing: 1 }}>Google</span></div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+
                 {/* OpEx Coverage by month (full width) */}
                 <div style={{ ...S.card, marginBottom: 20 }}>
                   <span style={S.label}>OpEx Coverage by Month — CM3 ÷ Monthly OpEx ({fmt$(opex)})</span>
@@ -1025,7 +1288,7 @@ export default function DashboardTool({ view = 'cfo' }) {
                 {/* NCAC + CM3 side by side */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
                   <div style={S.card}>
-                    <span style={S.label}>NCAC by Month (Meta spend ÷ new customers)</span>
+                    <span style={S.label}>NCAC by Month (Ad spend ÷ new customers)</span>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
                       {rows.map(r => {
                         const barPct = r.ncac != null ? (r.ncac / maxNcac) * 100 : 0;
@@ -1090,7 +1353,7 @@ export default function DashboardTool({ view = 'cfo' }) {
                             <tr key={r.month} style={{ borderTop: '1px solid #2a3441' }}>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#c9d1d9' }}>{fmtMo(r.month)}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#f0f4f8', textAlign: 'right', fontWeight: 600 }}>{fmt$(r.revenue)}</td>
-                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#c9d1d9', textAlign: 'right' }}>{r.orders || '—'}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.orders < (r.newCustomers + r.returningCustomers) ? '#f85149' : '#c9d1d9', textAlign: 'right' }} title={r.orders < (r.newCustomers + r.returningCustomers) ? `Orders (${r.orders}) < customers (${r.newCustomers + r.returningCustomers}) — data inconsistency` : ''}>{r.orders || '—'}{r.orders < (r.newCustomers + r.returningCustomers) ? '⚠' : ''}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#DC440A', textAlign: 'right', fontWeight: 600 }}>{r.newCustomers || '—'}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#2ea98f', textAlign: 'right', fontWeight: 600 }}>{r.returningCustomers || '—'}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#c9d1d9', textAlign: 'right' }}>{fmt$(r.metaSpend)}</td>
@@ -1131,7 +1394,7 @@ export default function DashboardTool({ view = 'cfo' }) {
                     </table>
                   </div>
                   <div style={{ fontSize: 9, color: '#6e7681', marginTop: 8, letterSpacing: 1 }}>
-                    CM3 = Revenue − COGS − Payment Fees − Shipping − Pick/Pack − (Meta + Google) Spend. COGS uses Shopify per-unit cost when set, GM% assumption otherwise. NCAC = Meta spend ÷ new lifetime customers. OpEx column = monthly P&L override or default. Bold OpEx = override set; dim = default.
+                    CM3 = Revenue − COGS − Payment Fees − Shipping − Pick/Pack − (Meta + Google) Spend. COGS uses Shopify per-unit cost when set, GM% assumption otherwise. NCAC = (Meta + Google) spend ÷ new lifetime customers. OpEx column = monthly P&L override or default. Bold OpEx = override set; dim = default.
                   </div>
                 </div>
               </>

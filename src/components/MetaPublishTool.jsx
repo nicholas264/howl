@@ -1,5 +1,13 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { buildSystemPrompt } from '../prompts';
+import CopyLibrary, { useCopyLibrary } from './CopyLibrary';
+import LaunchTimeline from './LaunchTimeline';
+
+const PUBLISH_STEPS = [
+  { key: 'meta_upload',   label: 'Upload' },
+  { key: 'meta_creative', label: 'Creative' },
+  { key: 'meta_ad',       label: 'Ad' },
+];
 
 const LS_CONFIG = 'howl_meta_config';
 
@@ -38,7 +46,10 @@ const S = {
 };
 
 export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartItem, onRemoveCartItem }) {
-  const [config, setConfig] = useState(() => ls(LS_CONFIG, { pageId: '404789730317028', destUrl: '' }));
+  // Pushed items stay in the underlying cart so Gallery can still show them, but they
+  // disappear from the Publish queue and Creative Test list.
+  const queue = cart.filter(i => i.metaStatus !== 'pushed');
+  const [config, setConfig] = useState(() => ls(LS_CONFIG, { pageId: import.meta.env.VITE_META_PAGE_ID || '', destUrl: '' }));
   const [publishMode, setPublishMode] = useState('manual'); // 'manual' | 'creative_test'
 
   const [campaigns, setCampaigns] = useState([]);
@@ -58,6 +69,8 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
   const [statuses, setStatuses] = useState({});
   const [generatingCopy, setGeneratingCopy] = useState({});
   const [previewId, setPreviewId] = useState(null);
+  const [focusedItemId, setFocusedItemId] = useState(null);
+  const library = useCopyLibrary();
   const fileInputRef = useRef(null);
 
   // ── Creative Test state ─────────────────────────────────────────────────
@@ -111,11 +124,11 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
     });
   };
 
-  const selectAllCt = () => setCtSelected(new Set(cart.map(i => i.id)));
+  const selectAllCt = () => setCtSelected(new Set(queue.map(i => i.id)));
   const selectNoneCt = () => setCtSelected(new Set());
 
   const launchCreativeTest = useCallback(async () => {
-    const items = cart.filter(i => ctSelected.has(i.id));
+    const items = queue.filter(i => ctSelected.has(i.id));
     if (items.length === 0) { alert('Select at least one creative.'); return; }
     if (!config.pageId.trim()) { alert('Enter your Facebook Page ID in Settings.'); return; }
     if (!config.destUrl.trim()) { alert('Enter a destination URL in Settings.'); return; }
@@ -197,6 +210,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
           pageId: config.pageId,
           destUrl: config.destUrl,
           items: preparedItems,
+          creator: 'Static Builder',
         }),
       });
       const d = await r.json();
@@ -231,7 +245,16 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
   const removeFromQueue = (id) => onRemoveCartItem?.(id);
 
   const setStatus = (id, status, message = '') => {
-    setStatuses(prev => ({ ...prev, [id]: { status, message } }));
+    setStatuses(prev => ({ ...prev, [id]: { ...(prev[id] || {}), status, message } }));
+  };
+
+  const setStep = (id, stepKey, status, detail = '') => {
+    setStatuses(prev => {
+      const cur = prev[id] || {};
+      const steps = { ...(cur.steps || {}), [stepKey]: { status, detail } };
+      const currentStep = status === 'running' ? stepKey : cur.currentStep;
+      return { ...prev, [id]: { ...cur, steps, currentStep } };
+    });
   };
 
   // ── Generate copy with Claude ─────────────────────────────────────────────
@@ -398,10 +421,23 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
     if (!config.destUrl.trim()) { alert('Enter a destination URL in Settings.'); return; }
     if (!item.hook.trim()) { alert('Enter a headline for this ad.'); return; }
 
-    setStatus(item.id, 'pushing');
+    // Reset steps for this item
+    setStatuses(prev => ({ ...prev, [item.id]: { status: 'pushing', message: '', steps: {}, currentStep: null } }));
+    const adName = item.name || `HOWL Ad ${new Date().toLocaleDateString()}`;
+    const mimeType = item.type === 'carousel' ? 'carousel' : item.type === 'video' ? 'video/mp4' : 'image';
+
     try {
-      // Step 1: Upload assets individually to avoid body size limits
-      let body;
+      // ── Step 1: Upload asset(s) ────────────────────────────────────────────
+      setStep(item.id, 'meta_upload', 'running');
+      const creativeBody = {
+        action: 'create_creative',
+        adName,
+        headline: item.hook,
+        primaryText: item.body || item.hook,
+        destUrl: config.destUrl,
+        pageId: config.pageId,
+      };
+
       if (item.type === 'carousel' && item.cards) {
         const uploadedCards = [];
         for (let ci = 0; ci < item.cards.length; ci++) {
@@ -421,16 +457,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
             destUrl: config.destUrl,
           });
         }
-        body = {
-          action: 'push_carousel',
-          cards: uploadedCards,
-          adName: item.name || `HOWL Carousel ${new Date().toLocaleDateString()}`,
-          headline: item.hook,
-          primaryText: item.body || item.hook,
-          destUrl: config.destUrl,
-          pageId: config.pageId,
-          adsetId,
-        };
+        creativeBody.cards = uploadedCards;
       } else if (item.type === 'video') {
         const ur = await fetch('/api/meta', {
           method: 'POST',
@@ -439,16 +466,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
         });
         const ud = await ur.json();
         if (ud.error) throw new Error(`Video upload: ${ud.error}`);
-        body = {
-          action: 'push_ad',
-          videoId: ud.videoId,
-          adName: item.name || `HOWL Ad ${new Date().toLocaleDateString()}`,
-          headline: item.hook,
-          primaryText: item.body || item.hook,
-          destUrl: config.destUrl,
-          pageId: config.pageId,
-          adsetId,
-        };
+        creativeBody.videoId = ud.videoId;
       } else {
         const imgData = item.squareUrl || item.url;
         const ur = await fetch('/api/meta', {
@@ -458,27 +476,49 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
         });
         const ud = await ur.json();
         if (ud.error) throw new Error(`Image upload: ${ud.error}`);
-        body = {
-          action: 'push_ad',
-          imageHash: ud.hash,
-          adName: item.name || `HOWL Ad ${new Date().toLocaleDateString()}`,
+        creativeBody.imageHash = ud.hash;
+      }
+      setStep(item.id, 'meta_upload', 'done');
+
+      // ── Step 2: Create creative ────────────────────────────────────────────
+      setStep(item.id, 'meta_creative', 'running');
+      const cr = await fetch('/api/meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(creativeBody),
+      });
+      const cd = await cr.json();
+      if (cd.error) {
+        setStep(item.id, 'meta_creative', 'error', cd.error);
+        throw new Error(`[creative] ${cd.error}`);
+      }
+      setStep(item.id, 'meta_creative', 'done');
+
+      // ── Step 3: Create ad ──────────────────────────────────────────────────
+      setStep(item.id, 'meta_ad', 'running');
+      const ar = await fetch('/api/meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_ad_from_creative',
+          creativeId: cd.creativeId,
+          adName,
+          adsetId,
           headline: item.hook,
           primaryText: item.body || item.hook,
           destUrl: config.destUrl,
-          pageId: config.pageId,
-          adsetId,
-        };
-      }
-
-      // Step 2: Create the ad (small JSON payload, no base64)
-      const r = await fetch('/api/meta', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+          mimeType,
+          creator: 'Static Builder',
+        }),
       });
-      const d = await r.json();
-      if (d.error) throw new Error(`[${d.step}] ${d.error}`);
-      setStatus(item.id, 'success', `Ad ID: ${d.adId}`);
+      const ad = await ar.json();
+      if (ad.error) {
+        setStep(item.id, 'meta_ad', 'error', ad.error);
+        throw new Error(`[ad] ${ad.error}`);
+      }
+      setStep(item.id, 'meta_ad', 'done', ad.adId);
+
+      setStatus(item.id, 'success', `Ad ID: ${ad.adId}`);
       onUpdateCartItem?.(item.id, { metaStatus: 'pushed', metaPushedAt: Date.now() });
     } catch (err) {
       setStatus(item.id, 'error', err.message);
@@ -491,7 +531,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
   const [pushAllProgress, setPushAllProgress] = useState('');
 
   const pushAll = useCallback(async () => {
-    const unpushed = cart.filter(item => !statuses[item.id] || statuses[item.id].status !== 'success');
+    const unpushed = queue.filter(item => !statuses[item.id] || statuses[item.id].status !== 'success');
     if (unpushed.length === 0) return;
     setPushingAll(true);
     for (let i = 0; i < unpushed.length; i++) {
@@ -505,7 +545,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
   const activeAdsetId = selectedAdsetId && selectedAdsetId !== '__new__' ? selectedAdsetId : null;
   const activeCampaignId = selectedCampaignId && selectedCampaignId !== '__new__' ? selectedCampaignId : null;
 
-  const ctSelectedCount = cart.filter(i => ctSelected.has(i.id)).length;
+  const ctSelectedCount = queue.filter(i => ctSelected.has(i.id)).length;
   const ctTotalDaily = ctSelectedCount * parseFloat(ctConfig.budgetPerCreative || '0');
 
   return (
@@ -678,21 +718,28 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
 
           <div style={S.divider} />
 
+          <CopyLibrary
+            library={library}
+            onUse={focusedItemId ? (v) => {
+              updateQueueItem(focusedItemId, { hook: v.headline || '', body: v.primaryText || '' });
+            } : null}
+          />
+
           <div style={S.section}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-              <span style={{ ...S.label, marginBottom: 0 }}>Select Creatives {cart.length > 0 && `(${cart.length} in cart)`}</span>
+              <span style={{ ...S.label, marginBottom: 0 }}>Select Creatives {queue.length > 0 && `(${queue.length} in cart)`}</span>
               <button onClick={selectAllCt} style={S.ghostBtn}>Select All</button>
               <button onClick={selectNoneCt} style={S.ghostBtn}>None</button>
             </div>
 
-            {cart.length === 0 && (
+            {queue.length === 0 && (
               <div style={{ border: '2px dashed #2a3441', borderRadius: 6, padding: '32px', textAlign: 'center', color: '#6e7681', fontSize: 11 }}>
                 Add creatives from Image Ads, Review Ads, or Video Ads first.
               </div>
             )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {cart.map(item => {
+              {queue.map(item => {
                 const isSelected = ctSelected.has(item.id);
                 return (
                   <div
@@ -725,13 +772,28 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                       )}
                     </div>
                     {/* Info */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ flex: 1, minWidth: 0 }} onClick={e => e.stopPropagation()}>
                       <div style={{ fontSize: 11, color: '#f0f4f8', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {item.name || 'Untitled'}
                       </div>
-                      <div style={{ fontSize: 9, color: '#8b949e', marginTop: 2 }}>
+                      <div style={{ fontSize: 9, color: '#8b949e', marginTop: 2, marginBottom: 6 }}>
                         {item.type === 'carousel' ? `Carousel (${item.cards?.length} cards)` : item.type === 'video' ? 'Video' : item.storyUrl ? '1:1 + 9:16' : '1:1'}
-                        {item.hook ? ` — ${item.hook.slice(0, 50)}` : ''}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <input
+                          style={{ ...S.input, fontSize: 9, padding: '5px 8px', flex: 1, borderColor: focusedItemId === item.id ? '#DC440A' : '#2a3441' }}
+                          value={item.hook || ''}
+                          onChange={e => updateQueueItem(item.id, { hook: e.target.value })}
+                          onFocus={() => setFocusedItemId(item.id)}
+                          placeholder="Headline"
+                        />
+                        <input
+                          style={{ ...S.input, fontSize: 9, padding: '5px 8px', flex: 2, borderColor: focusedItemId === item.id ? '#DC440A' : '#2a3441' }}
+                          value={item.body || ''}
+                          onChange={e => updateQueueItem(item.id, { body: e.target.value })}
+                          onFocus={() => setFocusedItemId(item.id)}
+                          placeholder="Primary text"
+                        />
                       </div>
                     </div>
                     {/* Per-creative budget */}
@@ -743,7 +805,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
               })}
             </div>
 
-            {cart.length > 0 && (
+            {queue.length > 0 && (
               <div style={{ marginTop: 20 }}>
                 <button
                   onClick={launchCreativeTest}
@@ -910,18 +972,25 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
 
       <div style={S.divider} />
 
+      <CopyLibrary
+        library={library}
+        onUse={focusedItemId ? (v) => {
+          updateQueueItem(focusedItemId, { hook: v.headline || '', body: v.primaryText || '' });
+        } : null}
+      />
+
       {/* Publish Queue */}
       <div style={S.section}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-          <span style={{ ...S.label, marginBottom: 0 }}>Publish Queue {cart.length > 0 && `(${cart.length})`}</span>
+          <span style={{ ...S.label, marginBottom: 0 }}>Publish Queue {queue.length > 0 && `(${queue.length})`}</span>
           <button onClick={() => fileInputRef.current?.click()} style={S.ghostBtn}>+ Upload Images</button>
-          {cart.length > 0 && (
+          {queue.length > 0 && (
             <button
               onClick={pushAll}
               disabled={pushingAll || !activeAdsetId}
               style={S.btn(pushingAll || !activeAdsetId)}
             >
-              {pushingAll ? `Pushing ${pushAllProgress}…` : `Push All (${cart.filter(i => !statuses[i.id] || statuses[i.id].status !== 'success').length})`}
+              {pushingAll ? `Pushing ${pushAllProgress}…` : `Push All (${queue.filter(i => !statuses[i.id] || statuses[i.id].status !== 'success').length})`}
             </button>
           )}
           <input
@@ -934,7 +1003,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
           />
         </div>
 
-        {cart.length === 0 && (
+        {queue.length === 0 && (
           <div
             style={{ border: '2px dashed #2a3441', borderRadius: 6, padding: '32px', textAlign: 'center', color: '#6e7681', fontSize: 11 }}
             onDragOver={e => e.preventDefault()}
@@ -949,7 +1018,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {cart.map(item => {
+          {queue.map(item => {
             const st = statuses[item.id] || {};
             const isPushing = st.status === 'pushing';
             const isDone = st.status === 'success';
@@ -1010,11 +1079,11 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                   <div style={{ ...S.row, alignItems: 'flex-start' }}>
                     <div style={{ ...S.col, flex: 1 }}>
                       <span style={{ fontSize: 9, color: '#8b949e' }}>Headline</span>
-                      <textarea style={{ ...S.input, fontSize: 10, resize: 'vertical', minHeight: 56, lineHeight: 1.5 }} value={item.hook} onChange={e => updateQueueItem(item.id, { hook: e.target.value })} placeholder="6-word hook" />
+                      <textarea style={{ ...S.input, fontSize: 10, resize: 'vertical', minHeight: 56, lineHeight: 1.5, borderColor: focusedItemId === item.id ? '#DC440A' : '#2a3441' }} value={item.hook} onChange={e => updateQueueItem(item.id, { hook: e.target.value })} onFocus={() => setFocusedItemId(item.id)} placeholder="6-word hook" />
                     </div>
                     <div style={{ ...S.col, flex: 2 }}>
                       <span style={{ fontSize: 9, color: '#8b949e' }}>Primary Text</span>
-                      <textarea style={{ ...S.input, fontSize: 10, resize: 'vertical', minHeight: 80, lineHeight: 1.5 }} value={item.body} onChange={e => updateQueueItem(item.id, { body: e.target.value })} placeholder="Body copy (defaults to headline if empty)" />
+                      <textarea style={{ ...S.input, fontSize: 10, resize: 'vertical', minHeight: 80, lineHeight: 1.5, borderColor: focusedItemId === item.id ? '#DC440A' : '#2a3441' }} value={item.body} onChange={e => updateQueueItem(item.id, { body: e.target.value })} onFocus={() => setFocusedItemId(item.id)} placeholder="Body copy (defaults to headline if empty)" />
                     </div>
                   </div>
                   <div>
@@ -1026,6 +1095,9 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                       {generatingCopy[item.id] ? 'Generating…' : 'Generate Copy'}
                     </button>
                   </div>
+                  {(st.status === 'pushing' || st.status === 'success' || st.status === 'error') && (st.steps && Object.keys(st.steps).length > 0) && (
+                    <LaunchTimeline stepDefs={PUBLISH_STEPS} steps={st.steps} currentStep={st.currentStep} />
+                  )}
                   {st.status === 'error' && <div style={S.err}>{st.message}</div>}
                   {st.status === 'success' && <div style={S.success}>Pushed — {st.message} (PAUSED in Ads Manager)</div>}
                 </div>

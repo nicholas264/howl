@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, Fragment } from 'react';
 import { PRODUCTS, ANGLES } from '../data';
 import MetaTargetPicker from './MetaTargetPicker';
 import CopyLibrary, { useCopyLibrary } from './CopyLibrary';
+import LaunchTimeline from './LaunchTimeline';
 
 const LS_CONFIG = 'howl_ugc_config';
 
@@ -61,51 +62,9 @@ const S = {
   settings: { border: '1px solid #2a3441', borderRadius: 6, background: '#161b22', padding: 16, marginBottom: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 },
 };
 
-function LaunchTimeline({ steps, currentStep }) {
-  return (
-    <div style={{ marginTop: 12, padding: '14px 4px 8px', display: 'flex', alignItems: 'flex-start', gap: 0, position: 'relative' }}>
-      {LAUNCH_STEPS.map((s, idx) => {
-        const st = steps[s.key];
-        const status = st?.status || 'idle';
-        const isCurrent = currentStep === s.key && status !== 'done' && status !== 'error';
-        const done = status === 'done';
-        const err = status === 'error';
-        const color = err ? '#f85149' : done ? '#3fb950' : isCurrent ? '#DC440A' : '#2a3441';
-        const nextDone = steps[LAUNCH_STEPS[idx + 1]?.key]?.status === 'done';
-        const lineColor = done ? (nextDone ? '#3fb950' : '#DC440A') : '#2a3441';
-        return (
-          <React.Fragment key={s.key}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0, flexShrink: 0 }}>
-              <div
-                style={{
-                  width: 14, height: 14, borderRadius: '50%', background: color,
-                  boxShadow: isCurrent ? `0 0 0 3px rgba(220,68,10,0.2), 0 0 12px rgba(220,68,10,0.5)` : 'none',
-                  animation: isCurrent ? 'pulseDot 1.2s ease-in-out infinite' : 'none',
-                  border: status === 'idle' ? '2px solid #2a3441' : 'none',
-                  boxSizing: 'border-box',
-                }}
-              />
-              <div style={{ fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase', color: isCurrent ? '#f0f4f8' : err ? '#f85149' : done ? '#8b949e' : '#6e7681', fontWeight: isCurrent ? 700 : 500, whiteSpace: 'nowrap' }}>
-                {s.label}
-              </div>
-              {st?.detail && (
-                <div style={{ fontSize: 9, color: '#6e7681', fontFamily: "'JetBrains Mono', monospace", whiteSpace: 'nowrap' }}>{st.detail}</div>
-              )}
-            </div>
-            {idx < LAUNCH_STEPS.length - 1 && (
-              <div style={{ flex: 1, height: 2, background: lineColor, marginTop: 6, minWidth: 12, transition: 'background 0.3s' }} />
-            )}
-          </React.Fragment>
-        );
-      })}
-      <style>{`@keyframes pulseDot { 0%,100% { transform: scale(1); } 50% { transform: scale(1.2); } }`}</style>
-    </div>
-  );
-}
-
 export default function UgcInboxTool() {
   const [config, setConfig] = useState(() => ls(LS_CONFIG, {
-    pageId: '404789730317028',
+    pageId: import.meta.env.VITE_META_PAGE_ID || '',
     destUrl: '',
     adsetId: '',
     defaultCreator: '',
@@ -139,7 +98,9 @@ export default function UgcInboxTool() {
       });
       const d = await r.json();
       if (d.error) throw new Error(d.error);
-      setFiles(d.files || []);
+      // Server now returns `items` (with kind: 'single' | 'pair'). Fall back to legacy `files`.
+      const incoming = d.items || (d.files || []).map(f => ({ kind: 'single', ...f }));
+      setFiles(incoming);
       // Seed per-file defaults for new files.
       // Creator auto-extracted: prefer top folder name, else filename prefix before "_".
       setPerFile(prev => {
@@ -184,22 +145,26 @@ export default function UgcInboxTool() {
     updateFile(file.id, { status: 'pushing', error: null, steps: {}, currentStep: null });
 
     try {
+      const isPair = file.kind === 'pair';
+      const requestBody = {
+        action: 'launch_meta_ad',
+        adsetId: config.adsetId.trim(),
+        pageId: config.pageId.trim(),
+        destUrl: config.destUrl.trim(),
+        adName,
+        headline: meta.headline?.trim() || '',
+        primaryText: meta.primaryText?.trim() || '',
+        creator: meta.creator?.trim() || '',
+        productId: meta.productId || '',
+        angleId: meta.angleId || '',
+      };
+      if (isPair) requestBody.pair = { feedFileId: file.feed.id, storyFileId: file.story.id };
+      else requestBody.fileId = file.id;
+
       // Single server-side call — streams NDJSON progress per step.
       const r = await fetch('/api/drive/ugc', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'launch_meta_ad',
-          fileId: file.id,
-          adsetId: config.adsetId.trim(),
-          pageId: config.pageId.trim(),
-          destUrl: config.destUrl.trim(),
-          adName,
-          headline: meta.headline?.trim() || '',
-          primaryText: meta.primaryText?.trim() || '',
-          creator: meta.creator?.trim() || '',
-          productId: meta.productId || '',
-          angleId: meta.angleId || '',
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!r.body) throw new Error('No response stream');
@@ -220,10 +185,27 @@ export default function UgcInboxTool() {
             const evt = JSON.parse(line);
             if (evt.done) { finalEvent = evt; continue; }
             if (evt.step) {
+              const m = evt.step.match(/^(drive_download|meta_upload|meta_thumbnail)_(feed|story)$/);
+              const baseKey = m ? m[1] : evt.step;
+              const role = m ? m[2] : null;
               setPerFile(prev => {
                 const f = prev[file.id] || {};
-                const steps = { ...(f.steps || {}), [evt.step]: { status: evt.status, detail: evt.detail, error: evt.error } };
-                return { ...prev, [file.id]: { ...f, steps, currentStep: evt.step } };
+                const cur = (f.steps || {})[baseKey] || {};
+                let next;
+                if (role) {
+                  const roles = { ...(cur.roles || {}), [role]: { status: evt.status, detail: evt.detail } };
+                  const statuses = Object.values(roles).map(r => r.status);
+                  let combined;
+                  if (statuses.includes('error')) combined = 'error';
+                  else if (statuses.length === 2 && statuses.every(s => s === 'done')) combined = 'done';
+                  else combined = statuses.find(s => s === 'progress' || s === 'start') || cur.status || 'start';
+                  const detailStr = Object.entries(roles).map(([r, v]) => v.detail ? `${r[0]}:${v.detail}` : '').filter(Boolean).join(' / ');
+                  next = { ...cur, roles, status: combined, detail: detailStr || cur.detail, error: evt.error || cur.error };
+                } else {
+                  next = { status: evt.status, detail: evt.detail, error: evt.error };
+                }
+                const steps = { ...(f.steps || {}), [baseKey]: next };
+                return { ...prev, [file.id]: { ...f, steps, currentStep: baseKey } };
               });
             }
           } catch {}
@@ -303,7 +285,20 @@ export default function UgcInboxTool() {
           return (
             <div key={file.id} style={S.card}>
               <div>
-                {isVideo ? (
+                {file.kind === 'pair' ? (
+                  <div style={{ position: 'relative', width: 140, height: 140 }}>
+                    {file.feed.thumbnailLink ? (
+                      <img src={file.feed.thumbnailLink} alt="feed" style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, objectFit: 'cover', borderRadius: 4, border: '2px solid #161b22', zIndex: 1 }} referrerPolicy="no-referrer" />
+                    ) : (
+                      <div style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, borderRadius: 4, background: '#1c2330', border: '2px solid #161b22', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6e7681', fontSize: 9, letterSpacing: 1 }}>1:1</div>
+                    )}
+                    {file.story.thumbnailLink ? (
+                      <img src={file.story.thumbnailLink} alt="story" style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, objectFit: 'cover', borderRadius: 4, border: '2px solid #161b22', zIndex: 2 }} referrerPolicy="no-referrer" />
+                    ) : (
+                      <div style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, borderRadius: 4, background: '#1c2330', border: '2px solid #161b22', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6e7681', fontSize: 9, letterSpacing: 1 }}>9:16</div>
+                    )}
+                  </div>
+                ) : isVideo ? (
                   <div style={S.thumbPlaceholder}>
                     <div style={{ fontSize: 24 }}>▶</div>
                     <div>Video</div>
@@ -323,14 +318,24 @@ export default function UgcInboxTool() {
                 )}
               </div>
               <div>
-                <div style={S.fileName}>{file.name}</div>
+                <div style={S.fileName}>
+                  {file.kind === 'pair' ? (file.folderName || file.name) : file.name}
+                  {file.kind === 'pair' && (
+                    <span style={{ marginLeft: 10, fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#3fb950', fontWeight: 700, background: 'rgba(63,185,80,0.1)', padding: '2px 6px', borderRadius: 3, border: '1px solid rgba(63,185,80,0.4)' }}>
+                      1:1 + 9:16 Paired
+                    </span>
+                  )}
+                </div>
                 {file.folderPath && (
                   <div style={{ fontSize: 9, color: '#DC440A', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 }}>
                     📁 {file.folderPath}
                   </div>
                 )}
                 <div style={S.fileMeta}>
-                  {file.mimeType} · {(parseInt(file.size || 0) / 1024 / 1024).toFixed(2)} MB · {new Date(file.createdTime).toLocaleString()}
+                  {file.kind === 'pair'
+                    ? `${file.feed.mimeType} · ${file.feed.name} + ${file.story.name}`
+                    : `${file.mimeType} · ${(parseInt(file.size || 0) / 1024 / 1024).toFixed(2)} MB · ${new Date(file.createdTime).toLocaleString()}`
+                  }
                 </div>
                 <div style={S.row}>
                   <div>
@@ -396,7 +401,7 @@ export default function UgcInboxTool() {
                   → {buildAdName({ creator: meta.creator, productId: meta.productId, angleId: meta.angleId })}
                 </div>
                 {(status === 'pushing' || status === 'error' || status === 'launched') && (
-                  <LaunchTimeline steps={meta.steps || {}} currentStep={meta.currentStep} />
+                  <LaunchTimeline stepDefs={LAUNCH_STEPS} steps={meta.steps || {}} currentStep={meta.currentStep} />
                 )}
                 {meta.error && <div style={S.err}>{meta.error}</div>}
               </div>
@@ -411,7 +416,7 @@ export default function UgcInboxTool() {
                 </button>
                 {status === 'launched' && meta.adId && (
                   <a
-                    href={`https://adsmanager.facebook.com/adsmanager/manage/ads/edit?act=${(import.meta.env.VITE_META_AD_ACCOUNT_ID || '3139414606311974').replace('act_','')}&selected_ad_ids=${meta.adId}`}
+                    href={`https://adsmanager.facebook.com/adsmanager/manage/ads/edit?act=${(import.meta.env.VITE_META_AD_ACCOUNT_ID || '').replace('act_','')}&selected_ad_ids=${meta.adId}`}
                     target="_blank"
                     rel="noreferrer"
                     style={{ fontSize: 9, color: '#3fb950', letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700 }}
@@ -424,6 +429,32 @@ export default function UgcInboxTool() {
                 )}
                 {file.webViewLink && (
                   <a href={file.webViewLink} target="_blank" rel="noreferrer" style={{ fontSize: 9, color: '#8b949e', letterSpacing: 2, textTransform: 'uppercase' }}>Open in Drive</a>
+                )}
+                {status !== 'launched' && status !== 'pushing' && (
+                  <button
+                    onClick={async () => {
+                      const label = file.kind === 'pair' ? `pair "${file.folderName || file.name}" (both files)` : `"${file.name}"`;
+                      if (!confirm(`Delete ${label} from Drive? Moved to Drive trash and recoverable for 30 days.`)) return;
+                      const idsToDelete = file.kind === 'pair' ? [file.feed.id, file.story.id] : [file.id];
+                      try {
+                        for (const fid of idsToDelete) {
+                          const r = await fetch('/api/drive/ugc', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action: 'delete', fileId: fid }),
+                          });
+                          const d = await r.json();
+                          if (d.error) throw new Error(d.error);
+                        }
+                        setFiles(prev => prev.filter(f => f.id !== file.id));
+                        setPerFile(prev => { const next = { ...prev }; delete next[file.id]; return next; });
+                      } catch (err) {
+                        updateFile(file.id, { error: `Delete failed: ${err.message}` });
+                      }
+                    }}
+                    style={{ fontSize: 9, color: '#f85149', letterSpacing: 2, textTransform: 'uppercase', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, fontWeight: 600 }}
+                  >
+                    Delete
+                  </button>
                 )}
               </div>
             </div>

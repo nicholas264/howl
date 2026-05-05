@@ -10,8 +10,11 @@ function getClerk() {
 }
 
 export async function requireAuth(req, res) {
-  // Skip auth in local dev if explicitly disabled
-  if (process.env.AUTH_DISABLED === 'true') return { userId: 'local-dev', email: 'dev@local' };
+  // Local-dev only: bypass requires both AUTH_DISABLED=true AND non-production env.
+  // Production deploys ignore this flag entirely.
+  if (process.env.NODE_ENV !== 'production' && process.env.AUTH_DISABLED === 'true') {
+    return { userId: 'local-dev', email: 'dev@local' };
+  }
 
   if (!process.env.CLERK_SECRET_KEY) {
     res.status(500).json({ error: 'CLERK_SECRET_KEY not configured' });
