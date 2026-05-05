@@ -50,14 +50,14 @@ export default async function handler(req, res) {
     const { action } = req.body;
 
     if (action === 'delete') {
+      // Tool-local hide: file stays in Drive, just gets filtered out of `list`.
+      // Service account often lacks Drive write perms, so trashing isn't reliable.
       const { fileId } = req.body;
       if (!fileId) return res.status(400).json({ error: 'fileId required' });
-      // Trash (soft delete) — recoverable from Drive trash for 30 days.
-      await driveFetch(token, `/files/${fileId}?supportsAllDrives=true`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trashed: true }),
-      });
+      if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'DATABASE_URL not configured' });
+      const sql = neon(process.env.DATABASE_URL);
+      await sql`CREATE TABLE IF NOT EXISTS ugc_hidden (file_id TEXT PRIMARY KEY, hidden_at TIMESTAMPTZ DEFAULT NOW())`;
+      await sql`INSERT INTO ugc_hidden (file_id) VALUES (${fileId}) ON CONFLICT (file_id) DO NOTHING`;
       return res.json({ ok: true });
     }
 
@@ -88,6 +88,16 @@ export default async function handler(req, res) {
 
     if (action === 'list') {
       const inboxId = await ensureFolder(token, rootId, 'Inbox');
+      // Load hidden file IDs (tool-local soft-delete)
+      let hiddenIds = new Set();
+      if (process.env.DATABASE_URL) {
+        try {
+          const sql = neon(process.env.DATABASE_URL);
+          await sql`CREATE TABLE IF NOT EXISTS ugc_hidden (file_id TEXT PRIMARY KEY, hidden_at TIMESTAMPTZ DEFAULT NOW())`;
+          const rows = await sql`SELECT file_id FROM ugc_hidden`;
+          hiddenIds = new Set(rows.map(r => r.file_id));
+        } catch {}
+      }
       const fields = encodeURIComponent('files(id,name,mimeType,size,createdTime,modifiedTime,thumbnailLink,webViewLink,parents,videoMediaMetadata(width,height),imageMediaMetadata(width,height))');
       // BFS walk: collect all files under Inbox (any depth). Folders we care about excluded from files list.
       const folderNames = { [inboxId]: 'Inbox' };
@@ -104,7 +114,7 @@ export default async function handler(req, res) {
             folderNames[item.id] = item.name;
             folderParents[item.id] = item.parents?.[0] || null;
             queue.push(item.id);
-          } else {
+          } else if (!hiddenIds.has(item.id)) {
             files.push(item);
           }
         }

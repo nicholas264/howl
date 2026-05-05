@@ -434,7 +434,7 @@ export default function UgcInboxTool() {
                   <button
                     onClick={async () => {
                       const label = file.kind === 'pair' ? `pair "${file.folderName || file.name}" (both files)` : `"${file.name}"`;
-                      if (!confirm(`Delete ${label} from Drive? Moved to Drive trash and recoverable for 30 days.`)) return;
+                      if (!confirm(`Hide ${label} from the inbox? File stays in Drive.`)) return;
                       const idsToDelete = file.kind === 'pair' ? [file.feed.id, file.story.id] : [file.id];
                       try {
                         for (const fid of idsToDelete) {
