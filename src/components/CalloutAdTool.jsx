@@ -1,25 +1,32 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { toPng } from 'html-to-image';
+import { upload } from '@vercel/blob/client';
 import { PRODUCTS } from '../data';
 import { COLORS, FONTS, BRAND_FONT_FILES, canvasFont, cssLetterSpacing, pxLetterSpacing, loadBrandFonts } from '../brand';
 
-const LS_DRAFTS = 'howl_callout_drafts';
-const MAX_DRAFTS = 30;
-
-function loadDrafts() {
-  try { return JSON.parse(localStorage.getItem(LS_DRAFTS) || '[]'); } catch { return []; }
-}
-function saveDrafts(drafts) {
-  try { localStorage.setItem(LS_DRAFTS, JSON.stringify(drafts.slice(0, MAX_DRAFTS))); } catch (err) { console.error('Draft save failed:', err); }
+async function fetchLayouts() {
+  try {
+    const r = await fetch('/api/db/callout-layouts');
+    const data = await r.json();
+    return r.ok ? (data.layouts || []) : [];
+  } catch { return []; }
 }
 
-async function blobToDataUrl(blob) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onloadend = () => resolve(r.result);
-    r.onerror = reject;
-    r.readAsDataURL(blob);
+async function fetchLayout(id) {
+  const r = await fetch(`/api/db/callout-layouts?id=${id}`);
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'Could not load layout');
+  return data.layout;
+}
+
+async function uploadCalloutImage(blob, productId) {
+  const fileName = `callout-${productId || 'img'}-${Date.now()}.jpg`;
+  const blobRes = await upload(`callout-photos/${fileName}`, blob, {
+    access: 'public',
+    handleUploadUrl: '/api/blob/upload-token',
+    contentType: blob.type || 'image/jpeg',
   });
+  return blobRes.url;
 }
 
 let cachedFontCss = null;
@@ -248,10 +255,13 @@ export default function CalloutAdTool({ onAddToCart }) {
   const [productId, setProductId] = useState('r4mkii');
   const product = PRODUCTS.find(p => p.id === productId) || PRODUCTS[0];
   const [format, setFormat] = useState(FORMATS[0]);
-  const [imgUrl, setImgUrl] = useState(null);   // object URL for fast in-editor display
-  const [imgData, setImgData] = useState(null); // base64 data URL for persistence
-  const [drafts, setDrafts] = useState(() => loadDrafts());
-  const [draftId, setDraftId] = useState(null); // currently-loaded draft, if any
+  const [imgUrl, setImgUrl] = useState(null);   // local preview URL OR persisted blob URL
+  const [imgBlobUrl, setImgBlobUrl] = useState(null); // Vercel Blob URL once uploaded
+  const [drafts, setDrafts] = useState([]);
+  const [draftId, setDraftId] = useState(null); // currently-loaded draft id (db row id), if any
+  const [savingDraft, setSavingDraft] = useState(false);
+
+  useEffect(() => { fetchLayouts().then(setDrafts); }, []);
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [callouts, setCallouts] = useState([]);
@@ -283,59 +293,104 @@ export default function CalloutAdTool({ onAddToCart }) {
   const handleFile = async (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (imgUrl) URL.revokeObjectURL(imgUrl);
+    if (imgUrl && imgUrl.startsWith('blob:')) URL.revokeObjectURL(imgUrl);
+    let resized;
     try {
-      const resized = await resizeImage(f, 2000); // long-edge cap
-      setImgUrl(URL.createObjectURL(resized));
-      setImgData(await blobToDataUrl(resized));
+      resized = await resizeImage(f, 2000); // long-edge cap
     } catch (err) {
       console.error('Image resize failed, falling back to original:', err);
-      setImgUrl(URL.createObjectURL(f));
-      setImgData(await blobToDataUrl(f));
+      resized = f;
+    }
+    // Show the local preview immediately, then upload to Blob in the background.
+    const localUrl = URL.createObjectURL(resized);
+    setImgUrl(localUrl);
+    setImgBlobUrl(null);
+    try {
+      const url = await uploadCalloutImage(resized, productId);
+      setImgBlobUrl(url);
+    } catch (err) {
+      console.error('Image upload failed:', err);
     }
   };
 
-  const saveDraft = () => {
-    const id = draftId || `draft-${Date.now()}`;
-    const draft = {
-      id,
-      productId,
-      formatId: format.id,
-      title, subtitle, titlePos,
-      callouts,
-      imgData,
-      savedAt: Date.now(),
-      label: `${product.name} · ${new Date().toLocaleString()}`,
-    };
-    const next = [draft, ...drafts.filter(d => d.id !== id)];
-    setDrafts(next);
-    saveDrafts(next);
-    setDraftId(id);
-  };
-
-  const loadDraft = (id) => {
-    const d = drafts.find(x => x.id === id);
-    if (!d) return;
-    skipNextProductInitRef.current = true;
-    setProductId(d.productId);
-    setFormat(FORMATS.find(f => f.id === d.formatId) || FORMATS[0]);
-    setTitle(d.title);
-    setSubtitle(d.subtitle);
-    setTitlePos(d.titlePos || { x: 0.05, y: 0.04 });
-    setCallouts(d.callouts || []);
-    if (d.imgData) {
-      if (imgUrl) URL.revokeObjectURL(imgUrl);
-      setImgData(d.imgData);
-      setImgUrl(d.imgData); // data URLs work as src directly
+  const saveDraft = async () => {
+    if (savingDraft) return;
+    setSavingDraft(true);
+    try {
+      const payload = {
+        product_id: productId,
+        format: format.id,
+        title,
+        subtitle,
+        title_pos: titlePos,
+        callouts,
+        image_url: imgBlobUrl,
+      };
+      let saved;
+      if (draftId) {
+        const r = await fetch(`/api/db/callout-layouts?id=${draftId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Save failed');
+        saved = data.layout;
+      } else {
+        const r = await fetch('/api/db/callout-layouts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Save failed');
+        saved = data.layout;
+        setDraftId(saved.id);
+      }
+      setDrafts(await fetchLayouts());
+      return saved;
+    } catch (err) {
+      console.error('saveDraft failed', err);
+      alert('Save failed: ' + err.message);
+    } finally {
+      setSavingDraft(false);
     }
-    setDraftId(id);
   };
 
-  const deleteDraft = (id) => {
-    const next = drafts.filter(d => d.id !== id);
-    setDrafts(next);
-    saveDrafts(next);
-    if (draftId === id) setDraftId(null);
+  const loadDraft = async (id) => {
+    try {
+      const d = await fetchLayout(id);
+      if (!d) return;
+      skipNextProductInitRef.current = true;
+      setProductId(d.product_id);
+      setFormat(FORMATS.find(f => f.id === d.format) || FORMATS[0]);
+      setTitle(d.title || '');
+      setSubtitle(d.subtitle || '');
+      setTitlePos(d.title_pos || { x: 0.05, y: 0.04 });
+      setCallouts(d.callouts || []);
+      if (imgUrl && imgUrl.startsWith('blob:')) URL.revokeObjectURL(imgUrl);
+      if (d.image_url) {
+        setImgUrl(d.image_url);
+        setImgBlobUrl(d.image_url);
+      } else {
+        setImgUrl(null);
+        setImgBlobUrl(null);
+      }
+      setDraftId(d.id);
+    } catch (err) {
+      console.error('loadDraft failed', err);
+      alert('Load failed: ' + err.message);
+    }
+  };
+
+  const deleteDraft = async (id) => {
+    try {
+      await fetch(`/api/db/callout-layouts?id=${id}`, { method: 'DELETE' });
+      setDrafts(prev => prev.filter(d => d.id !== id));
+      if (draftId === id) setDraftId(null);
+    } catch (err) {
+      console.error('deleteDraft failed', err);
+    }
   };
 
   const updateCallout = (id, patch) => {
@@ -420,7 +475,7 @@ export default function CalloutAdTool({ onAddToCart }) {
       const canvas = await renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts, titlePos });
       const dataUrl = canvas.toDataURL('image/png');
       // auto-save the editor state so it can be re-opened later
-      saveDraft();
+      await saveDraft();
       onAddToCart({
         id: Date.now(),
         type: 'image',
@@ -613,7 +668,9 @@ export default function CalloutAdTool({ onAddToCart }) {
               >
                 <option value="">— New layout —</option>
                 {drafts.map(d => (
-                  <option key={d.id} value={d.id}>{d.label}</option>
+                  <option key={d.id} value={d.id}>
+                    {d.title || PRODUCTS.find(p => p.id === d.product_id)?.name || `Layout ${d.id}`} · {new Date(d.updated_at).toLocaleString()}
+                  </option>
                 ))}
               </select>
               <button onClick={saveDraft} style={chipOff}>{draftId ? 'Update' : 'Save'}</button>

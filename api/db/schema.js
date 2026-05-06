@@ -49,6 +49,46 @@ export default async function handler(req, res) {
       )
     `;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS ugc_sessions (
+        id            BIGSERIAL PRIMARY KEY,
+        user_id       TEXT,
+        title         TEXT,
+        file_name     TEXT,
+        file_size     BIGINT,
+        duration      DOUBLE PRECISION,
+        video_url     TEXT NOT NULL,
+        audio_url     TEXT,
+        words         JSONB,
+        settings      JSONB,
+        thumbnail_url TEXT,
+        status        TEXT NOT NULL DEFAULT 'uploaded',
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_ugc_sessions_updated_at ON ugc_sessions(updated_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_ugc_sessions_user_id ON ugc_sessions(user_id)`;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS callout_layouts (
+        id          BIGSERIAL PRIMARY KEY,
+        user_id     TEXT,
+        product_id  TEXT,
+        format      TEXT,
+        title       TEXT,
+        subtitle    TEXT,
+        title_pos   JSONB,
+        callouts    JSONB,
+        image_url   TEXT,
+        thumb_url   TEXT,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_callout_layouts_updated_at ON callout_layouts(updated_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_callout_layouts_user_id ON callout_layouts(user_id)`;
+
     return res.json({ ok: true });
   } catch (err) {
     return res.status(500).json({ error: err.message });
