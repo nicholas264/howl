@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Player } from '@remotion/player';
 import { upload } from '@vercel/blob/client';
+import { useAuth } from '@clerk/clerk-react';
 import { renderCuts, buildSrtFromWords } from '../utils/ffmpegClient';
 import { UgcVideo, calcDurationInFrames } from '../remotion/UgcVideo';
 
@@ -20,6 +21,7 @@ const DEFAULT_SETTINGS = {
 };
 
 export default function UgcEditorTool({ onAddToCart }) {
+  const { getToken } = useAuth();
   const [sessions, setSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [activeSession, setActiveSession] = useState(null); // db row
@@ -95,9 +97,11 @@ export default function UgcEditorTool({ onAddToCart }) {
     setUploadProgress(0);
 
     try {
+      const token = await getToken();
       const blob = await upload(`ugc-source/${Date.now()}-${f.name}`, f, {
         access: 'public',
         handleUploadUrl: '/api/blob/upload-token',
+        clientPayload: token,
         onUploadProgress: (event) => {
           if (event?.total) setUploadProgress(event.loaded / event.total);
           else if (typeof event === 'number') setUploadProgress(event);

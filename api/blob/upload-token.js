@@ -1,36 +1,53 @@
 // Issues short-lived client upload tokens for Vercel Blob direct-from-browser uploads.
 // Used by the UGC Editor to upload multi-GB source videos without proxying through
-// a Vercel function. Auth-gated via Clerk.
+// a Vercel function.
+//
+// Auth: @vercel/blob/client.upload() uses its own internal fetch which does NOT go
+// through the global Authorization-header interceptor, so we can't use the standard
+// Bearer-token gate here. Instead, the client passes its Clerk session JWT via
+// `clientPayload`, and we verify it inside onBeforeGenerateToken.
 import { handleUpload } from '@vercel/blob/client';
-import { requireAuth } from '../_lib/auth.js';
+import { verifyToken } from '@clerk/backend';
 
 export const config = {
   api: { bodyParser: true },
 };
 
 export default async function handler(req, res) {
-  if (!(await requireAuth(req, res))) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
     const jsonResponse = await handleUpload({
       body: req.body,
       request: req,
-      onBeforeGenerateToken: async (pathname) => ({
-        allowedContentTypes: [
-          'video/mp4',
-          'video/quicktime',
-          'video/webm',
-          'video/x-matroska',
-          'video/mpeg',
-          'image/jpeg',
-          'image/png',
-          'image/webp',
-          'audio/mpeg',
-        ],
-        maximumSizeInBytes: 10 * 1024 * 1024 * 1024, // 10 GB
-        addRandomSuffix: true,
-      }),
+      onBeforeGenerateToken: async (_pathname, clientPayload) => {
+        // Local-dev escape hatch — matches requireAuth's behavior.
+        const isLocalBypass = process.env.NODE_ENV !== 'production' && process.env.AUTH_DISABLED === 'true';
+        if (!isLocalBypass) {
+          if (!process.env.CLERK_SECRET_KEY) throw new Error('CLERK_SECRET_KEY not configured');
+          if (!clientPayload) throw new Error('Unauthorized — clientPayload missing');
+          try {
+            await verifyToken(clientPayload, { secretKey: process.env.CLERK_SECRET_KEY });
+          } catch (err) {
+            throw new Error(`Unauthorized — ${err.message}`);
+          }
+        }
+        return {
+          allowedContentTypes: [
+            'video/mp4',
+            'video/quicktime',
+            'video/webm',
+            'video/x-matroska',
+            'video/mpeg',
+            'image/jpeg',
+            'image/png',
+            'image/webp',
+            'audio/mpeg',
+          ],
+          maximumSizeInBytes: 10 * 1024 * 1024 * 1024, // 10 GB
+          addRandomSuffix: true,
+        };
+      },
       onUploadCompleted: async () => {
         // Hook for future side effects. The session row is created by the client
         // immediately after upload completes via /api/db/ugc-sessions.

@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { toPng } from 'html-to-image';
 import { upload } from '@vercel/blob/client';
+import { useAuth } from '@clerk/clerk-react';
 import { PRODUCTS } from '../data';
 import { COLORS, FONTS, BRAND_FONT_FILES, canvasFont, cssLetterSpacing, pxLetterSpacing, loadBrandFonts } from '../brand';
 
@@ -19,11 +20,12 @@ async function fetchLayout(id) {
   return data.layout;
 }
 
-async function uploadCalloutImage(blob, productId) {
+async function uploadCalloutImage(blob, productId, token) {
   const fileName = `callout-${productId || 'img'}-${Date.now()}.jpg`;
   const blobRes = await upload(`callout-photos/${fileName}`, blob, {
     access: 'public',
     handleUploadUrl: '/api/blob/upload-token',
+    clientPayload: token,
     contentType: blob.type || 'image/jpeg',
   });
   return blobRes.url;
@@ -252,6 +254,7 @@ const PRESET_ANCHORS = [
 ];
 
 export default function CalloutAdTool({ onAddToCart }) {
+  const { getToken } = useAuth();
   const [productId, setProductId] = useState('r4mkii');
   const product = PRODUCTS.find(p => p.id === productId) || PRODUCTS[0];
   const [format, setFormat] = useState(FORMATS[0]);
@@ -306,7 +309,8 @@ export default function CalloutAdTool({ onAddToCart }) {
     setImgUrl(localUrl);
     setImgBlobUrl(null);
     try {
-      const url = await uploadCalloutImage(resized, productId);
+      const token = await getToken();
+      const url = await uploadCalloutImage(resized, productId, token);
       setImgBlobUrl(url);
     } catch (err) {
       console.error('Image upload failed:', err);
