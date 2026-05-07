@@ -507,7 +507,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
   const v = VIEW_TITLES[view] || VIEW_TITLES.cfo;
 
   return (
-    <div style={S.wrap}>
+    <div style={{ ...S.wrap, maxWidth: view === 'creative' ? 1600 : S.wrap.maxWidth }}>
       {setActiveTab && (
         <div className="dash-subnav">
           {DASH_TABS.map(t => (
