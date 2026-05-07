@@ -89,6 +89,50 @@ export default async function handler(req, res) {
     await sql`CREATE INDEX IF NOT EXISTS idx_callout_layouts_updated_at ON callout_layouts(updated_at DESC)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_callout_layouts_user_id ON callout_layouts(user_id)`;
 
+    // Creative analytics — one row per ad in the Meta account, refreshed by the
+    // sync_creative_analytics endpoint. group_key (= video_id || image_hash)
+    // is what the Top Creatives table groups by.
+    await sql`
+      CREATE TABLE IF NOT EXISTS creative_performance (
+        ad_id          TEXT PRIMARY KEY,
+        ad_name        TEXT,
+        adset_id       TEXT,
+        campaign_id    TEXT,
+        creative_id    TEXT,
+        video_id       TEXT,
+        image_hash     TEXT,
+        group_key      TEXT,
+        thumbnail_url  TEXT,
+        asset_url      TEXT,
+        status         TEXT,
+        created_time   TIMESTAMPTZ,
+        synced_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_creative_performance_group_key ON creative_performance(group_key)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_creative_performance_created_time ON creative_performance(created_time DESC)`;
+
+    // Daily ad insights. PK = (ad_id, date). Stores raw metrics; the aggregation
+    // endpoint sums these across a date window and groups by group_key.
+    await sql`
+      CREATE TABLE IF NOT EXISTS creative_insights_daily (
+        ad_id              TEXT NOT NULL,
+        date               DATE NOT NULL,
+        spend              NUMERIC(14,4) NOT NULL DEFAULT 0,
+        impressions        BIGINT NOT NULL DEFAULT 0,
+        clicks             BIGINT NOT NULL DEFAULT 0,
+        unique_link_clicks BIGINT NOT NULL DEFAULT 0,
+        purchases          BIGINT NOT NULL DEFAULT 0,
+        purchase_value     NUMERIC(14,4) NOT NULL DEFAULT 0,
+        video_3s_views     BIGINT NOT NULL DEFAULT 0,
+        video_thruplays    BIGINT NOT NULL DEFAULT 0,
+        video_avg_watch    NUMERIC(10,4) NOT NULL DEFAULT 0,
+        synced_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (ad_id, date)
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_creative_insights_date ON creative_insights_daily(date DESC)`;
+
     return res.json({ ok: true });
   } catch (err) {
     return res.status(500).json({ error: err.message });

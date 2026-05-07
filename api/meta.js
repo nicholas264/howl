@@ -900,6 +900,240 @@ export default async function handler(req, res) {
         });
       }
 
+      case 'sync_creative_analytics': {
+        if (!process.env.DATABASE_URL) return res.json({ error: 'DATABASE_URL not configured' });
+        const sinceDays = Math.max(1, Math.min(365, parseInt(req.body.sinceDays || 30, 10)));
+        const force = !!req.body.force;
+        const { neon } = await import('@neondatabase/serverless');
+        const sql = neon(process.env.DATABASE_URL);
+
+        // Throttle to once / 10 min unless forced
+        if (!force) {
+          const [last] = await sql`SELECT MAX(synced_at) AS t FROM creative_performance`;
+          if (last?.t && Date.now() - new Date(last.t).getTime() < 10 * 60 * 1000) {
+            return res.json({ ok: true, skipped: 'throttled', lastSyncedAt: last.t });
+          }
+        }
+
+        // 1) Walk /act_X/ads pages, upserting ad + creative metadata
+        let adsPage = `${BASE}/${adAccountId}/ads?fields=id,name,status,adset_id,campaign_id,created_time,creative{id,video_id,image_hash,thumbnail_url,object_story_spec}&limit=200&access_token=${accessToken}`;
+        let adsUpserted = 0;
+        const adIds = [];
+        for (let pageGuard = 0; pageGuard < 50 && adsPage; pageGuard++) {
+          const r = await fetch(adsPage);
+          const d = await r.json();
+          if (d.error) return res.status(400).json({ error: d.error.message, step: 'list_ads' });
+          for (const ad of (d.data || [])) {
+            const creative = ad.creative || {};
+            const videoId = creative.video_id || null;
+            const imageHash = creative.image_hash || null;
+            const groupKey = videoId || imageHash || ad.id;
+            const thumb = creative.thumbnail_url || null;
+            await sql`
+              INSERT INTO creative_performance
+                (ad_id, ad_name, adset_id, campaign_id, creative_id, video_id, image_hash, group_key, thumbnail_url, status, created_time, synced_at)
+              VALUES
+                (${ad.id}, ${ad.name || null}, ${ad.adset_id || null}, ${ad.campaign_id || null}, ${creative.id || null}, ${videoId}, ${imageHash}, ${groupKey}, ${thumb}, ${ad.status || null}, ${ad.created_time || null}, NOW())
+              ON CONFLICT (ad_id) DO UPDATE SET
+                ad_name = EXCLUDED.ad_name,
+                adset_id = EXCLUDED.adset_id,
+                campaign_id = EXCLUDED.campaign_id,
+                creative_id = EXCLUDED.creative_id,
+                video_id = EXCLUDED.video_id,
+                image_hash = EXCLUDED.image_hash,
+                group_key = EXCLUDED.group_key,
+                thumbnail_url = COALESCE(EXCLUDED.thumbnail_url, creative_performance.thumbnail_url),
+                status = EXCLUDED.status,
+                synced_at = NOW()
+            `;
+            adsUpserted++;
+            adIds.push(ad.id);
+          }
+          adsPage = d.paging?.next || null;
+        }
+
+        // 2) Pull daily insights for the window. Use account-level call with time_increment=1.
+        const fmtYmd = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        const tsNow = new Date();
+        const tsSince = new Date(tsNow.getTime() - sinceDays * 24 * 60 * 60 * 1000);
+        const timeRange = encodeURIComponent(JSON.stringify({ since: fmtYmd(tsSince), until: fmtYmd(tsNow) }));
+        const fields = [
+          'ad_id', 'date_start', 'spend', 'impressions', 'clicks', 'unique_inline_link_clicks',
+          'actions', 'action_values',
+          'video_3_sec_watched_actions', 'video_thruplay_watched_actions', 'video_avg_time_watched_actions',
+        ].join(',');
+
+        const PURCHASE_TYPES = ['omni_purchase', 'offsite_conversion.fb_pixel_purchase', 'purchase', 'web_in_store_purchase'];
+        const pickAction = (arr) => {
+          if (!Array.isArray(arr)) return 0;
+          for (const t of PURCHASE_TYPES) {
+            const hit = arr.find(a => a.action_type === t);
+            if (hit) return parseFloat(hit.value || 0);
+          }
+          return 0;
+        };
+        const pickVideoAction = (arr) => {
+          if (!Array.isArray(arr) || arr.length === 0) return 0;
+          // Sum across action_type variants (Meta returns a small list keyed by action_type)
+          return arr.reduce((s, a) => s + (parseFloat(a.value) || 0), 0);
+        };
+
+        let insightsPage = `${BASE}/${adAccountId}/insights?level=ad&time_increment=1&time_range=${timeRange}&fields=${fields}&limit=500&access_token=${accessToken}`;
+        let insightsUpserted = 0;
+        for (let pageGuard = 0; pageGuard < 100 && insightsPage; pageGuard++) {
+          const r = await fetch(insightsPage);
+          const d = await r.json();
+          if (d.error) return res.status(400).json({ error: d.error.message, step: 'insights' });
+          for (const row of (d.data || [])) {
+            if (!row.ad_id || !row.date_start) continue;
+            const purchases = pickAction(row.actions);
+            const purchaseValue = pickAction(row.action_values);
+            const v3s = pickVideoAction(row.video_3_sec_watched_actions);
+            const vThru = pickVideoAction(row.video_thruplay_watched_actions);
+            const vAvg = pickVideoAction(row.video_avg_time_watched_actions);
+            await sql`
+              INSERT INTO creative_insights_daily
+                (ad_id, date, spend, impressions, clicks, unique_link_clicks, purchases, purchase_value, video_3s_views, video_thruplays, video_avg_watch, synced_at)
+              VALUES
+                (${row.ad_id}, ${row.date_start}, ${parseFloat(row.spend || 0)}, ${parseInt(row.impressions || 0, 10)}, ${parseInt(row.clicks || 0, 10)}, ${parseInt(row.unique_inline_link_clicks || 0, 10)}, ${purchases}, ${purchaseValue}, ${v3s}, ${vThru}, ${vAvg}, NOW())
+              ON CONFLICT (ad_id, date) DO UPDATE SET
+                spend = EXCLUDED.spend,
+                impressions = EXCLUDED.impressions,
+                clicks = EXCLUDED.clicks,
+                unique_link_clicks = EXCLUDED.unique_link_clicks,
+                purchases = EXCLUDED.purchases,
+                purchase_value = EXCLUDED.purchase_value,
+                video_3s_views = EXCLUDED.video_3s_views,
+                video_thruplays = EXCLUDED.video_thruplays,
+                video_avg_watch = EXCLUDED.video_avg_watch,
+                synced_at = NOW()
+            `;
+            insightsUpserted++;
+          }
+          insightsPage = d.paging?.next || null;
+        }
+
+        return res.json({ ok: true, adsUpserted, insightsUpserted, sinceDays });
+      }
+
+      case 'get_creative_table': {
+        if (!process.env.DATABASE_URL) return res.json({ error: 'DATABASE_URL not configured' });
+        const { neon } = await import('@neondatabase/serverless');
+        const sql = neon(process.env.DATABASE_URL);
+
+        const sinceDays = Math.max(1, Math.min(365, parseInt(req.body.sinceDays || 14, 10)));
+        const fmtYmd = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        const tsNow = new Date();
+        const tsSince = new Date(tsNow.getTime() - sinceDays * 24 * 60 * 60 * 1000);
+        const since = fmtYmd(tsSince);
+        const until = fmtYmd(tsNow);
+
+        const rows = await sql`
+          WITH agg AS (
+            SELECT
+              cp.group_key,
+              SUM(i.spend)::float           AS spend,
+              SUM(i.impressions)::bigint    AS impressions,
+              SUM(i.clicks)::bigint         AS clicks,
+              SUM(i.unique_link_clicks)::bigint AS unique_link_clicks,
+              SUM(i.purchases)::bigint      AS purchases,
+              SUM(i.purchase_value)::float  AS purchase_value,
+              SUM(i.video_3s_views)::bigint AS video_3s_views,
+              SUM(i.video_thruplays)::bigint AS video_thruplays
+            FROM creative_performance cp
+            JOIN creative_insights_daily i ON i.ad_id = cp.ad_id
+            WHERE i.date BETWEEN ${since} AND ${until}
+            GROUP BY cp.group_key
+          ),
+          meta AS (
+            SELECT DISTINCT ON (cp.group_key)
+              cp.group_key,
+              cp.ad_name        AS name,
+              cp.thumbnail_url,
+              MIN(cp.created_time) OVER (PARTITION BY cp.group_key) AS first_launch_date,
+              COUNT(*)          OVER (PARTITION BY cp.group_key) AS ad_count
+            FROM creative_performance cp
+            ORDER BY cp.group_key, cp.created_time ASC
+          )
+          SELECT
+            m.group_key, m.name, m.thumbnail_url, m.first_launch_date, m.ad_count,
+            COALESCE(a.spend, 0)              AS spend,
+            COALESCE(a.purchase_value, 0)     AS purchase_value,
+            COALESCE(a.purchases, 0)          AS purchases,
+            COALESCE(a.impressions, 0)        AS impressions,
+            COALESCE(a.clicks, 0)             AS clicks,
+            COALESCE(a.unique_link_clicks, 0) AS unique_link_clicks,
+            COALESCE(a.video_3s_views, 0)     AS video_3s_views,
+            COALESCE(a.video_thruplays, 0)    AS video_thruplays
+          FROM meta m
+          LEFT JOIN agg a USING (group_key)
+          WHERE COALESCE(a.spend, 0) > 0 OR COALESCE(a.impressions, 0) > 0
+          ORDER BY spend DESC NULLS LAST
+          LIMIT 500
+        `;
+
+        const groups = rows.map(r => {
+          const spend = Number(r.spend) || 0;
+          const purchaseValue = Number(r.purchase_value) || 0;
+          const purchases = Number(r.purchases) || 0;
+          const clicks = Number(r.clicks) || 0;
+          const impressions = Number(r.impressions) || 0;
+          const v3s = Number(r.video_3s_views) || 0;
+          const vThru = Number(r.video_thruplays) || 0;
+          return {
+            groupKey: r.group_key,
+            name: r.name,
+            thumbnailUrl: r.thumbnail_url,
+            firstLaunchDate: r.first_launch_date,
+            adCount: Number(r.ad_count) || 0,
+            spend,
+            purchaseValue,
+            purchases,
+            roas: spend > 0 ? purchaseValue / spend : 0,
+            cpa: purchases > 0 ? spend / purchases : null,
+            cpc: clicks > 0 ? spend / clicks : null,
+            ctr: impressions > 0 ? clicks / impressions : 0,
+            hookRate: impressions > 0 ? v3s / impressions : 0,
+            holdRate: v3s > 0 ? vThru / v3s : 0,
+            impressions,
+            clicks,
+          };
+        });
+
+        return res.json({ groups, sinceDays, since, until });
+      }
+
+      case 'get_creative_group_ads': {
+        if (!process.env.DATABASE_URL) return res.json({ error: 'DATABASE_URL not configured' });
+        const groupKey = req.body.groupKey;
+        if (!groupKey) return res.status(400).json({ error: 'groupKey required' });
+        const { neon } = await import('@neondatabase/serverless');
+        const sql = neon(process.env.DATABASE_URL);
+
+        const sinceDays = Math.max(1, Math.min(365, parseInt(req.body.sinceDays || 14, 10)));
+        const fmtYmd = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        const tsNow = new Date();
+        const tsSince = new Date(tsNow.getTime() - sinceDays * 24 * 60 * 60 * 1000);
+
+        const ads = await sql`
+          SELECT
+            cp.ad_id, cp.ad_name, cp.thumbnail_url, cp.created_time, cp.status,
+            COALESCE(SUM(i.spend), 0)::float          AS spend,
+            COALESCE(SUM(i.purchase_value), 0)::float AS purchase_value,
+            COALESCE(SUM(i.purchases), 0)::bigint     AS purchases,
+            COALESCE(SUM(i.impressions), 0)::bigint   AS impressions,
+            COALESCE(SUM(i.clicks), 0)::bigint        AS clicks
+          FROM creative_performance cp
+          LEFT JOIN creative_insights_daily i
+            ON i.ad_id = cp.ad_id AND i.date BETWEEN ${fmtYmd(tsSince)} AND ${fmtYmd(tsNow)}
+          WHERE cp.group_key = ${groupKey}
+          GROUP BY cp.ad_id, cp.ad_name, cp.thumbnail_url, cp.created_time, cp.status
+          ORDER BY spend DESC
+        `;
+
+        return res.json({ ads });
+      }
+
       default:
         return res.status(400).json({ error: `Unknown action: ${action}` });
     }

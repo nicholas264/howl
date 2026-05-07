@@ -3,6 +3,9 @@
   "functions": {
     "api/drive/ugc.js": {
       "maxDuration": 300
+    },
+    "api/meta.js": {
+      "maxDuration": 300
     }
   },
   "rewrites": [

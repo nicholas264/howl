@@ -192,10 +192,10 @@ export default function HowlAdEngine() {
       { key: 'review', label: 'Review Ads' },
       { key: 'video', label: 'Video Ads' },
       { key: 'founder', label: 'Founder Ads' },
+      { key: 'ugc-editor', label: 'UGC Editor' },
     ]},
     { group: 'Launch', items: [
       { key: 'ugc', label: 'UGC Inbox', count: ugcCount || null },
-      { key: 'ugc-editor', label: 'UGC Editor' },
       { key: 'gallery', label: 'Gallery', count: cartCount || null },
       { key: 'publish', label: 'Publish', count: cartCount || null },
     ]},

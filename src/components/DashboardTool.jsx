@@ -97,25 +97,74 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
 
   useEffect(() => { loadLaunches(); }, [loadLaunches]);
 
-  // Tool ROI — single fetch, lazy on first creative-view visit. Single Meta call per 500 ads.
-  const [toolRoi, setToolRoi] = useState(null);
-  const [toolRoiLoading, setToolRoiLoading] = useState(false);
-  const [toolRoiError, setToolRoiError] = useState('');
-  const [toolRoiSinceDays, setToolRoiSinceDays] = useState(90);
-  const loadToolRoi = useCallback(async (days = 90) => {
-    setToolRoiLoading(true); setToolRoiError('');
+  // Auto-load Top Creatives when entering the creative view or changing the window.
+  useEffect(() => {
+    if (view !== 'creative') return;
+    loadCreativeTable(creativeWindowDays);
+  }, [view, creativeWindowDays, loadCreativeTable]);
+
+  // Top Creatives — Motion-style sortable table. Reads from creative_performance +
+  // creative_insights_daily (populated by sync_creative_analytics). One fetch per
+  // window change, no Meta call on page load.
+  const [creativeTable, setCreativeTable] = useState(null);
+  const [creativeTableLoading, setCreativeTableLoading] = useState(false);
+  const [creativeTableError, setCreativeTableError] = useState('');
+  const [creativeWindowDays, setCreativeWindowDays] = useState(14);
+  const [creativeSortKey, setCreativeSortKey] = useState('spend');
+  const [creativeSortDir, setCreativeSortDir] = useState('desc');
+  const [creativeSyncing, setCreativeSyncing] = useState(false);
+  const [creativeSyncMsg, setCreativeSyncMsg] = useState('');
+  const [creativeExpanded, setCreativeExpanded] = useState({}); // groupKey -> { loading, ads }
+
+  const loadCreativeTable = useCallback(async (days) => {
+    setCreativeTableLoading(true); setCreativeTableError('');
     try {
       const r = await fetch('/api/meta', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'get_tool_roi', sinceDays: days }),
+        body: JSON.stringify({ action: 'get_creative_table', sinceDays: days }),
       });
       const d = await r.json();
       if (d.error) throw new Error(d.error);
-      setToolRoi(d);
-      setToolRoiSinceDays(days);
-    } catch (err) { setToolRoiError(err.message); }
-    finally { setToolRoiLoading(false); }
+      setCreativeTable(d);
+    } catch (err) { setCreativeTableError(err.message); }
+    finally { setCreativeTableLoading(false); }
   }, []);
+
+  const syncCreativeAnalytics = useCallback(async () => {
+    setCreativeSyncing(true); setCreativeSyncMsg('');
+    try {
+      const r = await fetch('/api/meta', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync_creative_analytics', sinceDays: 30, force: true }),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setCreativeSyncMsg(`Synced ${d.adsUpserted || 0} ads · ${d.insightsUpserted || 0} daily rows`);
+      await loadCreativeTable(creativeWindowDays);
+    } catch (err) { setCreativeSyncMsg(`Sync failed: ${err.message}`); }
+    finally { setCreativeSyncing(false); }
+  }, [creativeWindowDays, loadCreativeTable]);
+
+  const toggleCreativeRow = useCallback(async (groupKey) => {
+    setCreativeExpanded(prev => {
+      if (prev[groupKey]?.ads) {
+        const { [groupKey]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [groupKey]: { loading: true, ads: null } };
+    });
+    if (creativeExpanded[groupKey]?.ads) return;
+    try {
+      const r = await fetch('/api/meta', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_creative_group_ads', groupKey, sinceDays: creativeWindowDays }),
+      });
+      const d = await r.json();
+      setCreativeExpanded(prev => ({ ...prev, [groupKey]: { loading: false, ads: d.ads || [] } }));
+    } catch {
+      setCreativeExpanded(prev => ({ ...prev, [groupKey]: { loading: false, ads: [] } }));
+    }
+  }, [creativeWindowDays, creativeExpanded]);
 
   // Shopify analytics state
   const [shopifyData,    setShopifyData]    = useState(null);
@@ -501,106 +550,226 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
         </div>
       )}
 
-      {/* Tool ROI — Creative sub-tab only */}
-      {view === 'creative' && (
-        <div style={{ ...S.card, marginBottom: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={S.label}>Tool-Built Ads · ROI</span>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              {[30, 90, 365].map(d => (
-                <button key={d} onClick={() => loadToolRoi(d)} disabled={toolRoiLoading} style={{
-                  padding: '5px 10px', background: toolRoiSinceDays === d && toolRoi ? 'rgba(220,68,10,0.15)' : 'none',
-                  border: `1px solid ${toolRoiSinceDays === d && toolRoi ? '#DC440A' : '#2a3441'}`,
-                  color: toolRoiSinceDays === d && toolRoi ? '#DC440A' : '#8b949e',
-                  fontFamily: 'inherit', fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase',
-                  cursor: toolRoiLoading ? 'not-allowed' : 'pointer', borderRadius: 3,
-                }}>{d === 365 ? '1Y' : `${d}d`}</button>
-              ))}
-              <button onClick={() => loadToolRoi(toolRoiSinceDays)} disabled={toolRoiLoading} style={S.ghostBtn}>
-                {toolRoiLoading ? 'Pulling…' : toolRoi ? 'Refresh' : 'Pull ROI'}
-              </button>
+      {/* Top Creatives — Motion-style sortable table, Creative sub-tab only */}
+      {view === 'creative' && (() => {
+        const COLS = [
+          { key: 'name',            label: 'Creative',     align: 'left',  sortable: false, kind: 'name' },
+          { key: 'firstLaunchDate', label: 'Launch date',  align: 'left',  sortable: true,  kind: 'date' },
+          { key: 'spend',           label: 'Spend',        align: 'right', sortable: true,  kind: 'money', heat: 'high' },
+          { key: 'purchaseValue',   label: 'Purchase value', align: 'right', sortable: true, kind: 'money', heat: 'high' },
+          { key: 'roas',            label: 'ROAS',         align: 'right', sortable: true,  kind: 'x',     heat: 'high' },
+          { key: 'cpa',             label: 'CPA',          align: 'right', sortable: true,  kind: 'money', heat: 'low' },
+          { key: 'cpc',             label: 'CPC',          align: 'right', sortable: true,  kind: 'money', heat: 'low' },
+          { key: 'hookRate',        label: 'Hook rate',    align: 'right', sortable: true,  kind: 'pct',   heat: 'high' },
+          { key: 'holdRate',        label: 'Hold rate',    align: 'right', sortable: true,  kind: 'pct',   heat: 'high' },
+          { key: 'ctr',             label: 'CTR',          align: 'right', sortable: true,  kind: 'pct',   heat: 'high' },
+        ];
+
+        const groups = (creativeTable?.groups || []).slice();
+        const sortKey = creativeSortKey;
+        const dir = creativeSortDir === 'asc' ? 1 : -1;
+        groups.sort((a, b) => {
+          const av = a[sortKey], bv = b[sortKey];
+          if (av == null && bv == null) return 0;
+          if (av == null) return 1;
+          if (bv == null) return -1;
+          if (av < bv) return -1 * dir;
+          if (av > bv) return 1 * dir;
+          return 0;
+        });
+
+        // Percentile-based heatmap. For 'low' columns (CPA/CPC), invert.
+        const heatRanges = {};
+        for (const c of COLS) {
+          if (!c.heat) continue;
+          const vals = groups.map(g => g[c.key]).filter(v => typeof v === 'number' && !isNaN(v) && v > 0);
+          if (vals.length === 0) { heatRanges[c.key] = null; continue; }
+          const sorted = [...vals].sort((a, b) => a - b);
+          heatRanges[c.key] = { min: sorted[0], max: sorted[sorted.length - 1], heat: c.heat };
+        }
+        const heatColor = (key, val) => {
+          const r = heatRanges[key];
+          if (!r || typeof val !== 'number' || isNaN(val) || val <= 0 || r.max === r.min) return null;
+          let t = (val - r.min) / (r.max - r.min); // 0..1
+          if (r.heat === 'low') t = 1 - t;
+          // alpha 0..0.35 of green
+          const a = Math.max(0.05, Math.min(0.4, t * 0.4));
+          return `rgba(63,185,80,${a.toFixed(3)})`;
+        };
+        const fmt = (kind, v) => {
+          if (v == null || (typeof v === 'number' && (isNaN(v) || v === 0 && kind !== 'money'))) {
+            if (kind === 'money' && v === 0) return '$0';
+            if (v == null) return '—';
+          }
+          if (kind === 'money') return `$${(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+          if (kind === 'x') return `${(v || 0).toFixed(2)}x`;
+          if (kind === 'pct') return `${((v || 0) * 100).toFixed(2)}%`;
+          if (kind === 'date') {
+            try { return new Date(v).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+            catch { return '—'; }
+          }
+          return v;
+        };
+        const sortClick = (key) => {
+          if (creativeSortKey === key) {
+            setCreativeSortDir(creativeSortDir === 'asc' ? 'desc' : 'asc');
+          } else {
+            setCreativeSortKey(key);
+            setCreativeSortDir('desc');
+          }
+        };
+        const sortIcon = (key) => creativeSortKey !== key ? '' : (creativeSortDir === 'desc' ? ' ▼' : ' ▲');
+
+        return (
+          <div style={{ ...S.card, marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+              <span style={S.label}>Top Creatives</span>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                {[7, 14, 30, 90].map(d => (
+                  <button key={d} onClick={() => setCreativeWindowDays(d)} disabled={creativeTableLoading} style={{
+                    padding: '5px 10px',
+                    background: creativeWindowDays === d ? 'rgba(220,68,10,0.15)' : 'none',
+                    border: `1px solid ${creativeWindowDays === d ? '#DC440A' : '#2a3441'}`,
+                    color: creativeWindowDays === d ? '#DC440A' : '#8b949e',
+                    fontFamily: 'inherit', fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase',
+                    cursor: creativeTableLoading ? 'not-allowed' : 'pointer', borderRadius: 3,
+                  }}>{d}d</button>
+                ))}
+                <button onClick={syncCreativeAnalytics} disabled={creativeSyncing} style={S.ghostBtn}>
+                  {creativeSyncing ? 'Syncing…' : 'Sync from Meta'}
+                </button>
+              </div>
+            </div>
+
+            {creativeSyncMsg && (
+              <div style={{ fontSize: 10, color: creativeSyncMsg.startsWith('Sync failed') ? '#f85149' : '#3fb950', marginBottom: 10 }}>
+                {creativeSyncMsg}
+              </div>
+            )}
+            {creativeTableError && <div style={{ ...S.err, marginBottom: 10 }}>{creativeTableError}</div>}
+
+            {creativeTableLoading && !creativeTable && (
+              <div style={{ fontSize: 11, color: '#6e7681', padding: '20px 0' }}>Loading…</div>
+            )}
+
+            {creativeTable && groups.length === 0 && (
+              <div style={{ fontSize: 11, color: '#6e7681', padding: '14px 0' }}>
+                No creative performance in this window. Try a longer window or click Sync from Meta.
+              </div>
+            )}
+
+            {groups.length > 0 && (
+              <div style={{ overflowX: 'auto', marginTop: 4 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, minWidth: 1000 }}>
+                  <thead>
+                    <tr style={{ color: '#6e7681', fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase' }}>
+                      {COLS.map(c => (
+                        <th key={c.key}
+                            onClick={() => c.sortable && sortClick(c.key)}
+                            style={{
+                              textAlign: c.align, padding: '8px 10px',
+                              cursor: c.sortable ? 'pointer' : 'default',
+                              borderBottom: '1px solid #2a3441',
+                              userSelect: 'none',
+                              color: creativeSortKey === c.key ? '#DC440A' : '#6e7681',
+                              whiteSpace: 'nowrap',
+                            }}>
+                          {c.label}{sortIcon(c.key)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groups.map((g) => {
+                      const exp = creativeExpanded[g.groupKey];
+                      const isOpen = !!exp;
+                      return (
+                        <React.Fragment key={g.groupKey}>
+                          <tr onClick={() => toggleCreativeRow(g.groupKey)}
+                              style={{ borderTop: '1px solid #2a3441', cursor: 'pointer', background: isOpen ? 'rgba(220,68,10,0.04)' : 'transparent' }}>
+                            <td style={{ padding: '8px 10px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                {g.thumbnailUrl
+                                  ? <img src={g.thumbnailUrl} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4, flexShrink: 0, background: '#1c2330' }} onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
+                                  : <div style={{ width: 36, height: 36, background: '#1c2330', borderRadius: 4, flexShrink: 0 }} />
+                                }
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ color: '#f0f4f8', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{g.name || '(unnamed)'}</div>
+                                  <div style={{ fontSize: 9, color: '#6e7681', letterSpacing: 1, textTransform: 'uppercase' }}>{g.adCount} {g.adCount === 1 ? 'ad' : 'ads'}</div>
+                                </div>
+                              </div>
+                            </td>
+                            {COLS.slice(1).map(c => {
+                              const v = g[c.key];
+                              const bg = c.heat ? heatColor(c.key, v) : null;
+                              return (
+                                <td key={c.key} style={{
+                                  padding: '8px 10px', textAlign: c.align,
+                                  background: bg || 'transparent',
+                                  color: '#c9d1d9', whiteSpace: 'nowrap',
+                                  fontWeight: c.kind === 'money' || c.kind === 'x' ? 600 : 400,
+                                }}>{fmt(c.kind, v)}</td>
+                              );
+                            })}
+                          </tr>
+                          {isOpen && (
+                            <tr style={{ background: 'rgba(28,35,48,0.6)' }}>
+                              <td colSpan={COLS.length} style={{ padding: '4px 10px 12px 56px' }}>
+                                {exp.loading && <div style={{ fontSize: 10, color: '#6e7681', padding: '8px 0' }}>Loading ads…</div>}
+                                {!exp.loading && exp.ads && exp.ads.length === 0 && (
+                                  <div style={{ fontSize: 10, color: '#6e7681', padding: '8px 0' }}>No ads.</div>
+                                )}
+                                {!exp.loading && exp.ads && exp.ads.length > 0 && (
+                                  <table style={{ width: '100%', fontSize: 10, borderCollapse: 'collapse' }}>
+                                    <thead>
+                                      <tr style={{ color: '#6e7681', letterSpacing: 1, textTransform: 'uppercase', fontSize: 8 }}>
+                                        <th style={{ textAlign: 'left',  padding: '4px 8px' }}>Ad name</th>
+                                        <th style={{ textAlign: 'left',  padding: '4px 8px' }}>Status</th>
+                                        <th style={{ textAlign: 'left',  padding: '4px 8px' }}>Created</th>
+                                        <th style={{ textAlign: 'right', padding: '4px 8px' }}>Spend</th>
+                                        <th style={{ textAlign: 'right', padding: '4px 8px' }}>Revenue</th>
+                                        <th style={{ textAlign: 'right', padding: '4px 8px' }}>Purchases</th>
+                                        <th style={{ textAlign: 'right', padding: '4px 8px' }}>ROAS</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {exp.ads.map(ad => {
+                                        const spend = Number(ad.spend) || 0;
+                                        const rev = Number(ad.purchase_value) || 0;
+                                        const roas = spend > 0 ? rev / spend : 0;
+                                        return (
+                                          <tr key={ad.ad_id} style={{ borderTop: '1px solid #2a3441' }}>
+                                            <td style={{ padding: '5px 8px', color: '#c9d1d9', maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ad.ad_name || ad.ad_id}</td>
+                                            <td style={{ padding: '5px 8px', color: '#8b949e' }}>{ad.status || '—'}</td>
+                                            <td style={{ padding: '5px 8px', color: '#8b949e' }}>{ad.created_time ? new Date(ad.created_time).toLocaleDateString() : '—'}</td>
+                                            <td style={{ padding: '5px 8px', textAlign: 'right', color: '#8b949e' }}>${spend.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                                            <td style={{ padding: '5px 8px', textAlign: 'right', color: '#f0f4f8', fontWeight: 600 }}>${rev.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                                            <td style={{ padding: '5px 8px', textAlign: 'right', color: '#8b949e' }}>{Number(ad.purchases) || 0}</td>
+                                            <td style={{ padding: '5px 8px', textAlign: 'right', color: roas >= 2 ? '#3fb950' : roas >= 1 ? '#f5a623' : '#f85149', fontWeight: 700 }}>{roas.toFixed(2)}x</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                )}
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div style={{ fontSize: 9, color: '#6e7681', letterSpacing: 1, marginTop: 12 }}>
+              Window: last {creativeTable?.sinceDays || creativeWindowDays}d · {groups.length} creative {groups.length === 1 ? 'group' : 'groups'} · grouped by video / image hash
             </div>
           </div>
-          {toolRoiError && <div style={{ ...S.err, marginBottom: 10 }}>{toolRoiError}</div>}
-          {!toolRoi && !toolRoiLoading && !toolRoiError && (
-            <div style={{ fontSize: 11, color: '#6e7681', marginTop: 6 }}>Click Pull ROI to query Meta Insights for every ad the tool has launched. One API call per 500 ads.</div>
-          )}
-          {toolRoi && (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, marginTop: 4 }}>
-                {[
-                  { label: 'Spend',     val: `$${(toolRoi.totals.spend || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}` },
-                  { label: 'Revenue',   val: `$${(toolRoi.totals.revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}` },
-                  { label: 'ROAS',      val: `${(toolRoi.totals.roas || 0).toFixed(2)}x`, accent: toolRoi.totals.roas >= 2 ? '#3fb950' : toolRoi.totals.roas >= 1 ? '#f5a623' : '#f85149' },
-                  { label: 'Purchases', val: `${(toolRoi.totals.purchases || 0).toLocaleString()}` },
-                  { label: 'Ads Live',  val: `${toolRoi.totals.adsLaunched}` },
-                ].map(({ label, val, accent }) => (
-                  <div key={label} style={{ borderLeft: '2px solid #2a3441', paddingLeft: 12 }}>
-                    <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#6e7681', marginBottom: 4 }}>{label}</div>
-                    <div style={{ fontSize: 22, fontWeight: 700, color: accent || '#f0f4f8', lineHeight: 1.1 }}>{val}</div>
-                  </div>
-                ))}
-              </div>
+        );
+      })()}
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginTop: 22 }}>
-                <div>
-                  <span style={S.label}>By Format</span>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8, fontSize: 11 }}>
-                    <thead>
-                      <tr style={{ color: '#6e7681', textAlign: 'left', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase' }}>
-                        <th style={{ padding: '4px 6px 4px 0' }}>Type</th>
-                        <th style={{ padding: '4px 6px', textAlign: 'right' }}>Ads</th>
-                        <th style={{ padding: '4px 6px', textAlign: 'right' }}>Spend</th>
-                        <th style={{ padding: '4px 6px', textAlign: 'right' }}>Revenue</th>
-                        <th style={{ padding: '4px 0 4px 6px', textAlign: 'right' }}>ROAS</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {toolRoi.byMimeType.map(r => (
-                        <tr key={r.mimeType} style={{ borderTop: '1px solid #2a3441' }}>
-                          <td style={{ padding: '6px 6px 6px 0', color: '#c9d1d9' }}>{r.mimeType}</td>
-                          <td style={{ padding: '6px 6px', textAlign: 'right', color: '#8b949e' }}>{r.ads}</td>
-                          <td style={{ padding: '6px 6px', textAlign: 'right', color: '#8b949e' }}>${r.spend.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-                          <td style={{ padding: '6px 6px', textAlign: 'right', color: '#f0f4f8', fontWeight: 600 }}>${r.revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-                          <td style={{ padding: '6px 0 6px 6px', textAlign: 'right', color: r.roas >= 2 ? '#3fb950' : r.roas >= 1 ? '#f5a623' : '#f85149', fontWeight: 700 }}>{r.roas.toFixed(2)}x</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div>
-                  <span style={S.label}>By Creator</span>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8, fontSize: 11 }}>
-                    <thead>
-                      <tr style={{ color: '#6e7681', textAlign: 'left', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase' }}>
-                        <th style={{ padding: '4px 6px 4px 0' }}>Creator</th>
-                        <th style={{ padding: '4px 6px', textAlign: 'right' }}>Ads</th>
-                        <th style={{ padding: '4px 6px', textAlign: 'right' }}>Spend</th>
-                        <th style={{ padding: '4px 6px', textAlign: 'right' }}>Revenue</th>
-                        <th style={{ padding: '4px 0 4px 6px', textAlign: 'right' }}>ROAS</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {toolRoi.byCreator.slice(0, 8).map(r => (
-                        <tr key={r.creator} style={{ borderTop: '1px solid #2a3441' }}>
-                          <td style={{ padding: '6px 6px 6px 0', color: '#c9d1d9', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.creator}</td>
-                          <td style={{ padding: '6px 6px', textAlign: 'right', color: '#8b949e' }}>{r.ads}</td>
-                          <td style={{ padding: '6px 6px', textAlign: 'right', color: '#8b949e' }}>${r.spend.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-                          <td style={{ padding: '6px 6px', textAlign: 'right', color: '#f0f4f8', fontWeight: 600 }}>${r.revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-                          <td style={{ padding: '6px 0 6px 6px', textAlign: 'right', color: r.roas >= 2 ? '#3fb950' : r.roas >= 1 ? '#f5a623' : '#f85149', fontWeight: 700 }}>{r.roas.toFixed(2)}x</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div style={{ fontSize: 9, color: '#6e7681', letterSpacing: 1, marginTop: 12 }}>
-                Window: last {toolRoi.sinceDays}d · {toolRoi._meta?.metaCalls || 0} Meta API call{(toolRoi._meta?.metaCalls || 0) === 1 ? '' : 's'} · {toolRoi._meta?.adsWithInsights || 0} of {toolRoi.totals.adsLaunched} ads with insights
-              </div>
-            </>
-          )}
-        </div>
-      )}
 
       {/* Launch Log stats — DB-backed, on Creative sub-tab */}
       {view === 'creative' && launches && launches.length > 0 && (() => {
