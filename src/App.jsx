@@ -200,6 +200,7 @@ export default function HowlAdEngine() {
       { key: 'publish', label: 'Publish', count: cartCount || null },
     ]},
     { group: 'Insights', items: [
+      { key: 'creative-analytics', label: 'Creative Analytics' },
       { key: 'dashboard-cfo', label: 'Dashboard', matchPrefix: 'dashboard-' },
       { key: 'inventory', label: 'Inventory' },
       { key: 'log', label: 'Launch Log' },
@@ -285,6 +286,7 @@ export default function HowlAdEngine() {
       {activeTab === "dashboard-meta" && <DashboardTool setActiveTab={setActiveTab} view="meta" />}
       {activeTab === "dashboard-shopify" && <DashboardTool setActiveTab={setActiveTab} view="shopify" />}
       {activeTab === "dashboard-creative" && <DashboardTool setActiveTab={setActiveTab} view="creative" />}
+      {activeTab === "creative-analytics" && <DashboardTool setActiveTab={setActiveTab} view="creative" />}
       {activeTab === "dashboard-forecast" && <DashboardTool setActiveTab={setActiveTab} view="forecast" />}
       {activeTab === "inventory" && <InventoryTool />}
       {activeTab === "log" && <LaunchLogTool />}
