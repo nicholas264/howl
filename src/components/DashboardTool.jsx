@@ -97,12 +97,6 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
 
   useEffect(() => { loadLaunches(); }, [loadLaunches]);
 
-  // Auto-load Top Creatives when entering the creative view or changing the window.
-  useEffect(() => {
-    if (view !== 'creative') return;
-    loadCreativeTable(creativeWindowDays);
-  }, [view, creativeWindowDays, loadCreativeTable]);
-
   // Top Creatives — Motion-style sortable table. Reads from creative_performance +
   // creative_insights_daily (populated by sync_creative_analytics). One fetch per
   // window change, no Meta call on page load.
@@ -129,6 +123,12 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
     } catch (err) { setCreativeTableError(err.message); }
     finally { setCreativeTableLoading(false); }
   }, []);
+
+  // Auto-load Top Creatives when entering the creative view or changing the window.
+  useEffect(() => {
+    if (view !== 'creative') return;
+    loadCreativeTable(creativeWindowDays);
+  }, [view, creativeWindowDays, loadCreativeTable]);
 
   const syncCreativeAnalytics = useCallback(async () => {
     setCreativeSyncing(true); setCreativeSyncMsg('');
