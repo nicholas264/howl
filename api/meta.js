@@ -1184,6 +1184,7 @@ export default async function handler(req, res) {
 
       case 'analyze_creative_group': {
         const groupKey = req.body.groupKey;
+        const manualTranscript = (req.body.manualTranscript || '').trim();
         if (!groupKey) return res.status(400).json({ error: 'groupKey required' });
         if (!process.env.DATABASE_URL) return res.json({ error: 'DATABASE_URL not configured' });
         if (!process.env.ANTHROPIC_API_KEY) return res.json({ error: 'ANTHROPIC_API_KEY not configured' });
@@ -1217,7 +1218,8 @@ export default async function handler(req, res) {
         let imageUrl = topAd.thumbnail_url;
         let videoSource = null;
         if (isVideo) {
-          const r = await fetch(`${BASE}/${topAd.video_id}?fields=source,picture,format,permalink_url&access_token=${accessToken}`);
+          // First try: video object directly.
+          const r = await fetch(`${BASE}/${topAd.video_id}?fields=source,picture,format,permalink_url,embed_html&access_token=${accessToken}`);
           const d = await r.json();
           if (d.error) {
             debug.videoFieldsResolved = `meta error: ${d.error.message}`;
@@ -1225,13 +1227,33 @@ export default async function handler(req, res) {
             debug.videoFieldsResolved = Object.keys(d).join(',');
             videoSource = d.source || null;
             if (!videoSource && Array.isArray(d.format)) {
-              // Meta's format[] sometimes carries an embed/source URL when source is restricted.
-              for (const f of d.format) {
-                if (f?.picture) imageUrl = f.picture;
-              }
+              for (const f of d.format) { if (f?.picture) imageUrl = f.picture; }
             }
             if (d.picture) imageUrl = d.picture;
-            debug.videoSourceUrl = videoSource ? 'present' : 'missing (Meta did not return a source URL — common for hosted ad videos)';
+            // Fallback 1: pull from embed_html if Meta restricted the `source` field.
+            if (!videoSource && d.embed_html) {
+              const m = d.embed_html.match(/src=["']([^"']+\.mp4[^"']*)["']/i)
+                || d.embed_html.match(/src=["']([^"']+)["']/i);
+              if (m) {
+                videoSource = m[1].replace(/&amp;/g, '&');
+                debug.videoSourceUrl = 'recovered from embed_html';
+              }
+            }
+            // Fallback 2: ad-account scoped advideos edge sometimes exposes source when the video object alone won't.
+            if (!videoSource) {
+              try {
+                const r2 = await fetch(`${BASE}/${adAccountId}/advideos?ids=${encodeURIComponent(topAd.video_id)}&fields=source&access_token=${accessToken}`);
+                const d2 = await r2.json();
+                const inner = d2 && d2[topAd.video_id];
+                if (inner?.source) {
+                  videoSource = inner.source;
+                  debug.videoSourceUrl = 'recovered from advideos endpoint';
+                }
+              } catch {}
+            }
+            if (!debug.videoSourceUrl) {
+              debug.videoSourceUrl = videoSource ? 'present' : 'missing (Meta restricts source on this video — try Paste transcript)';
+            }
           }
         } else if (topAd.image_hash) {
           const hashesParam = encodeURIComponent(JSON.stringify([topAd.image_hash]));
@@ -1241,9 +1263,10 @@ export default async function handler(req, res) {
           if (img?.url) imageUrl = img.url;
         }
 
-        // Whisper transcription (video only). Failures are non-fatal — analysis can proceed without transcript.
-        let transcript = '';
-        if (isVideo) {
+        // Manual transcript wins — user pasted the script themselves, skip Meta + Whisper entirely.
+        let transcript = manualTranscript;
+        if (manualTranscript) debug.whisper = `manual: ${manualTranscript.length} chars`;
+        if (isVideo && !manualTranscript) {
           if (!process.env.OPENAI_API_KEY) {
             debug.whisper = 'skipped: OPENAI_API_KEY missing in this environment';
           } else if (!videoSource) {

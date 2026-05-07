@@ -177,13 +177,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
       setAnalysisDrawer({ groupKey, name, analysis: null, loading: false, error: err.message });
     }
   }, []);
-  const runAnalysis = useCallback(async (groupKey, name) => {
+  const runAnalysis = useCallback(async (groupKey, name, manualTranscript) => {
     setAnalyzingGroup(groupKey);
     setAnalysisDrawer({ groupKey, name, analysis: null, loading: true, error: '' });
     try {
       const r = await fetch('/api/meta', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'analyze_creative_group', groupKey }),
+        body: JSON.stringify({ action: 'analyze_creative_group', groupKey, manualTranscript }),
       });
       const d = await r.json();
       if (d.error) throw new Error(d.error);
@@ -1162,7 +1162,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
 
                   {!a.transcript && a.asset_kind === 'video' && (
                     <div style={{ marginBottom: 16, padding: 12, background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.4)', borderRadius: 4, fontSize: 11, color: '#f5a623', lineHeight: 1.55 }}>
-                      <strong>No transcript captured.</strong> Claude analyzed only the thumbnail frame, so the verbal hook could not be extracted.
+                      <strong>No transcript captured.</strong> Meta restricts the video source URL on most ad-hosted videos, so Whisper can't access the audio. Paste the script below and click Re-analyze with this script — Claude will use it instead.
                       {analysisDrawer.debug && (
                         <div style={{ marginTop: 10, fontSize: 10, color: '#c9d1d9', fontFamily: 'JetBrains Mono, monospace' }}>
                           <div>video_fields: {analysisDrawer.debug.videoFieldsResolved || '—'}</div>
@@ -1172,6 +1172,12 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                           <div>image: {analysisDrawer.debug.image || '—'}</div>
                         </div>
                       )}
+                      <ManualTranscriptPaste
+                        groupKey={analysisDrawer.groupKey}
+                        name={analysisDrawer.name}
+                        analyzing={analyzingGroup === analysisDrawer.groupKey}
+                        onSubmit={(text) => runAnalysis(analysisDrawer.groupKey, analysisDrawer.name, text)}
+                      />
                     </div>
                   )}
 
@@ -2587,6 +2593,42 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           </>
         );
       })()}
+    </div>
+  );
+}
+
+
+function ManualTranscriptPaste({ groupKey, name, analyzing, onSubmit }) {
+  const [text, setText] = React.useState("");
+  return (
+    <div style={{ marginTop: 12 }}>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Paste the spoken script of this video..."
+        rows={5}
+        style={{
+          width: "100%", padding: "8px 10px",
+          background: "#1c2330", border: "1px solid #2a3441",
+          color: "#f0f4f8", fontFamily: "inherit", fontSize: 11.5, lineHeight: 1.5,
+          borderRadius: 3, resize: "vertical", boxSizing: "border-box",
+        }}
+      />
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+        <button
+          onClick={() => text.trim() && onSubmit(text.trim())}
+          disabled={!text.trim() || analyzing}
+          style={{
+            padding: "6px 14px", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700,
+            background: text.trim() && !analyzing ? "#DC440A" : "rgba(220,68,10,0.2)",
+            border: "1px solid #DC440A", color: text.trim() && !analyzing ? "#fff" : "rgba(255,255,255,0.5)",
+            fontFamily: "inherit", borderRadius: 3,
+            cursor: text.trim() && !analyzing ? "pointer" : "not-allowed",
+          }}
+        >
+          {analyzing ? "Re-analyzing..." : "Re-analyze with this script"}
+        </button>
+      </div>
     </div>
   );
 }
