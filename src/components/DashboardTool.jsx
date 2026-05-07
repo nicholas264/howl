@@ -66,7 +66,15 @@ const S = {
   err:     { padding: '8px 12px', border: '1px solid rgba(220,68,10,0.4)', background: 'rgba(220,68,10,0.1)', color: '#DC440A', fontSize: 10, borderRadius: 4 },
 };
 
-export default function DashboardTool({ view = 'cfo' }) {
+const DASH_TABS = [
+  { key: 'dashboard-cfo',      view: 'cfo',      label: 'CFO' },
+  { key: 'dashboard-meta',     view: 'meta',     label: 'Meta' },
+  { key: 'dashboard-shopify',  view: 'shopify',  label: 'Shopify' },
+  { key: 'dashboard-creative', view: 'creative', label: 'Creative' },
+  { key: 'dashboard-forecast', view: 'forecast', label: 'Forecast' },
+];
+
+export default function DashboardTool({ view = 'cfo', setActiveTab }) {
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
@@ -435,7 +443,17 @@ export default function DashboardTool({ view = 'cfo' }) {
 
   return (
     <div style={S.wrap}>
-      {/* Header — shared across sub-tabs, with both load buttons */}
+      {setActiveTab && (
+        <div className="dash-subnav">
+          {DASH_TABS.map(t => (
+            <button
+              key={t.key}
+              className={`dash-subtab ${view === t.view ? 'on' : ''}`}
+              onClick={() => setActiveTab(t.key)}
+            >{t.label}</button>
+          ))}
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <div className="eyebrow" style={{ marginBottom: 6 }}>Dashboard</div>

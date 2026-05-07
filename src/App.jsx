@@ -200,12 +200,7 @@ export default function HowlAdEngine() {
       { key: 'publish', label: 'Publish', count: cartCount || null },
     ]},
     { group: 'Insights', items: [
-      { key: 'dashboard-cfo',      label: 'Dashboard',         parent: true },
-      { key: 'dashboard-cfo',      label: 'CFO View',          indent: true },
-      { key: 'dashboard-meta',     label: 'Meta',              indent: true },
-      { key: 'dashboard-shopify',  label: 'Shopify',           indent: true },
-      { key: 'dashboard-creative', label: 'Creative',          indent: true },
-      { key: 'dashboard-forecast', label: 'Forecast',          indent: true },
+      { key: 'dashboard-cfo', label: 'Dashboard', matchPrefix: 'dashboard-' },
       { key: 'inventory', label: 'Inventory' },
       { key: 'log', label: 'Launch Log' },
     ]},
@@ -223,33 +218,34 @@ export default function HowlAdEngine() {
             {NAV.map(group => (
               <React.Fragment key={group.group}>
                 <div className="sidebar-section">{group.group}</div>
-                {group.items.map((item, idx) => (
-                  item.parent ? (
-                    <div key={`${item.label}-${idx}`} className="side-parent">{item.label}</div>
-                  ) : (
+                {group.items.map((item, idx) => {
+                  const isActive = item.matchPrefix
+                    ? activeTab.startsWith(item.matchPrefix)
+                    : activeTab === item.key;
+                  return (
                     <button
                       key={`${item.key}-${idx}`}
-                      className={`side-item ${item.indent ? 'indent' : ''} ${activeTab === item.key ? 'on' : ''}`}
+                      className={`side-item ${isActive ? 'on' : ''}`}
                       onClick={() => setActiveTab(item.key)}
                       disabled={item.disabled}
                     >
                       <span>{item.label}</span>
                       {item.count ? <span className="count">{item.count > 99 ? '99+' : item.count}</span> : null}
                     </button>
-                  )
-                ))}
+                  );
+                })}
               </React.Fragment>
             ))}
           </nav>
-          <div style={{ padding: '14px 16px', borderTop: '1px solid #2a3441', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className="sidebar-foot">
             <UserButton
               afterSignOutUrl="/"
               appearance={{
                 variables: { colorPrimary: '#DC440A', colorBackground: '#0d1117', colorText: '#f0f4f8' },
-                elements: { userButtonAvatarBox: { width: 28, height: 28 } },
+                elements: { userButtonAvatarBox: { width: 26, height: 26 } },
               }}
             />
-            <span style={{ fontSize: 10, color: '#6e7681', letterSpacing: 1, textTransform: 'uppercase' }}>Account</span>
+            <span className="acct-lbl">Account</span>
           </div>
         </aside>
 
@@ -285,11 +281,11 @@ export default function HowlAdEngine() {
       {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} onAddToCart={addToCart} />}
       {activeTab === "founder" && <FounderAdTool />}
       {activeTab === "gallery" && <GalleryTab cart={cart} />}
-      {activeTab === "dashboard-cfo" && <DashboardTool view="cfo" />}
-      {activeTab === "dashboard-meta" && <DashboardTool view="meta" />}
-      {activeTab === "dashboard-shopify" && <DashboardTool view="shopify" />}
-      {activeTab === "dashboard-creative" && <DashboardTool view="creative" />}
-      {activeTab === "dashboard-forecast" && <DashboardTool view="forecast" />}
+      {activeTab === "dashboard-cfo" && <DashboardTool setActiveTab={setActiveTab} view="cfo" />}
+      {activeTab === "dashboard-meta" && <DashboardTool setActiveTab={setActiveTab} view="meta" />}
+      {activeTab === "dashboard-shopify" && <DashboardTool setActiveTab={setActiveTab} view="shopify" />}
+      {activeTab === "dashboard-creative" && <DashboardTool setActiveTab={setActiveTab} view="creative" />}
+      {activeTab === "dashboard-forecast" && <DashboardTool setActiveTab={setActiveTab} view="forecast" />}
       {activeTab === "inventory" && <InventoryTool />}
       {activeTab === "log" && <LaunchLogTool />}
       {activeTab === "ugc" && <UgcInboxTool />}
