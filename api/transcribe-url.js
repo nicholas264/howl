@@ -121,12 +121,10 @@ export default async function handler(req, res) {
       return res.status(whisperRes.status).json({ error: whisperData.error?.message || 'Whisper failed', detail: whisperData });
     }
 
-    const words = (whisperData.words || []).map((w) => ({
-      word: w.word,
-      start: w.start,
-      end: w.end,
-      kept: true,
-    }));
+    const words = attachPunctuation(
+      (whisperData.words || []).map((w) => ({ word: w.word, start: w.start, end: w.end, kept: true })),
+      whisperData.segments || []
+    );
     const duration = whisperData.duration || (words.length ? words[words.length - 1].end : 0);
 
     // 4. Persist on session row if one was provided
@@ -156,4 +154,36 @@ export default async function handler(req, res) {
       try { unlinkSync(audioPath); } catch { /* noop */ }
     }
   }
+}
+
+/**
+ * Whisper's word-level granularity strips punctuation. Segment text keeps it
+ * (e.g. "vibe,"  "backyard."). Walk segment tokens and bare words in parallel,
+ * matching by stripped letters, copying the punctuated form back onto the word
+ * so the transcript reads like real prose.
+ */
+function attachPunctuation(words, segments) {
+  if (!words.length || !Array.isArray(segments) || !segments.length) return words;
+  const tokens = [];
+  for (const seg of segments) {
+    if (!seg.text) continue;
+    for (const t of seg.text.trim().split(/\s+/)) tokens.push(t);
+  }
+  const strip = (s) => (s || '').toLowerCase().replace(/[^a-z0-9'-]/gi, '');
+  const out = words.map(w => ({ ...w }));
+  let ti = 0;
+  for (let wi = 0; wi < out.length && ti < tokens.length; wi++) {
+    const wPlain = strip(out[wi].word);
+    if (!wPlain) continue;
+    while (ti < tokens.length) {
+      const tPlain = strip(tokens[ti]);
+      if (tPlain === wPlain || (tPlain && wPlain && (tPlain.startsWith(wPlain) || wPlain.startsWith(tPlain)))) {
+        out[wi].word = tokens[ti];
+        ti++;
+        break;
+      }
+      ti++;
+    }
+  }
+  return out;
 }

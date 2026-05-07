@@ -36,9 +36,42 @@ export default async function handler(req, res) {
       body: form,
     });
     const data = await r.json();
+    if (r.ok && Array.isArray(data.words) && Array.isArray(data.segments)) {
+      data.words = attachPunctuation(data.words, data.segments);
+      // Rebuild a punctuated text from segments if `text` was missing/cleaner version desired.
+      if (!data.text) {
+        data.text = data.segments.map(s => s.text).join(' ').trim();
+      }
+    }
     return res.status(r.status).json(data);
   } catch (err) {
     console.error('transcribe error', err);
     return res.status(500).json({ error: err.message || 'Transcription failed' });
   }
+}
+
+function attachPunctuation(words, segments) {
+  if (!words.length || !Array.isArray(segments) || !segments.length) return words;
+  const tokens = [];
+  for (const seg of segments) {
+    if (!seg.text) continue;
+    for (const t of seg.text.trim().split(/\s+/)) tokens.push(t);
+  }
+  const strip = (s) => (s || '').toLowerCase().replace(/[^a-z0-9'-]/gi, '');
+  const out = words.map(w => ({ ...w }));
+  let ti = 0;
+  for (let wi = 0; wi < out.length && ti < tokens.length; wi++) {
+    const wPlain = strip(out[wi].word);
+    if (!wPlain) continue;
+    while (ti < tokens.length) {
+      const tPlain = strip(tokens[ti]);
+      if (tPlain === wPlain || (tPlain && wPlain && (tPlain.startsWith(wPlain) || wPlain.startsWith(tPlain)))) {
+        out[wi].word = tokens[ti];
+        ti++;
+        break;
+      }
+      ti++;
+    }
+  }
+  return out;
 }

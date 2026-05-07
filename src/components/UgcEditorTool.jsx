@@ -398,8 +398,8 @@ export default function UgcEditorTool({ onAddToCart }) {
         )}
 
         {videoUrl && stage !== 'uploading' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginTop: 16 }}>
-            <div>
+          <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24, marginTop: 16, alignItems: 'start' }}>
+            <div style={{ position: 'sticky', top: 16 }}>
               {settings.remotionMode && (stage === 'ready' || stage === 'done') && segments.length > 0 ? (
                 <Player
                   component={UgcVideo}
@@ -413,7 +413,7 @@ export default function UgcEditorTool({ onAddToCart }) {
                   loop
                 />
               ) : (
-                <video ref={videoRef} src={videoUrl} controls crossOrigin="anonymous" style={{ width: '100%', borderRadius: 8, background: '#000' }} />
+                <video ref={videoRef} src={videoUrl} controls crossOrigin="anonymous" style={{ width: '100%', borderRadius: 8, background: '#000', maxHeight: 320 }} />
               )}
               <div style={{ fontSize: 12, color: '#8b949e', marginTop: 6 }}>
                 {activeSession?.file_name || file?.name}
