@@ -55,15 +55,16 @@ input, textarea, select, button { font-family: inherit; }
 .sidebar-top { padding: 20px 18px 16px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .sidebar-top img { height: 24px; width: auto; object-fit: contain; display: block; margin-left: -2px; }
 .sidebar-sub { font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-size: 13px; color: var(--flame); letter-spacing: 0; text-transform: none; line-height: 1; padding-left: 2px; }
-.sidebar-section { padding: 14px 12px 4px 18px; font-size: 9px; font-weight: 600; letter-spacing: 2px; color: var(--muted2); text-transform: uppercase; }
+.sidebar-section { padding: 16px 12px 4px 18px; font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-weight: 400; font-size: 15px; letter-spacing: -0.005em; color: var(--muted); text-transform: none; }
+.sidebar-section:first-child { padding-top: 12px; }
 .side-nav { display: flex; flex-direction: column; padding: 4px 10px 12px; gap: 1px; flex: 1; }
 .side-item { padding: 6px 12px; font-family: inherit; font-size: 12.5px; font-weight: 500; letter-spacing: 0; color: var(--muted); cursor: pointer; border: none; background: none; text-align: left; border-radius: 4px; transition: color .12s, background .12s; display: flex; justify-content: space-between; align-items: center; position: relative; line-height: 1.3; }
 .side-item:hover { color: var(--text); background: var(--surface2); }
 .side-item.on { color: var(--text); background: var(--flame-dim); font-weight: 600; }
 .side-item.on::before { content: ''; position: absolute; left: -10px; top: 6px; bottom: 6px; width: 2px; background: var(--flame); border-radius: 0 2px 2px 0; }
 .side-item:disabled { opacity: 0.35; cursor: not-allowed; }
-.side-item .count { font-size: 10px; font-weight: 600; color: var(--muted2); background: var(--bg); padding: 1px 7px; border-radius: 9px; letter-spacing: 0; }
-.side-item.on .count { color: var(--flame); background: var(--bg); }
+.side-item .count { font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-weight: 400; font-size: 14px; line-height: 1; color: var(--muted2); background: none; padding: 0; border-radius: 0; letter-spacing: 0; }
+.side-item.on .count { color: var(--flame); background: none; }
 .sidebar-foot { padding: 10px 16px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
 .sidebar-foot .acct-lbl { font-size: 9px; color: var(--muted2); letter-spacing: 1.5px; text-transform: uppercase; }
 .main-panel { flex: 1; min-width: 0; overflow-x: auto; }
