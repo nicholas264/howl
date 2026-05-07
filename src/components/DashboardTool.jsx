@@ -130,6 +130,22 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
     loadCreativeTable(creativeWindowDays);
   }, [view, creativeWindowDays, loadCreativeTable]);
 
+  const [creativeInitMsg, setCreativeInitMsg] = useState('');
+  const [creativeIniting, setCreativeIniting] = useState(false);
+  const initCreativeTables = useCallback(async () => {
+    setCreativeIniting(true); setCreativeInitMsg('');
+    try {
+      const r = await fetch('/api/db/schema', { method: 'POST' });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || 'Schema init failed');
+      setCreativeInitMsg('Tables ready. Click Sync from Meta to pull data.');
+      setCreativeTableError('');
+      await loadCreativeTable(creativeWindowDays);
+    } catch (err) {
+      setCreativeInitMsg(`Init failed: ${err.message}`);
+    } finally { setCreativeIniting(false); }
+  }, [creativeWindowDays, loadCreativeTable]);
+
   const syncCreativeAnalytics = useCallback(async () => {
     setCreativeSyncing(true); setCreativeSyncMsg('');
     try {
@@ -646,7 +662,21 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                 {creativeSyncMsg}
               </div>
             )}
-            {creativeTableError && <div style={{ ...S.err, marginBottom: 10 }}>{creativeTableError}</div>}
+            {creativeTableError && (
+              <div style={{ ...S.err, marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <span>{creativeTableError}</span>
+                {/relation .* does not exist/i.test(creativeTableError) && (
+                  <button onClick={initCreativeTables} disabled={creativeIniting} style={S.ghostBtn}>
+                    {creativeIniting ? 'Initializing…' : 'Initialize tables'}
+                  </button>
+                )}
+              </div>
+            )}
+            {creativeInitMsg && (
+              <div style={{ fontSize: 10, color: creativeInitMsg.startsWith('Init failed') ? '#f85149' : '#3fb950', marginBottom: 10 }}>
+                {creativeInitMsg}
+              </div>
+            )}
 
             {creativeTableLoading && !creativeTable && (
               <div style={{ fontSize: 11, color: '#6e7681', padding: '20px 0' }}>Loading…</div>
