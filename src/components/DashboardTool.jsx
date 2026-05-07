@@ -715,15 +715,15 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
             )}
 
             {groups.length > 0 && (
-              <div style={{ overflowX: 'auto', marginTop: 4 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, minWidth: 1000 }}>
+              <div style={{ marginTop: 4 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10.5, tableLayout: 'auto' }}>
                   <thead>
                     <tr style={{ color: '#6e7681', fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase' }}>
                       {COLS.map(c => (
                         <th key={c.key}
                             onClick={() => c.sortable && sortClick(c.key)}
                             style={{
-                              textAlign: c.align, padding: '8px 10px',
+                              textAlign: c.align, padding: '7px 6px',
                               cursor: c.sortable ? 'pointer' : 'default',
                               borderBottom: '1px solid #2a3441',
                               userSelect: 'none',
@@ -743,14 +743,14 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                         <React.Fragment key={g.groupKey}>
                           <tr onClick={() => toggleCreativeRow(g.groupKey)}
                               style={{ borderTop: '1px solid #2a3441', cursor: 'pointer', background: isOpen ? 'rgba(220,68,10,0.04)' : 'transparent' }}>
-                            <td style={{ padding: '8px 10px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <td style={{ padding: '7px 6px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                 {g.thumbnailUrl
-                                  ? <img src={g.thumbnailUrl} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 4, flexShrink: 0, background: '#1c2330' }} onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
-                                  : <div style={{ width: 36, height: 36, background: '#1c2330', borderRadius: 4, flexShrink: 0 }} />
+                                  ? <img src={g.thumbnailUrl} alt="" style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 4, flexShrink: 0, background: '#1c2330' }} onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
+                                  : <div style={{ width: 32, height: 32, background: '#1c2330', borderRadius: 4, flexShrink: 0 }} />
                                 }
                                 <div style={{ minWidth: 0 }}>
-                                  <div style={{ color: '#f0f4f8', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{g.name || '(unnamed)'}</div>
+                                  <div style={{ color: '#f0f4f8', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{g.name || '(unnamed)'}</div>
                                   <div style={{ fontSize: 9, color: '#6e7681', letterSpacing: 1, textTransform: 'uppercase' }}>{g.adCount} {g.adCount === 1 ? 'ad' : 'ads'}</div>
                                 </div>
                               </div>
@@ -760,7 +760,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                               const bg = c.heat ? heatColor(c.key, v) : null;
                               return (
                                 <td key={c.key} style={{
-                                  padding: '8px 10px', textAlign: c.align,
+                                  padding: '7px 6px', textAlign: c.align,
                                   background: bg || 'transparent',
                                   color: '#c9d1d9', whiteSpace: 'nowrap',
                                   fontWeight: c.kind === 'money' || c.kind === 'x' ? 600 : 400,
