@@ -916,17 +916,44 @@ export default async function handler(req, res) {
         }
 
         // 1) Walk /act_X/ads pages, upserting ad + creative metadata
-        let adsPage = `${BASE}/${adAccountId}/ads?fields=id,name,status,adset_id,campaign_id,created_time,creative{id,video_id,image_hash,thumbnail_url,object_story_spec}&limit=200&access_token=${accessToken}`;
+        let adsPage = `${BASE}/${adAccountId}/ads?fields=id,name,status,adset_id,campaign_id,created_time,creative{id,video_id,image_hash,thumbnail_url,object_story_spec,asset_feed_spec,effective_object_story_id}&limit=200&access_token=${accessToken}`;
         let adsUpserted = 0;
         const adIds = [];
+        // Resolve video_id / image_hash from any of the places Meta hides them.
+        // Direct fields work for simple link ads; page-post / dynamic ads bury
+        // them in object_story_spec or asset_feed_spec.
+        const resolveCreativeIds = (creative) => {
+          let videoId = creative.video_id || null;
+          let imageHash = creative.image_hash || null;
+          const oss = creative.object_story_spec || {};
+          if (!videoId && oss.video_data?.video_id) videoId = oss.video_data.video_id;
+          if (!imageHash && oss.link_data?.image_hash) imageHash = oss.link_data.image_hash;
+          if (!imageHash && oss.photo_data?.image_hash) imageHash = oss.photo_data.image_hash;
+          // Carousel: link_data.child_attachments[].video_id / image_hash — first child as the group key.
+          if (!videoId && Array.isArray(oss.link_data?.child_attachments)) {
+            for (const c of oss.link_data.child_attachments) {
+              if (c.video_id) { videoId = c.video_id; break; }
+            }
+          }
+          if (!imageHash && Array.isArray(oss.link_data?.child_attachments)) {
+            for (const c of oss.link_data.child_attachments) {
+              if (c.image_hash) { imageHash = c.image_hash; break; }
+            }
+          }
+          // Dynamic / Advantage+ creative: asset_feed_spec.videos[] / images[]
+          const afs = creative.asset_feed_spec || {};
+          if (!videoId && Array.isArray(afs.videos) && afs.videos[0]?.video_id) videoId = afs.videos[0].video_id;
+          if (!imageHash && Array.isArray(afs.images) && afs.images[0]?.hash) imageHash = afs.images[0].hash;
+          return { videoId, imageHash };
+        };
+
         for (let pageGuard = 0; pageGuard < 50 && adsPage; pageGuard++) {
           const r = await fetch(adsPage);
           const d = await r.json();
           if (d.error) return res.status(400).json({ error: d.error.message, step: 'list_ads' });
           for (const ad of (d.data || [])) {
             const creative = ad.creative || {};
-            const videoId = creative.video_id || null;
-            const imageHash = creative.image_hash || null;
+            const { videoId, imageHash } = resolveCreativeIds(creative);
             const groupKey = videoId || imageHash || ad.id;
             const thumb = creative.thumbnail_url || null;
             await sql`
