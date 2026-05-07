@@ -960,7 +960,7 @@ export default async function handler(req, res) {
         const fields = [
           'ad_id', 'date_start', 'spend', 'impressions', 'clicks', 'unique_inline_link_clicks',
           'actions', 'action_values',
-          'video_3_sec_watched_actions', 'video_thruplay_watched_actions', 'video_avg_time_watched_actions',
+          'video_thruplay_watched_actions',
         ].join(',');
 
         const PURCHASE_TYPES = ['omni_purchase', 'offsite_conversion.fb_pixel_purchase', 'purchase', 'web_in_store_purchase'];
@@ -984,13 +984,20 @@ export default async function handler(req, res) {
           const r = await fetch(insightsPage);
           const d = await r.json();
           if (d.error) return res.status(400).json({ error: d.error.message, step: 'insights' });
+          // Pull a specific action_type from the actions[] array (e.g. video_view = 3-sec views).
+          const pickActionType = (arr, type) => {
+            if (!Array.isArray(arr)) return 0;
+            const hit = arr.find(a => a.action_type === type);
+            return hit ? parseFloat(hit.value || 0) : 0;
+          };
           for (const row of (d.data || [])) {
             if (!row.ad_id || !row.date_start) continue;
             const purchases = pickAction(row.actions);
             const purchaseValue = pickAction(row.action_values);
-            const v3s = pickVideoAction(row.video_3_sec_watched_actions);
+            // 3-sec video views moved into actions[] under action_type 'video_view' in newer Graph versions.
+            const v3s = pickActionType(row.actions, 'video_view');
             const vThru = pickVideoAction(row.video_thruplay_watched_actions);
-            const vAvg = pickVideoAction(row.video_avg_time_watched_actions);
+            const vAvg = 0;
             await sql`
               INSERT INTO creative_insights_daily
                 (ad_id, date, spend, impressions, clicks, unique_link_clicks, purchases, purchase_value, video_3s_views, video_thruplays, video_avg_watch, synced_at)
