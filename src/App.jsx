@@ -17,6 +17,7 @@ import LaunchLogTool from "./components/LaunchLogTool";
 import UgcInboxTool from "./components/UgcInboxTool";
 import UgcEditorTool from "./components/UgcEditorTool";
 import GalleryTab from "./components/GalleryTab";
+import FromWinnersTool from "./components/FromWinnersTool";
 import { useDriveAuth } from "./hooks/useDriveAuth";
 import { cartGetAll, cartPut, cartDelete } from "./utils/cartDb";
 import "./styles.css";
@@ -184,6 +185,7 @@ export default function HowlAdEngine() {
     ]},
     { group: 'Generate', items: [
       { key: 'config', label: 'Configure' },
+      { key: 'from-winners', label: 'From Winners' },
       { key: 'results', label: 'Results', disabled: variations.length === 0, count: variations.length || null },
     ]},
     { group: 'Create', items: [
@@ -276,6 +278,7 @@ export default function HowlAdEngine() {
         />
       )}
 
+      {activeTab === "from-winners" && <FromWinnersTool setActiveTab={setActiveTab} setVariations={setVariations} />}
       {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} driveAuth={driveAuth} onAddToCart={addToCart} />}
       {activeTab === "callout" && <CalloutAdTool onAddToCart={addToCart} />}
       {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} onAddToCart={addToCart} />}

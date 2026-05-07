@@ -133,6 +133,29 @@ export default async function handler(req, res) {
     `;
     await sql`CREATE INDEX IF NOT EXISTS idx_creative_insights_date ON creative_insights_daily(date DESC)`;
 
+    // Per-creative AI analysis ("Creative DNA"). One row per group_key.
+    // Populated by the analyze_creative_group action: Whisper for video transcript,
+    // Claude vision for visual + structural analysis, blended with the perf snapshot
+    // at analysis time. Read by the From Winners generation tab.
+    await sql`
+      CREATE TABLE IF NOT EXISTS creative_analysis (
+        group_key             TEXT PRIMARY KEY,
+        asset_kind            TEXT,
+        transcript            TEXT,
+        hook_text_verbatim    TEXT,
+        hook_type             TEXT,
+        format                TEXT,
+        angle                 TEXT,
+        talent_description    TEXT,
+        visual_summary        TEXT,
+        why_it_worked         TEXT,
+        performance_snapshot  JSONB,
+        model                 TEXT,
+        generated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_creative_analysis_generated_at ON creative_analysis(generated_at DESC)`;
+
     return res.json({ ok: true });
   } catch (err) {
     return res.status(500).json({ error: err.message });

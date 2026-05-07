@@ -161,6 +161,54 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
     finally { setCreativeSyncing(false); }
   }, [creativeWindowDays, loadCreativeTable]);
 
+  // Creative DNA — per-group AI analysis. Drawer shows on demand.
+  const [analyzingGroup, setAnalyzingGroup] = useState(null);   // groupKey currently being analyzed
+  const [analysisDrawer, setAnalysisDrawer] = useState(null);   // { groupKey, name, analysis, loading, error }
+  const openAnalysis = useCallback(async (groupKey, name) => {
+    setAnalysisDrawer({ groupKey, name, analysis: null, loading: true, error: '' });
+    try {
+      const r = await fetch('/api/meta', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_creative_analysis', groupKey }),
+      });
+      const d = await r.json();
+      setAnalysisDrawer({ groupKey, name, analysis: d.analysis, loading: false, error: d.error || '' });
+    } catch (err) {
+      setAnalysisDrawer({ groupKey, name, analysis: null, loading: false, error: err.message });
+    }
+  }, []);
+  const runAnalysis = useCallback(async (groupKey, name) => {
+    setAnalyzingGroup(groupKey);
+    setAnalysisDrawer({ groupKey, name, analysis: null, loading: true, error: '' });
+    try {
+      const r = await fetch('/api/meta', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'analyze_creative_group', groupKey }),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      // Reshape API response to DB row shape so the drawer renders the same way for fresh + cached analyses.
+      const a = d.analysis;
+      setAnalysisDrawer({
+        groupKey, name, loading: false, error: '',
+        analysis: {
+          group_key: a.groupKey, asset_kind: a.assetKind, transcript: a.transcript,
+          hook_text_verbatim: a.hookTextVerbatim, hook_type: a.hookType,
+          format: a.format, angle: a.angle, talent_description: a.talentDescription,
+          visual_summary: a.visualSummary, why_it_worked: a.whyItWorked,
+          performance_snapshot: a.performance, generated_at: a.generatedAt,
+        },
+      });
+      // Reflect the new analyzed status on the row without a full refetch.
+      setCreativeTable(prev => prev ? {
+        ...prev,
+        groups: prev.groups.map(g => g.groupKey === groupKey ? { ...g, isAnalyzed: true } : g),
+      } : prev);
+    } catch (err) {
+      setAnalysisDrawer({ groupKey, name, analysis: null, loading: false, error: err.message });
+    } finally { setAnalyzingGroup(null); }
+  }, []);
+
   const toggleCreativeRow = useCallback(async (groupKey) => {
     setCreativeExpanded(prev => {
       if (prev[groupKey]?.ads) {
@@ -581,6 +629,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           { key: 'hookRate',        label: 'Hook rate',    align: 'right', sortable: true,  kind: 'pct',   heat: 'high' },
           { key: 'holdRate',        label: 'Hold rate',    align: 'right', sortable: true,  kind: 'pct',   heat: 'high' },
           { key: 'ctr',             label: 'CTR',          align: 'right', sortable: true,  kind: 'pct',   heat: 'high' },
+          { key: '__analyze',       label: '',             align: 'right', sortable: false, kind: 'action' },
         ];
 
         // Pull CFO assumptions for per-creative contribution profit.
@@ -756,6 +805,28 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                               </div>
                             </td>
                             {COLS.slice(1).map(c => {
+                              if (c.kind === 'action') {
+                                const isAnalyzing = analyzingGroup === g.groupKey;
+                                const handler = (e) => {
+                                  e.stopPropagation();
+                                  if (isAnalyzing) return;
+                                  if (g.isAnalyzed) openAnalysis(g.groupKey, g.name);
+                                  else runAnalysis(g.groupKey, g.name);
+                                };
+                                return (
+                                  <td key={c.key} style={{ padding: '7px 6px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                    <button onClick={handler} disabled={isAnalyzing} style={{
+                                      padding: '4px 9px', fontSize: 9, letterSpacing: 1.2, textTransform: 'uppercase',
+                                      fontFamily: 'inherit', borderRadius: 3, cursor: isAnalyzing ? 'wait' : 'pointer',
+                                      background: g.isAnalyzed ? 'rgba(63,185,80,0.12)' : 'rgba(220,68,10,0.12)',
+                                      border: `1px solid ${g.isAnalyzed ? 'rgba(63,185,80,0.5)' : 'rgba(220,68,10,0.5)'}`,
+                                      color: g.isAnalyzed ? '#3fb950' : '#DC440A',
+                                    }}>
+                                      {isAnalyzing ? '…' : (g.isAnalyzed ? 'View DNA' : 'Analyze')}
+                                    </button>
+                                  </td>
+                                );
+                              }
                               const v = g[c.key];
                               const bg = c.heat ? heatColor(c.key, v) : null;
                               return (
@@ -1006,6 +1077,103 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
       {view === 'creative' && launchesError && <div style={{ ...S.err, marginBottom: 20 }}>Launch log: {launchesError}</div>}
       {view === 'creative' && (!launches || launches.length === 0) && !launchesError && (
         <div style={{ ...S.card, color: '#8b949e', fontSize: 12 }}>No launches logged yet. Push an ad via UGC Inbox or Publish to populate this view.</div>
+      )}
+
+      {/* Creative DNA drawer — overlay on top of Creative Analytics */}
+      {analysisDrawer && (
+        <div onClick={() => setAnalysisDrawer(null)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 50,
+          display: 'flex', justifyContent: 'flex-end',
+        }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            width: 'min(620px, 100%)', height: '100%', overflowY: 'auto',
+            background: '#0d1117', borderLeft: '1px solid #2a3441', padding: '24px 28px',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
+              <div>
+                <div style={{ fontSize: 9, letterSpacing: 2, color: '#6e7681', textTransform: 'uppercase', marginBottom: 6 }}>Creative DNA</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#f0f4f8', maxWidth: 460 }}>{analysisDrawer.name || '(unnamed)'}</div>
+              </div>
+              <button onClick={() => setAnalysisDrawer(null)} style={{
+                padding: '6px 10px', fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase',
+                background: 'none', border: '1px solid #2a3441', color: '#8b949e',
+                fontFamily: 'inherit', borderRadius: 3, cursor: 'pointer',
+              }}>Close</button>
+            </div>
+
+            {analysisDrawer.loading && (
+              <div style={{ fontSize: 11, color: '#8b949e', padding: '20px 0' }}>
+                {analyzingGroup === analysisDrawer.groupKey
+                  ? 'Fetching asset, transcribing, and analyzing… This takes 30–90 seconds.'
+                  : 'Loading…'}
+              </div>
+            )}
+            {analysisDrawer.error && (
+              <div style={{ ...S.err, marginBottom: 12 }}>{analysisDrawer.error}</div>
+            )}
+
+            {!analysisDrawer.loading && !analysisDrawer.analysis && !analysisDrawer.error && (
+              <div style={{ fontSize: 11, color: '#8b949e', padding: '14px 0' }}>
+                Not analyzed yet.{' '}
+                <button onClick={() => runAnalysis(analysisDrawer.groupKey, analysisDrawer.name)} style={S.ghostBtn}>
+                  Analyze now
+                </button>
+              </div>
+            )}
+
+            {analysisDrawer.analysis && (() => {
+              const a = analysisDrawer.analysis;
+              const Field = ({ label, value }) => value ? (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 9, letterSpacing: 2, color: '#6e7681', textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
+                  <div style={{ fontSize: 12.5, color: '#f0f4f8', lineHeight: 1.55 }}>{value}</div>
+                </div>
+              ) : null;
+              const Pill = ({ label, value }) => value ? (
+                <span style={{
+                  display: 'inline-block', padding: '4px 9px', fontSize: 9.5, letterSpacing: 1.2, textTransform: 'uppercase',
+                  background: 'rgba(220,68,10,0.1)', border: '1px solid rgba(220,68,10,0.4)', color: '#DC440A',
+                  borderRadius: 3, marginRight: 6, marginBottom: 6, fontWeight: 600,
+                }}>{label}: {value}</span>
+              ) : null;
+
+              return (
+                <>
+                  <div style={{ marginBottom: 18 }}>
+                    <Pill label="Hook" value={a.hook_type} />
+                    <Pill label="Format" value={a.format} />
+                    <Pill label="Angle" value={a.angle} />
+                  </div>
+
+                  <Field label="Hook (verbatim)" value={a.hook_text_verbatim ? `"${a.hook_text_verbatim}"` : null} />
+                  <Field label="Why it worked" value={a.why_it_worked} />
+                  <Field label="Visual summary" value={a.visual_summary} />
+                  <Field label="Talent" value={a.talent_description} />
+
+                  {a.transcript && (
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 9, letterSpacing: 2, color: '#6e7681', textTransform: 'uppercase', marginBottom: 4 }}>Transcript</div>
+                      <div style={{ fontSize: 11.5, color: '#c9d1d9', lineHeight: 1.55, padding: 12, background: '#1c2330', borderRadius: 4, whiteSpace: 'pre-wrap' }}>
+                        {a.transcript}
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid #2a3441', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: 9, color: '#6e7681', letterSpacing: 1 }}>
+                      {a.generated_at ? `Analyzed ${new Date(a.generated_at).toLocaleString()}` : ''}
+                    </div>
+                    <button onClick={() => runAnalysis(analysisDrawer.groupKey, analysisDrawer.name)}
+                            disabled={analyzingGroup === analysisDrawer.groupKey}
+                            style={S.ghostBtn}>
+                      {analyzingGroup === analysisDrawer.groupKey ? 'Re-analyzing…' : 'Re-analyze'}
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
       )}
 
       {shopifyData?._meta?.customerScopeMissing && (
