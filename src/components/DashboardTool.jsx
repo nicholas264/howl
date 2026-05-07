@@ -2600,13 +2600,71 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
 
 function ManualTranscriptPaste({ groupKey, name, analyzing, onSubmit }) {
   const [text, setText] = React.useState("");
+  const [uploading, setUploading] = React.useState(false);
+  const [uploadErr, setUploadErr] = React.useState("");
+  const fileRef = React.useRef(null);
+
+  const onFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 24 * 1024 * 1024) {
+      setUploadErr(`File is ${(file.size / 1024 / 1024).toFixed(1)}MB. Whisper max is 25MB. Compress or trim first.`);
+      return;
+    }
+    setUploadErr("");
+    setUploading(true);
+    try {
+      const r = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": file.type || "video/mp4" },
+        body: file,
+      });
+      const data = await r.json();
+      if (data.error) throw new Error(typeof data.error === "string" ? data.error : (data.error.message || "Transcription failed"));
+      const t = (data.text || "").trim();
+      if (!t) throw new Error("Whisper returned an empty transcript.");
+      setText(t);
+      onSubmit(t);
+    } catch (err) {
+      setUploadErr(err.message);
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
   return (
     <div style={{ marginTop: 12 }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading || analyzing}
+          style={{
+            padding: "7px 14px", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700,
+            background: uploading || analyzing ? "rgba(220,68,10,0.2)" : "#DC440A",
+            border: "1px solid #DC440A", color: uploading || analyzing ? "rgba(255,255,255,0.5)" : "#fff",
+            fontFamily: "inherit", borderRadius: 3,
+            cursor: uploading || analyzing ? "not-allowed" : "pointer",
+          }}
+        >
+          {uploading ? "Transcribing..." : "Upload video file"}
+        </button>
+        <span style={{ fontSize: 10, color: "#8b949e" }}>
+          .mp4 / .mov, up to 25MB. Whisper transcribes, then re-analyzes.
+        </span>
+      </div>
+      <input ref={fileRef} type="file" accept="video/*,audio/*" onChange={onFile} style={{ display: "none" }} />
+      {uploadErr && <div style={{ fontSize: 11, color: "#f85149", marginBottom: 8 }}>{uploadErr}</div>}
+
+      <div style={{ fontSize: 9, letterSpacing: 1.5, color: "#6e7681", textTransform: "uppercase", margin: "10px 0 4px" }}>
+        Or paste script manually
+      </div>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="Paste the spoken script of this video..."
-        rows={5}
+        rows={4}
         style={{
           width: "100%", padding: "8px 10px",
           background: "#1c2330", border: "1px solid #2a3441",
@@ -2616,17 +2674,18 @@ function ManualTranscriptPaste({ groupKey, name, analyzing, onSubmit }) {
       />
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
         <button
+          type="button"
           onClick={() => text.trim() && onSubmit(text.trim())}
-          disabled={!text.trim() || analyzing}
+          disabled={!text.trim() || analyzing || uploading}
           style={{
             padding: "6px 14px", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700,
-            background: text.trim() && !analyzing ? "#DC440A" : "rgba(220,68,10,0.2)",
-            border: "1px solid #DC440A", color: text.trim() && !analyzing ? "#fff" : "rgba(255,255,255,0.5)",
+            background: text.trim() && !analyzing && !uploading ? "rgba(220,68,10,0.15)" : "rgba(220,68,10,0.06)",
+            border: "1px solid #DC440A", color: text.trim() && !analyzing && !uploading ? "#DC440A" : "rgba(220,68,10,0.5)",
             fontFamily: "inherit", borderRadius: 3,
-            cursor: text.trim() && !analyzing ? "pointer" : "not-allowed",
+            cursor: text.trim() && !analyzing && !uploading ? "pointer" : "not-allowed",
           }}
         >
-          {analyzing ? "Re-analyzing..." : "Re-analyze with this script"}
+          {analyzing ? "Re-analyzing..." : "Re-analyze with pasted script"}
         </button>
       </div>
     </div>
