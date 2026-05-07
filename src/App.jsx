@@ -14,6 +14,7 @@ import DashboardTool from "./components/DashboardTool";
 import InventoryTool from "./components/InventoryTool";
 import WelcomeScreen from "./components/WelcomeScreen";
 import LaunchLogTool from "./components/LaunchLogTool";
+import FeedbackWidget from "./components/FeedbackWidget";
 import UgcInboxTool from "./components/UgcInboxTool";
 import UgcEditorTool from "./components/UgcEditorTool";
 import GalleryTab from "./components/GalleryTab";
@@ -305,6 +306,7 @@ export default function HowlAdEngine() {
       )}
         </main>
       </div>
+      <FeedbackWidget />
     </div>
   );
 }

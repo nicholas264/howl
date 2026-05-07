@@ -42,6 +42,7 @@ export default function LaunchLogTool() {
   const [search, setSearch] = useState('');
   const [creatorFilter, setCreatorFilter] = useState('');
   const [angleFilter, setAngleFilter] = useState('');
+  const [userFilter, setUserFilter] = useState('');
 
   const refresh = useCallback(async () => {
     setLoading(true); setError('');
@@ -58,10 +59,12 @@ export default function LaunchLogTool() {
 
   const creators = Array.from(new Set(rows.map(r => r.creator).filter(Boolean))).sort();
   const angles = Array.from(new Set(rows.map(r => r.angle_id).filter(Boolean)));
+  const users = Array.from(new Set(rows.map(r => r.launched_by_email).filter(Boolean))).sort();
 
   const filtered = rows.filter(r => {
     if (creatorFilter && r.creator !== creatorFilter) return false;
     if (angleFilter && r.angle_id !== angleFilter) return false;
+    if (userFilter && r.launched_by_email !== userFilter) return false;
     if (search) {
       const q = search.toLowerCase();
       const hay = `${r.ad_name || ''} ${r.headline || ''} ${r.primary_text || ''} ${r.creator || ''}`.toLowerCase();
@@ -121,6 +124,10 @@ export default function LaunchLogTool() {
           <option value="">All angles</option>
           {angles.map(a => <option key={a} value={a}>{angleName(a)}</option>)}
         </select>
+        <select style={S.select} value={userFilter} onChange={e => setUserFilter(e.target.value)}>
+          <option value="">All users</option>
+          {users.map(u => <option key={u} value={u}>{u}</option>)}
+        </select>
         <span style={{ fontSize: 10, color: '#6e7681', letterSpacing: 1.5 }}>
           {filtered.length} of {rows.length}
         </span>
@@ -142,6 +149,7 @@ export default function LaunchLogTool() {
               <th style={S.th}>When</th>
               <th style={S.th}>Ad</th>
               <th style={S.th}>Creator</th>
+              <th style={S.th}>Launched by</th>
               <th style={S.th}>Product / Angle</th>
               <th style={S.th}>Copy</th>
               <th style={S.th}>Meta</th>
@@ -157,6 +165,9 @@ export default function LaunchLogTool() {
                 </td>
                 <td style={S.td}>
                   {r.creator && <span style={S.creatorPill}>{r.creator}</span>}
+                </td>
+                <td style={{ ...S.td, fontSize: 10, color: '#8b949e' }}>
+                  {r.launched_by_email || <span style={{ color: '#6e7681' }}>—</span>}
                 </td>
                 <td style={{ ...S.td, fontSize: 10, color: '#8b949e' }}>
                   <div>{productName(r.product_id)}</div>

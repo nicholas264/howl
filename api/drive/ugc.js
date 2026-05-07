@@ -39,7 +39,8 @@ async function ensureFolder(token, parentId, name) {
 }
 
 export default async function handler(req, res) {
-  if (!(await requireAuth(req, res))) return;
+  const auth = await requireAuth(req, res);
+  if (!auth) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const rootId = process.env.UGC_INBOX_FOLDER_ID;
@@ -253,6 +254,11 @@ export default async function handler(req, res) {
         const stepLabel = (s) => role ? `${s}_${role}` : s;
         emit({ step: stepLabel('drive_download'), status: 'start' });
         const fmeta = await driveFetch(token, `/files/${fid}?fields=name,mimeType,parents&supportsAllDrives=true`);
+        if ((fmeta.name || '').includes('__LAUNCHED__')) {
+          const e = new Error(`Already launched (file renamed by another user). Refresh the inbox.`);
+          e.alreadyLaunched = true;
+          throw e;
+        }
         const dl = await fetch(`${DRIVE}/files/${fid}?alt=media&supportsAllDrives=true`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -449,9 +455,9 @@ export default async function handler(req, res) {
               const sql = neon(process.env.DATABASE_URL);
               await sql`
                 INSERT INTO launch_history
-                  (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type)
+                  (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email)
                 VALUES
-                  (${adData.id}, ${adsetId}, ${campaignId || null}, ${pair.feedFileId}, ${feed.fileMeta.name + ' + ' + story.fileMeta.name}, ${creator || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${feed.mimeType + ' (paired)'})
+                  (${adData.id}, ${adsetId}, ${campaignId || null}, ${pair.feedFileId}, ${feed.fileMeta.name + ' + ' + story.fileMeta.name}, ${creator || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${feed.mimeType + ' (paired)'}, ${auth.userId}, ${auth.email || null})
               `;
               emit({ step: 'db_log', status: 'done' });
             } else {
@@ -472,6 +478,9 @@ export default async function handler(req, res) {
       // 1. Fetch bytes from Drive
       emit({ step: 'drive_download', status: 'start' });
       const fileMeta = await driveFetch(token, `/files/${fileId}?fields=name,mimeType,parents&supportsAllDrives=true`);
+      if ((fileMeta.name || '').includes('__LAUNCHED__')) {
+        return fail('drive_download', 'Already launched (file renamed by another user). Refresh the inbox.');
+      }
       const dlRes = await fetch(`${DRIVE}/files/${fileId}?alt=media&supportsAllDrives=true`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -654,9 +663,9 @@ export default async function handler(req, res) {
           const sql = neon(process.env.DATABASE_URL);
           await sql`
             INSERT INTO launch_history
-              (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type)
+              (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email)
             VALUES
-              (${adData.id}, ${adsetId}, ${campaignId || null}, ${fileId}, ${fileMeta.name}, ${creator || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${mimeType})
+              (${adData.id}, ${adsetId}, ${campaignId || null}, ${fileId}, ${fileMeta.name}, ${creator || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${mimeType}, ${auth.userId}, ${auth.email || null})
           `;
           emit({ step: 'db_log', status: 'done' });
         } else {

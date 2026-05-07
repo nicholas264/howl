@@ -6,9 +6,9 @@ async function logLaunch(row) {
     const sql = neon(process.env.DATABASE_URL);
     await sql`
       INSERT INTO launch_history
-        (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type)
+        (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email)
       VALUES
-        (${row.ad_id}, ${row.adset_id || null}, ${row.campaign_id || null}, ${row.drive_file_id || null}, ${row.drive_file_name || null}, ${row.creator || null}, ${row.product_id || null}, ${row.angle_id || null}, ${row.ad_name || null}, ${row.headline || null}, ${row.primary_text || null}, ${row.dest_url || null}, ${row.mime_type || null})
+        (${row.ad_id}, ${row.adset_id || null}, ${row.campaign_id || null}, ${row.drive_file_id || null}, ${row.drive_file_name || null}, ${row.creator || null}, ${row.product_id || null}, ${row.angle_id || null}, ${row.ad_name || null}, ${row.headline || null}, ${row.primary_text || null}, ${row.dest_url || null}, ${row.mime_type || null}, ${row.launched_by_user_id || null}, ${row.launched_by_email || null})
     `;
   } catch (err) {
     console.error('launch_history insert failed:', err.message);
@@ -59,7 +59,9 @@ export const config = {
 import { requireAuth } from './_lib/auth.js';
 
 export default async function handler(req, res) {
-  if (!(await requireAuth(req, res))) return;
+  const auth = await requireAuth(req, res);
+  if (!auth) return;
+  const actor = { launched_by_user_id: auth.userId, launched_by_email: auth.email };
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -462,6 +464,7 @@ export default async function handler(req, res) {
           dest_url: destUrl,
           mime_type: mimeType || 'image',
           creator: req.body.creator || 'Static Builder',
+          ...actor,
         });
         return res.json({ success: true, adId: d.id });
       }
@@ -549,6 +552,7 @@ export default async function handler(req, res) {
           dest_url: destUrl,
           mime_type: preUploadedVideoId ? 'video/mp4' : 'image',
           creator: req.body.creator || 'Static Builder',
+          ...actor,
         });
 
         return res.json({ success: true, adId: adData.id });
@@ -627,6 +631,7 @@ export default async function handler(req, res) {
           dest_url: destUrl,
           mime_type: 'carousel',
           creator: req.body.creator || 'Static Builder',
+          ...actor,
         });
 
         return res.json({ success: true, adId: adData.id });
@@ -830,6 +835,7 @@ export default async function handler(req, res) {
             product_id: item.product || null,
             mime_type: item.type || 'static',
             creator: item.creator || req.body.creator || 'Static Builder',
+            ...actor,
           });
 
           results.push({ item: item.name, adsetId: adsetData.id, adId: adData.id, success: true });

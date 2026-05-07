@@ -1,9 +1,9 @@
 // One-shot endpoint to ensure schema exists. Idempotent — safe to call repeatedly.
 import { neon } from '@neondatabase/serverless';
-import { requireAuth } from '../_lib/auth.js';
+import { requireAdmin } from '../_lib/auth.js';
 
 export default async function handler(req, res) {
-  if (!(await requireAuth(req, res))) return;
+  if (!(await requireAdmin(req, res))) return;
   if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).end();
 
   const sql = neon(process.env.DATABASE_URL);
@@ -155,6 +155,28 @@ export default async function handler(req, res) {
       )
     `;
     await sql`CREATE INDEX IF NOT EXISTS idx_creative_analysis_generated_at ON creative_analysis(generated_at DESC)`;
+
+    // Attribution columns on launch_history (idempotent).
+    await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS launched_by_user_id TEXT`;
+    await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS launched_by_email TEXT`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_launch_history_launched_by ON launch_history(launched_by_user_id)`;
+
+    // Internal bug/feature/edge-case reports submitted from the in-app widget.
+    await sql`
+      CREATE TABLE IF NOT EXISTS feedback (
+        id          BIGSERIAL PRIMARY KEY,
+        user_id     TEXT,
+        email       TEXT,
+        kind        TEXT NOT NULL,
+        message     TEXT NOT NULL,
+        page_url    TEXT,
+        user_agent  TEXT,
+        status      TEXT NOT NULL DEFAULT 'open',
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)`;
 
     return res.json({ ok: true });
   } catch (err) {
