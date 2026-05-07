@@ -916,7 +916,19 @@ export default async function handler(req, res) {
         }
 
         // 1) Walk /act_X/ads pages, upserting ad + creative metadata
-        let adsPage = `${BASE}/${adAccountId}/ads?fields=id,name,status,adset_id,campaign_id,created_time,creative{id,video_id,image_hash,thumbnail_url,object_story_spec,asset_feed_spec,effective_object_story_id}&limit=200&access_token=${accessToken}`;
+        // Tight subfield expansion to stay under Meta's per-page byte budget.
+        // object_story_spec / asset_feed_spec full payloads are large; we only
+        // need the IDs / hashes that anchor a creative group.
+        const creativeSubfields = [
+          'id',
+          'video_id',
+          'image_hash',
+          'thumbnail_url',
+          'effective_object_story_id',
+          'object_story_spec{video_data{video_id},link_data{image_hash,child_attachments{video_id,image_hash}},photo_data{image_hash}}',
+          'asset_feed_spec{videos{video_id},images{hash}}',
+        ].join(',');
+        let adsPage = `${BASE}/${adAccountId}/ads?fields=id,name,status,adset_id,campaign_id,created_time,creative{${creativeSubfields}}&limit=50&access_token=${accessToken}`;
         let adsUpserted = 0;
         const adIds = [];
         // Resolve video_id / image_hash from any of the places Meta hides them.
