@@ -573,6 +573,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           { key: 'firstLaunchDate', label: 'Launch date',  align: 'left',  sortable: true,  kind: 'date' },
           { key: 'spend',           label: 'Spend',        align: 'right', sortable: true,  kind: 'money', heat: 'high' },
           { key: 'purchaseValue',   label: 'Purchase value', align: 'right', sortable: true, kind: 'money', heat: 'high' },
+          { key: 'contribProfit',   label: 'Contrib profit', align: 'right', sortable: true, kind: 'money', heat: 'high' },
+          { key: 'contribMargin',   label: 'Contrib margin', align: 'right', sortable: true, kind: 'pct',   heat: 'high' },
           { key: 'roas',            label: 'ROAS',         align: 'right', sortable: true,  kind: 'x',     heat: 'high' },
           { key: 'cpa',             label: 'CPA',          align: 'right', sortable: true,  kind: 'money', heat: 'low' },
           { key: 'cpc',             label: 'CPC',          align: 'right', sortable: true,  kind: 'money', heat: 'low' },
@@ -581,7 +583,27 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           { key: 'ctr',             label: 'CTR',          align: 'right', sortable: true,  kind: 'pct',   heat: 'high' },
         ];
 
-        const groups = (creativeTable?.groups || []).slice();
+        // Pull CFO assumptions for per-creative contribution profit.
+        const s = settings || {};
+        const gmPct = (s.grossMarginPct ?? 60) / 100;
+        const pfPct = (s.paymentFeePct ?? 2.9) / 100;
+        const pfFixed = s.paymentFeeFixed ?? 0.30;
+        const shipPerOrder = s.shippingCostPerOrder ?? 8;
+        const fulfillPerOrder = s.fulfillmentCostPerOrder ?? 3;
+
+        const groups = (creativeTable?.groups || []).map(g => {
+          const rev = g.purchaseValue || 0;
+          const orders = g.purchases || 0;
+          const contribProfit =
+            rev * gmPct
+            - rev * pfPct
+            - orders * pfFixed
+            - orders * shipPerOrder
+            - orders * fulfillPerOrder
+            - (g.spend || 0);
+          const contribMargin = rev > 0 ? contribProfit / rev : 0;
+          return { ...g, contribProfit, contribMargin };
+        });
         const sortKey = creativeSortKey;
         const dir = creativeSortDir === 'asc' ? 1 : -1;
         groups.sort((a, b) => {
@@ -617,7 +639,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
             if (kind === 'money' && v === 0) return '$0';
             if (v == null) return '—';
           }
-          if (kind === 'money') return `$${(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+          if (kind === 'money') {
+            const n = v || 0;
+            const sign = n < 0 ? '-' : '';
+            return `${sign}$${Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+          }
           if (kind === 'x') return `${(v || 0).toFixed(2)}x`;
           if (kind === 'pct') return `${((v || 0) * 100).toFixed(2)}%`;
           if (kind === 'date') {
