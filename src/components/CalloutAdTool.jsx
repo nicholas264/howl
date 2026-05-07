@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { toPng } from 'html-to-image';
 import { upload } from '@vercel/blob/client';
 import { useAuth } from '@clerk/clerk-react';
 import { PRODUCTS } from '../data';
@@ -65,7 +64,6 @@ const DEFAULT_CALLOUT = (heading, body, side, x, y) => ({
 // Default text X for a given side (matches the legacy side-margin layout).
 const defaultTextX = (side) => (side === 'left' ? 0.04 : 0.96);
 
-// Render the entire callout ad to a canvas — bypasses html-to-image entirely.
 async function renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts, titlePos = { x: 0.05, y: 0.04 } }) {
   const titleSize = format.w * 0.075;
   const subSize = format.w * 0.022;

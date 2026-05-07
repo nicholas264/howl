@@ -3,13 +3,9 @@ import { PRODUCTS, ANGLES } from '../data';
 import MetaTargetPicker from './MetaTargetPicker';
 import CopyLibrary, { useCopyLibrary } from './CopyLibrary';
 import LaunchTimeline from './LaunchTimeline';
+import { ls, lsSet } from '../utils/localStorage';
 
 const LS_CONFIG = 'howl_ugc_config';
-
-function ls(key, fallback) {
-  try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; }
-}
-function lsSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
 
 function todayISO() {
   const d = new Date();

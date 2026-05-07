@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useLayoutEffect, useEffect } from 'react';
 import JSZip from 'jszip';
 import { COLORS, FONTS, canvasFont, cssLetterSpacing, loadBrandFonts } from '../brand';
+import { ls, lsSet } from '../utils/localStorage';
 
 const LS_IMAGES  = 'howl_saved_images';
 const LS_PRESETS = 'howl_style_presets';
@@ -26,11 +27,6 @@ const TEXT_COLORS = [
   { id: 'dark',   label: 'Dark',   value: '#f0f4f8' },
   { id: 'orange', label: 'Orange', value: COLORS.flame },
 ];
-
-function ls(key, fallback) {
-  try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; }
-}
-function lsSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
 
 function wrapText(ctx, text, maxWidth) {
   const words = text.split(' ');

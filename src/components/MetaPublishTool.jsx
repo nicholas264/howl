@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { buildSystemPrompt } from '../prompts';
 import CopyLibrary, { useCopyLibrary } from './CopyLibrary';
 import LaunchTimeline from './LaunchTimeline';
+import { ls, lsSet } from '../utils/localStorage';
 
 const PUBLISH_STEPS = [
   { key: 'meta_upload',   label: 'Upload' },
@@ -17,11 +18,6 @@ const OBJECTIVES = [
   { value: 'OUTCOME_AWARENESS', label: 'Awareness' },
   { value: 'OUTCOME_LEADS',     label: 'Leads' },
 ];
-
-function ls(key, fallback) {
-  try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; }
-}
-function lsSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
 
 const S = {
   wrap: { padding: '28px 36px', maxWidth: 1100 },
