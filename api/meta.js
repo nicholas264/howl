@@ -1171,15 +1171,28 @@ export default async function handler(req, res) {
         const isVideo = !!topAd.video_id;
         const assetKind = isVideo ? 'video' : 'image';
 
+        // Track each step's outcome for debug surfacing — opaque failures are useless.
+        const debug = { videoFieldsResolved: null, videoSourceUrl: null, videoBytes: 0, whisper: null, image: null };
+
         // Resolve a usable image URL (for Claude vision) and a video source URL (for Whisper).
         let imageUrl = topAd.thumbnail_url;
         let videoSource = null;
         if (isVideo) {
-          const r = await fetch(`${BASE}/${topAd.video_id}?fields=source,picture&access_token=${accessToken}`);
+          const r = await fetch(`${BASE}/${topAd.video_id}?fields=source,picture,format,permalink_url&access_token=${accessToken}`);
           const d = await r.json();
-          if (!d.error) {
+          if (d.error) {
+            debug.videoFieldsResolved = `meta error: ${d.error.message}`;
+          } else {
+            debug.videoFieldsResolved = Object.keys(d).join(',');
             videoSource = d.source || null;
+            if (!videoSource && Array.isArray(d.format)) {
+              // Meta's format[] sometimes carries an embed/source URL when source is restricted.
+              for (const f of d.format) {
+                if (f?.picture) imageUrl = f.picture;
+              }
+            }
             if (d.picture) imageUrl = d.picture;
+            debug.videoSourceUrl = videoSource ? 'present' : 'missing (Meta did not return a source URL — common for hosted ad videos)';
           }
         } else if (topAd.image_hash) {
           const hashesParam = encodeURIComponent(JSON.stringify([topAd.image_hash]));
@@ -1191,22 +1204,43 @@ export default async function handler(req, res) {
 
         // Whisper transcription (video only). Failures are non-fatal — analysis can proceed without transcript.
         let transcript = '';
-        if (isVideo && videoSource && process.env.OPENAI_API_KEY) {
-          try {
-            const vr = await fetch(videoSource);
-            const buf = Buffer.from(await vr.arrayBuffer());
-            const form = new FormData();
-            form.append('file', new Blob([buf], { type: 'video/mp4' }), 'video.mp4');
-            form.append('model', 'whisper-1');
-            form.append('response_format', 'text');
-            const wr = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-              body: form,
-            });
-            if (wr.ok) transcript = (await wr.text()).trim();
-          } catch (err) {
-            console.error('Whisper failed:', err.message);
+        if (isVideo) {
+          if (!process.env.OPENAI_API_KEY) {
+            debug.whisper = 'skipped: OPENAI_API_KEY missing in this environment';
+          } else if (!videoSource) {
+            debug.whisper = 'skipped: no video source URL';
+          } else {
+            try {
+              const vr = await fetch(videoSource);
+              if (!vr.ok) {
+                debug.whisper = `video fetch failed: HTTP ${vr.status}`;
+              } else {
+                const buf = Buffer.from(await vr.arrayBuffer());
+                debug.videoBytes = buf.length;
+                if (buf.length > 24 * 1024 * 1024) {
+                  debug.whisper = `skipped: video is ${(buf.length / 1024 / 1024).toFixed(1)}MB (Whisper limit 25MB)`;
+                } else {
+                  const form = new FormData();
+                  form.append('file', new Blob([buf], { type: 'video/mp4' }), 'video.mp4');
+                  form.append('model', 'whisper-1');
+                  form.append('response_format', 'text');
+                  const wr = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+                    body: form,
+                  });
+                  if (wr.ok) {
+                    transcript = (await wr.text()).trim();
+                    debug.whisper = `ok: ${transcript.length} chars`;
+                  } else {
+                    const errText = await wr.text();
+                    debug.whisper = `whisper HTTP ${wr.status}: ${errText.slice(0, 200)}`;
+                  }
+                }
+              }
+            } catch (err) {
+              debug.whisper = `exception: ${err.message}`;
+            }
           }
         }
 
@@ -1216,12 +1250,19 @@ export default async function handler(req, res) {
         if (imageUrl) {
           try {
             const ir = await fetch(imageUrl);
-            const buf = Buffer.from(await ir.arrayBuffer());
-            imageB64 = buf.toString('base64');
-            mediaType = ir.headers.get('content-type')?.split(';')[0] || 'image/jpeg';
+            if (!ir.ok) {
+              debug.image = `image fetch failed: HTTP ${ir.status}`;
+            } else {
+              const buf = Buffer.from(await ir.arrayBuffer());
+              imageB64 = buf.toString('base64');
+              mediaType = ir.headers.get('content-type')?.split(';')[0] || 'image/jpeg';
+              debug.image = `ok: ${buf.length} bytes, ${mediaType}`;
+            }
           } catch (err) {
-            console.error('Image fetch failed:', err.message);
+            debug.image = `exception: ${err.message}`;
           }
+        } else {
+          debug.image = 'no image URL';
         }
 
         const perf = {
@@ -1234,18 +1275,27 @@ export default async function handler(req, res) {
         perf.roas = perf.spend > 0 ? perf.purchaseValue / perf.spend : 0;
         perf.cpa = perf.purchases > 0 ? perf.spend / perf.purchases : null;
 
+        const haveTranscript = !!transcript;
         const systemPrompt = `You analyze HOWL Campfires Meta ads. HOWL sells smokeless propane fire pits (R1, R4 MKii, etc.) — outdoor brand, masculine voice, "burn-ban-friendly" angle is recurring.
 
-Given an ad asset (image/video frame + transcript when available) plus its performance, return ONLY a single valid JSON object with these exact fields:
+You will receive ONE still image (either a static ad, or a single thumbnail frame from a video ad) plus optionally a full transcript and performance numbers.
+
+CRITICAL RULES:
+- If a transcript is provided, the verbal hook is the FIRST sentence or two of that transcript. Quote it verbatim.
+- If NO transcript is provided, you are looking at only a thumbnail frame. You CANNOT know the spoken hook. Set "hook_text_verbatim" to null and note this clearly in why_it_worked. Do not guess the hook from the thumbnail.
+- For videos with no transcript, mark hook_type as "unknown" rather than fabricating one.
+- Never invent dialogue, on-screen text, or claims that are not visible in the image or written in the transcript.
+
+Return ONLY a single valid JSON object with these exact fields:
 
 {
-  "hook_text_verbatim": "the literal opening line spoken or shown on screen, <=140 chars",
-  "hook_type": "one of: question | stat | problem | POV | demo | testimonial | before-after | list | contrarian | founder | other",
+  "hook_text_verbatim": "the literal opening line from the transcript (<=140 chars), or null if no transcript",
+  "hook_type": "one of: question | stat | problem | POV | demo | testimonial | before-after | list | contrarian | founder | unknown | other",
   "format": "one of: ugc-talking-head | ugc-product-demo | studio-product | founder | callout-graphic | review-collage | static-image | other",
   "angle": "short label (<=6 words) for the persuasive angle, e.g. 'burn ban anywhere'",
   "talent_description": "1 sentence on who is on camera (or 'no on-camera talent' for static)",
-  "visual_summary": "2-3 sentences on what the eye sees: setting, framing, on-screen text, motion",
-  "why_it_worked": "3-5 sentences. Concrete reasoning that ties THIS creative's hook, format, angle, and talent to its performance. Avoid generic ad-school platitudes."
+  "visual_summary": "2-3 sentences on what the eye sees in the image: setting, framing, on-screen text, motion cues",
+  "why_it_worked": "3-5 sentences. Concrete reasoning that ties THIS creative's available signals (transcript if present, visual format, performance) to its results. If no transcript, acknowledge the limitation and reason from format/visual/performance only. Avoid generic ad-school platitudes."
 }
 
 No prose outside the JSON. No markdown fences.`;
@@ -1257,7 +1307,9 @@ No prose outside the JSON. No markdown fences.`;
 - ROAS: ${perf.roas.toFixed(2)}x
 ${perf.cpa != null ? `- CPA: $${perf.cpa.toFixed(2)}` : ''}
 
-${transcript ? `Transcript:\n${transcript}` : 'No transcript (static image or audio unavailable).'}
+${haveTranscript ? `Transcript (full):\n${transcript}` : (isVideo
+  ? 'NO TRANSCRIPT AVAILABLE — only the thumbnail frame is visible to you. You cannot determine the spoken hook. Follow the rule above: hook_text_verbatim must be null.'
+  : 'Static image ad, no transcript needed.')}
 
 Analyze this creative.`;
 
@@ -1328,6 +1380,7 @@ Analyze this creative.`;
             performance: perf,
             generatedAt: new Date().toISOString(),
           },
+          debug,
         });
       }
 

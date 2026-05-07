@@ -198,6 +198,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           visual_summary: a.visualSummary, why_it_worked: a.whyItWorked,
           performance_snapshot: a.performance, generated_at: a.generatedAt,
         },
+        debug: d.debug || null,
       });
       // Reflect the new analyzed status on the row without a full refetch.
       setCreativeTable(prev => prev ? {
@@ -1156,6 +1157,21 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                       <div style={{ fontSize: 11.5, color: '#c9d1d9', lineHeight: 1.55, padding: 12, background: '#1c2330', borderRadius: 4, whiteSpace: 'pre-wrap' }}>
                         {a.transcript}
                       </div>
+                    </div>
+                  )}
+
+                  {!a.transcript && a.asset_kind === 'video' && (
+                    <div style={{ marginBottom: 16, padding: 12, background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.4)', borderRadius: 4, fontSize: 11, color: '#f5a623', lineHeight: 1.55 }}>
+                      <strong>No transcript captured.</strong> Claude analyzed only the thumbnail frame, so the verbal hook could not be extracted.
+                      {analysisDrawer.debug && (
+                        <div style={{ marginTop: 10, fontSize: 10, color: '#c9d1d9', fontFamily: 'JetBrains Mono, monospace' }}>
+                          <div>video_fields: {analysisDrawer.debug.videoFieldsResolved || '—'}</div>
+                          <div>video_source: {analysisDrawer.debug.videoSourceUrl || '—'}</div>
+                          <div>video_bytes: {analysisDrawer.debug.videoBytes || 0}</div>
+                          <div>whisper: {analysisDrawer.debug.whisper || '—'}</div>
+                          <div>image: {analysisDrawer.debug.image || '—'}</div>
+                        </div>
+                      )}
                     </div>
                   )}
 
