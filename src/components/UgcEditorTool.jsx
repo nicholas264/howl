@@ -530,14 +530,14 @@ export default function UgcEditorTool({ onAddToCart }) {
                     onDoubleClick={() => seekTo(w.start)}
                     style={{
                       cursor: 'pointer',
-                      padding: '1px 3px',
-                      margin: '0 1px',
+                      padding: '1px 4px',
                       borderRadius: 3,
                       color: w.kept ? '#f0f4f8' : '#6e7681',
                       textDecoration: w.kept ? 'none' : 'line-through',
                       background: w.kept ? 'transparent' : '#1f2630',
+                      flex: '0 0 auto',
                     }}
-                    title={`${w.start.toFixed(2)}s — double-click to seek`}
+                    title={`${w.start.toFixed(2)}s · double-click to seek`}
                   >
                     {w.word}
                   </span>
@@ -633,4 +633,6 @@ const smallInput = {
 const transcriptBox = {
   background: '#0d1117', border: '1px solid #2a3441', borderRadius: 8,
   padding: 14, fontSize: 14, lineHeight: 1.8, height: 460, overflowY: 'auto',
+  display: 'flex', flexWrap: 'wrap', alignContent: 'flex-start', gap: '2px 6px',
+  wordBreak: 'break-word',
 };
