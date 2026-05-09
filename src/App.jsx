@@ -17,10 +17,10 @@ const MetaPublishTool = lazy(() => import("./components/MetaPublishTool"));
 const DashboardTool = lazy(() => import("./components/DashboardTool"));
 const InventoryTool = lazy(() => import("./components/InventoryTool"));
 const LaunchLogTool = lazy(() => import("./components/LaunchLogTool"));
-const UgcInboxTool = lazy(() => import("./components/UgcInboxTool"));
 const UgcEditorTool = lazy(() => import("./components/UgcEditorTool"));
 const GalleryTab = lazy(() => import("./components/GalleryTab"));
 const FromWinnersTool = lazy(() => import("./components/FromWinnersTool"));
+const LauncherTool = lazy(() => import("./components/LauncherTool"));
 import { useDriveAuth } from "./hooks/useDriveAuth";
 import { cartGetAll, cartPut, cartDelete } from "./utils/cartDb";
 import "./styles.css";
@@ -206,9 +206,8 @@ export default function HowlAdEngine() {
       { key: 'ugc-editor', label: 'UGC Editor' },
     ]},
     { group: 'Launch', items: [
-      { key: 'ugc', label: 'UGC Inbox', count: ugcCount || null },
+      { key: 'launcher', label: 'Launcher', count: (ugcCount + cartCount) || null },
       { key: 'gallery', label: 'Gallery', count: cartCount || null },
-      { key: 'publish', label: 'Publish', count: cartCount || null },
     ]},
     { group: 'Insights', items: [
       { key: 'creative-analytics', label: 'Creative Analytics' },
@@ -303,8 +302,17 @@ export default function HowlAdEngine() {
         {activeTab === "dashboard-forecast" && <DashboardTool setActiveTab={setActiveTab} view="forecast" />}
         {activeTab === "inventory" && <InventoryTool />}
         {activeTab === "log" && <LaunchLogTool />}
-        {activeTab === "ugc" && <UgcInboxTool />}
         {activeTab === "ugc-editor" && <UgcEditorTool onAddToCart={addToCart} />}
+        {activeTab === "launcher" && (
+          <LauncherTool
+            cart={cart}
+            onAddToCart={addToCart}
+            onUpdateCartItem={updateCartItem}
+            onRemoveCartItem={removeCartItem}
+          />
+        )}
+        {/* Legacy publish tool kept reachable at /?tab=publish for the
+            Creative Test workflow until that's folded into Launcher. */}
         {activeTab === "publish" && (
           <MetaPublishTool
             cart={cart}
