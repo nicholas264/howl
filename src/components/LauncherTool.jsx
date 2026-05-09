@@ -19,7 +19,7 @@
 // Creative Test (bulk parallel launches with cost caps) lives temporarily in
 // the legacy Publish tool until a follow-up folds it in.
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { PRODUCTS, ANGLES } from '../data';
+import { PRODUCTS } from '../data';
 import CopyLibrary, { useCopyLibrary } from './CopyLibrary';
 import LaunchTimeline from './LaunchTimeline';
 import { ls, lsSet } from '../utils/localStorage';
@@ -57,11 +57,14 @@ function todayISO() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function buildAdName({ creator, productId, angleId }) {
+function buildAdName({ creator, productId }) {
   const product = PRODUCTS.find(p => p.id === productId)?.name || productId || 'product';
-  const angle = ANGLES.find(a => a.id === angleId)?.label || angleId || 'angle';
   const c = (creator || 'creator').trim().replace(/\s+/g, '-');
-  return `HOWL | UGC | ${c} | ${product} | ${angle} | ${todayISO()}`;
+  return `HOWL | UGC | ${c} | ${product} | ${todayISO()}`;
+}
+
+function destUrlFor(productId) {
+  return PRODUCTS.find(p => p.id === productId)?.url || '';
 }
 
 const S = {
@@ -97,10 +100,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   const [config, setConfig] = useState(() => ls(LS_CONFIG, {
     pageId: import.meta.env.VITE_META_PAGE_ID || '',
     instagramUserId: import.meta.env.VITE_META_INSTAGRAM_USER_ID || '',
-    destUrl: '',
     defaultCreator: '',
     defaultProduct: PRODUCTS[0]?.id || '',
-    defaultAngle: ANGLES[0]?.id || '',
   }));
   const updateConfig = (patch) => {
     const next = { ...config, ...patch };
@@ -228,7 +229,6 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           next[id] = {
             creator: topFolder || filePrefix || config.defaultCreator,
             productId: config.defaultProduct,
-            angleId: config.defaultAngle,
             headline: '',
             primaryText: '',
           };
@@ -241,7 +241,6 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           next[id] = {
             creator: config.defaultCreator || 'Static Builder',
             productId: config.defaultProduct,
-            angleId: config.defaultAngle,
             headline: c.hook || '',
             primaryText: c.body || '',
           };
@@ -249,7 +248,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       }
       return next;
     });
-  }, [driveItems, cart, config.defaultCreator, config.defaultProduct, config.defaultAngle]);
+  }, [driveItems, cart, config.defaultCreator, config.defaultProduct]);
 
   // ── unified queue ─────────────────────────────────────────────────────
   const queue = useMemo(() => {
@@ -277,26 +276,26 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     const id = item.unifiedId;
     const m = meta[id] || {};
     if (!selectedAdsetId || selectedAdsetId === '__new__') return setGlobalError('Pick an ad set first.');
-    if (!config.destUrl.trim()) return setGlobalError('Destination URL required.');
+    const productUrl = destUrlFor(m.productId);
+    if (!productUrl) return setItemStatus(id, 'error', 'Selected product has no URL set in data/products.js');
     if (!m.creator?.trim()) return setItemStatus(id, 'error', 'Creator required');
     if (!m.headline?.trim() && !m.primaryText?.trim()) return setItemStatus(id, 'error', 'Headline or primary text required');
 
     setItemStatus(id, 'pushing', '');
     setStatuses(prev => ({ ...prev, [id]: { status: 'pushing', steps: {}, currentStep: null } }));
 
-    const adName = buildAdName({ creator: m.creator, productId: m.productId, angleId: m.angleId });
+    const adName = buildAdName({ creator: m.creator, productId: m.productId });
     const body = {
       action: 'launch_meta_ad',
       adsetId: selectedAdsetId,
       pageId: config.pageId.trim(),
       instagramUserId: (config.instagramUserId || '').trim(),
-      destUrl: config.destUrl.trim(),
+      destUrl: productUrl,
       adName,
       headline: m.headline?.trim() || '',
       primaryText: m.primaryText?.trim() || '',
       creator: m.creator.trim(),
       productId: m.productId || '',
-      angleId: m.angleId || '',
       campaignId: selectedCampaignId,
     };
     if (item.kind === 'pair') body.pair = { feedFileId: item.feed.id, storyFileId: item.story.id };
@@ -347,11 +346,12 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     const m = meta[id] || {};
     if (!selectedAdsetId || selectedAdsetId === '__new__') return setGlobalError('Pick an ad set first.');
     if (!config.pageId.trim()) return setGlobalError('Pick a Facebook Page.');
-    if (!config.destUrl.trim()) return setGlobalError('Destination URL required.');
+    const productUrl = destUrlFor(m.productId);
+    if (!productUrl) return setItemStatus(id, 'error', 'Selected product has no URL set in data/products.js');
     if (!m.headline?.trim()) return setItemStatus(id, 'error', 'Headline required');
 
     setStatuses(prev => ({ ...prev, [id]: { status: 'pushing', steps: {}, currentStep: null } }));
-    const adName = buildAdName({ creator: m.creator || 'Static Builder', productId: m.productId, angleId: m.angleId });
+    const adName = buildAdName({ creator: m.creator || 'Static Builder', productId: m.productId });
     const mimeType = item.type === 'video' ? 'video/mp4' : 'image';
 
     try {
@@ -362,7 +362,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         adName,
         headline: m.headline,
         primaryText: m.primaryText || m.headline,
-        destUrl: config.destUrl,
+        destUrl: productUrl,
         pageId: config.pageId,
         instagramUserId: (config.instagramUserId || '').trim() || undefined,
       };
@@ -389,7 +389,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
 
       // 3. Create ad
       setStep(id, 'meta_ad', 'running');
-      const ar = await fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_ad_from_creative', creativeId: cd.creativeId, adName, adsetId: selectedAdsetId, headline: m.headline, primaryText: m.primaryText || m.headline, destUrl: config.destUrl, mimeType, creator: m.creator || 'Static Builder' }) });
+      const ar = await fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_ad_from_creative', creativeId: cd.creativeId, adName, adsetId: selectedAdsetId, headline: m.headline, primaryText: m.primaryText || m.headline, destUrl: productUrl, mimeType, creator: m.creator || 'Static Builder' }) });
       const ad = await ar.json();
       if (ad.error) { setStep(id, 'meta_ad', 'error', ad.error); throw new Error(ad.error); }
       setStep(id, 'meta_ad', 'done', ad.adId);
@@ -431,10 +431,6 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           <div>
             <label style={S.label}>Instagram Account</label>
             <InstagramAccountPicker value={config.instagramUserId} onChange={(id) => updateConfig({ instagramUserId: id })} />
-          </div>
-          <div>
-            <label style={S.label}>Destination URL</label>
-            <input style={S.input} value={config.destUrl} onChange={e => updateConfig({ destUrl: e.target.value })} placeholder="https://howlcampfires.com/..." />
           </div>
           <div>
             <label style={S.label}>Default Creator</label>
@@ -590,12 +586,11 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                   <select style={S.select} value={m.productId || ''} onChange={e => updateMeta(id, { productId: e.target.value })}>
                     {PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
-                </div>
-                <div>
-                  <label style={S.label}>Angle</label>
-                  <select style={S.select} value={m.angleId || ''} onChange={e => updateMeta(id, { angleId: e.target.value })}>
-                    {ANGLES.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
-                  </select>
+                  {m.productId && (
+                    <div style={{ fontSize: 9, color: '#6e7681', marginTop: 4, wordBreak: 'break-all' }}>
+                      → {destUrlFor(m.productId) || '(no URL set)'}
+                    </div>
+                  )}
                 </div>
               </div>
               <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8 }}>
