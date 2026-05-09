@@ -1,5 +1,36 @@
 import React, { useState, useEffect, useCallback, Fragment } from 'react';
 import { PRODUCTS, ANGLES } from '../data';
+
+// Same-origin authenticated proxy for Drive thumbnails. The site sets
+// COEP: require-corp, which blocks lh3.googleusercontent.com images, so we
+// fetch via /api/drive/thumb (auth header injected by FetchInterceptor) and
+// render the bytes through an object URL.
+function DriveThumb({ fileId, alt, style, fallback }) {
+  const [src, setSrc] = useState(null);
+  const [errored, setErrored] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl = null;
+    (async () => {
+      try {
+        const r = await fetch(`/api/drive/thumb?fileId=${encodeURIComponent(fileId)}&size=320`);
+        if (!r.ok) throw new Error('thumb fetch failed');
+        const blob = await r.blob();
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSrc(objectUrl);
+      } catch {
+        if (!cancelled) setErrored(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [fileId]);
+  if (errored || !src) return fallback || null;
+  return <img src={src} alt={alt || ''} style={style} draggable={false} />;
+}
 import MetaTargetPicker from './MetaTargetPicker';
 import CopyLibrary, { useCopyLibrary } from './CopyLibrary';
 import LaunchTimeline from './LaunchTimeline';
@@ -283,29 +314,37 @@ export default function UgcInboxTool() {
               <div>
                 {file.kind === 'pair' ? (
                   <div style={{ position: 'relative', width: 140, height: 140 }}>
-                    {file.feed.thumbnailLink ? (
-                      <img src={file.feed.thumbnailLink} alt="feed" style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, objectFit: 'cover', borderRadius: 4, border: '2px solid #161b22', zIndex: 1 }} referrerPolicy="no-referrer" />
-                    ) : (
-                      <div style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, borderRadius: 4, background: '#1c2330', border: '2px solid #161b22', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6e7681', fontSize: 9, letterSpacing: 1 }}>1:1</div>
-                    )}
-                    {file.story.thumbnailLink ? (
-                      <img src={file.story.thumbnailLink} alt="story" style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, objectFit: 'cover', borderRadius: 4, border: '2px solid #161b22', zIndex: 2 }} referrerPolicy="no-referrer" />
-                    ) : (
-                      <div style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, borderRadius: 4, background: '#1c2330', border: '2px solid #161b22', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6e7681', fontSize: 9, letterSpacing: 1 }}>9:16</div>
-                    )}
+                    <DriveThumb
+                      fileId={file.feed.id}
+                      alt="feed"
+                      style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, objectFit: 'cover', borderRadius: 4, border: '2px solid #161b22', zIndex: 1 }}
+                      fallback={<div style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, borderRadius: 4, background: '#1c2330', border: '2px solid #161b22', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6e7681', fontSize: 9, letterSpacing: 1 }}>1:1</div>}
+                    />
+                    <DriveThumb
+                      fileId={file.story.id}
+                      alt="story"
+                      style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, objectFit: 'cover', borderRadius: 4, border: '2px solid #161b22', zIndex: 2 }}
+                      fallback={<div style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, borderRadius: 4, background: '#1c2330', border: '2px solid #161b22', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6e7681', fontSize: 9, letterSpacing: 1 }}>9:16</div>}
+                    />
                   </div>
                 ) : isVideo ? (
-                  <div style={S.thumbPlaceholder}>
-                    <div style={{ fontSize: 24 }}>▶</div>
-                    <div>Video</div>
-                  </div>
-                ) : thumb ? (
-                  <img
-                    src={thumb}
+                  <DriveThumb
+                    fileId={file.id}
                     alt={file.name}
                     style={S.thumb}
-                    referrerPolicy="no-referrer"
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    fallback={(
+                      <div style={S.thumbPlaceholder}>
+                        <div style={{ fontSize: 24 }}>▶</div>
+                        <div>Video</div>
+                      </div>
+                    )}
+                  />
+                ) : thumb ? (
+                  <DriveThumb
+                    fileId={file.id}
+                    alt={file.name}
+                    style={S.thumb}
+                    fallback={<div style={S.thumbPlaceholder}><div>Image</div></div>}
                   />
                 ) : (
                   <div style={S.thumbPlaceholder}>
