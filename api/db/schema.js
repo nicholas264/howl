@@ -103,6 +103,24 @@ export default async function handler(req, res) {
     `;
     await sql`CREATE INDEX IF NOT EXISTS idx_callout_images_created_at ON callout_images(created_at DESC)`;
 
+    // Per-product, per-feature spec used by /api/callout-vision to ground
+    // anchor placement. Visual description + typical location go straight into
+    // the Claude prompt; body_copy is the benefit statement displayed on the ad.
+    await sql`
+      CREATE TABLE IF NOT EXISTS callout_feature_specs (
+        id                  BIGSERIAL PRIMARY KEY,
+        product_id          TEXT NOT NULL,
+        feature_name        TEXT NOT NULL,
+        visual_description  TEXT,
+        typical_location    TEXT,
+        body_copy           TEXT,
+        created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (product_id, feature_name)
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_callout_feature_specs_product ON callout_feature_specs(product_id)`;
+
     // Creative analytics — one row per ad in the Meta account, refreshed by the
     // sync_creative_analytics endpoint. group_key (= video_id || image_hash)
     // is what the Top Creatives table groups by.

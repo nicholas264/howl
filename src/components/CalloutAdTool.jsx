@@ -42,6 +42,66 @@ async function deleteImageRecord(id) {
   } catch { return false; }
 }
 
+async function fetchFeatureSpecs(productId) {
+  try {
+    const r = await fetch(`/api/db/callout-features?product_id=${encodeURIComponent(productId)}`);
+    const data = await r.json();
+    return r.ok ? (data.specs || []) : [];
+  } catch { return []; }
+}
+
+async function saveFeatureSpecs(specs) {
+  const r = await fetch('/api/db/callout-features', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(specs),
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'save failed');
+  return data.specs || [];
+}
+
+// Anti-overlap layout solver. Groups callouts by side, sorts by anchor Y, then
+// enforces a minimum vertical gap between text-block centers. If a side has too
+// many callouts to fit at min spacing, distribute them evenly over the band.
+// textY is the only field mutated; anchors are not touched.
+function applyLayoutSolver(callouts) {
+  const MIN_GAP = 0.14;   // normalized vertical distance between text centers
+  const TOP = 0.10;
+  const BOT = 0.92;
+
+  const distribute = (list) => {
+    if (!list.length) return [];
+    const required = (list.length - 1) * MIN_GAP;
+    if (BOT - TOP < required) {
+      const step = (BOT - TOP) / Math.max(1, list.length - 1);
+      return list.map((c, i) => ({ ...c, textY: TOP + step * i, textX: undefined }));
+    }
+    let prev = -Infinity;
+    const placed = list.map((c, i) => {
+      const desired = Math.max(TOP, Math.min(BOT, c.anchorY));
+      const minY = i === 0 ? TOP : prev + MIN_GAP;
+      const ty = Math.max(desired, minY);
+      prev = ty;
+      return { ...c, textY: ty, textX: undefined };
+    });
+    const last = placed[placed.length - 1];
+    if (last.textY > BOT) {
+      const shift = last.textY - BOT;
+      placed.forEach(c => { c.textY = Math.max(TOP, c.textY - shift); });
+    }
+    return placed;
+  };
+
+  const left = callouts.filter(c => c.side !== 'right').sort((a, b) => a.anchorY - b.anchorY);
+  const right = callouts.filter(c => c.side === 'right').sort((a, b) => a.anchorY - b.anchorY);
+  const placedLeft = distribute(left);
+  const placedRight = distribute(right);
+  // Preserve original order so the right-panel UI stays stable.
+  const byId = new Map([...placedLeft, ...placedRight].map(c => [c.id, c]));
+  return callouts.map(c => byId.get(c.id) || c);
+}
+
 async function fetchLayout(id) {
   const r = await fetch(`/api/db/callout-layouts?id=${id}`);
   const data = await r.json();
@@ -298,10 +358,41 @@ export default function CalloutAdTool({ onAddToCart }) {
   const [batchRendering, setBatchRendering] = useState(0); // count of in-flight bulk renders
   const [variations, setVariations] = useState([]); // [{ id, srcUrl, fileName, dataUrl }]
   const [autoPlacing, setAutoPlacing] = useState(false);
+  const [featureSpecs, setFeatureSpecs] = useState([]);
+  const [featureLibraryOpen, setFeatureLibraryOpen] = useState(false);
 
   useEffect(() => { fetchLayouts().then(setDrafts); }, []);
   // Per-product image libraries — refetch whenever the active product changes.
   useEffect(() => { fetchSavedImages(productId).then(setSavedImages); }, [productId]);
+  // Per-product feature spec library. On first load for a product, auto-seed
+  // from PRODUCTS.features + FEATURE_COPY so the user has something to edit.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const existing = await fetchFeatureSpecs(productId);
+      if (cancelled) return;
+      if (existing.length) {
+        setFeatureSpecs(existing);
+        return;
+      }
+      const seedProduct = PRODUCTS.find(p => p.id === productId);
+      if (!seedProduct) return;
+      const seeded = seedProduct.features.map(name => ({
+        product_id: productId,
+        feature_name: name,
+        visual_description: '',
+        typical_location: '',
+        body_copy: FEATURE_COPY[name] || '',
+      }));
+      try {
+        const saved = await saveFeatureSpecs(seeded);
+        if (!cancelled) setFeatureSpecs(saved);
+      } catch (err) {
+        console.error('seed feature specs failed', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [productId]);
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [callouts, setCallouts] = useState([]);
@@ -582,13 +673,13 @@ export default function CalloutAdTool({ onAddToCart }) {
     const r = await fetch('/api/callout-vision', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageUrl: srcUrl, productName: product.name, features }),
+      body: JSON.stringify({ imageUrl: srcUrl, productId, productName: product.name, features }),
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'vision failed');
     const placements = data.placements || [];
     if (!placements.length) return callouts;
-    return callouts.map(c => {
+    const merged = callouts.map(c => {
       const p = placements.find(pl => pl.feature.toLowerCase() === (c.heading || '').toLowerCase());
       if (!p) return c;
       return {
@@ -596,10 +687,11 @@ export default function CalloutAdTool({ onAddToCart }) {
         anchorX: p.anchorX,
         anchorY: p.anchorY,
         side: p.side,
-        textX: undefined, // reset so default side margin applies
+        textX: undefined,
         textY: p.anchorY,
       };
     });
+    return applyLayoutSolver(merged);
   };
 
   const autoPlace = async () => {
@@ -888,6 +980,20 @@ export default function CalloutAdTool({ onAddToCart }) {
             >
               {autoPlacing ? 'Placing…' : 'Auto-place callouts'}
             </button>
+            <button
+              onClick={() => setCallouts(prev => applyLayoutSolver(prev))}
+              style={secondaryBtn}
+              title="Spread overlapping text blocks vertically without changing anchors"
+            >
+              Tidy layout
+            </button>
+            <button
+              onClick={() => setFeatureLibraryOpen(true)}
+              style={secondaryBtn}
+              title="Edit per-feature visual description, location, and body copy used by auto-place"
+            >
+              Feature library
+            </button>
             {savedImages.length > 0 && (
               <button
                 onClick={() => renderBatch({ withVision: true })}
@@ -1114,6 +1220,139 @@ export default function CalloutAdTool({ onAddToCart }) {
             <div style={{ fontSize: 11, color: '#6e7681', marginTop: 8, lineHeight: 1.5 }}>
               Drag the cream dot to anchor the leader line to a feature. Drag the text block freely to position the callout anywhere on the canvas — the line follows. Crossing the centerline auto-flips the text alignment.
             </div>
+          </div>
+        </div>
+      </div>
+
+      {featureLibraryOpen && (
+        <FeatureLibraryModal
+          productId={productId}
+          productName={product.name}
+          specs={featureSpecs}
+          onClose={() => setFeatureLibraryOpen(false)}
+          onSaved={(saved) => {
+            setFeatureSpecs(saved);
+            // Pull updated body copy into any active callout whose heading matches.
+            setCallouts(prev => prev.map(c => {
+              const s = saved.find(sp => sp.feature_name.toLowerCase() === (c.heading || '').toLowerCase());
+              if (!s || !s.body_copy) return c;
+              return { ...c, body: s.body_copy };
+            }));
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function FeatureLibraryModal({ productId, productName, specs, onClose, onSaved }) {
+  const [draft, setDraft] = useState(() => specs.map(s => ({ ...s })));
+  const [saving, setSaving] = useState(false);
+
+  const update = (i, patch) => setDraft(prev => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s));
+  const remove = async (i) => {
+    const s = draft[i];
+    if (s.id) {
+      await fetch(`/api/db/callout-features?id=${s.id}`, { method: 'DELETE' });
+    }
+    setDraft(prev => prev.filter((_, idx) => idx !== i));
+  };
+  const add = () => setDraft(prev => [...prev, { product_id: productId, feature_name: '', visual_description: '', typical_location: '', body_copy: '' }]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const valid = draft.filter(s => s.feature_name.trim()).map(s => ({
+        ...s,
+        product_id: productId,
+        feature_name: s.feature_name.trim(),
+      }));
+      const saved = await saveFeatureSpecs(valid);
+      onSaved(saved);
+      onClose();
+    } catch (err) {
+      alert('Save failed: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#0d1117', border: '1px solid #2a3441', borderRadius: 8,
+          width: '100%', maxWidth: 820, maxHeight: '85vh', overflow: 'auto', padding: 22,
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <h2 style={{ margin: 0, fontSize: 18 }}>Feature library — {productName}</h2>
+          <button onClick={onClose} style={{ background: 'transparent', border: 0, color: '#8b949e', fontSize: 22, cursor: 'pointer' }}>×</button>
+        </div>
+        <p style={{ color: '#8b949e', fontSize: 12, marginTop: 0 }}>
+          These specs ground the auto-place vision call. The more precise your visual description and typical location, the more accurately Claude lands the dot. Body copy auto-fills new callouts and updates existing ones with a matching heading.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 12 }}>
+          {draft.map((s, i) => (
+            <div key={s.id || `new-${i}`} style={{ background: '#161b22', border: '1px solid #2a3441', borderRadius: 6, padding: 12 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                <input
+                  value={s.feature_name}
+                  onChange={(e) => update(i, { feature_name: e.target.value })}
+                  placeholder="Feature name (e.g. A-Flame Burner)"
+                  style={{ ...input, fontWeight: 600 }}
+                />
+                <button onClick={() => remove(i)} style={{ ...chipOff, color: '#f85149' }}>Remove</button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#8b949e', marginBottom: 4 }}>Visual description</div>
+                  <textarea
+                    value={s.visual_description || ''}
+                    onChange={(e) => update(i, { visual_description: e.target.value })}
+                    placeholder="What this feature looks like in the photo. e.g. The wide brass burner ring with cross-hatched holes at the bottom-center of the firepit."
+                    rows={3}
+                    style={{ ...input, resize: 'vertical', fontFamily: 'inherit' }}
+                  />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#8b949e', marginBottom: 4 }}>Typical location</div>
+                  <textarea
+                    value={s.typical_location || ''}
+                    onChange={(e) => update(i, { typical_location: e.target.value })}
+                    placeholder="Where on the product it usually appears. e.g. Bottom-center, just under the flame."
+                    rows={3}
+                    style={{ ...input, resize: 'vertical', fontFamily: 'inherit' }}
+                  />
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#8b949e', marginBottom: 4 }}>Body copy</div>
+                <textarea
+                  value={s.body_copy || ''}
+                  onChange={(e) => update(i, { body_copy: e.target.value })}
+                  placeholder="Short benefit statement shown on the ad."
+                  rows={2}
+                  style={{ ...input, resize: 'vertical', fontFamily: 'inherit' }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
+          <button onClick={add} style={chipOff}>+ Add feature</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onClose} style={chipOff}>Cancel</button>
+            <button onClick={save} disabled={saving} style={primaryBtn}>{saving ? 'Saving…' : 'Save library'}</button>
           </div>
         </div>
       </div>
