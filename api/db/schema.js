@@ -89,6 +89,20 @@ export default async function handler(req, res) {
     await sql`CREATE INDEX IF NOT EXISTS idx_callout_layouts_updated_at ON callout_layouts(updated_at DESC)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_callout_layouts_user_id ON callout_layouts(user_id)`;
 
+    // Reusable base images uploaded into the Callout Ads tool. Decoupled from
+    // callout_layouts so the same image can back many layouts.
+    await sql`
+      CREATE TABLE IF NOT EXISTS callout_images (
+        id          BIGSERIAL PRIMARY KEY,
+        user_id     TEXT,
+        product_id  TEXT,
+        url         TEXT NOT NULL,
+        file_name   TEXT,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_callout_images_created_at ON callout_images(created_at DESC)`;
+
     // Creative analytics — one row per ad in the Meta account, refreshed by the
     // sync_creative_analytics endpoint. group_key (= video_id || image_hash)
     // is what the Top Creatives table groups by.

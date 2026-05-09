@@ -70,7 +70,11 @@ export default async function handler(req, res) {
       if (!id) return res.status(400).json({ error: 'id required' });
       const rows = await sql`SELECT image_url FROM callout_layouts WHERE id = ${id} LIMIT 1`;
       if (rows.length && rows[0].image_url) {
-        try { await del(rows[0].image_url); } catch (err) { console.error('blob del failed', err); }
+        // Only orphan-delete the blob if no callout_images library record holds it.
+        const refs = await sql`SELECT 1 FROM callout_images WHERE url = ${rows[0].image_url} LIMIT 1`;
+        if (!refs.length) {
+          try { await del(rows[0].image_url); } catch (err) { console.error('blob del failed', err); }
+        }
       }
       await sql`DELETE FROM callout_layouts WHERE id = ${id}`;
       return res.json({ ok: true });

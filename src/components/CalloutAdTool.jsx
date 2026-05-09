@@ -12,6 +12,33 @@ async function fetchLayouts() {
   } catch { return []; }
 }
 
+async function fetchSavedImages() {
+  try {
+    const r = await fetch('/api/db/callout-images');
+    const data = await r.json();
+    return r.ok ? (data.images || []) : [];
+  } catch { return []; }
+}
+
+async function saveImageRecord({ url, product_id, file_name }) {
+  try {
+    const r = await fetch('/api/db/callout-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, product_id, file_name }),
+    });
+    const data = await r.json();
+    return r.ok ? data.image : null;
+  } catch { return null; }
+}
+
+async function deleteImageRecord(id) {
+  try {
+    await fetch(`/api/db/callout-images?id=${id}`, { method: 'DELETE' });
+    return true;
+  } catch { return false; }
+}
+
 async function fetchLayout(id) {
   const r = await fetch(`/api/db/callout-layouts?id=${id}`);
   const data = await r.json();
@@ -261,8 +288,12 @@ export default function CalloutAdTool({ onAddToCart }) {
   const [drafts, setDrafts] = useState([]);
   const [draftId, setDraftId] = useState(null); // currently-loaded draft id (db row id), if any
   const [savingDraft, setSavingDraft] = useState(false);
+  const [savedImages, setSavedImages] = useState([]);
+  const [bulkUploading, setBulkUploading] = useState(0); // count of in-flight uploads
+  const [dragOver, setDragOver] = useState(false);
 
   useEffect(() => { fetchLayouts().then(setDrafts); }, []);
+  useEffect(() => { fetchSavedImages().then(setSavedImages); }, []);
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [callouts, setCallouts] = useState([]);
@@ -291,27 +322,90 @@ export default function CalloutAdTool({ onAddToCart }) {
     )));
   }, [productId]);
 
-  const handleFile = async (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    if (imgUrl && imgUrl.startsWith('blob:')) URL.revokeObjectURL(imgUrl);
+  // Upload a single file to Blob and record it in the saved-images library.
+  // Returns the blob URL on success, or null. `setActive` controls whether
+  // this file becomes the currently-selected image on the stage.
+  const uploadAndRecord = async (file, { setActive } = { setActive: false }) => {
     let resized;
     try {
-      resized = await resizeImage(f, 2000); // long-edge cap
+      resized = await resizeImage(file, 2000);
     } catch (err) {
       console.error('Image resize failed, falling back to original:', err);
-      resized = f;
+      resized = file;
     }
-    // Show the local preview immediately, then upload to Blob in the background.
-    const localUrl = URL.createObjectURL(resized);
-    setImgUrl(localUrl);
-    setImgBlobUrl(null);
+    let localUrl = null;
+    if (setActive) {
+      if (imgUrl && imgUrl.startsWith('blob:')) URL.revokeObjectURL(imgUrl);
+      localUrl = URL.createObjectURL(resized);
+      setImgUrl(localUrl);
+      setImgBlobUrl(null);
+    }
     try {
       const token = await getToken();
       const url = await uploadCalloutImage(resized, productId, token);
-      setImgBlobUrl(url);
+      const record = await saveImageRecord({ url, product_id: productId, file_name: file.name });
+      if (record) setSavedImages(prev => [record, ...prev]);
+      if (setActive) {
+        setImgUrl(url);
+        setImgBlobUrl(url);
+        if (localUrl) URL.revokeObjectURL(localUrl);
+      }
+      return url;
     } catch (err) {
       console.error('Image upload failed:', err);
+      return null;
+    }
+  };
+
+  const handleFile = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    e.target.value = '';
+    if (files.length === 1) {
+      await uploadAndRecord(files[0], { setActive: true });
+      return;
+    }
+    setBulkUploading(files.length);
+    let first = true;
+    for (const f of files) {
+      await uploadAndRecord(f, { setActive: first });
+      first = false;
+      setBulkUploading(n => n - 1);
+    }
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type.startsWith('image/'));
+    if (!files.length) return;
+    if (files.length === 1) {
+      await uploadAndRecord(files[0], { setActive: true });
+      return;
+    }
+    setBulkUploading(files.length);
+    let first = true;
+    for (const f of files) {
+      await uploadAndRecord(f, { setActive: first });
+      first = false;
+      setBulkUploading(n => n - 1);
+    }
+  };
+
+  const pickSavedImage = (url) => {
+    if (imgUrl && imgUrl.startsWith('blob:')) URL.revokeObjectURL(imgUrl);
+    setImgUrl(url);
+    setImgBlobUrl(url);
+  };
+
+  const removeSavedImage = async (img) => {
+    if (!confirm('Delete this image from the library?')) return;
+    const ok = await deleteImageRecord(img.id);
+    if (!ok) return;
+    setSavedImages(prev => prev.filter(i => i.id !== img.id));
+    if (imgBlobUrl === img.url) {
+      setImgUrl(null);
+      setImgBlobUrl(null);
     }
   };
 
@@ -701,7 +795,73 @@ export default function CalloutAdTool({ onAddToCart }) {
           </Row>
 
           <Row label="Product image">
-            <input type="file" accept="image/*" onChange={handleFile} style={{ fontSize: 12 }} />
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+              style={{
+                border: `1px dashed ${dragOver ? COLORS.flame : '#2a3441'}`,
+                background: dragOver ? '#1f2630' : '#0d1117',
+                borderRadius: 6,
+                padding: 12,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+              }}
+            >
+              <input type="file" accept="image/*" multiple onChange={handleFile} style={{ fontSize: 12 }} />
+              <div style={{ fontSize: 11, color: '#6e7681' }}>
+                Drag & drop image(s) here for bulk upload. First file becomes the active stage image; the rest go straight to the library.
+                {bulkUploading > 0 && <span style={{ marginLeft: 6, color: COLORS.flame }}>Uploading {bulkUploading}…</span>}
+              </div>
+            </div>
+            {savedImages.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#8b949e', marginBottom: 6 }}>
+                  Saved images ({savedImages.length})
+                </div>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(64px, 1fr))',
+                  gap: 6,
+                  maxHeight: 220,
+                  overflowY: 'auto',
+                }}>
+                  {savedImages.map(img => {
+                    const active = imgBlobUrl === img.url;
+                    return (
+                      <div
+                        key={img.id}
+                        style={{ position: 'relative', aspectRatio: '1 / 1' }}
+                      >
+                        <img
+                          src={img.url}
+                          alt={img.file_name || ''}
+                          onClick={() => pickSavedImage(img.url)}
+                          title={img.file_name || ''}
+                          style={{
+                            width: '100%', height: '100%', objectFit: 'cover',
+                            borderRadius: 4, cursor: 'pointer',
+                            border: `2px solid ${active ? COLORS.flame : 'transparent'}`,
+                          }}
+                        />
+                        <button
+                          onClick={() => removeSavedImage(img)}
+                          title="Delete from library"
+                          style={{
+                            position: 'absolute', top: 2, right: 2,
+                            width: 18, height: 18, borderRadius: '50%',
+                            background: 'rgba(0,0,0,0.7)', color: '#fff',
+                            border: 0, cursor: 'pointer', fontSize: 11, lineHeight: 1,
+                            padding: 0,
+                          }}
+                        >×</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </Row>
 
           <Row label="Title">

@@ -1,0 +1,52 @@
+import { neon } from '@neondatabase/serverless';
+import { del } from '@vercel/blob';
+import { requireAuth } from '../_lib/auth.js';
+
+export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
+
+export default async function handler(req, res) {
+  const auth = await requireAuth(req, res);
+  if (!auth) return;
+  const sql = neon(process.env.DATABASE_URL);
+  const userId = auth.userId;
+
+  try {
+    if (req.method === 'GET') {
+      const limit = Math.min(parseInt(req.query.limit || '200'), 500);
+      const rows = await sql`
+        SELECT id, product_id, url, file_name, created_at
+        FROM callout_images
+        ORDER BY created_at DESC
+        LIMIT ${limit}
+      `;
+      return res.json({ images: rows });
+    }
+
+    if (req.method === 'POST') {
+      const { url, product_id, file_name } = req.body || {};
+      if (!url) return res.status(400).json({ error: 'url required' });
+      const rows = await sql`
+        INSERT INTO callout_images (user_id, product_id, url, file_name)
+        VALUES (${userId}, ${product_id || null}, ${url}, ${file_name || null})
+        RETURNING id, product_id, url, file_name, created_at
+      `;
+      return res.status(201).json({ image: rows[0] });
+    }
+
+    if (req.method === 'DELETE') {
+      const { id } = req.query;
+      if (!id) return res.status(400).json({ error: 'id required' });
+      const rows = await sql`SELECT url FROM callout_images WHERE id = ${id} LIMIT 1`;
+      if (rows.length && rows[0].url) {
+        try { await del(rows[0].url); } catch (err) { console.error('blob del failed', err); }
+      }
+      await sql`DELETE FROM callout_images WHERE id = ${id}`;
+      return res.json({ ok: true });
+    }
+
+    return res.status(405).end();
+  } catch (err) {
+    console.error('callout-images error', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
