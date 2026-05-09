@@ -13,12 +13,21 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const limit = Math.min(parseInt(req.query.limit || '200'), 500);
-      const rows = await sql`
-        SELECT id, product_id, url, file_name, created_at
-        FROM callout_images
-        ORDER BY created_at DESC
-        LIMIT ${limit}
-      `;
+      const productId = (req.query.product_id || '').trim();
+      const rows = productId
+        ? await sql`
+            SELECT id, product_id, url, file_name, created_at
+            FROM callout_images
+            WHERE product_id = ${productId}
+            ORDER BY created_at DESC
+            LIMIT ${limit}
+          `
+        : await sql`
+            SELECT id, product_id, url, file_name, created_at
+            FROM callout_images
+            ORDER BY created_at DESC
+            LIMIT ${limit}
+          `;
       return res.json({ images: rows });
     }
 

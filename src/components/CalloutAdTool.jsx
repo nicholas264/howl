@@ -12,9 +12,12 @@ async function fetchLayouts() {
   } catch { return []; }
 }
 
-async function fetchSavedImages() {
+async function fetchSavedImages(productId) {
   try {
-    const r = await fetch('/api/db/callout-images');
+    const url = productId
+      ? `/api/db/callout-images?product_id=${encodeURIComponent(productId)}`
+      : '/api/db/callout-images';
+    const r = await fetch(url);
     const data = await r.json();
     return r.ok ? (data.images || []) : [];
   } catch { return []; }
@@ -297,7 +300,8 @@ export default function CalloutAdTool({ onAddToCart }) {
   const [autoPlacing, setAutoPlacing] = useState(false);
 
   useEffect(() => { fetchLayouts().then(setDrafts); }, []);
-  useEffect(() => { fetchSavedImages().then(setSavedImages); }, []);
+  // Per-product image libraries — refetch whenever the active product changes.
+  useEffect(() => { fetchSavedImages(productId).then(setSavedImages); }, [productId]);
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [callouts, setCallouts] = useState([]);
