@@ -293,6 +293,8 @@ export default function CalloutAdTool({ onAddToCart }) {
   const [dragOver, setDragOver] = useState(false);
   const [textBoxSizes, setTextBoxSizes] = useState({}); // id -> { w, h } measured on the stage
   const [batchRendering, setBatchRendering] = useState(0); // count of in-flight bulk renders
+  const [variations, setVariations] = useState([]); // [{ id, srcUrl, fileName, dataUrl }]
+  const [autoPlacing, setAutoPlacing] = useState(false);
 
   useEffect(() => { fetchLayouts().then(setDrafts); }, []);
   useEffect(() => { fetchSavedImages().then(setSavedImages); }, []);
@@ -566,25 +568,81 @@ export default function CalloutAdTool({ onAddToCart }) {
     }
   };
 
-  // Render one callout PNG per saved image using the current title / callouts
-  // / format / titlePos. Each rendered file is downloaded individually.
-  const renderBatch = async () => {
+  // Ask Claude vision where each feature lives in `srcUrl` and return a fresh
+  // callouts array seeded with those anchors. Falls back to the existing
+  // callouts if the call fails. Re-uses the body copy from the current
+  // callouts (matched by heading) so user edits aren't lost.
+  const placeCalloutsWithVision = async (srcUrl) => {
+    const features = callouts.map(c => c.heading || '').filter(Boolean);
+    if (!features.length) return callouts;
+    const r = await fetch('/api/callout-vision', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageUrl: srcUrl, productName: product.name, features }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'vision failed');
+    const placements = data.placements || [];
+    if (!placements.length) return callouts;
+    return callouts.map(c => {
+      const p = placements.find(pl => pl.feature.toLowerCase() === (c.heading || '').toLowerCase());
+      if (!p) return c;
+      return {
+        ...c,
+        anchorX: p.anchorX,
+        anchorY: p.anchorY,
+        side: p.side,
+        textX: undefined, // reset so default side margin applies
+        textY: p.anchorY,
+      };
+    });
+  };
+
+  const autoPlace = async () => {
+    if (!imgBlobUrl) {
+      alert('Save the image first (it needs a public URL).');
+      return;
+    }
+    setAutoPlacing(true);
+    try {
+      const next = await placeCalloutsWithVision(imgBlobUrl);
+      setCallouts(next);
+    } catch (err) {
+      console.error('autoPlace failed', err);
+      alert('Auto-place failed: ' + err.message);
+    } finally {
+      setAutoPlacing(false);
+    }
+  };
+
+  // Render one callout PNG per saved image. Each render uses Claude vision
+  // to pick anchors for THIS image (so callouts actually point at the right
+  // feature, not at the same coordinates from the active layout). Results
+  // land in a preview gallery — nothing is downloaded automatically.
+  const renderBatch = async ({ withVision = true } = {}) => {
     if (!savedImages.length) return;
     setBatchRendering(savedImages.length);
+    setVariations([]);
+    const out = [];
     try {
       for (let i = 0; i < savedImages.length; i++) {
         const img = savedImages[i];
         try {
+          const calloutsForImg = withVision
+            ? await placeCalloutsWithVision(img.url).catch(() => callouts)
+            : callouts;
           const canvas = await renderCalloutCanvas({
-            imgUrl: img.url, format, title, subtitle, callouts, titlePos,
+            imgUrl: img.url, format, title, subtitle, callouts: calloutsForImg, titlePos,
           });
           const dataUrl = canvas.toDataURL('image/png');
-          const a = document.createElement('a');
-          a.href = dataUrl;
-          const base = (img.file_name || `img-${img.id}`).replace(/\.[^/.]+$/, '');
-          a.download = `howl_callout_${product.id}_${base}.png`;
-          a.click();
-          await new Promise(r => setTimeout(r, 120)); // let browser flush each download
+          out.push({
+            id: `var-${img.id}-${Date.now()}`,
+            srcUrl: img.url,
+            fileName: img.file_name || `img-${img.id}`,
+            dataUrl,
+            callouts: calloutsForImg,
+          });
+          setVariations([...out]);
         } catch (err) {
           console.error('Batch render failed for', img.file_name, err);
         }
@@ -593,6 +651,28 @@ export default function CalloutAdTool({ onAddToCart }) {
     } finally {
       setBatchRendering(0);
     }
+  };
+
+  const downloadVariation = (v) => {
+    const a = document.createElement('a');
+    a.href = v.dataUrl;
+    const base = (v.fileName || 'img').replace(/\.[^/.]+$/, '');
+    a.download = `howl_callout_${product.id}_${base}.png`;
+    a.click();
+  };
+
+  const downloadAllVariations = async () => {
+    for (const v of variations) {
+      downloadVariation(v);
+      await new Promise(r => setTimeout(r, 150));
+    }
+  };
+
+  const useVariationAsBase = (v) => {
+    if (imgUrl && imgUrl.startsWith('blob:')) URL.revokeObjectURL(imgUrl);
+    setImgUrl(v.srcUrl);
+    setImgBlobUrl(v.srcUrl);
+    setCallouts(v.callouts);
   };
 
   const sendToCart = async () => {
@@ -796,17 +876,72 @@ export default function CalloutAdTool({ onAddToCart }) {
                 Send to Cart
               </button>
             )}
+            <button
+              onClick={autoPlace}
+              disabled={!imgBlobUrl || autoPlacing}
+              style={secondaryBtn}
+              title="Use Claude vision to position each callout's anchor on the right feature"
+            >
+              {autoPlacing ? 'Placing…' : 'Auto-place callouts'}
+            </button>
             {savedImages.length > 0 && (
               <button
-                onClick={renderBatch}
+                onClick={() => renderBatch({ withVision: true })}
                 disabled={batchRendering > 0 || exporting}
                 style={secondaryBtn}
-                title="Render the current layout against every saved image"
+                title="Render the current layout against every saved image, using vision to place each one"
               >
                 {batchRendering > 0 ? `Rendering ${batchRendering}…` : `Render variations (${savedImages.length})`}
               </button>
             )}
           </div>
+
+          {variations.length > 0 && (
+            <div style={{ marginTop: 18, borderTop: '1px solid #2a3441', paddingTop: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, color: '#8b949e' }}>
+                  Variations ({variations.length})
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={downloadAllVariations} style={chipOff}>Download all</button>
+                  <button onClick={() => setVariations([])} style={{ ...chipOff, color: '#f85149' }}>Clear</button>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
+                {variations.map(v => (
+                  <div key={v.id} style={{ background: '#0d1117', border: '1px solid #2a3441', borderRadius: 6, overflow: 'hidden' }}>
+                    <img
+                      src={v.dataUrl}
+                      alt={v.fileName}
+                      style={{ width: '100%', display: 'block', aspectRatio: `${format.w} / ${format.h}`, objectFit: 'cover' }}
+                    />
+                    <div style={{ padding: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div style={{ fontSize: 10, color: '#8b949e', wordBreak: 'break-all' }}>{v.fileName}</div>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        <button onClick={() => downloadVariation(v)} style={chipOff}>Download</button>
+                        <button onClick={() => useVariationAsBase(v)} style={chipOff}>Edit</button>
+                        {onAddToCart && (
+                          <button
+                            onClick={() => onAddToCart({
+                              id: Date.now() + Math.random(),
+                              type: 'image',
+                              kind: 'callout-ad',
+                              squareUrl: v.dataUrl,
+                              url: v.dataUrl,
+                              name: `${product.name} callout · ${v.fileName}`,
+                              product: product.id,
+                              createdAt: Date.now(),
+                            })}
+                            style={chipOff}
+                          >Cart</button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* RIGHT — controls */}
