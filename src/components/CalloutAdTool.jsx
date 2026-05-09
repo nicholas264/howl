@@ -291,6 +291,8 @@ export default function CalloutAdTool({ onAddToCart }) {
   const [savedImages, setSavedImages] = useState([]);
   const [bulkUploading, setBulkUploading] = useState(0); // count of in-flight uploads
   const [dragOver, setDragOver] = useState(false);
+  const [textBoxSizes, setTextBoxSizes] = useState({}); // id -> { w, h } measured on the stage
+  const [batchRendering, setBatchRendering] = useState(0); // count of in-flight bulk renders
 
   useEffect(() => { fetchLayouts().then(setDrafts); }, []);
   useEffect(() => { fetchSavedImages().then(setSavedImages); }, []);
@@ -564,6 +566,35 @@ export default function CalloutAdTool({ onAddToCart }) {
     }
   };
 
+  // Render one callout PNG per saved image using the current title / callouts
+  // / format / titlePos. Each rendered file is downloaded individually.
+  const renderBatch = async () => {
+    if (!savedImages.length) return;
+    setBatchRendering(savedImages.length);
+    try {
+      for (let i = 0; i < savedImages.length; i++) {
+        const img = savedImages[i];
+        try {
+          const canvas = await renderCalloutCanvas({
+            imgUrl: img.url, format, title, subtitle, callouts, titlePos,
+          });
+          const dataUrl = canvas.toDataURL('image/png');
+          const a = document.createElement('a');
+          a.href = dataUrl;
+          const base = (img.file_name || `img-${img.id}`).replace(/\.[^/.]+$/, '');
+          a.download = `howl_callout_${product.id}_${base}.png`;
+          a.click();
+          await new Promise(r => setTimeout(r, 120)); // let browser flush each download
+        } catch (err) {
+          console.error('Batch render failed for', img.file_name, err);
+        }
+        setBatchRendering(savedImages.length - (i + 1));
+      }
+    } finally {
+      setBatchRendering(0);
+    }
+  };
+
   const sendToCart = async () => {
     if (!onAddToCart) return;
     setExporting(true);
@@ -652,21 +683,25 @@ export default function CalloutAdTool({ onAddToCart }) {
               )}
             </div>
 
-            {/* SVG leader lines */}
+            {/* SVG leader lines — start at the inner edge of the rendered text
+                block (measured on mount/resize) so the line never crosses the
+                text. Falls back to the textX anchor while measurement is pending. */}
             <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
               {callouts.map(c => {
                 const ax = c.anchorX * stageDisplayWidth;
                 const ay = c.anchorY * stageDisplayHeight;
-                // Leader line starts at the inner edge of the text block — the
-                // edge nearest the anchor. Text block left edge if side=left,
-                // right edge if side=right.
                 const tx = c.textX ?? defaultTextX(c.side);
                 const boxX = tx * stageDisplayWidth;
                 const boxY = (c.textY ?? c.anchorY) * stageDisplayHeight;
+                const isLeft = c.side === 'left';
+                const measured = textBoxSizes[c.id]?.w || 0;
+                // Left-anchored block grows rightward — line starts at right edge.
+                // Right-anchored block grows leftward — line starts at left edge.
+                const lineStartX = isLeft ? boxX + measured : boxX - measured;
                 return (
                   <line
                     key={c.id}
-                    x1={boxX} y1={boxY} x2={ax} y2={ay}
+                    x1={lineStartX} y1={boxY} x2={ax} y2={ay}
                     stroke="#F9F3DF" strokeWidth={1}
                   />
                 );
@@ -699,6 +734,16 @@ export default function CalloutAdTool({ onAddToCart }) {
               return (
                 <div
                   key={`label-${c.id}`}
+                  ref={(el) => {
+                    if (!el) return;
+                    const w = el.offsetWidth;
+                    const h = el.offsetHeight;
+                    setTextBoxSizes(prev => {
+                      const cur = prev[c.id];
+                      if (cur && cur.w === w && cur.h === h) return prev;
+                      return { ...prev, [c.id]: { w, h } };
+                    });
+                  }}
                   onMouseDown={(e) => {
                     e.stopPropagation();
                     draggingRef.current = { id: c.id, type: 'label' };
@@ -742,13 +787,23 @@ export default function CalloutAdTool({ onAddToCart }) {
             )}
           </div>
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
             <button onClick={exportPng} disabled={!imgUrl || exporting} style={primaryBtn}>
               {exporting ? 'Rendering…' : 'Download PNG'}
             </button>
             {onAddToCart && (
               <button onClick={sendToCart} disabled={!imgUrl || exporting} style={secondaryBtn}>
                 Send to Cart
+              </button>
+            )}
+            {savedImages.length > 0 && (
+              <button
+                onClick={renderBatch}
+                disabled={batchRendering > 0 || exporting}
+                style={secondaryBtn}
+                title="Render the current layout against every saved image"
+              >
+                {batchRendering > 0 ? `Rendering ${batchRendering}…` : `Render variations (${savedImages.length})`}
               </button>
             )}
           </div>
