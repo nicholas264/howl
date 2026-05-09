@@ -10,18 +10,27 @@ export default async function handler(req, res) {
   const sql = neon(process.env.DATABASE_URL);
   const userId = auth.userId;
 
+  // Returns the session row only if it belongs to the authenticated user.
+  // Returns null when the row exists but is owned by someone else, so we
+  // surface the same 404 either way and don't leak existence.
+  const ownRow = async (id) => {
+    const rows = await sql`SELECT * FROM ugc_sessions WHERE id = ${id} AND user_id = ${userId} LIMIT 1`;
+    return rows[0] || null;
+  };
+
   try {
     if (req.method === 'GET') {
       const id = req.query.id;
       if (id) {
-        const rows = await sql`SELECT * FROM ugc_sessions WHERE id = ${id} LIMIT 1`;
-        if (!rows.length) return res.status(404).json({ error: 'Not found' });
-        return res.json({ session: rows[0] });
+        const row = await ownRow(id);
+        if (!row) return res.status(404).json({ error: 'Not found' });
+        return res.json({ session: row });
       }
       const limit = Math.min(parseInt(req.query.limit || '50'), 200);
       const rows = await sql`
         SELECT id, title, file_name, file_size, duration, video_url, thumbnail_url, status, created_at, updated_at
         FROM ugc_sessions
+        WHERE user_id = ${userId}
         ORDER BY updated_at DESC
         LIMIT ${limit}
       `;
@@ -63,38 +72,36 @@ export default async function handler(req, res) {
     if (req.method === 'PATCH') {
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: 'id required' });
+      const owned = await ownRow(id);
+      if (!owned) return res.status(404).json({ error: 'Not found' });
       const fields = req.body || {};
       const allowed = ['title', 'duration', 'words', 'settings', 'audio_url', 'thumbnail_url', 'status'];
       const set = {};
       for (const k of allowed) if (k in fields) set[k] = fields[k];
       if (!Object.keys(set).length) return res.status(400).json({ error: 'no fields to update' });
 
-      // Build a single UPDATE — neon's tagged template doesn't support dynamic SET clauses,
-      // so we apply each column via separate queries inside a transaction-like sequence.
-      // (Idempotent enough for autosave; adopt sql.transaction() if it ever matters.)
-      if ('title' in set) await sql`UPDATE ugc_sessions SET title = ${set.title}, updated_at = now() WHERE id = ${id}`;
-      if ('duration' in set) await sql`UPDATE ugc_sessions SET duration = ${set.duration}, updated_at = now() WHERE id = ${id}`;
-      if ('words' in set) await sql`UPDATE ugc_sessions SET words = ${JSON.stringify(set.words)}, updated_at = now() WHERE id = ${id}`;
-      if ('settings' in set) await sql`UPDATE ugc_sessions SET settings = ${JSON.stringify(set.settings)}, updated_at = now() WHERE id = ${id}`;
-      if ('audio_url' in set) await sql`UPDATE ugc_sessions SET audio_url = ${set.audio_url}, updated_at = now() WHERE id = ${id}`;
-      if ('thumbnail_url' in set) await sql`UPDATE ugc_sessions SET thumbnail_url = ${set.thumbnail_url}, updated_at = now() WHERE id = ${id}`;
-      if ('status' in set) await sql`UPDATE ugc_sessions SET status = ${set.status}, updated_at = now() WHERE id = ${id}`;
+      if ('title' in set) await sql`UPDATE ugc_sessions SET title = ${set.title}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
+      if ('duration' in set) await sql`UPDATE ugc_sessions SET duration = ${set.duration}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
+      if ('words' in set) await sql`UPDATE ugc_sessions SET words = ${JSON.stringify(set.words)}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
+      if ('settings' in set) await sql`UPDATE ugc_sessions SET settings = ${JSON.stringify(set.settings)}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
+      if ('audio_url' in set) await sql`UPDATE ugc_sessions SET audio_url = ${set.audio_url}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
+      if ('thumbnail_url' in set) await sql`UPDATE ugc_sessions SET thumbnail_url = ${set.thumbnail_url}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
+      if ('status' in set) await sql`UPDATE ugc_sessions SET status = ${set.status}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
 
-      const rows = await sql`SELECT * FROM ugc_sessions WHERE id = ${id} LIMIT 1`;
+      const rows = await sql`SELECT * FROM ugc_sessions WHERE id = ${id} AND user_id = ${userId} LIMIT 1`;
       return res.json({ session: rows[0] });
     }
 
     if (req.method === 'DELETE') {
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: 'id required' });
-      const rows = await sql`SELECT video_url, audio_url FROM ugc_sessions WHERE id = ${id} LIMIT 1`;
-      if (rows.length) {
-        const urls = [rows[0].video_url, rows[0].audio_url].filter(Boolean);
-        for (const url of urls) {
-          try { await del(url); } catch (err) { console.error('blob del failed', url, err); }
-        }
+      const owned = await ownRow(id);
+      if (!owned) return res.status(404).json({ error: 'Not found' });
+      const urls = [owned.video_url, owned.audio_url].filter(Boolean);
+      for (const url of urls) {
+        try { await del(url); } catch (err) { console.error('blob del failed', url, err); }
       }
-      await sql`DELETE FROM ugc_sessions WHERE id = ${id}`;
+      await sql`DELETE FROM ugc_sessions WHERE id = ${id} AND user_id = ${userId}`;
       return res.json({ ok: true });
     }
 

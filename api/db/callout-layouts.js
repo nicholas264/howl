@@ -10,18 +10,24 @@ export default async function handler(req, res) {
   const sql = neon(process.env.DATABASE_URL);
   const userId = auth.userId;
 
+  const ownRow = async (id) => {
+    const rows = await sql`SELECT * FROM callout_layouts WHERE id = ${id} AND user_id = ${userId} LIMIT 1`;
+    return rows[0] || null;
+  };
+
   try {
     if (req.method === 'GET') {
       const id = req.query.id;
       if (id) {
-        const rows = await sql`SELECT * FROM callout_layouts WHERE id = ${id} LIMIT 1`;
-        if (!rows.length) return res.status(404).json({ error: 'Not found' });
-        return res.json({ layout: rows[0] });
+        const row = await ownRow(id);
+        if (!row) return res.status(404).json({ error: 'Not found' });
+        return res.json({ layout: row });
       }
       const limit = Math.min(parseInt(req.query.limit || '100'), 300);
       const rows = await sql`
         SELECT id, product_id, format, title, subtitle, image_url, thumb_url, created_at, updated_at
         FROM callout_layouts
+        WHERE user_id = ${userId}
         ORDER BY updated_at DESC
         LIMIT ${limit}
       `;
@@ -51,32 +57,35 @@ export default async function handler(req, res) {
     if (req.method === 'PATCH') {
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: 'id required' });
+      const owned = await ownRow(id);
+      if (!owned) return res.status(404).json({ error: 'Not found' });
       const fields = req.body || {};
-      if ('product_id' in fields) await sql`UPDATE callout_layouts SET product_id = ${fields.product_id}, updated_at = now() WHERE id = ${id}`;
-      if ('format' in fields) await sql`UPDATE callout_layouts SET format = ${fields.format}, updated_at = now() WHERE id = ${id}`;
-      if ('title' in fields) await sql`UPDATE callout_layouts SET title = ${fields.title}, updated_at = now() WHERE id = ${id}`;
-      if ('subtitle' in fields) await sql`UPDATE callout_layouts SET subtitle = ${fields.subtitle}, updated_at = now() WHERE id = ${id}`;
-      if ('title_pos' in fields) await sql`UPDATE callout_layouts SET title_pos = ${JSON.stringify(fields.title_pos)}, updated_at = now() WHERE id = ${id}`;
-      if ('callouts' in fields) await sql`UPDATE callout_layouts SET callouts = ${JSON.stringify(fields.callouts)}, updated_at = now() WHERE id = ${id}`;
-      if ('image_url' in fields) await sql`UPDATE callout_layouts SET image_url = ${fields.image_url}, updated_at = now() WHERE id = ${id}`;
-      if ('thumb_url' in fields) await sql`UPDATE callout_layouts SET thumb_url = ${fields.thumb_url}, updated_at = now() WHERE id = ${id}`;
+      if ('product_id' in fields) await sql`UPDATE callout_layouts SET product_id = ${fields.product_id}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
+      if ('format' in fields) await sql`UPDATE callout_layouts SET format = ${fields.format}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
+      if ('title' in fields) await sql`UPDATE callout_layouts SET title = ${fields.title}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
+      if ('subtitle' in fields) await sql`UPDATE callout_layouts SET subtitle = ${fields.subtitle}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
+      if ('title_pos' in fields) await sql`UPDATE callout_layouts SET title_pos = ${JSON.stringify(fields.title_pos)}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
+      if ('callouts' in fields) await sql`UPDATE callout_layouts SET callouts = ${JSON.stringify(fields.callouts)}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
+      if ('image_url' in fields) await sql`UPDATE callout_layouts SET image_url = ${fields.image_url}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
+      if ('thumb_url' in fields) await sql`UPDATE callout_layouts SET thumb_url = ${fields.thumb_url}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
 
-      const rows = await sql`SELECT * FROM callout_layouts WHERE id = ${id} LIMIT 1`;
+      const rows = await sql`SELECT * FROM callout_layouts WHERE id = ${id} AND user_id = ${userId} LIMIT 1`;
       return res.json({ layout: rows[0] });
     }
 
     if (req.method === 'DELETE') {
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: 'id required' });
-      const rows = await sql`SELECT image_url FROM callout_layouts WHERE id = ${id} LIMIT 1`;
-      if (rows.length && rows[0].image_url) {
+      const owned = await ownRow(id);
+      if (!owned) return res.status(404).json({ error: 'Not found' });
+      if (owned.image_url) {
         // Only orphan-delete the blob if no callout_images library record holds it.
-        const refs = await sql`SELECT 1 FROM callout_images WHERE url = ${rows[0].image_url} LIMIT 1`;
+        const refs = await sql`SELECT 1 FROM callout_images WHERE url = ${owned.image_url} LIMIT 1`;
         if (!refs.length) {
-          try { await del(rows[0].image_url); } catch (err) { console.error('blob del failed', err); }
+          try { await del(owned.image_url); } catch (err) { console.error('blob del failed', err); }
         }
       }
-      await sql`DELETE FROM callout_layouts WHERE id = ${id}`;
+      await sql`DELETE FROM callout_layouts WHERE id = ${id} AND user_id = ${userId}`;
       return res.json({ ok: true });
     }
 

@@ -1,5 +1,6 @@
 // Per-image, per-feature anchor cache. Vision results and manual overrides
-// both write here so re-renders are deterministic and corrections persist.
+// both write here. All operations are gated on the owning callout_images row
+// belonging to the authenticated user.
 import { neon } from '@neondatabase/serverless';
 import { requireAuth } from '../_lib/auth.js';
 
@@ -9,11 +10,20 @@ export default async function handler(req, res) {
   const auth = await requireAuth(req, res);
   if (!auth) return;
   const sql = neon(process.env.DATABASE_URL);
+  const userId = auth.userId;
+
+  // Returns true only if the image_id row exists and is owned by userId.
+  const ownsImage = async (imageId) => {
+    if (!imageId) return false;
+    const rows = await sql`SELECT 1 FROM callout_images WHERE id = ${imageId} AND user_id = ${userId} LIMIT 1`;
+    return rows.length > 0;
+  };
 
   try {
     if (req.method === 'GET') {
       const imageId = (req.query.image_id || '').trim();
       if (!imageId) return res.status(400).json({ error: 'image_id required' });
+      if (!(await ownsImage(imageId))) return res.status(404).json({ error: 'Not found' });
       const rows = await sql`
         SELECT id, image_id, feature_name, anchor_x, anchor_y, side, text_x, text_y, source, updated_at
         FROM callout_image_placements
@@ -24,9 +34,13 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      // Upsert. Accepts a single placement or an array.
       const payload = req.body;
       const list = Array.isArray(payload) ? payload : [payload];
+      // Verify ownership of every image_id touched in this batch.
+      const imageIds = [...new Set(list.map(p => p?.image_id).filter(Boolean))];
+      for (const id of imageIds) {
+        if (!(await ownsImage(id))) return res.status(404).json({ error: 'Not found' });
+      }
       const out = [];
       for (const p of list) {
         const { image_id, feature_name, anchor_x, anchor_y, side, text_x, text_y, source } = p || {};
@@ -55,9 +69,9 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'DELETE') {
-      // Clear all placements for an image (used by 'Re-run vision').
       const imageId = (req.query.image_id || '').trim();
       if (!imageId) return res.status(400).json({ error: 'image_id required' });
+      if (!(await ownsImage(imageId))) return res.status(404).json({ error: 'Not found' });
       await sql`DELETE FROM callout_image_placements WHERE image_id = ${imageId}`;
       return res.json({ ok: true });
     }

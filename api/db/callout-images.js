@@ -18,13 +18,14 @@ export default async function handler(req, res) {
         ? await sql`
             SELECT id, product_id, url, file_name, created_at
             FROM callout_images
-            WHERE product_id = ${productId}
+            WHERE user_id = ${userId} AND product_id = ${productId}
             ORDER BY created_at DESC
             LIMIT ${limit}
           `
         : await sql`
             SELECT id, product_id, url, file_name, created_at
             FROM callout_images
+            WHERE user_id = ${userId}
             ORDER BY created_at DESC
             LIMIT ${limit}
           `;
@@ -45,11 +46,12 @@ export default async function handler(req, res) {
     if (req.method === 'DELETE') {
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: 'id required' });
-      const rows = await sql`SELECT url FROM callout_images WHERE id = ${id} LIMIT 1`;
-      if (rows.length && rows[0].url) {
+      const rows = await sql`SELECT url FROM callout_images WHERE id = ${id} AND user_id = ${userId} LIMIT 1`;
+      if (!rows.length) return res.status(404).json({ error: 'Not found' });
+      if (rows[0].url) {
         try { await del(rows[0].url); } catch (err) { console.error('blob del failed', err); }
       }
-      await sql`DELETE FROM callout_images WHERE id = ${id}`;
+      await sql`DELETE FROM callout_images WHERE id = ${id} AND user_id = ${userId}`;
       return res.json({ ok: true });
     }
 

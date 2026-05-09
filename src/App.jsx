@@ -1,27 +1,35 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, Suspense, lazy } from "react";
 import { UserButton } from "@clerk/clerk-react";
 import { PRODUCTS, ANGLES, PLATFORMS } from "./data";
 import { buildSystemPrompt, buildUserPrompt } from "./prompts";
+// Always-visible shell components stay eagerly imported.
 import ConfigPanel from "./components/ConfigPanel";
 import ResultsPanel from "./components/ResultsPanel";
-import ReviewAdTool from "./components/ReviewAdTool";
-import VideoAdTool from "./components/VideoAdTool";
-import ImageAdTool from "./components/ImageAdTool";
-import CalloutAdTool from "./components/CalloutAdTool";
-import FounderAdTool from "./components/FounderAdTool";
-import MetaPublishTool from "./components/MetaPublishTool";
-import DashboardTool from "./components/DashboardTool";
-import InventoryTool from "./components/InventoryTool";
 import WelcomeScreen from "./components/WelcomeScreen";
-import LaunchLogTool from "./components/LaunchLogTool";
 import FeedbackWidget from "./components/FeedbackWidget";
-import UgcInboxTool from "./components/UgcInboxTool";
-import UgcEditorTool from "./components/UgcEditorTool";
-import GalleryTab from "./components/GalleryTab";
-import FromWinnersTool from "./components/FromWinnersTool";
+// Heavy tab tools are code-split — only the active tab's bundle is downloaded.
+const ReviewAdTool = lazy(() => import("./components/ReviewAdTool"));
+const VideoAdTool = lazy(() => import("./components/VideoAdTool"));
+const ImageAdTool = lazy(() => import("./components/ImageAdTool"));
+const CalloutAdTool = lazy(() => import("./components/CalloutAdTool"));
+const FounderAdTool = lazy(() => import("./components/FounderAdTool"));
+const MetaPublishTool = lazy(() => import("./components/MetaPublishTool"));
+const DashboardTool = lazy(() => import("./components/DashboardTool"));
+const InventoryTool = lazy(() => import("./components/InventoryTool"));
+const LaunchLogTool = lazy(() => import("./components/LaunchLogTool"));
+const UgcInboxTool = lazy(() => import("./components/UgcInboxTool"));
+const UgcEditorTool = lazy(() => import("./components/UgcEditorTool"));
+const GalleryTab = lazy(() => import("./components/GalleryTab"));
+const FromWinnersTool = lazy(() => import("./components/FromWinnersTool"));
 import { useDriveAuth } from "./hooks/useDriveAuth";
 import { cartGetAll, cartPut, cartDelete } from "./utils/cartDb";
 import "./styles.css";
+
+const TabFallback = () => (
+  <div style={{ padding: 32, color: '#8b949e', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase' }}>
+    Loading…
+  </div>
+);
 
 export default function HowlAdEngine() {
   const driveAuth = useDriveAuth();
@@ -279,31 +287,33 @@ export default function HowlAdEngine() {
         />
       )}
 
-      {activeTab === "from-winners" && <FromWinnersTool setActiveTab={setActiveTab} setVariations={setVariations} />}
-      {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} driveAuth={driveAuth} onAddToCart={addToCart} />}
-      {activeTab === "callout" && <CalloutAdTool onAddToCart={addToCart} />}
-      {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} onAddToCart={addToCart} />}
-      {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} onAddToCart={addToCart} />}
-      {activeTab === "founder" && <FounderAdTool />}
-      {activeTab === "gallery" && <GalleryTab cart={cart} />}
-      {activeTab === "dashboard-cfo" && <DashboardTool setActiveTab={setActiveTab} view="cfo" />}
-      {activeTab === "dashboard-meta" && <DashboardTool setActiveTab={setActiveTab} view="meta" />}
-      {activeTab === "dashboard-shopify" && <DashboardTool setActiveTab={setActiveTab} view="shopify" />}
-      {activeTab === "dashboard-creative" && <DashboardTool setActiveTab={setActiveTab} view="creative" />}
-      {activeTab === "creative-analytics" && <DashboardTool setActiveTab={setActiveTab} view="creative" />}
-      {activeTab === "dashboard-forecast" && <DashboardTool setActiveTab={setActiveTab} view="forecast" />}
-      {activeTab === "inventory" && <InventoryTool />}
-      {activeTab === "log" && <LaunchLogTool />}
-      {activeTab === "ugc" && <UgcInboxTool />}
-      {activeTab === "ugc-editor" && <UgcEditorTool onAddToCart={addToCart} />}
-      {activeTab === "publish" && (
-        <MetaPublishTool
-          cart={cart}
-          onAddToCart={addToCart}
-          onUpdateCartItem={updateCartItem}
-          onRemoveCartItem={removeCartItem}
-        />
-      )}
+      <Suspense fallback={<TabFallback />}>
+        {activeTab === "from-winners" && <FromWinnersTool setActiveTab={setActiveTab} setVariations={setVariations} />}
+        {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} driveAuth={driveAuth} onAddToCart={addToCart} />}
+        {activeTab === "callout" && <CalloutAdTool onAddToCart={addToCart} />}
+        {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} onAddToCart={addToCart} />}
+        {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} onAddToCart={addToCart} />}
+        {activeTab === "founder" && <FounderAdTool />}
+        {activeTab === "gallery" && <GalleryTab cart={cart} />}
+        {activeTab === "dashboard-cfo" && <DashboardTool setActiveTab={setActiveTab} view="cfo" />}
+        {activeTab === "dashboard-meta" && <DashboardTool setActiveTab={setActiveTab} view="meta" />}
+        {activeTab === "dashboard-shopify" && <DashboardTool setActiveTab={setActiveTab} view="shopify" />}
+        {activeTab === "dashboard-creative" && <DashboardTool setActiveTab={setActiveTab} view="creative" />}
+        {activeTab === "creative-analytics" && <DashboardTool setActiveTab={setActiveTab} view="creative" />}
+        {activeTab === "dashboard-forecast" && <DashboardTool setActiveTab={setActiveTab} view="forecast" />}
+        {activeTab === "inventory" && <InventoryTool />}
+        {activeTab === "log" && <LaunchLogTool />}
+        {activeTab === "ugc" && <UgcInboxTool />}
+        {activeTab === "ugc-editor" && <UgcEditorTool onAddToCart={addToCart} />}
+        {activeTab === "publish" && (
+          <MetaPublishTool
+            cart={cart}
+            onAddToCart={addToCart}
+            onUpdateCartItem={updateCartItem}
+            onRemoveCartItem={removeCartItem}
+          />
+        )}
+      </Suspense>
         </main>
       </div>
       <FeedbackWidget />
