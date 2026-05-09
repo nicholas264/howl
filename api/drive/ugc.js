@@ -163,29 +163,68 @@ export default async function handler(req, res) {
 
       const pairedFileIds = new Set();
       const pairItems = [];
+      // For each subfolder, split by media type (video vs image) and within each
+      // type pair feed-aspect files with story-aspect files one-to-one. Extras
+      // are left as singles. This handles folders with 3+ files where only
+      // some of them form the 1:1 + 9:16 pair.
       for (const [parentId, list] of Object.entries(byParent)) {
-        if (list.length !== 2) continue;
-        if (!sameType(list[0], list[1])) continue;
-        const a0 = aspectFor(list[0]);
-        const a1 = aspectFor(list[1]);
-        let feed = null, story = null;
-        if (a0 === 'feed' && a1 === 'story') { feed = list[0]; story = list[1]; }
-        else if (a1 === 'feed' && a0 === 'story') { feed = list[1]; story = list[0]; }
-        else continue;
-        pairedFileIds.add(feed.id);
-        pairedFileIds.add(story.id);
-        pairItems.push({
-          kind: 'pair',
-          id: `pair:${parentId}`,
-          folderId: parentId,
-          folderName: folderNames[parentId] || '',
-          folderPath: feed.folderPath,
-          feed,
-          story,
-          mimeType: feed.mimeType,
-          createdTime: feed.createdTime > story.createdTime ? feed.createdTime : story.createdTime,
-          name: folderNames[parentId] || feed.name,
-        });
+        if (list.length < 2) continue;
+        const buckets = { video: [], image: [] };
+        for (const f of list) {
+          if (f.mimeType?.startsWith('video/')) buckets.video.push(f);
+          else if (f.mimeType?.startsWith('image/')) buckets.image.push(f);
+        }
+        for (const sameTypeList of [buckets.video, buckets.image]) {
+          if (sameTypeList.length < 2) continue;
+          const feeds = [];
+          const stories = [];
+          const unknown = [];
+          for (const f of sameTypeList) {
+            const a = aspectFor(f);
+            if (a === 'feed') feeds.push(f);
+            else if (a === 'story') stories.push(f);
+            else unknown.push(f);
+          }
+          // Resolve unknowns: if exactly one feed + one unknown, the unknown is
+          // the story (and vice versa). Beyond that we leave unknowns as singles.
+          if (unknown.length && feeds.length === 0 && stories.length === 0 && unknown.length === 2) {
+            // Two ambiguous files → fall back to byte size: larger = feed.
+            const [a, b] = unknown;
+            const sa = parseInt(a.size || 0), sb = parseInt(b.size || 0);
+            if (sa >= sb) { feeds.push(a); stories.push(b); }
+            else { feeds.push(b); stories.push(a); }
+            unknown.length = 0;
+          } else {
+            while (unknown.length && (feeds.length === 0 || stories.length === 0)) {
+              const u = unknown.shift();
+              if (feeds.length === 0) feeds.push(u);
+              else stories.push(u);
+            }
+          }
+          // Stable order so pairing is deterministic across refreshes.
+          const byCreated = (a, b) => (a.createdTime || '').localeCompare(b.createdTime || '');
+          feeds.sort(byCreated);
+          stories.sort(byCreated);
+          const pairCount = Math.min(feeds.length, stories.length);
+          for (let i = 0; i < pairCount; i++) {
+            const feed = feeds[i];
+            const story = stories[i];
+            pairedFileIds.add(feed.id);
+            pairedFileIds.add(story.id);
+            pairItems.push({
+              kind: 'pair',
+              id: `pair:${parentId}:${feed.id}:${story.id}`,
+              folderId: parentId,
+              folderName: folderNames[parentId] || '',
+              folderPath: feed.folderPath,
+              feed,
+              story,
+              mimeType: feed.mimeType,
+              createdTime: feed.createdTime > story.createdTime ? feed.createdTime : story.createdTime,
+              name: folderNames[parentId] || feed.name,
+            });
+          }
+        }
       }
 
       const items = [
@@ -226,7 +265,12 @@ export default async function handler(req, res) {
       res.setHeader('Cache-Control', 'no-cache, no-transform');
       res.setHeader('X-Accel-Buffering', 'no');
       const emit = (obj) => { try { res.write(JSON.stringify(obj) + '\n'); } catch {} };
-      const fail = (step, error, detail) => { emit({ step, status: 'error', error, detail }); emit({ done: true, error: `${step}: ${error}` }); res.end(); };
+      const fail = (step, error, detail) => {
+        const detailStr = detail == null ? undefined : (typeof detail === 'string' ? detail : JSON.stringify(detail));
+        emit({ step, status: 'error', error, detail: detailStr });
+        emit({ done: true, error: `${step}: ${error}` });
+        res.end();
+      };
 
       if ((!fileId && !isPair) || !adsetId || !pageId || !destUrl || !adName) {
         return fail('validate', 'Missing required fields');
@@ -316,24 +360,36 @@ export default async function handler(req, res) {
         let thumb = null;
         if (vId) {
           emit({ step: stepLabel('meta_thumbnail'), status: 'start' });
-          const delays = [5000, 5000, 7000, 10000, 15000, 20000, 20000, 30000];
+          const delays = [5000, 5000, 7000, 10000, 15000, 20000, 20000, 30000, 30000, 30000];
+          let videoReady = false;
           for (let i = 0; i < delays.length; i++) {
             await new Promise(r => setTimeout(r, delays[i]));
-            const tRes = await fetch(`${GRAPH}/${vId}/thumbnails?fields=uri,is_preferred&access_token=${metaToken}`);
-            const tData = await parseMeta(tRes, 'meta_thumbnail');
-            if (tData.error) {
-              if (tData.error.code === 17 || /request limit/i.test(tData.error.message || '')) throw new Error('Meta rate limit — wait a few minutes and retry.');
-              if (i >= delays.length - 1) throw new Error(`Thumbnail not ready: ${tData.error.message}`);
-              emit({ step: stepLabel('meta_thumbnail'), status: 'progress', detail: `attempt ${i + 1}` });
+            // Check video processing status — required before creative creation.
+            const sRes = await fetch(`${GRAPH}/${vId}?fields=status&access_token=${metaToken}`);
+            const sData = await parseMeta(sRes, 'meta_thumbnail');
+            if (sData.error) {
+              if (sData.error.code === 17 || /request limit/i.test(sData.error.message || '')) throw new Error('Meta rate limit — wait a few minutes and retry.');
+              emit({ step: stepLabel('meta_thumbnail'), status: 'progress', detail: `status check failed (attempt ${i + 1})` });
               continue;
             }
-            const arr = tData.data || [];
-            const preferred = arr.find(t => t.is_preferred) || arr[0];
-            if (preferred?.uri) { thumb = preferred.uri; break; }
-            emit({ step: stepLabel('meta_thumbnail'), status: 'progress', detail: 'waiting for processing' });
+            const vStatus = sData.status?.video_status;
+            if (vStatus === 'error') throw new Error(`Video processing failed: ${sData.status?.processing_progress || 'unknown'}`);
+            if (vStatus === 'ready') {
+              videoReady = true;
+              // Try thumbnail (best-effort once video is ready).
+              const tRes = await fetch(`${GRAPH}/${vId}/thumbnails?fields=uri,is_preferred&access_token=${metaToken}`);
+              const tData = await parseMeta(tRes, 'meta_thumbnail');
+              if (!tData.error) {
+                const arr = tData.data || [];
+                const preferred = arr.find(t => t.is_preferred) || arr[0];
+                if (preferred?.uri) thumb = preferred.uri;
+              }
+              break;
+            }
+            emit({ step: stepLabel('meta_thumbnail'), status: 'progress', detail: `${vStatus || 'processing'} (${i + 1})` });
           }
-          if (!thumb) throw new Error('No thumbnail generated in time (video still processing)');
-          emit({ step: stepLabel('meta_thumbnail'), status: 'done' });
+          if (!videoReady) throw new Error('Video still processing after timeout — try again in a minute.');
+          emit({ step: stepLabel('meta_thumbnail'), status: 'done', detail: thumb ? 'ready' : 'ready (no thumb — auto)' });
         }
 
         return { videoId: vId, imageHash: iHash, thumbnailUrl: thumb, fileMeta: fmeta, mimeType: mt };
@@ -342,16 +398,18 @@ export default async function handler(req, res) {
       // ── PAIR PATH ───────────────────────────────────────────────────────────
       if (isPair) {
         try {
-          const feed = await processAsset(pair.feedFileId, 'feed');
-          const story = await processAsset(pair.storyFileId, 'story');
+          const [feed, story] = await Promise.all([
+            processAsset(pair.feedFileId, 'feed'),
+            processAsset(pair.storyFileId, 'story'),
+          ]);
 
           // Build asset_feed_spec for placement-asset customization
           emit({ step: 'meta_creative', status: 'start' });
           const isVid = !!feed.videoId;
           const assetFeedSpec = isVid ? {
             videos: [
-              { video_id: feed.videoId, thumbnail_url: feed.thumbnailUrl, adlabels: [{ name: 'video_feed' }] },
-              { video_id: story.videoId, thumbnail_url: story.thumbnailUrl, adlabels: [{ name: 'video_story' }] },
+              { video_id: feed.videoId, ...(feed.thumbnailUrl ? { thumbnail_url: feed.thumbnailUrl } : {}), adlabels: [{ name: 'video_feed' }] },
+              { video_id: story.videoId, ...(story.thumbnailUrl ? { thumbnail_url: story.thumbnailUrl } : {}), adlabels: [{ name: 'video_story' }] },
             ],
             bodies: [{ text: primaryText || headline || '' }],
             titles: [{ text: headline || '' }],
