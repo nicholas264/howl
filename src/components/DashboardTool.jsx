@@ -55,6 +55,65 @@ function fmtCtr(n) {
   return parseFloat(n).toFixed(2) + '%';
 }
 
+function getCreativeStatus(g) {
+  const spend = Number(g.spend) || 0;
+  const roas = Number(g.roas) || 0;
+  const cpa = Number(g.cpa) || 0;
+  const ctr = Number(g.ctr) || 0;
+  const hookRate = Number(g.hookRate) || 0;
+  const purchases = Number(g.purchases) || 0;
+  const profit = Number(g.contribProfit) || 0;
+
+  if (spend < 50 && purchases === 0) {
+    return { label: 'Learning', color: '#8b949e', bg: 'rgba(139,148,158,0.12)', border: 'rgba(139,148,158,0.35)' };
+  }
+  if (profit > 0 && roas >= 2 && purchases >= 2) {
+    return { label: 'Winner', color: '#3fb950', bg: 'rgba(63,185,80,0.12)', border: 'rgba(63,185,80,0.45)' };
+  }
+  if (spend >= 100 && roas < 1 && purchases <= 1) {
+    return { label: 'Stop', color: '#f85149', bg: 'rgba(248,81,73,0.12)', border: 'rgba(248,81,73,0.45)' };
+  }
+  if (ctr > 0 && ctr < 0.008 && spend >= 75) {
+    return { label: 'Hook Weak', color: '#f5a623', bg: 'rgba(245,166,35,0.12)', border: 'rgba(245,166,35,0.45)' };
+  }
+  if (hookRate > 0.25 && (roas < 1.5 || cpa > 80)) {
+    return { label: 'Fix Offer', color: '#f5a623', bg: 'rgba(245,166,35,0.12)', border: 'rgba(245,166,35,0.45)' };
+  }
+  return { label: 'Watch', color: '#58a6ff', bg: 'rgba(88,166,255,0.12)', border: 'rgba(88,166,255,0.4)' };
+}
+
+function getCreativeNextTests(g) {
+  const status = getCreativeStatus(g).label;
+  const hookRate = Number(g.hookRate) || 0;
+  const holdRate = Number(g.holdRate) || 0;
+  const ctr = Number(g.ctr) || 0;
+  const roas = Number(g.roas) || 0;
+  const cpa = Number(g.cpa) || 0;
+  const ideas = [];
+
+  if (status === 'Winner') {
+    ideas.push('Make 5 hook variants from this opening');
+    ideas.push('Brief 2 creators to copy the format');
+  } else if (status === 'Stop') {
+    ideas.push('Pause unless it has a strategic learning');
+    ideas.push('Reuse only the product proof, not the hook');
+  } else if (status === 'Hook Weak' || ctr < 0.008) {
+    ideas.push('Rewrite the first 2 seconds');
+    ideas.push('Test a stronger opening frame');
+  } else if (status === 'Fix Offer' || (hookRate > 0.25 && roas < 1.5)) {
+    ideas.push('Keep the hook, test price/proof/body copy');
+    ideas.push('Send traffic to the best product-specific URL');
+  } else if (holdRate > 0 && holdRate < 0.2) {
+    ideas.push('Tighten the middle and show product sooner');
+  } else if (cpa > 0 && cpa > 80) {
+    ideas.push('Test lower-friction copy and clearer proof');
+  } else {
+    ideas.push('Let it spend to signal threshold');
+  }
+
+  return ideas.slice(0, 2);
+}
+
 const S = {
   wrap:    { padding: '28px 36px', maxWidth: 1100 },
   label:   { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#8b949e', marginBottom: 8, display: 'block' },
@@ -619,6 +678,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
       {view === 'creative' && (() => {
         const COLS = [
           { key: 'name',            label: 'Creative',     align: 'left',  sortable: false, kind: 'name' },
+          { key: 'status',          label: 'Status',       align: 'left',  sortable: false, kind: 'status' },
+          { key: 'nextTest',        label: 'Next test',    align: 'left',  sortable: false, kind: 'nextTest' },
           { key: 'firstLaunchDate', label: 'Launch date',  align: 'left',  sortable: true,  kind: 'date' },
           { key: 'spend',           label: 'Spend',        align: 'right', sortable: true,  kind: 'money', heat: 'high' },
           { key: 'purchaseValue',   label: 'Purchase value', align: 'right', sortable: true, kind: 'money', heat: 'high' },
@@ -711,6 +772,12 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           }
         };
         const sortIcon = (key) => creativeSortKey !== key ? '' : (creativeSortDir === 'desc' ? ' ▼' : ' ▲');
+        const statusCounts = groups.reduce((acc, g) => {
+          const label = getCreativeStatus(g).label;
+          acc[label] = (acc[label] || 0) + 1;
+          return acc;
+        }, {});
+        const statusOrder = ['Winner', 'Fix Offer', 'Hook Weak', 'Watch', 'Learning', 'Stop'];
 
         return (
           <div style={{ ...S.card, marginBottom: 20 }}>
@@ -751,6 +818,33 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
             {creativeInitMsg && (
               <div style={{ fontSize: 10, color: creativeInitMsg.startsWith('Init failed') ? '#f85149' : '#3fb950', marginBottom: 10 }}>
                 {creativeInitMsg}
+              </div>
+            )}
+
+            {groups.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+                {statusOrder.filter(label => statusCounts[label]).map(label => {
+                  const sample = groups.find(g => getCreativeStatus(g).label === label);
+                  const status = sample ? getCreativeStatus(sample) : getCreativeStatus({});
+                  return (
+                    <span key={label} style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '5px 8px',
+                      borderRadius: 3,
+                      border: `1px solid ${status.border}`,
+                      background: status.bg,
+                      color: status.color,
+                      fontSize: 9,
+                      fontWeight: 700,
+                      letterSpacing: 1,
+                      textTransform: 'uppercase',
+                    }}>
+                      {label} <span style={{ color: '#f0f4f8' }}>{statusCounts[label]}</span>
+                    </span>
+                  );
+                })}
               </div>
             )}
 
@@ -806,6 +900,39 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                               </div>
                             </td>
                             {COLS.slice(1).map(c => {
+                              if (c.kind === 'status') {
+                                const status = getCreativeStatus(g);
+                                return (
+                                  <td key={c.key} style={{ padding: '7px 6px', textAlign: 'left', whiteSpace: 'nowrap' }}>
+                                    <span style={{
+                                      display: 'inline-block',
+                                      padding: '4px 8px',
+                                      borderRadius: 3,
+                                      border: `1px solid ${status.border}`,
+                                      background: status.bg,
+                                      color: status.color,
+                                      fontSize: 9,
+                                      fontWeight: 700,
+                                      letterSpacing: 1,
+                                      textTransform: 'uppercase',
+                                    }}>{status.label}</span>
+                                  </td>
+                                );
+                              }
+                              if (c.kind === 'nextTest') {
+                                const ideas = getCreativeNextTests(g);
+                                return (
+                                  <td key={c.key} style={{ padding: '7px 6px', textAlign: 'left', minWidth: 190, maxWidth: 260 }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                      {ideas.map((idea, idx) => (
+                                        <span key={idx} style={{ color: idx === 0 ? '#f0f4f8' : '#8b949e', fontSize: 9.5, lineHeight: 1.25 }}>
+                                          {idea}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </td>
+                                );
+                              }
                               if (c.kind === 'action') {
                                 const isAnalyzing = analyzingGroup === g.groupKey;
                                 const handler = (e) => {
