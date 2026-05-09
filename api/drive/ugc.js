@@ -185,16 +185,25 @@ export default async function handler(req, res) {
             else if (a === 'story') stories.push(f);
             else unknown.push(f);
           }
-          // Resolve unknowns: if exactly one feed + one unknown, the unknown is
-          // the story (and vice versa). Beyond that we leave unknowns as singles.
-          if (unknown.length && feeds.length === 0 && stories.length === 0 && unknown.length === 2) {
-            // Two ambiguous files → fall back to byte size: larger = feed.
-            const [a, b] = unknown;
-            const sa = parseInt(a.size || 0), sb = parseInt(b.size || 0);
-            if (sa >= sb) { feeds.push(a); stories.push(b); }
-            else { feeds.push(b); stories.push(a); }
-            unknown.length = 0;
-          } else {
+          // SOP: exactly two same-type files in a folder are always a feed+story
+          // pair. Use aspectFor where it disagreed (one classified, the other
+          // unknown), or byte size as a tiebreaker (larger = feed at equal
+          // quality). This overrides the case where both got classified the same.
+          if (sameTypeList.length === 2) {
+            const [a, b] = sameTypeList;
+            let feed, story;
+            const aa = aspectFor(a), ab = aspectFor(b);
+            if (aa === 'feed' || ab === 'story') { feed = a; story = b; }
+            else if (ab === 'feed' || aa === 'story') { feed = b; story = a; }
+            else {
+              const sa = parseInt(a.size || 0), sb = parseInt(b.size || 0);
+              if (sa >= sb) { feed = a; story = b; } else { feed = b; story = a; }
+            }
+            feeds.length = 0; stories.length = 0; unknown.length = 0;
+            feeds.push(feed); stories.push(story);
+          } else if (unknown.length) {
+            // 3+ files: pull unknowns into whichever side is empty so a pair
+            // can still be formed.
             while (unknown.length && (feeds.length === 0 || stories.length === 0)) {
               const u = unknown.shift();
               if (feeds.length === 0) feeds.push(u);
