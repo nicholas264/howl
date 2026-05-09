@@ -1,6 +1,115 @@
 import React, { useState, useEffect, useCallback, Fragment } from 'react';
 import { PRODUCTS, ANGLES } from '../data';
 
+// Profile-picker dropdown for Facebook Pages the system-user token can see.
+function PagePicker({ value, onChange }) {
+  const [pages, setPages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch('/api/meta-pages');
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'failed');
+        setPages(data.pages || []);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+  const selected = pages.find(p => p.id === value);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{ ...S.input, display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', cursor: 'pointer', padding: '6px 10px' }}
+      >
+        {selected ? (
+          <>
+            <ProfileAvatar src={selected.picture_url} name={selected.name} />
+            <span style={{ flex: 1 }}>{selected.name}</span>
+          </>
+        ) : (
+          <span style={{ flex: 1, color: '#6e7681' }}>
+            {loading ? 'Loading Pages…' : error ? `Error: ${error}` : pages.length ? 'Select Facebook Page' : 'No Pages found'}
+          </span>
+        )}
+        <span style={{ color: '#6e7681', fontSize: 9 }}>▼</span>
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
+          <div style={{
+            position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 51,
+            background: '#0d1117', border: '1px solid #2a3441', borderRadius: 4,
+            maxHeight: 280, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+          }}>
+            {pages.length === 0 && (
+              <div style={{ padding: 12, color: '#8b949e', fontSize: 11 }}>
+                {loading ? 'Loading…' : 'No Facebook Pages accessible to this token.'}
+              </div>
+            )}
+            {pages.map(p => {
+              const active = p.id === value;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => { onChange(p.id); setOpen(false); }}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '8px 10px', cursor: 'pointer', textAlign: 'left',
+                    background: active ? '#1f2630' : 'transparent',
+                    border: 0, color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11,
+                  }}
+                >
+                  <ProfileAvatar src={p.picture_url} name={p.name} size={28} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600 }}>{p.name}</div>
+                    <div style={{ fontSize: 9, color: '#6e7681' }}>{p.username ? `@${p.username} · ` : ''}{p.id}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Shared avatar that falls back to an initial-letter circle when the image
+// fails (CDN blocked, missing pic, etc).
+function ProfileAvatar({ src, name, size = 24 }) {
+  const [errored, setErrored] = useState(false);
+  if (src && !errored) {
+    return (
+      <img
+        src={src}
+        alt={name || ''}
+        crossOrigin="anonymous"
+        referrerPolicy="no-referrer"
+        onError={() => setErrored(true)}
+        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+      />
+    );
+  }
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%', flexShrink: 0,
+      background: '#2a3441', color: '#f0f4f8',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: size * 0.45, fontWeight: 700,
+    }}>{(name || '?').charAt(0).toUpperCase()}</div>
+  );
+}
+
 // Profile-picker dropdown for Instagram business accounts the connected ad
 // account / page tokens can see. Loads on mount; selecting a row sets the
 // numeric IG user ID on the parent config.
@@ -25,30 +134,6 @@ function InstagramAccountPicker({ value, onChange }) {
   }, []);
   const selected = accounts.find(a => a.id === value);
 
-  const Avatar = ({ src, name, size = 24 }) => {
-    const [errored, setErrored] = useState(false);
-    if (src && !errored) {
-      return (
-        <img
-          src={src}
-          alt={name || ''}
-          crossOrigin="anonymous"
-          referrerPolicy="no-referrer"
-          onError={() => setErrored(true)}
-          style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
-        />
-      );
-    }
-    return (
-      <div style={{
-        width: size, height: size, borderRadius: '50%', flexShrink: 0,
-        background: '#2a3441', color: '#f0f4f8',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: size * 0.45, fontWeight: 700,
-      }}>{(name || '?').charAt(0).toUpperCase()}</div>
-    );
-  };
-
   return (
     <div style={{ position: 'relative' }}>
       <button
@@ -62,7 +147,7 @@ function InstagramAccountPicker({ value, onChange }) {
       >
         {selected ? (
           <>
-            <Avatar src={selected.profile_pic_url} name={selected.username} />
+            <ProfileAvatar src={selected.profile_pic_url} name={selected.username} />
             <span style={{ flex: 1 }}>@{selected.username || selected.id}</span>
           </>
         ) : (
@@ -99,7 +184,7 @@ function InstagramAccountPicker({ value, onChange }) {
                     border: 0, color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11,
                   }}
                 >
-                  <Avatar src={a.profile_pic_url} name={a.username} size={28} />
+                  <ProfileAvatar src={a.profile_pic_url} name={a.username} size={28} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600 }}>@{a.username || '(no username)'}</div>
                     <div style={{ fontSize: 9, color: '#6e7681' }}>{a.id} · {a.source}</div>
@@ -398,8 +483,8 @@ export default function UgcInboxTool() {
           <input style={S.input} value={config.destUrl} onChange={e => updateConfig({ destUrl: e.target.value })} placeholder="https://howlcampfires.com/..." />
         </div>
         <div>
-          <label style={S.label}>Page ID</label>
-          <input style={S.input} value={config.pageId} onChange={e => updateConfig({ pageId: e.target.value })} />
+          <label style={S.label}>Facebook Page</label>
+          <PagePicker value={config.pageId} onChange={(id) => updateConfig({ pageId: id })} />
         </div>
         <div>
           <label style={S.label}>Instagram Account</label>
