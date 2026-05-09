@@ -268,6 +268,10 @@ export default async function handler(req, res) {
       // Accepts EITHER a single fileId OR a pair { feedFileId, storyFileId } for placement-asset customization.
       const { fileId, pair, adsetId, pageId, destUrl, adName, headline, primaryText, creator, productId, angleId, campaignId } = req.body;
       const isPair = !!pair && pair.feedFileId && pair.storyFileId;
+      // Instagram User ID is required by Meta when the ad targets Instagram
+      // placements (Reels, Stories). Allow per-launch override but fall back
+      // to the META_INSTAGRAM_USER_ID env var.
+      const instagramUserId = (req.body.instagramUserId || process.env.META_INSTAGRAM_USER_ID || '').trim() || null;
 
       // Stream headers
       res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
@@ -475,7 +479,10 @@ export default async function handler(req, res) {
 
           const creativeParams = new URLSearchParams({
             name: `${adName} Creative`,
-            object_story_spec: JSON.stringify({ page_id: pageId }),
+            object_story_spec: JSON.stringify({
+              page_id: pageId,
+              ...(instagramUserId ? { instagram_user_id: instagramUserId } : {}),
+            }),
             asset_feed_spec: JSON.stringify(assetFeedSpec),
             access_token: metaToken,
           });
@@ -667,8 +674,8 @@ export default async function handler(req, res) {
       // 3. Create creative
       emit({ step: 'meta_creative', status: 'start' });
       const objectStorySpec = videoId
-        ? { page_id: pageId, video_data: { video_id: videoId, image_url: videoThumbnailUrl, message: primaryText || headline || '', title: headline || '', call_to_action: { type: 'SHOP_NOW', value: { link: destUrl } } } }
-        : { page_id: pageId, link_data: { image_hash: imageHash, link: destUrl, message: primaryText || headline || '', name: headline || '', call_to_action: { type: 'SHOP_NOW' } } };
+        ? { page_id: pageId, ...(instagramUserId ? { instagram_user_id: instagramUserId } : {}), video_data: { video_id: videoId, image_url: videoThumbnailUrl, message: primaryText || headline || '', title: headline || '', call_to_action: { type: 'SHOP_NOW', value: { link: destUrl } } } }
+        : { page_id: pageId, ...(instagramUserId ? { instagram_user_id: instagramUserId } : {}), link_data: { image_hash: imageHash, link: destUrl, message: primaryText || headline || '', name: headline || '', call_to_action: { type: 'SHOP_NOW' } } };
       const creativeParams = new URLSearchParams({
         name: `${adName} Creative`,
         object_story_spec: JSON.stringify(objectStorySpec),

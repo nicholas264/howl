@@ -92,6 +92,7 @@ const S = {
 export default function UgcInboxTool() {
   const [config, setConfig] = useState(() => ls(LS_CONFIG, {
     pageId: import.meta.env.VITE_META_PAGE_ID || '',
+    instagramUserId: import.meta.env.VITE_META_INSTAGRAM_USER_ID || '',
     destUrl: '',
     adsetId: '',
     defaultCreator: '',
@@ -177,6 +178,7 @@ export default function UgcInboxTool() {
         action: 'launch_meta_ad',
         adsetId: config.adsetId.trim(),
         pageId: config.pageId.trim(),
+        instagramUserId: (config.instagramUserId || '').trim(),
         destUrl: config.destUrl.trim(),
         adName,
         headline: meta.headline?.trim() || '',
@@ -285,6 +287,10 @@ export default function UgcInboxTool() {
         <div>
           <label style={S.label}>Page ID</label>
           <input style={S.input} value={config.pageId} onChange={e => updateConfig({ pageId: e.target.value })} />
+        </div>
+        <div>
+          <label style={S.label}>Instagram User ID</label>
+          <input style={S.input} value={config.instagramUserId || ''} onChange={e => updateConfig({ instagramUserId: e.target.value })} placeholder="numeric IG account ID" />
         </div>
         <div>
           <label style={S.label}>Default Creator</label>
