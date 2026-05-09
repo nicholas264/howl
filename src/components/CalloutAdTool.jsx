@@ -50,6 +50,68 @@ async function fetchFeatureSpecs(productId) {
   } catch { return []; }
 }
 
+async function fetchPlacements(imageId) {
+  if (!imageId) return [];
+  try {
+    const r = await fetch(`/api/db/callout-placements?image_id=${imageId}`);
+    const data = await r.json();
+    return r.ok ? (data.placements || []) : [];
+  } catch { return []; }
+}
+
+async function savePlacements(rows) {
+  if (!rows.length) return [];
+  try {
+    const r = await fetch('/api/db/callout-placements', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rows),
+    });
+    const data = await r.json();
+    return r.ok ? (data.placements || []) : [];
+  } catch { return []; }
+}
+
+async function clearPlacements(imageId) {
+  if (!imageId) return;
+  try {
+    await fetch(`/api/db/callout-placements?image_id=${imageId}`, { method: 'DELETE' });
+  } catch {}
+}
+
+// Apply cached placements to a callouts array. Matches by heading == feature_name.
+function applyPlacementsToCallouts(callouts, placements) {
+  if (!placements.length) return callouts;
+  return callouts.map(c => {
+    const p = placements.find(pl => pl.feature_name.toLowerCase() === (c.heading || '').toLowerCase());
+    if (!p) return c;
+    return {
+      ...c,
+      anchorX: Number(p.anchor_x),
+      anchorY: Number(p.anchor_y),
+      side: p.side,
+      textX: p.text_x == null ? undefined : Number(p.text_x),
+      textY: p.text_y == null ? Number(p.anchor_y) : Number(p.text_y),
+    };
+  });
+}
+
+// Build placement rows from current callouts.
+function calloutsToPlacementRows(callouts, imageId, source) {
+  return callouts
+    .filter(c => (c.heading || '').trim())
+    .map(c => ({
+      image_id: imageId,
+      feature_name: c.heading.trim(),
+      anchor_x: c.anchorX,
+      anchor_y: c.anchorY,
+      side: c.side,
+      text_x: c.textX ?? null,
+      text_y: c.textY ?? null,
+      source,
+    }));
+}
+
 async function saveFeatureSpecs(specs) {
   const r = await fetch('/api/db/callout-features', {
     method: 'POST',
@@ -360,6 +422,7 @@ export default function CalloutAdTool({ onAddToCart }) {
   const [autoPlacing, setAutoPlacing] = useState(false);
   const [featureSpecs, setFeatureSpecs] = useState([]);
   const [featureLibraryOpen, setFeatureLibraryOpen] = useState(false);
+  const [currentImageId, setCurrentImageId] = useState(null); // callout_images.id of the active image (null = no library record)
 
   useEffect(() => { fetchLayouts().then(setDrafts); }, []);
   // Per-product image libraries — refetch whenever the active product changes.
@@ -447,6 +510,7 @@ export default function CalloutAdTool({ onAddToCart }) {
       if (setActive) {
         setImgUrl(url);
         setImgBlobUrl(url);
+        setCurrentImageId(record?.id || null);
         if (localUrl) URL.revokeObjectURL(localUrl);
       }
       return url;
@@ -491,10 +555,17 @@ export default function CalloutAdTool({ onAddToCart }) {
     }
   };
 
-  const pickSavedImage = (url) => {
+  const pickSavedImage = async (img) => {
     if (imgUrl && imgUrl.startsWith('blob:')) URL.revokeObjectURL(imgUrl);
-    setImgUrl(url);
-    setImgBlobUrl(url);
+    setImgUrl(img.url);
+    setImgBlobUrl(img.url);
+    setCurrentImageId(img.id);
+    // Apply cached placements (vision result or manual override) to the
+    // current callouts, so re-opening this image shows the same layout.
+    const cached = await fetchPlacements(img.id);
+    if (cached.length) {
+      setCallouts(prev => applyPlacementsToCallouts(prev, cached));
+    }
   };
 
   const removeSavedImage = async (img) => {
@@ -635,7 +706,27 @@ export default function CalloutAdTool({ onAddToCart }) {
     }));
   }, []);
 
-  const stopDrag = useCallback(() => { draggingRef.current = null; }, []);
+  const stopDrag = useCallback(() => {
+    const drag = draggingRef.current;
+    draggingRef.current = null;
+    // Persist manual override for the dragged callout so it sticks across
+    // re-renders. Title drags aren't per-feature, so skip those.
+    if (drag && drag.type !== 'title' && currentImageId) {
+      const c = callouts.find(cc => cc.id === drag.id);
+      if (c && (c.heading || '').trim()) {
+        savePlacements([{
+          image_id: currentImageId,
+          feature_name: c.heading.trim(),
+          anchor_x: c.anchorX,
+          anchor_y: c.anchorY,
+          side: c.side,
+          text_x: c.textX ?? null,
+          text_y: c.textY ?? null,
+          source: 'manual',
+        }]);
+      }
+    }
+  }, [callouts, currentImageId]);
 
   useEffect(() => {
     window.addEventListener('mousemove', handleStageMouseMove);
@@ -667,9 +758,26 @@ export default function CalloutAdTool({ onAddToCart }) {
   // callouts array seeded with those anchors. Falls back to the existing
   // callouts if the call fails. Re-uses the body copy from the current
   // callouts (matched by heading) so user edits aren't lost.
-  const placeCalloutsWithVision = async (srcUrl) => {
+  // Run vision (or use cached placements when complete) to position the
+  // callouts on `srcUrl`. When `imageId` is supplied, results are cached and
+  // re-used. `forceVision` skips the cache and re-runs Claude.
+  const placeCalloutsWithVision = async (srcUrl, imageId = null, { forceVision = false } = {}) => {
     const features = callouts.map(c => c.heading || '').filter(Boolean);
     if (!features.length) return callouts;
+
+    // Cache hit path: if every requested feature has a cached placement,
+    // skip the vision call entirely.
+    if (imageId && !forceVision) {
+      const cached = await fetchPlacements(imageId);
+      if (cached.length) {
+        const cachedNames = new Set(cached.map(c => c.feature_name.toLowerCase()));
+        const allCovered = features.every(f => cachedNames.has(f.toLowerCase()));
+        if (allCovered) {
+          return applyPlacementsToCallouts(callouts, cached);
+        }
+      }
+    }
+
     const r = await fetch('/api/callout-vision', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -691,17 +799,23 @@ export default function CalloutAdTool({ onAddToCart }) {
         textY: p.anchorY,
       };
     });
-    return applyLayoutSolver(merged);
+    const solved = applyLayoutSolver(merged);
+    // Cache the result so subsequent renders are deterministic and free.
+    if (imageId) {
+      savePlacements(calloutsToPlacementRows(solved, imageId, 'vision'));
+    }
+    return solved;
   };
 
-  const autoPlace = async () => {
+  const autoPlace = async ({ forceVision = false } = {}) => {
     if (!imgBlobUrl) {
       alert('Save the image first (it needs a public URL).');
       return;
     }
     setAutoPlacing(true);
     try {
-      const next = await placeCalloutsWithVision(imgBlobUrl);
+      if (forceVision && currentImageId) await clearPlacements(currentImageId);
+      const next = await placeCalloutsWithVision(imgBlobUrl, currentImageId, { forceVision });
       setCallouts(next);
     } catch (err) {
       console.error('autoPlace failed', err);
@@ -725,7 +839,7 @@ export default function CalloutAdTool({ onAddToCart }) {
         const img = savedImages[i];
         try {
           const calloutsForImg = withVision
-            ? await placeCalloutsWithVision(img.url).catch(() => callouts)
+            ? await placeCalloutsWithVision(img.url, img.id).catch(() => callouts)
             : callouts;
           const canvas = await renderCalloutCanvas({
             imgUrl: img.url, format, title, subtitle, callouts: calloutsForImg, titlePos,
@@ -973,13 +1087,23 @@ export default function CalloutAdTool({ onAddToCart }) {
               </button>
             )}
             <button
-              onClick={autoPlace}
+              onClick={() => autoPlace()}
               disabled={!imgBlobUrl || autoPlacing}
               style={secondaryBtn}
-              title="Use Claude vision to position each callout's anchor on the right feature"
+              title="Use Claude vision (or cached placement) to position each callout's anchor"
             >
               {autoPlacing ? 'Placing…' : 'Auto-place callouts'}
             </button>
+            {currentImageId && (
+              <button
+                onClick={() => autoPlace({ forceVision: true })}
+                disabled={!imgBlobUrl || autoPlacing}
+                style={secondaryBtn}
+                title="Discard cached placements for this image and re-run Claude vision from scratch"
+              >
+                Re-run vision
+              </button>
+            )}
             <button
               onClick={() => setCallouts(prev => applyLayoutSolver(prev))}
               style={secondaryBtn}
@@ -1139,7 +1263,7 @@ export default function CalloutAdTool({ onAddToCart }) {
                           src={img.url}
                           alt={img.file_name || ''}
                           crossOrigin="anonymous"
-                          onClick={() => pickSavedImage(img.url)}
+                          onClick={() => pickSavedImage(img)}
                           title={img.file_name || ''}
                           style={{
                             width: '100%', height: '100%', objectFit: 'cover',

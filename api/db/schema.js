@@ -121,6 +121,26 @@ export default async function handler(req, res) {
     `;
     await sql`CREATE INDEX IF NOT EXISTS idx_callout_feature_specs_product ON callout_feature_specs(product_id)`;
 
+    // Per-image, per-feature anchor cache. Vision results land here on first
+    // run; manual user drags overwrite the row with source='manual'. Subsequent
+    // renders read from this table before considering a vision call.
+    await sql`
+      CREATE TABLE IF NOT EXISTS callout_image_placements (
+        id            BIGSERIAL PRIMARY KEY,
+        image_id      BIGINT NOT NULL REFERENCES callout_images(id) ON DELETE CASCADE,
+        feature_name  TEXT NOT NULL,
+        anchor_x      DOUBLE PRECISION NOT NULL,
+        anchor_y      DOUBLE PRECISION NOT NULL,
+        side          TEXT NOT NULL,
+        text_x        DOUBLE PRECISION,
+        text_y        DOUBLE PRECISION,
+        source        TEXT NOT NULL DEFAULT 'vision',
+        updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (image_id, feature_name)
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_callout_placements_image ON callout_image_placements(image_id)`;
+
     // Creative analytics — one row per ad in the Meta account, refreshed by the
     // sync_creative_analytics endpoint. group_key (= video_id || image_hash)
     // is what the Top Creatives table groups by.
