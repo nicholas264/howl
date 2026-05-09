@@ -1,6 +1,119 @@
 import React, { useState, useEffect, useCallback, Fragment } from 'react';
 import { PRODUCTS, ANGLES } from '../data';
 
+// Profile-picker dropdown for Instagram business accounts the connected ad
+// account / page tokens can see. Loads on mount; selecting a row sets the
+// numeric IG user ID on the parent config.
+function InstagramAccountPicker({ value, onChange }) {
+  const [accounts, setAccounts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch('/api/meta-instagram-accounts');
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'failed');
+        setAccounts(data.accounts || []);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+  const selected = accounts.find(a => a.id === value);
+
+  const Avatar = ({ src, name, size = 24 }) => {
+    const [errored, setErrored] = useState(false);
+    if (src && !errored) {
+      return (
+        <img
+          src={src}
+          alt={name || ''}
+          crossOrigin="anonymous"
+          referrerPolicy="no-referrer"
+          onError={() => setErrored(true)}
+          style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+        />
+      );
+    }
+    return (
+      <div style={{
+        width: size, height: size, borderRadius: '50%', flexShrink: 0,
+        background: '#2a3441', color: '#f0f4f8',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: size * 0.45, fontWeight: 700,
+      }}>{(name || '?').charAt(0).toUpperCase()}</div>
+    );
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          ...S.input,
+          display: 'flex', alignItems: 'center', gap: 8,
+          textAlign: 'left', cursor: 'pointer', padding: '6px 10px',
+        }}
+      >
+        {selected ? (
+          <>
+            <Avatar src={selected.profile_pic_url} name={selected.username} />
+            <span style={{ flex: 1 }}>@{selected.username || selected.id}</span>
+          </>
+        ) : (
+          <span style={{ flex: 1, color: '#6e7681' }}>
+            {loading ? 'Loading IG accounts…' : error ? `Error: ${error}` : accounts.length ? 'Select Instagram account' : 'No IG accounts found'}
+          </span>
+        )}
+        <span style={{ color: '#6e7681', fontSize: 9 }}>▼</span>
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
+          <div style={{
+            position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 51,
+            background: '#0d1117', border: '1px solid #2a3441', borderRadius: 4,
+            maxHeight: 280, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+          }}>
+            {accounts.length === 0 && (
+              <div style={{ padding: 12, color: '#8b949e', fontSize: 11 }}>
+                {loading ? 'Loading…' : 'No Instagram accounts linked to this ad account or page.'}
+              </div>
+            )}
+            {accounts.map(a => {
+              const active = a.id === value;
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => { onChange(a.id); setOpen(false); }}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '8px 10px', cursor: 'pointer', textAlign: 'left',
+                    background: active ? '#1f2630' : 'transparent',
+                    border: 0, color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11,
+                  }}
+                >
+                  <Avatar src={a.profile_pic_url} name={a.username} size={28} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600 }}>@{a.username || '(no username)'}</div>
+                    <div style={{ fontSize: 9, color: '#6e7681' }}>{a.id} · {a.source}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // Same-origin authenticated proxy for Drive thumbnails. The site sets
 // COEP: require-corp, which blocks lh3.googleusercontent.com images, so we
 // fetch via /api/drive/thumb (auth header injected by FetchInterceptor) and
@@ -289,8 +402,11 @@ export default function UgcInboxTool() {
           <input style={S.input} value={config.pageId} onChange={e => updateConfig({ pageId: e.target.value })} />
         </div>
         <div>
-          <label style={S.label}>Instagram User ID</label>
-          <input style={S.input} value={config.instagramUserId || ''} onChange={e => updateConfig({ instagramUserId: e.target.value })} placeholder="numeric IG account ID" />
+          <label style={S.label}>Instagram Account</label>
+          <InstagramAccountPicker
+            value={config.instagramUserId || ''}
+            onChange={(id) => updateConfig({ instagramUserId: id })}
+          />
         </div>
         <div>
           <label style={S.label}>Default Creator</label>
