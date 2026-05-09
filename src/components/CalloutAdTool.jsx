@@ -623,6 +623,7 @@ export default function CalloutAdTool({ onAddToCart }) {
                 src={imgUrl}
                 alt=""
                 draggable={false}
+                crossOrigin="anonymous"
                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
               />
             )}
@@ -837,6 +838,7 @@ export default function CalloutAdTool({ onAddToCart }) {
                         <img
                           src={img.url}
                           alt={img.file_name || ''}
+                          crossOrigin="anonymous"
                           onClick={() => pickSavedImage(img.url)}
                           title={img.file_name || ''}
                           style={{
