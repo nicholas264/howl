@@ -88,6 +88,9 @@ export default async function handler(req, res) {
     `;
     await sql`CREATE INDEX IF NOT EXISTS idx_callout_layouts_updated_at ON callout_layouts(updated_at DESC)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_callout_layouts_user_id ON callout_layouts(user_id)`;
+    // Per-format callout positions for the inactive formats. Active format's
+    // positions live on the flat callout rows; this holds the other(s).
+    await sql`ALTER TABLE callout_layouts ADD COLUMN IF NOT EXISTS pos_by_format JSONB`;
 
     // Reusable base images uploaded into the Callout Ads tool. Decoupled from
     // callout_layouts so the same image can back many layouts.

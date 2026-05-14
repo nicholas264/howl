@@ -35,9 +35,9 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const { product_id, format, title, subtitle, title_pos, callouts, image_url, thumb_url } = req.body || {};
+      const { product_id, format, title, subtitle, title_pos, callouts, image_url, thumb_url, pos_by_format } = req.body || {};
       const rows = await sql`
-        INSERT INTO callout_layouts (user_id, product_id, format, title, subtitle, title_pos, callouts, image_url, thumb_url)
+        INSERT INTO callout_layouts (user_id, product_id, format, title, subtitle, title_pos, callouts, image_url, thumb_url, pos_by_format)
         VALUES (
           ${userId},
           ${product_id || null},
@@ -47,7 +47,8 @@ export default async function handler(req, res) {
           ${title_pos ? JSON.stringify(title_pos) : null},
           ${callouts ? JSON.stringify(callouts) : null},
           ${image_url || null},
-          ${thumb_url || null}
+          ${thumb_url || null},
+          ${pos_by_format ? JSON.stringify(pos_by_format) : null}
         )
         RETURNING *
       `;
@@ -68,6 +69,7 @@ export default async function handler(req, res) {
       if ('callouts' in fields) await sql`UPDATE callout_layouts SET callouts = ${JSON.stringify(fields.callouts)}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
       if ('image_url' in fields) await sql`UPDATE callout_layouts SET image_url = ${fields.image_url}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
       if ('thumb_url' in fields) await sql`UPDATE callout_layouts SET thumb_url = ${fields.thumb_url}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
+      if ('pos_by_format' in fields) await sql`UPDATE callout_layouts SET pos_by_format = ${fields.pos_by_format ? JSON.stringify(fields.pos_by_format) : null}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
 
       const rows = await sql`SELECT * FROM callout_layouts WHERE id = ${id} AND user_id = ${userId} LIMIT 1`;
       return res.json({ layout: rows[0] });

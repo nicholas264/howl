@@ -353,8 +353,43 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     setStatuses(prev => ({ ...prev, [id]: { status: 'pushing', steps: {}, currentStep: null } }));
     const adName = buildAdName({ creator: m.creator || 'Static Builder', productId: m.productId });
     const mimeType = item.type === 'video' ? 'video/mp4' : 'image';
+    const isPairedImage = item.paired && item.storyUrl && item.type !== 'video';
 
     try {
+      // Paired callout image — upload both, create one creative with asset_feed_spec.
+      if (isPairedImage) {
+        setStep(id, 'meta_upload', 'running');
+        const [feedUp, storyUp] = await Promise.all([
+          fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'upload_image', imageBase64: item.squareUrl || item.url }) }).then(r => r.json()),
+          fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'upload_image', imageBase64: item.storyUrl }) }).then(r => r.json()),
+        ]);
+        if (feedUp.error) throw new Error(`Feed image upload: ${feedUp.error}`);
+        if (storyUp.error) throw new Error(`Story image upload: ${storyUp.error}`);
+        setStep(id, 'meta_upload', 'done');
+
+        setStep(id, 'meta_creative', 'running');
+        const pr = await fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+          action: 'create_paired_image_ad',
+          feedImageHash: feedUp.hash,
+          storyImageHash: storyUp.hash,
+          adName,
+          headline: m.headline,
+          primaryText: m.primaryText || m.headline,
+          destUrl: productUrl,
+          adsetId: selectedAdsetId,
+          pageId: config.pageId,
+          instagramUserId: (config.instagramUserId || '').trim() || undefined,
+          creator: m.creator || 'Static Builder',
+        }) });
+        const pd = await pr.json();
+        if (pd.error) { setStep(id, 'meta_creative', 'error', pd.error); throw new Error(pd.error); }
+        setStep(id, 'meta_creative', 'done');
+        setStep(id, 'meta_ad', 'done', pd.adId);
+        setItemStatus(id, 'success', `Ad ${pd.adId}`);
+        onUpdateCartItem?.(item.id, { metaStatus: 'pushed', metaPushedAt: Date.now() });
+        return;
+      }
+
       // 1. Upload asset
       setStep(id, 'meta_upload', 'running');
       const creativeBody = {
@@ -544,6 +579,11 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                     fallback={<div style={S.thumbBox}>{(item.mimeType || '').startsWith('video/') ? <><div style={{ fontSize: 24 }}>▶</div><div>Video</div></> : 'Image'}</div>}
                   />
                 )
+              ) : item.paired && item.storyUrl ? (
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <img src={item.squareUrl || item.url} alt={`${item.name} 4:5`} style={{ width: 84, height: 105, objectFit: 'cover', borderRadius: 4 }} />
+                  <img src={item.storyUrl} alt={`${item.name} 9:16`} style={{ width: 52, height: 92, objectFit: 'cover', borderRadius: 4 }} />
+                </div>
               ) : (
                 <img src={item.squareUrl || item.url} alt={item.name} style={{ width: 140, height: 140, objectFit: 'cover', borderRadius: 4 }} />
               )}
@@ -561,6 +601,9 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                     : <span style={S.badge('#3fb950')}>Cart</span>}
                   {item.source === 'drive' && item.kind === 'pair' && (
                     <span style={{ marginLeft: 6, ...S.badge('#3fb950') }}>1:1 + 9:16</span>
+                  )}
+                  {item.paired && item.storyUrl && (
+                    <span style={{ marginLeft: 6, ...S.badge('#3fb950') }}>4:5 + 9:16</span>
                   )}
                 </span>
               </div>

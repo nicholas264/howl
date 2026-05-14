@@ -408,6 +408,11 @@ export default function CalloutAdTool({ onAddToCart }) {
   const [productId, setProductId] = useState('r4mkii');
   const product = PRODUCTS.find(p => p.id === productId) || PRODUCTS[0];
   const [format, setFormat] = useState(FORMATS[0]);
+  // Per-format positions for the INACTIVE formats. The active format's
+  // positions live on the flat callout rows + titlePos. Shape:
+  //   { square: { titlePos, callouts: [{id, side, anchorX, anchorY, textX, textY}] } | null,
+  //     story:  ... }
+  const [posByFormat, setPosByFormat] = useState({ square: null, story: null });
   const [imgUrl, setImgUrl] = useState(null);   // local preview URL OR persisted blob URL
   const [imgBlobUrl, setImgBlobUrl] = useState(null); // Vercel Blob URL once uploaded
   const [drafts, setDrafts] = useState([]);
@@ -466,6 +471,43 @@ export default function CalloutAdTool({ onAddToCart }) {
   const draggingRef = useRef(null); // { id, type: 'anchor' }
   const skipNextProductInitRef = useRef(false);
 
+  // Snapshot helpers for per-format positions.
+  const snapshotCurrentPos = () => ({
+    titlePos,
+    callouts: callouts.map(c => ({
+      id: c.id, side: c.side,
+      anchorX: c.anchorX, anchorY: c.anchorY,
+      textX: c.textX, textY: c.textY,
+    })),
+  });
+
+  // Toggle between formats while preserving each format's positions. The
+  // active format reads/writes flat fields on callouts + titlePos; the
+  // inactive format's positions are stashed in posByFormat.
+  const switchFormat = (nextFormat) => {
+    if (nextFormat.id === format.id) return;
+    const snap = snapshotCurrentPos();
+    const stash = posByFormat[nextFormat.id];
+    setPosByFormat(prev => ({ ...prev, [format.id]: snap }));
+    if (stash) {
+      const byId = new Map(stash.callouts.map(c => [c.id, c]));
+      setCallouts(prev => prev.map(c => {
+        const o = byId.get(c.id);
+        if (!o) return c;
+        return { ...c, side: o.side, anchorX: o.anchorX, anchorY: o.anchorY, textX: o.textX, textY: o.textY };
+      }));
+      if (stash.titlePos) setTitlePos(stash.titlePos);
+    }
+    setFormat(nextFormat);
+  };
+
+  // "Copy positions to the other format" — overwrites the stashed slot for
+  // the inactive format with the current positions.
+  const copyPosToOtherFormat = () => {
+    const otherId = format.id === 'square' ? 'story' : 'square';
+    setPosByFormat(prev => ({ ...prev, [otherId]: snapshotCurrentPos() }));
+  };
+
   // Initialize from product (skipped when loading a draft)
   useEffect(() => {
     if (skipNextProductInitRef.current) {
@@ -474,6 +516,7 @@ export default function CalloutAdTool({ onAddToCart }) {
     }
     setTitle(`THE ${product.name.toUpperCase()}`);
     setSubtitle(product.tagline.toUpperCase());
+    setPosByFormat({ square: null, story: null });
     const features = product.features.slice(0, 4);
     setCallouts(features.map((f, i) => DEFAULT_CALLOUT(
       f.toUpperCase(),
@@ -591,6 +634,7 @@ export default function CalloutAdTool({ onAddToCart }) {
         title_pos: titlePos,
         callouts,
         image_url: imgBlobUrl,
+        pos_by_format: posByFormat,
       };
       let saved;
       if (draftId) {
@@ -634,6 +678,7 @@ export default function CalloutAdTool({ onAddToCart }) {
       setSubtitle(d.subtitle || '');
       setTitlePos(d.title_pos || { x: 0.05, y: 0.04 });
       setCallouts(d.callouts || []);
+      setPosByFormat(d.pos_by_format || { square: null, story: null });
       if (imgUrl && imgUrl.startsWith('blob:')) URL.revokeObjectURL(imgUrl);
       if (d.image_url) {
         setImgUrl(d.image_url);
@@ -664,6 +709,13 @@ export default function CalloutAdTool({ onAddToCart }) {
   };
   const removeCallout = (id) => {
     setCallouts(prev => prev.filter(c => c.id !== id));
+    setPosByFormat(prev => {
+      const next = { ...prev };
+      for (const k of Object.keys(next)) {
+        if (next[k]) next[k] = { ...next[k], callouts: next[k].callouts.filter(c => c.id !== id) };
+      }
+      return next;
+    });
     if (selectedId === id) setSelectedId(null);
   };
   const addCallout = () => {
@@ -885,21 +937,50 @@ export default function CalloutAdTool({ onAddToCart }) {
     setCallouts(v.callouts);
   };
 
+  // Render the current draft to a target format using the stashed positions
+  // for the target format (or the live state when target === active).
+  const renderFormat = async (targetFormat) => {
+    let useCallouts = callouts;
+    let useTitlePos = titlePos;
+    if (targetFormat.id !== format.id) {
+      const stash = posByFormat[targetFormat.id];
+      if (stash) {
+        const byId = new Map(stash.callouts.map(c => [c.id, c]));
+        useCallouts = callouts.map(c => {
+          const o = byId.get(c.id);
+          if (!o) return c;
+          return { ...c, side: o.side, anchorX: o.anchorX, anchorY: o.anchorY, textX: o.textX, textY: o.textY };
+        });
+        if (stash.titlePos) useTitlePos = stash.titlePos;
+      }
+    }
+    const canvas = await renderCalloutCanvas({
+      imgUrl, format: targetFormat, title, subtitle, callouts: useCallouts, titlePos: useTitlePos,
+    });
+    return canvas.toDataURL('image/png');
+  };
+
   const sendToCart = async () => {
     if (!onAddToCart) return;
     setExporting(true);
     try {
-      const canvas = await renderCalloutCanvas({ imgUrl, format, title, subtitle, callouts, titlePos });
-      const dataUrl = canvas.toDataURL('image/png');
+      const square = FORMATS.find(f => f.id === 'square');
+      const story = FORMATS.find(f => f.id === 'story');
+      const [squareUrl, storyUrl] = await Promise.all([
+        renderFormat(square),
+        renderFormat(story),
+      ]);
       // auto-save the editor state so it can be re-opened later
       await saveDraft();
       onAddToCart({
         id: Date.now(),
         type: 'image',
         kind: 'callout-ad',
+        paired: true,
         calloutDraftId: draftId || `draft-${Date.now()}`,
-        squareUrl: dataUrl,
-        url: dataUrl,
+        squareUrl,
+        storyUrl,
+        url: squareUrl,
         name: `${product.name} callout · ${new Date().toLocaleString()}`,
         product: product.id,
         createdAt: Date.now(),
@@ -1208,14 +1289,19 @@ export default function CalloutAdTool({ onAddToCart }) {
           </Row>
 
           <Row label="Format">
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               {FORMATS.map(f => (
                 <button
                   key={f.id}
-                  onClick={() => setFormat(f)}
+                  onClick={() => switchFormat(f)}
                   style={format.id === f.id ? chipOn : chipOff}
                 >{f.label}</button>
               ))}
+              <button
+                onClick={copyPosToOtherFormat}
+                style={{ ...chipOff, fontSize: 10 }}
+                title="Copy current callout positions to the other format"
+              >Copy → {format.id === 'square' ? '9:16' : '4:5'}</button>
             </div>
           </Row>
 

@@ -479,6 +479,88 @@ export default async function handler(req, res) {
         return res.json({ success: true, adId: d.id });
       }
 
+      case 'create_paired_image_ad': {
+        const { feedImageHash, storyImageHash, adName, headline, primaryText, destUrl, adsetId } = req.body;
+        const pageId = req.body.pageId || defaultPageId;
+        const instagramUserId = (req.body.instagramUserId || '').trim() || undefined;
+        if (!feedImageHash || !storyImageHash) return res.status(400).json({ error: 'feedImageHash and storyImageHash required', step: 'validate' });
+        if (!adsetId || !pageId || !destUrl || !adName) return res.status(400).json({ error: 'Missing required fields', step: 'validate' });
+
+        const assetFeedSpec = {
+          images: [
+            { hash: feedImageHash, adlabels: [{ name: 'image_feed' }] },
+            { hash: storyImageHash, adlabels: [{ name: 'image_story' }] },
+          ],
+          bodies: [{ text: primaryText || headline || '' }],
+          titles: [{ text: headline || '' }],
+          link_urls: [{ website_url: destUrl }],
+          call_to_action_types: ['SHOP_NOW'],
+          ad_formats: ['SINGLE_IMAGE'],
+          asset_customization_rules: [
+            {
+              customization_spec: {
+                publisher_platforms: ['facebook', 'instagram'],
+                facebook_positions: ['feed', 'marketplace'],
+                instagram_positions: ['stream', 'explore'],
+              },
+              image_label: { name: 'image_feed' },
+            },
+            {
+              customization_spec: {
+                publisher_platforms: ['facebook', 'instagram'],
+                facebook_positions: ['story', 'facebook_reels'],
+                instagram_positions: ['story', 'reels'],
+              },
+              image_label: { name: 'image_story' },
+            },
+          ],
+        };
+
+        const creativeParams = new URLSearchParams({
+          name: `${adName} Creative`,
+          object_story_spec: JSON.stringify({
+            page_id: pageId,
+            ...(instagramUserId ? { instagram_user_id: instagramUserId } : {}),
+          }),
+          asset_feed_spec: JSON.stringify(assetFeedSpec),
+          access_token: accessToken,
+        });
+        const creativeRes = await fetch(`${BASE}/${adAccountId}/adcreatives`, {
+          method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: creativeParams,
+        });
+        const creativeData = await creativeRes.json();
+        if (creativeData.error) {
+          return res.status(400).json({ error: creativeData.error.error_user_msg || creativeData.error.message, detail: creativeData.error, step: 'create_creative' });
+        }
+
+        const adParams = new URLSearchParams({
+          name: adName,
+          adset_id: adsetId,
+          creative: JSON.stringify({ creative_id: creativeData.id }),
+          status: 'PAUSED',
+          access_token: accessToken,
+        });
+        const adRes = await fetch(`${BASE}/${adAccountId}/ads`, {
+          method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: adParams,
+        });
+        const adData = await adRes.json();
+        if (adData.error) return res.status(400).json({ error: adData.error.message, step: 'create_ad' });
+
+        await logLaunch({
+          ad_id: adData.id,
+          adset_id: adsetId,
+          ad_name: adName,
+          headline,
+          primary_text: primaryText,
+          dest_url: destUrl,
+          mime_type: 'image (paired)',
+          creator: req.body.creator || 'Static Builder',
+          ...actor,
+        });
+
+        return res.json({ success: true, adId: adData.id, creativeId: creativeData.id });
+      }
+
       case 'push_ad': {
         const { imageHash, videoId: preUploadedVideoId, adName, headline, primaryText, destUrl, adsetId } = req.body;
         const pageId = req.body.pageId || defaultPageId;
