@@ -1,6 +1,33 @@
 # AWS + Remotion Lambda Setup — howl-ad-engine
 
-This is a self-contained brief for a separate Claude Code session that will provision AWS for the howl-ad-engine UGC Editor render pipeline. The main session has already wired direct-to-Blob uploads, server-side audio extraction, Whisper transcription, and persistent UGC sessions. This is the missing piece: server-side video rendering of cuts + animated captions + brand intro/outro at multi-GB scale.
+This is a brief for a separate Claude Code session ("co-work") that will wire Remotion Lambda into howl-ad-engine. The main session has already shipped direct-to-Blob uploads, server-side audio extraction, Whisper transcription, and persistent UGC sessions. This is the missing piece: server-side video rendering of cuts + animated captions + brand intro/outro at multi-GB scale.
+
+## How to use this brief
+
+Some steps require Nicholas (browser-based AWS console actions, credit card, MFA on a phone). Co-work cannot do those. Everything else is fully autonomous.
+
+### Nicholas — do these first, by hand
+
+1. **Create the AWS account.** Go to https://signup.aws.amazon.com/ and sign up. Account email: a HOWL inbox if you have one, else `nicholas@howlcampfires.com`. Account name: `howl-prod`. Add a credit card. Verify phone.
+2. **Enable MFA on the root account immediately** (Authy / 1Password / hardware key — your call).
+3. **Set a billing alert at $50/mo.** Console → Billing → Budgets → Create budget.
+4. **Create an IAM user `howl-ci` with programmatic access.** Console → IAM → Users → Create user → name `howl-ci` → check "Provide user access to the AWS Management Console" off → Next → attach policy "AdministratorAccess" *temporarily* (co-work will tighten this down) → create. On the success screen, **download the .csv with the access key + secret**. Save it to 1Password / Bitwarden under "HOWL AWS — howl-ci access keys."
+5. **Paste the keys into the co-work Claude session as a single message** like:
+
+   ```
+   AWS keys for the Remotion setup:
+   AWS_ACCESS_KEY_ID=AKIA...
+   AWS_SECRET_ACCESS_KEY=...
+   AWS_REGION=us-east-1
+   ```
+
+   Co-work will write them to a local `.env.aws` (gitignored) so subsequent `npx remotion lambda` commands pick them up.
+
+That's it for manual steps. Hand the rest off.
+
+### Co-work — start here
+
+Read the rest of this doc and execute steps 3 through 9. Skip step 1 (Nicholas did it) and step 2 (Nicholas chose `us-east-1`).
 
 ## What you're delivering
 

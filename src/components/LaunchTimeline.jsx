@@ -28,7 +28,7 @@ export default function LaunchTimeline({ stepDefs, steps, currentStep }) {
                 {s.label}
               </div>
               {st?.detail && (
-                <div style={{ fontSize: 9, color: '#6e7681', fontFamily: "'JetBrains Mono', monospace", whiteSpace: 'nowrap' }}>{st.detail}</div>
+                <div style={{ fontSize: 9, color: '#6e7681', fontFamily: "'JetBrains Mono', monospace", whiteSpace: 'nowrap' }}>{typeof st.detail === 'string' ? st.detail : JSON.stringify(st.detail)}</div>
               )}
             </div>
             {idx < stepDefs.length - 1 && (

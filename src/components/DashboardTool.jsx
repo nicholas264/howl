@@ -859,8 +859,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
             )}
 
             {groups.length > 0 && (
-              <div style={{ marginTop: 4 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10.5, tableLayout: 'auto' }}>
+              <div style={{ marginTop: 4, overflowX: 'auto' }}>
+                <table style={{ width: '100%', minWidth: 1100, borderCollapse: 'collapse', fontSize: 10.5, tableLayout: 'auto' }}>
                   <thead>
                     <tr style={{ color: '#6e7681', fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase' }}>
                       {COLS.map(c => (
