@@ -70,6 +70,26 @@ export async function analyzeCreativeGroup({ groupKey, manualTranscript = '', ct
           }
         } catch {}
       }
+      if (!videoSource) {
+        // Final fallback: we may have mirrored the video to Vercel Blob at launch time.
+        // Look it up by ad_id (and other ad_ids in this group for safety).
+        try {
+          const [row] = await sql`
+            SELECT lh.source_video_url
+            FROM launch_history lh
+            JOIN creative_performance cp ON cp.ad_id = lh.ad_id
+            WHERE cp.group_key = ${groupKey} AND lh.source_video_url IS NOT NULL
+            ORDER BY lh.launched_at DESC
+            LIMIT 1
+          `;
+          if (row?.source_video_url) {
+            videoSource = row.source_video_url;
+            debug.videoSourceUrl = 'recovered from launch_history (Blob mirror)';
+          }
+        } catch (err) {
+          debug.videoSourceUrl = `launch_history lookup failed: ${err.message}`;
+        }
+      }
       if (!debug.videoSourceUrl) {
         debug.videoSourceUrl = videoSource ? 'present' : 'missing (Meta restricts source on this video — try Paste transcript)';
       }

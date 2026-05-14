@@ -1,3 +1,5 @@
+import { mirrorVideoToBlob } from './_lib/blob/mirror.js';
+
 // Best-effort launch logger — swallows errors so a DB outage doesn't break Meta publishes.
 async function logLaunch(row) {
   try {
@@ -6,15 +8,16 @@ async function logLaunch(row) {
     const sql = neon(process.env.DATABASE_URL);
     await sql`
       INSERT INTO launch_history
-        (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email)
+        (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
       VALUES
-        (${row.ad_id}, ${row.adset_id || null}, ${row.campaign_id || null}, ${row.drive_file_id || null}, ${row.drive_file_name || null}, ${row.creator || null}, ${row.product_id || null}, ${row.angle_id || null}, ${row.ad_name || null}, ${row.headline || null}, ${row.primary_text || null}, ${row.dest_url || null}, ${row.mime_type || null}, ${row.launched_by_user_id || null}, ${row.launched_by_email || null})
+        (${row.ad_id}, ${row.adset_id || null}, ${row.campaign_id || null}, ${row.drive_file_id || null}, ${row.drive_file_name || null}, ${row.creator || null}, ${row.product_id || null}, ${row.angle_id || null}, ${row.ad_name || null}, ${row.headline || null}, ${row.primary_text || null}, ${row.dest_url || null}, ${row.mime_type || null}, ${row.launched_by_user_id || null}, ${row.launched_by_email || null}, ${row.source_video_url || null})
     `;
   } catch (err) {
     console.error('launch_history insert failed:', err.message);
   }
 }
 
+// Returns { videoId, blobUrl } — blobUrl is best-effort and may be null.
 async function uploadVideo(base64, name, adAccountId, accessToken, BASE) {
   const clean = base64.replace(/^data:video\/\w+;base64,/, '');
   const videoBuffer = Buffer.from(clean, 'base64');
@@ -26,7 +29,8 @@ async function uploadVideo(base64, name, adAccountId, accessToken, BASE) {
   const d = await r.json();
   if (d.error) throw new Error(d.error.message);
   if (!d.id) throw new Error('Video upload returned no ID');
-  return d.id;
+  const blobUrl = await mirrorVideoToBlob(videoBuffer, 'video/mp4', name || 'howl-video');
+  return { videoId: d.id, blobUrl };
 }
 
 async function uploadImage(base64, adAccountId, accessToken, BASE) {
@@ -469,6 +473,7 @@ export default async function handler(req, res) {
           dest_url: destUrl,
           mime_type: mimeType || 'image',
           creator: req.body.creator || 'Static Builder',
+          source_video_url: req.body.sourceVideoUrl || null,
           ...actor,
         });
         return res.json({ success: true, adId: d.id });
@@ -557,6 +562,7 @@ export default async function handler(req, res) {
           dest_url: destUrl,
           mime_type: preUploadedVideoId ? 'video/mp4' : 'image',
           creator: req.body.creator || 'Static Builder',
+          source_video_url: req.body.sourceVideoUrl || null,
           ...actor,
         });
 
@@ -657,8 +663,8 @@ export default async function handler(req, res) {
         const { videoBase64, name } = req.body;
         if (!videoBase64) return res.status(400).json({ error: 'No video data provided' });
         try {
-          const videoId = await uploadVideo(videoBase64, name, adAccountId, accessToken, BASE);
-          return res.json({ success: true, videoId });
+          const { videoId, blobUrl } = await uploadVideo(videoBase64, name, adAccountId, accessToken, BASE);
+          return res.json({ success: true, videoId, sourceVideoUrl: blobUrl });
         } catch (err) {
           return res.status(400).json({ error: err.message, step: 'upload_video' });
         }
@@ -840,6 +846,7 @@ export default async function handler(req, res) {
             product_id: item.product || null,
             mime_type: item.type || 'static',
             creator: item.creator || req.body.creator || 'Static Builder',
+            source_video_url: item.sourceVideoUrl || null,
             ...actor,
           });
 

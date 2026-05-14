@@ -213,6 +213,10 @@ export default async function handler(req, res) {
     await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS launched_by_email TEXT`;
     await sql`CREATE INDEX IF NOT EXISTS idx_launch_history_launched_by ON launch_history(launched_by_user_id)`;
 
+    // Persistent video copy in Vercel Blob — used by the DNA analyzer when Meta
+    // restricts the video source URL on its end.
+    await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS source_video_url TEXT`;
+
     // Internal bug/feature/edge-case reports submitted from the in-app widget.
     await sql`
       CREATE TABLE IF NOT EXISTS feedback (

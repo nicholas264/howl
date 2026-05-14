@@ -4,6 +4,7 @@
 import { neon } from '@neondatabase/serverless';
 import { requireAuth } from '../_lib/auth.js';
 import { getGoogleAccessToken } from '../_lib/gcp-auth.js';
+import { mirrorVideoToBlob } from '../_lib/blob/mirror.js';
 
 const DRIVE = 'https://www.googleapis.com/drive/v3';
 
@@ -405,7 +406,16 @@ export default async function handler(req, res) {
           emit({ step: stepLabel('meta_thumbnail'), status: 'done', detail: thumb ? 'ready' : 'ready (no thumb — auto)' });
         }
 
-        return { videoId: vId, imageHash: iHash, thumbnailUrl: thumb, fileMeta: fmeta, mimeType: mt };
+        // Mirror video to Vercel Blob so the DNA analyzer can pull it later
+        // even if Meta restricts video.source. Best-effort — never breaks launch.
+        let blobUrl = null;
+        if (isVid) {
+          emit({ step: stepLabel('blob_mirror'), status: 'start' });
+          blobUrl = await mirrorVideoToBlob(buf, mt, fmeta.name);
+          emit({ step: stepLabel('blob_mirror'), status: 'done', detail: blobUrl ? 'mirrored' : 'skipped' });
+        }
+
+        return { videoId: vId, imageHash: iHash, thumbnailUrl: thumb, fileMeta: fmeta, mimeType: mt, blobUrl };
       };
 
       // ── PAIR PATH ───────────────────────────────────────────────────────────
@@ -529,9 +539,9 @@ export default async function handler(req, res) {
               const sql = neon(process.env.DATABASE_URL);
               await sql`
                 INSERT INTO launch_history
-                  (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email)
+                  (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
                 VALUES
-                  (${adData.id}, ${adsetId}, ${campaignId || null}, ${pair.feedFileId}, ${feed.fileMeta.name + ' + ' + story.fileMeta.name}, ${creator || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${feed.mimeType + ' (paired)'}, ${auth.userId}, ${auth.email || null})
+                  (${adData.id}, ${adsetId}, ${campaignId || null}, ${pair.feedFileId}, ${feed.fileMeta.name + ' + ' + story.fileMeta.name}, ${creator || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${feed.mimeType + ' (paired)'}, ${auth.userId}, ${auth.email || null}, ${feed.blobUrl || null})
               `;
               emit({ step: 'db_log', status: 'done' });
             } else {
@@ -632,6 +642,17 @@ export default async function handler(req, res) {
         emit({ step: 'meta_upload', status: 'done', detail: `video ${videoId}` });
       }
 
+      // Mirror video to Blob in parallel with Meta thumbnail polling.
+      // Best-effort: failure does not break the launch.
+      let sourceVideoUrl = null;
+      const blobMirrorPromise = isVideo
+        ? (emit({ step: 'blob_mirror', status: 'start' }),
+           mirrorVideoToBlob(fileBuffer, mimeType, fileMeta.name).then(url => {
+             sourceVideoUrl = url;
+             emit({ step: 'blob_mirror', status: 'done', detail: url ? 'mirrored' : 'skipped' });
+           }))
+        : Promise.resolve();
+
       // Ads with video_data need a thumbnail. Poll Meta for the auto-generated one
       // with exponential-ish backoff to stay gentle on the rate limit.
       let videoThumbnailUrl = null;
@@ -731,15 +752,16 @@ export default async function handler(req, res) {
       emit({ step: 'drive_move', status: 'done', detail: finalName });
 
       // 6. Log to launch_history (best-effort — don't fail the launch on DB error)
+      await blobMirrorPromise;
       emit({ step: 'db_log', status: 'start' });
       try {
         if (process.env.DATABASE_URL) {
           const sql = neon(process.env.DATABASE_URL);
           await sql`
             INSERT INTO launch_history
-              (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email)
+              (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
             VALUES
-              (${adData.id}, ${adsetId}, ${campaignId || null}, ${fileId}, ${fileMeta.name}, ${creator || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${mimeType}, ${auth.userId}, ${auth.email || null})
+              (${adData.id}, ${adsetId}, ${campaignId || null}, ${fileId}, ${fileMeta.name}, ${creator || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${mimeType}, ${auth.userId}, ${auth.email || null}, ${sourceVideoUrl})
           `;
           emit({ step: 'db_log', status: 'done' });
         } else {
