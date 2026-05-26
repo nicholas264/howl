@@ -1393,12 +1393,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
 
         // Settings-derived maps (declared before allMonthKeys to avoid TDZ).
         const s = settings || { grossMarginPct: 60, paymentFeePct: 2.9, paymentFeeFixed: 0.30, shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000, googleSpend: {}, opexByMonth: {}, revenueAddByMonth: {}, ordersAddByMonth: {} };
-        // Google spend: live API rows (from snapshot) override manual settings.googleSpend.
-        // Live data flows: /api/google → upserts monthly_metrics.google → snapshotGoogleByMonth.
-        const liveGoogleSpend = Object.fromEntries(
+        // Google spend pulled live from /api/google → monthly_metrics.google → snapshot.
+        // Manual settings.googleSpend is ignored (column removed from assumptions UI).
+        const googleByMonth = Object.fromEntries(
           Object.entries(snapshotGoogleByMonth).map(([k, v]) => [k, Number(v?.spend || 0)])
         );
-        const googleByMonth = { ...(s.googleSpend || {}), ...liveGoogleSpend };
         const opexByMonth = s.opexByMonth || {};
         const revenueAddByMonth = s.revenueAddByMonth || {};
         const ordersAddByMonth = s.ordersAddByMonth || {};
@@ -1589,17 +1588,17 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                     <span style={{ fontSize: 9, color: '#6e7681' }}>YYYY-MM</span>
                   </div>
                 </div>
-                {/* Monthly OpEx, Google spend, additional revenue (dealer + historical) */}
+                {/* Monthly OpEx + additional revenue (dealer + historical). Google spend
+                    pulls live from the Ads API — no manual override column. */}
                 <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid #2a3441' }}>
-                  <span style={S.label}>Monthly Overrides — OpEx, Google, Add'l Revenue</span>
+                  <span style={S.label}>Monthly Overrides — OpEx, Add'l Revenue</span>
                   <div style={{ fontSize: 9, color: '#6e7681', marginBottom: 10, letterSpacing: 1 }}>
                     Leave blank to use defaults. <strong>Add'l Revenue</strong> is added on top of Shopify primary — use it for dealer-store sales and pre-window months (Jan/Feb '26). Add'l Orders drives correct fees/ship/pick math.
                   </div>
                   <div style={{ overflowX: 'auto', maxHeight: 480 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '60px 90px 90px 100px 70px 70px 70px', gap: 5, alignItems: 'center', minWidth: 580 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '60px 90px 100px 70px 70px 70px', gap: 5, alignItems: 'center', minWidth: 490 }}>
                       <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>Month</div>
                       <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>OpEx</div>
-                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>Google</div>
                       <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>Add'l Rev</div>
                       <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>Add'l Ord</div>
                       <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>+ New</div>
@@ -1617,7 +1616,6 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                           <React.Fragment key={mk}>
                             <span style={{ fontSize: 11, color: '#c9d1d9' }}>{fmtMo(mk)}</span>
                             {inp('opexByMonth', String(defaultOpex))}
-                            {inp('googleSpend', '0')}
                             {inp('revenueAddByMonth', '0')}
                             {inp('ordersAddByMonth', '0')}
                             {inp('newCustomersAddByMonth', '0')}
@@ -2040,7 +2038,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           shopByMonth[mk] = sumShop(liveShopByMonth[mk] || snapShopByMonth[mk] || null, dealerByMonth[mk] || null);
         }
         const metaByMonth = { ...snapMetaByMonth, ...liveSpendByMonth };
-        const googleByMonth = settings?.googleSpend || {};
+        // Google spend from live Ads API (via monthly_metrics.google snapshot).
+        const snapGoogleByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.google).map(r => [r.month, r.google]));
+        const googleByMonth = Object.fromEntries(
+          Object.entries(snapGoogleByMonth).map(([k, v]) => [k, Number(v?.spend || 0)])
+        );
         const opexByMonth = settings?.opexByMonth || {};
         const revenueAddByMonth = settings?.revenueAddByMonth || {};
         const ordersAddByMonth = settings?.ordersAddByMonth || {};

@@ -35,14 +35,24 @@ async function fetchStoreAnalytics(store, token) {
   since.setDate(1); since.setHours(0, 0, 0, 0);
   const sinceISO = since.toISOString();
 
+  // Query notes:
+  // - test:false excludes Bogus Gateway / dev orders.
+  // - We pull all orders (no financial_status filter) and reject in code based on
+  //   displayFinancialStatus + cancelledAt. This is more robust than guessing the
+  //   correct OR-combination in Shopify search syntax.
+  // - Revenue source: currentSubtotalPriceSet — post-discount, post-refund, ex-tax,
+  //   ex-shipping. This is the standard MER/aMER denominator. Refunds reduce it
+  //   automatically; previously we used netPaymentSet which counted refunded $ as
+  //   revenue and included tax + shipping.
   const buildQuery = (includeCustomer, includeUnitCost) => `query Orders($cursor: String) {
-    orders(first: 250, after: $cursor, query: "created_at:>=${sinceISO} financial_status:paid", sortKey: CREATED_AT) {
+    orders(first: 250, after: $cursor, query: "created_at:>=${sinceISO} test:false", sortKey: CREATED_AT) {
       pageInfo { hasNextPage endCursor }
       edges { node {
         id
         createdAt
-        netPaymentSet { shopMoney { amount } }
-        currentTotalPriceSet { shopMoney { amount } }
+        cancelledAt
+        displayFinancialStatus
+        currentSubtotalPriceSet { shopMoney { amount } }
         totalShippingPriceSet { shopMoney { amount } }
         ${includeCustomer ? 'customer { id numberOfOrders }' : ''}
         lineItems(first: 50) {
@@ -57,7 +67,7 @@ async function fetchStoreAnalytics(store, token) {
     }
   }`;
 
-  const orders = [];
+  const rawOrders = [];
   let cursor = null;
   let pages = 0;
   let includeCustomer = true;
@@ -71,27 +81,42 @@ async function fetchStoreAnalytics(store, token) {
     } catch (err) {
       if (err.code === 'MISSING_CUSTOMER_SCOPE' && includeCustomer) {
         includeCustomer = false; customerScopeMissing = true;
-        orders.length = 0; cursor = null; pages = 0;
+        rawOrders.length = 0; cursor = null; pages = 0;
         continue;
       }
       if (err.code === 'MISSING_INVENTORY_SCOPE' && includeUnitCost) {
         includeUnitCost = false; inventoryScopeMissing = true;
-        orders.length = 0; cursor = null; pages = 0;
+        rawOrders.length = 0; cursor = null; pages = 0;
         continue;
       }
       throw err;
     }
     const conn = data.orders;
-    for (const e of conn.edges) orders.push(e.node);
+    for (const e of conn.edges) rawOrders.push(e.node);
     if (!conn.pageInfo.hasNextPage) break;
     cursor = conn.pageInfo.endCursor;
     pages++;
   }
 
+  // Reject cancelled and non-revenue-bearing orders.
+  // displayFinancialStatus values: PAID, PARTIALLY_REFUNDED, PARTIALLY_PAID, REFUNDED,
+  // VOIDED, PENDING, AUTHORIZED, EXPIRED.
+  // Keep PAID + PARTIALLY_REFUNDED + PARTIALLY_PAID (still has captured revenue).
+  const KEEP_STATUS = new Set(['PAID', 'PARTIALLY_REFUNDED', 'PARTIALLY_PAID']);
+  const orders = rawOrders.filter(o =>
+    !o.cancelledAt && KEEP_STATUS.has((o.displayFinancialStatus || '').toUpperCase())
+  );
+  const rejectedCount = rawOrders.length - orders.length;
+
   const monthMap = {};
   const productMap = {};
 
-  // New/returning classification using lifetime numberOfOrders snapshot.
+  // New/returning classification.
+  // Logged-in customers: compare lifetime numberOfOrders to orders in window —
+  // if all known orders fall inside the window, the earliest is the acquisition.
+  // Guest orders (no customer.id): treat as new. No customer record = no history
+  // = a net-new acquisition for MER purposes. Previous behaviour silently dropped
+  // these from both new and returning buckets, understating newRevenue.
   const customerOrders = {};
   for (const o of orders) {
     const cid = o.customer?.id;
@@ -108,9 +133,11 @@ async function fetchStoreAnalytics(store, token) {
   for (const o of orders) {
     const d = new Date(o.createdAt);
     const mKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const orderRev = parseFloat(o.netPaymentSet?.shopMoney?.amount || o.currentTotalPriceSet?.shopMoney?.amount || 0);
+    // currentSubtotalPriceSet = line-item subtotal after discounts and refunds,
+    // before tax and shipping. The standard "net sales" definition for MER/aMER.
+    const orderRev = parseFloat(o.currentSubtotalPriceSet?.shopMoney?.amount || 0);
     const shipping = parseFloat(o.totalShippingPriceSet?.shopMoney?.amount || 0);
-    const isNew = newOrderIds.has(o.id);
+    const isNew = !o.customer?.id || newOrderIds.has(o.id);
     if (!monthMap[mKey]) monthMap[mKey] = { netSales: 0, orders: 0, shipping: 0, newCustomers: 0, returningCustomers: 0, newRevenue: 0, returningRevenue: 0, cogs: 0, costedRevenue: 0, uncostedRevenue: 0 };
     monthMap[mKey].netSales += orderRev;
     monthMap[mKey].orders += 1;
@@ -118,7 +145,7 @@ async function fetchStoreAnalytics(store, token) {
     if (isNew) {
       monthMap[mKey].newCustomers += 1;
       monthMap[mKey].newRevenue += orderRev;
-    } else if (o.customer?.id) {
+    } else {
       monthMap[mKey].returningCustomers += 1;
       monthMap[mKey].returningRevenue += orderRev;
     }
@@ -167,7 +194,7 @@ async function fetchStoreAnalytics(store, token) {
 
   return {
     months, productMap,
-    _meta: { ordersScanned: orders.length, pages, customerScopeMissing, inventoryScopeMissing },
+    _meta: { ordersScanned: orders.length, ordersRejected: rejectedCount, pages, customerScopeMissing, inventoryScopeMissing },
   };
 }
 
