@@ -1457,6 +1457,12 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           const metaSpend = meta.spend || 0;
           const googleSpend = Number(googleByMonth[mk] || 0);
           const adSpend = metaSpend + googleSpend;
+          // Platform-reported revenue (pixel-attributed). Used for channel-level
+          // ROAS — distinct from MER which uses true Shopify revenue.
+          const metaRoasReported = meta.roas != null ? Number(meta.roas) : null;
+          const metaPurchaseValue = metaRoasReported != null ? metaSpend * metaRoasReported : 0;
+          const googleConvValue = Number(snapshotGoogleByMonth[mk]?.conversionValue || 0);
+          const googleRoasReported = googleSpend > 0 ? googleConvValue / googleSpend : null;
           const cm3 = revenue - cogs - paymentFees - shipCost - fulfill - adSpend;
           // NCAC = total ad spend (Meta + Google) ÷ new customers.
           const totalNewCust = (sh.newCustomers || 0) + addNewCust;
@@ -1475,7 +1481,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           const isCurrent = mk === currentMonthKey;
           const newCustomers = (sh.newCustomers || 0) + addNewCust;
           const returningCustomers = (sh.returningCustomers || 0) + addReturningCust;
-          return { month: mk, revenue, orders, newCustomers, returningCustomers, newRevenue: sh.newRevenue || 0, returningRevenue: sh.returningRevenue || 0, metaSpend, googleSpend, adSpend, cogs, cogsActualPct, paymentFees, shipCost, fulfill, cm3, ncac, blendedNcac, blendedRoas, newRoas, firstOrderPayback, opex: opexThis, opexCoverage, isCurrent };
+          return { month: mk, revenue, orders, newCustomers, returningCustomers, newRevenue: sh.newRevenue || 0, returningRevenue: sh.returningRevenue || 0, metaSpend, googleSpend, adSpend, metaPurchaseValue, googleConvValue, metaRoasReported, googleRoasReported, cogs, cogsActualPct, paymentFees, shipCost, fulfill, cm3, ncac, blendedNcac, blendedRoas, newRoas, firstOrderPayback, opex: opexThis, opexCoverage, isCurrent };
         });
 
         // Current-month pace projection (last row if it's the current month)
@@ -1499,10 +1505,12 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           metaSpend: a.metaSpend + r.metaSpend,
           googleSpend: a.googleSpend + r.googleSpend,
           adSpend: a.adSpend + r.adSpend,
+          metaPurchaseValue: a.metaPurchaseValue + r.metaPurchaseValue,
+          googleConvValue: a.googleConvValue + r.googleConvValue,
           cm3: a.cm3 + r.cm3,
           newRevenue: a.newRevenue + r.newRevenue,
           opex: a.opex + r.opex,
-        }), { revenue: 0, orders: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, cm3: 0, newRevenue: 0, opex: 0 });
+        }), { revenue: 0, orders: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, newRevenue: 0, opex: 0 });
 
         const ltmNcac = ltm.newCustomers > 0 ? ltm.adSpend / ltm.newCustomers : null;
         const ltmBlendedNcac = ltmNcac;
@@ -1513,6 +1521,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
         const ltmMer = ltmRoas;
         // aMER (acquisition MER) = new-customer revenue ÷ total ad spend
         const ltmAmer = ltm.adSpend > 0 ? ltm.newRevenue / ltm.adSpend : null;
+        // Platform-reported ROAS by channel (pixel attribution, not Shopify-verified).
+        const ltmMetaRoas   = ltm.metaSpend   > 0 ? ltm.metaPurchaseValue / ltm.metaSpend   : null;
+        const ltmGoogleRoas = ltm.googleSpend > 0 ? ltm.googleConvValue   / ltm.googleSpend : null;
         const ltmRepeatRate = (ltm.newCustomers + ltm.returningCustomers) > 0
           ? ltm.returningCustomers / (ltm.newCustomers + ltm.returningCustomers) : 0;
         const ltmCmMargin = ltm.revenue > 0 ? ltm.cm3 / ltm.revenue : 0;
@@ -1655,6 +1666,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                     { label: 'Blended CPA',     value: ltmCpa == null ? '—' : '$' + ltmCpa.toFixed(0), sub: 'ad spend ÷ all orders' },
                     { label: 'MER',             value: ltmMer == null ? '—' : ltmMer.toFixed(2) + 'x', color: (ltmMer || 0) >= 2 ? '#3fb950' : (ltmMer || 0) >= 1 ? '#f5a623' : '#f85149', sub: 'revenue ÷ ad spend' },
                     { label: 'aMER',            value: ltmAmer == null ? '—' : ltmAmer.toFixed(2) + 'x', color: (ltmAmer || 0) >= 1 ? '#3fb950' : (ltmAmer || 0) >= 0.5 ? '#f5a623' : '#f85149', sub: 'new rev ÷ ad spend' },
+                    { label: 'Meta ROAS',       value: ltmMetaRoas   == null ? '—' : ltmMetaRoas.toFixed(2)   + 'x', color: (ltmMetaRoas   || 0) >= 2 ? '#3fb950' : (ltmMetaRoas   || 0) >= 1 ? '#f5a623' : '#f85149', sub: 'reported (pixel)' },
+                    { label: 'Google ROAS',     value: ltmGoogleRoas == null ? '—' : ltmGoogleRoas.toFixed(2) + 'x', color: (ltmGoogleRoas || 0) >= 2 ? '#3fb950' : (ltmGoogleRoas || 0) >= 1 ? '#f5a623' : '#f85149', sub: 'reported (pixel)' },
                     { label: 'Mktg % Rev',      value: ltm.revenue > 0 ? fmtPct(ltm.adSpend / ltm.revenue) : '—', color: ltm.revenue > 0 && (ltm.adSpend / ltm.revenue) <= 0.30 ? '#3fb950' : ltm.revenue > 0 && (ltm.adSpend / ltm.revenue) <= 0.50 ? '#f5a623' : '#f85149', sub: 'ad spend ÷ revenue' },
                     { label: 'Repeat Rate',     value: fmtPct(ltmRepeatRate) },
                   ].map(({ label, value, sub, color }) => (
@@ -1682,6 +1695,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                         { label: 'Projected New', value: pace.newCustomers.toLocaleString(), sub: currentRow.newCustomers + ' MTD' },
                         { label: 'NCAC (run rate)', value: pace.ncac == null ? '—' : '$' + pace.ncac.toFixed(0), sub: currentRow.newCustomers ? '' : 'no new yet' },
                         { label: 'MER (MTD)', value: currentRow.blendedRoas == null ? '—' : currentRow.blendedRoas.toFixed(2) + 'x', color: (currentRow.blendedRoas || 0) >= 2 ? '#3fb950' : (currentRow.blendedRoas || 0) >= 1 ? '#f5a623' : '#f85149' },
+                        { label: 'Meta ROAS (MTD)',   value: currentRow.metaRoasReported   == null ? '—' : currentRow.metaRoasReported.toFixed(2)   + 'x', color: (currentRow.metaRoasReported   || 0) >= 2 ? '#3fb950' : (currentRow.metaRoasReported   || 0) >= 1 ? '#f5a623' : '#f85149', sub: 'reported (pixel)' },
+                        { label: 'Google ROAS (MTD)', value: currentRow.googleRoasReported == null ? '—' : currentRow.googleRoasReported.toFixed(2) + 'x', color: (currentRow.googleRoasReported || 0) >= 2 ? '#3fb950' : (currentRow.googleRoasReported || 0) >= 1 ? '#f5a623' : '#f85149', sub: 'reported (pixel)' },
                         { label: 'Blended CPA (MTD)', value: currentRow.orders > 0 ? '$' + (currentRow.adSpend / currentRow.orders).toFixed(0) : '—', sub: currentRow.orders + ' orders' },
                         { label: 'Mktg % Rev (MTD)', value: currentRow.revenue > 0 ? fmtPct(currentRow.adSpend / currentRow.revenue) : '—', color: currentRow.revenue > 0 && (currentRow.adSpend / currentRow.revenue) <= 0.30 ? '#3fb950' : currentRow.revenue > 0 && (currentRow.adSpend / currentRow.revenue) <= 0.50 ? '#f5a623' : '#f85149' },
                       ].map(({ label, value, sub, color }) => (
