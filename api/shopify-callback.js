@@ -12,10 +12,17 @@ export default async function handler(req, res) {
   const tokenEnv = role === 'dealer' ? 'SHOPIFY_DEALER_ACCESS_TOKEN' : 'SHOPIFY_ACCESS_TOKEN';
   const storeEnv = role === 'dealer' ? 'SHOPIFY_DEALER_STORE' : 'SHOPIFY_STORE';
 
-  const clientId = process.env.SHOPIFY_CLIENT_ID;
-  const clientSecret = process.env.SHOPIFY_CLIENT_SECRET;
+  const clientId = role === 'dealer'
+    ? process.env.SHOPIFY_DEALER_CLIENT_ID
+    : process.env.SHOPIFY_CLIENT_ID;
+  const clientSecret = role === 'dealer'
+    ? process.env.SHOPIFY_DEALER_CLIENT_SECRET
+    : process.env.SHOPIFY_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    return res.status(500).send('SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET must be set in Vercel env first.');
+    const envPair = role === 'dealer'
+      ? 'SHOPIFY_DEALER_CLIENT_ID and SHOPIFY_DEALER_CLIENT_SECRET'
+      : 'SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET';
+    return res.status(500).send(`${envPair} must be set in Vercel env first.`);
   }
 
   try {
