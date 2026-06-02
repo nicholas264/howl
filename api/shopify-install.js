@@ -2,12 +2,6 @@
 // Visit: /api/shopify-install?shop=howl-campfires.myshopify.com&role=primary
 //        /api/shopify-install?shop=<dealer-shop>.myshopify.com&role=dealer
 export default async function handler(req, res) {
-  // Browser-redirect endpoint, so we can't use Bearer auth here.
-  // Gate with a shared secret to prevent random visitors kicking off OAuth.
-  const adminKey = process.env.ADMIN_INSTALL_KEY;
-  if (adminKey && req.query.key !== adminKey) {
-    return res.status(403).send('Forbidden — admin install key required (?key=...).');
-  }
   const shop = (req.query.shop || 'howl-campfires.myshopify.com').toString();
   const role = (req.query.role || 'primary').toString();
   const clientId = role === 'dealer'
