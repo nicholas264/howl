@@ -102,9 +102,13 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     instagramUserId: import.meta.env.VITE_META_INSTAGRAM_USER_ID || '',
     defaultCreator: '',
     defaultProduct: PRODUCTS[0]?.id || '',
-    defaultPixelId: import.meta.env.VITE_META_PIXEL_ID || '',
+    defaultPixelId: import.meta.env.VITE_META_PIXEL_ID || '3577794072540304',
     defaultObjective: 'OUTCOME_SALES',
   }));
+  // Backfill the HOWL pixel for users whose localStorage config predates the field.
+  useEffect(() => {
+    if (!config.defaultPixelId) updateConfig({ defaultPixelId: '3577794072540304' });
+  }, []);
   const updateConfig = (patch) => {
     const next = { ...config, ...patch };
     setConfig(next);
