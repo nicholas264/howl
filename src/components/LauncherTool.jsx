@@ -102,6 +102,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     instagramUserId: import.meta.env.VITE_META_INSTAGRAM_USER_ID || '',
     defaultCreator: '',
     defaultProduct: PRODUCTS[0]?.id || '',
+    defaultPixelId: import.meta.env.VITE_META_PIXEL_ID || '',
+    defaultObjective: 'OUTCOME_SALES',
   }));
   const updateConfig = (patch) => {
     const next = { ...config, ...patch };
@@ -117,8 +119,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   const [loadingAdsets, setLoadingAdsets] = useState(false);
   const [selectedCampaignId, setSelectedCampaignId] = useState(() => ls('howl_launcher_campaign', ''));
   const [selectedAdsetId, setSelectedAdsetId] = useState(() => ls('howl_launcher_adset', ''));
-  const [newCampaign, setNewCampaign] = useState({ name: '', objective: 'OUTCOME_TRAFFIC', pixelId: '' });
-  const [newAdset, setNewAdset] = useState({ name: '', budget: '10' });
+  const [newCampaign, setNewCampaign] = useState({ name: '', objective: 'OUTCOME_SALES', pixelId: '' });
+  const [newAdset, setNewAdset] = useState({ name: '', budget: '50' });
   const [creatingCampaign, setCreatingCampaign] = useState(false);
   const [creatingAdset, setCreatingAdset] = useState(false);
 
@@ -159,14 +161,18 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
 
   const createCampaign = async () => {
     if (!newCampaign.name.trim()) return alert('Campaign name required.');
+    const pixelId = (newCampaign.pixelId || config.defaultPixelId || '').trim();
+    if (newCampaign.objective === 'OUTCOME_SALES' && !pixelId) {
+      return alert('Pixel ID required for OUTCOME_SALES campaigns. Set Default Pixel ID in launcher settings.');
+    }
     setCreatingCampaign(true);
     try {
-      const r = await fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_campaign', name: newCampaign.name.trim(), objective: newCampaign.objective, pixel_id: newCampaign.pixelId }) });
+      const r = await fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_campaign', name: newCampaign.name.trim(), objective: newCampaign.objective, pixel_id: pixelId }) });
       const d = await r.json();
       if (d.error) throw new Error(d.error.message || d.error);
       await loadCampaigns();
       setSelectedCampaignId(d.id);
-      setNewCampaign({ name: '', objective: 'OUTCOME_TRAFFIC', pixelId: '' });
+      setNewCampaign({ name: '', objective: config.defaultObjective || 'OUTCOME_SALES', pixelId: '' });
     } catch (err) {
       alert('Create campaign failed: ' + err.message);
     } finally {
@@ -174,17 +180,37 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     }
   };
 
+  // Resolve the selected campaign's objective so ad sets inherit the right
+  // optimization (OUTCOME_SALES → OFFSITE_CONVERSIONS+PURCHASE, etc).
+  // Falls back to config.defaultObjective when the campaign list hasn't loaded
+  // or the campaign isn't found (e.g. it was just created in this session).
+  const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId);
+  const effectiveObjective = selectedCampaign?.objective || config.defaultObjective || 'OUTCOME_SALES';
+
   const createAdset = async () => {
     if (!selectedCampaignId || selectedCampaignId === '__new__') return alert('Pick a campaign first.');
     if (!newAdset.name.trim()) return alert('Ad set name required.');
+    const budgetDollars = parseFloat(newAdset.budget);
+    if (!(budgetDollars > 0)) return alert('Daily budget must be greater than 0.');
+    const pixelId = (config.defaultPixelId || '').trim();
+    if (effectiveObjective === 'OUTCOME_SALES' && !pixelId) {
+      return alert('Pixel ID required for sales ad sets. Set Default Pixel ID in launcher settings.');
+    }
     setCreatingAdset(true);
     try {
-      const r = await fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_adset', campaign_id: selectedCampaignId, name: newAdset.name.trim(), daily_budget: Math.round(parseFloat(newAdset.budget) * 100) }) });
+      const r = await fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        action: 'create_adset',
+        campaign_id: selectedCampaignId,
+        name: newAdset.name.trim(),
+        daily_budget_dollars: budgetDollars,
+        objective: effectiveObjective,
+        pixel_id: pixelId,
+      }) });
       const d = await r.json();
       if (d.error) throw new Error(d.error.message || d.error);
       await loadAdsets(selectedCampaignId);
       setSelectedAdsetId(d.id);
-      setNewAdset({ name: '', budget: '10' });
+      setNewAdset({ name: '', budget: '50' });
     } catch (err) {
       alert('Create ad set failed: ' + err.message);
     } finally {
@@ -495,6 +521,16 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
             <label style={S.label}>Default Creator</label>
             <input style={S.input} value={config.defaultCreator} onChange={e => updateConfig({ defaultCreator: e.target.value })} placeholder="e.g. Austin" />
           </div>
+          <div>
+            <label style={S.label}>Default Pixel ID</label>
+            <input style={S.input} value={config.defaultPixelId} onChange={e => updateConfig({ defaultPixelId: e.target.value })} placeholder="Meta pixel ID for sales optimization" />
+          </div>
+          <div>
+            <label style={S.label}>Default Objective</label>
+            <select style={S.select} value={config.defaultObjective} onChange={e => updateConfig({ defaultObjective: e.target.value })}>
+              {OBJECTIVES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
         </div>
 
         <div style={{ ...S.divider, margin: '16px 0' }} />
@@ -526,12 +562,21 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
 
         {selectedCampaignId === '__new__' && (
           <div style={{ marginTop: 12, padding: 12, border: '1px dashed #2a3441', borderRadius: 6 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 8 }}>
-              <input style={S.input} placeholder="Campaign name" value={newCampaign.name} onChange={e => setNewCampaign({ ...newCampaign, name: e.target.value })} />
-              <select style={S.select} value={newCampaign.objective} onChange={e => setNewCampaign({ ...newCampaign, objective: e.target.value })}>
-                {OBJECTIVES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-              <input style={S.input} placeholder="Pixel ID (sales)" value={newCampaign.pixelId} onChange={e => setNewCampaign({ ...newCampaign, pixelId: e.target.value })} />
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 8, alignItems: 'flex-end' }}>
+              <div>
+                <label style={S.label}>Campaign name</label>
+                <input style={S.input} placeholder="e.g. HOWL | UGC | Sales" value={newCampaign.name} onChange={e => setNewCampaign({ ...newCampaign, name: e.target.value })} />
+              </div>
+              <div>
+                <label style={S.label}>Objective</label>
+                <select style={S.select} value={newCampaign.objective} onChange={e => setNewCampaign({ ...newCampaign, objective: e.target.value })}>
+                  {OBJECTIVES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={S.label}>Pixel ID</label>
+                <input style={S.input} placeholder={config.defaultPixelId ? `default: ${config.defaultPixelId}` : 'Pixel ID (sales)'} value={newCampaign.pixelId} onChange={e => setNewCampaign({ ...newCampaign, pixelId: e.target.value })} />
+              </div>
               <button onClick={createCampaign} disabled={creatingCampaign} style={S.btn(creatingCampaign)}>
                 {creatingCampaign ? 'Creating…' : 'Create'}
               </button>
@@ -541,9 +586,21 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
 
         {selectedAdsetId === '__new__' && (
           <div style={{ marginTop: 12, padding: 12, border: '1px dashed #2a3441', borderRadius: 6 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr auto', gap: 8 }}>
-              <input style={S.input} placeholder="Ad set name" value={newAdset.name} onChange={e => setNewAdset({ ...newAdset, name: e.target.value })} />
-              <input style={S.input} placeholder="Daily $" value={newAdset.budget} onChange={e => setNewAdset({ ...newAdset, budget: e.target.value })} />
+            <div style={{ marginBottom: 8, fontSize: 10, color: '#8b949e' }}>
+              Inherits objective <strong style={{ color: '#f0f4f8' }}>{effectiveObjective}</strong>
+              {effectiveObjective === 'OUTCOME_SALES' && config.defaultPixelId && (
+                <> · pixel <strong style={{ color: '#f0f4f8' }}>{config.defaultPixelId}</strong> · optimizing for <strong style={{ color: '#f0f4f8' }}>PURCHASE</strong></>
+              )}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr auto', gap: 8, alignItems: 'flex-end' }}>
+              <div>
+                <label style={S.label}>Ad set name</label>
+                <input style={S.input} placeholder="e.g. US | 18-65 | Broad" value={newAdset.name} onChange={e => setNewAdset({ ...newAdset, name: e.target.value })} />
+              </div>
+              <div>
+                <label style={S.label}>Daily budget ($)</label>
+                <input style={S.input} type="number" min="1" step="1" placeholder="50" value={newAdset.budget} onChange={e => setNewAdset({ ...newAdset, budget: e.target.value })} />
+              </div>
               <button onClick={createAdset} disabled={creatingAdset} style={S.btn(creatingAdset)}>
                 {creatingAdset ? 'Creating…' : 'Create'}
               </button>
