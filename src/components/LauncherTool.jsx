@@ -446,6 +446,30 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     } catch (err) { console.error(err); }
   };
 
+  // Mark an already-launched (outside this tool) Drive file as launched:
+  // renames with __LAUNCHED__{adId} and moves to Launched/ folder, then drops from inbox.
+  const markDriveLaunched = async (item) => {
+    const adId = prompt('Meta ad ID (or leave blank to use "MANUAL"):', 'MANUAL');
+    if (adId === null) return;
+    const ids = item.kind === 'pair' ? [item.feed.id, item.story.id] : [item.id];
+    try {
+      for (const fileId of ids) {
+        const r = await fetch('/api/drive/ugc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'mark_launched', fileId, adId: adId || 'MANUAL' }),
+        });
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}));
+          throw new Error(d.error || `mark_launched failed (${r.status})`);
+        }
+      }
+      setDriveItems(prev => prev.filter(d => !ids.includes(d.id)));
+    } catch (err) {
+      alert(`Mark launched failed: ${err.message}`);
+    }
+  };
+
   // ── library (saved variants) ──────────────────────────────────────────
   const library = useCopyLibrary();
   const [focusedItemId, setFocusedItemId] = useState(null);
@@ -669,6 +693,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                   {item.webViewLink && (
                     <a href={item.webViewLink} target="_blank" rel="noreferrer" style={{ ...S.ghost, textDecoration: 'none' }}>Open in Drive</a>
                   )}
+                  <button onClick={() => markDriveLaunched(item)} style={{ ...S.ghost, color: '#3fb950' }}>Mark launched</button>
                   <button onClick={() => hideDriveFile(item.kind === 'pair' ? item.feed.id : item.id)} style={{ ...S.ghost, color: '#f85149' }}>Hide</button>
                 </>
               )}
