@@ -106,6 +106,21 @@ export default async function handler(req, res) {
     `;
     await sql`CREATE INDEX IF NOT EXISTS idx_callout_images_created_at ON callout_images(created_at DESC)`;
 
+    // Shared image library — backs ImageAdTool's photo set and ReviewAdTool's
+    // background picker. Was previously a per-browser localStorage blob keyed
+    // by 'howl_saved_images', which silently dropped uploads past the LS quota.
+    await sql`
+      CREATE TABLE IF NOT EXISTS image_library (
+        id         BIGSERIAL PRIMARY KEY,
+        user_id    TEXT,
+        url        TEXT NOT NULL,
+        file_name  TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_image_library_user ON image_library(user_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_image_library_created_at ON image_library(created_at DESC)`;
+
     // Per-product, per-feature spec used by /api/callout-vision to ground
     // anchor placement. Visual description + typical location go straight into
     // the Claude prompt; body_copy is the benefit statement displayed on the ad.

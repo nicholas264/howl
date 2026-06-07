@@ -1,8 +1,10 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import Papa from 'papaparse';
 import { toPng } from 'html-to-image';
+import { useAuth } from '@clerk/clerk-react';
 import { FORMATS } from '../brand';
 import UGCTemplate from '../templates/UGCTemplate';
+import { fetchImageLibrary, uploadImageToLibrary, deleteImageRecord } from '../utils/imageLibrary';
 
 const LS_REVIEWS = 'howl_review_ads_reviews';
 const LS_NAME = 'howl_review_ads_name';
@@ -40,14 +42,10 @@ function loadSaved() {
   } catch { return []; }
 }
 
-const LS_SAVED_IMAGES = 'howl_saved_images';
 const LS_BG = 'howl_review_bg';
 
-function loadSavedImages() {
-  try { return JSON.parse(localStorage.getItem(LS_SAVED_IMAGES) || '[]'); } catch { return []; }
-}
-
 export default function ReviewAdTool({ driveAuth, onAddToCart }) {
+  const { getToken } = useAuth();
   const [reviews, setReviews] = useState(loadSaved);
   const [csvName, setCsvName] = useState(() => localStorage.getItem(LS_NAME) || '');
   const [selected, setSelected] = useState(() => {
@@ -63,7 +61,8 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   const [dragging, setDragging] = useState(false);
   const [bgImage, setBgImage] = useState(() => { try { return localStorage.getItem(LS_BG) || null; } catch { return null; } });
   const [scrimColor, setScrimColor] = useState(() => { try { return localStorage.getItem('howl_review_scrim') || 'rgba(249,243,223,0.72)'; } catch { return 'rgba(249,243,223,0.72)'; } });
-  const [savedImages, setSavedImages] = useState(loadSavedImages);
+  const [savedImages, setSavedImages] = useState([]);
+  const [bgUploading, setBgUploading] = useState(false);
   const [textColor, setTextColor] = useState(() => { try { return localStorage.getItem('howl_review_textcolor') || '#333F4C'; } catch { return '#333F4C'; } });
   const bgFileRef = useRef(null);
 
@@ -85,37 +84,44 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   const captureRefs = useRef({});
   const singleCaptureRef = useRef(null);
 
-  const handleBgFile = (file) => {
+  // Load shared image library on mount.
+  useEffect(() => {
+    let cancelled = false;
+    fetchImageLibrary().then(rows => { if (!cancelled) setSavedImages(rows); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleBgFile = async (file) => {
     if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onload = () => {
-        const maxDim = 2160;
-        let { width: w, height: h } = img;
-        if (w > maxDim || h > maxDim) { const s = maxDim / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        const url = canvas.toDataURL('image/jpeg', 0.92);
-        setBgImage(url);
-        try { localStorage.setItem(LS_BG, url); } catch {}
-        // Also add to shared image library if not already there
-        setSavedImages(prev => {
-          if (prev.some(i => i.url === url)) return prev;
-          const next = [{ id: Date.now(), url }, ...prev].slice(0, 8);
-          try { localStorage.setItem(LS_SAVED_IMAGES, JSON.stringify(next)); } catch {}
-          return next;
-        });
-      };
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
+    setBgUploading(true);
+    try {
+      const record = await uploadImageToLibrary(file, getToken);
+      if (!record) throw new Error('Upload failed');
+      setSavedImages(prev => [record, ...prev.filter(i => i.url !== record.url)]);
+      setBgImage(record.url);
+      try { localStorage.setItem(LS_BG, record.url); } catch {}
+    } catch (err) {
+      alert(`Background upload failed: ${err?.message || err}`);
+    } finally {
+      setBgUploading(false);
+    }
   };
 
   const clearBg = () => {
     setBgImage(null);
     try { localStorage.removeItem(LS_BG); } catch {}
+  };
+
+  const removeSavedImage = async (id) => {
+    const prev = savedImages;
+    const target = prev.find(i => i.id === id);
+    setSavedImages(prev.filter(i => i.id !== id));
+    if (target && bgImage === target.url) clearBg();
+    const ok = await deleteImageRecord(id);
+    if (!ok) {
+      setSavedImages(prev);
+      alert('Could not delete image.');
+    }
   };
 
   const handleFile = (file) => {

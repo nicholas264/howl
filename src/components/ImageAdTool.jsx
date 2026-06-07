@@ -1,9 +1,10 @@
 import { useState, useRef, useCallback, useLayoutEffect, useEffect } from 'react';
 import JSZip from 'jszip';
+import { useAuth } from '@clerk/clerk-react';
 import { COLORS, FONTS, canvasFont, cssLetterSpacing, loadBrandFonts } from '../brand';
 import { ls, lsSet } from '../utils/localStorage';
+import { fetchImageLibrary, uploadImageToLibrary, deleteImageRecord } from '../utils/imageLibrary';
 
-const LS_IMAGES  = 'howl_saved_images';
 const LS_PRESETS = 'howl_style_presets';
 const LS_FAV     = 'howl_favorites';
 
@@ -171,10 +172,12 @@ function BatchCard({ img, hook, body, fmt, textPos, bodyPos, color, fontSize, bo
 }
 
 export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, onAddToCart }) {
+  const { getToken } = useAuth();
   const [mode, setMode]             = useState('single'); // 'single' | 'batch'
-  const [images, setImages]         = useState(() => ls(LS_IMAGES, []));
-  const [activeImg, setActiveImg]   = useState(() => { const imgs = ls(LS_IMAGES, []); return imgs[0] || null; });
-  const [selectedIds, setSelectedIds] = useState(() => { const imgs = ls(LS_IMAGES, []); return new Set(imgs.map(i => i.id)); });
+  const [images, setImages]         = useState([]);
+  const [activeImg, setActiveImg]   = useState(null);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [uploading, setUploading]   = useState(0);
   const [formatId, setFormatId]     = useState('square');
   const [overlayText, setOverlayText] = useState(initialText || '');
   const [batchHooks, setBatchHooks] = useState(initialText ? initialText : '');
@@ -235,42 +238,49 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
   }, [textDragging, bodyDragging]);
 
   // ── Image management ──────────────────────────────────────────────────
-  const addImage = useCallback((file) => {
-    if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onload = () => {
-        const maxDim = 2160;
-        let { width: w, height: h } = img;
-        if (w > maxDim || h > maxDim) { const s = maxDim / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        const url = canvas.toDataURL('image/jpeg', 0.92);
-        const entry = { id: Date.now(), url };
-        setImages(prev => {
-          const next = [entry, ...prev.filter(x => x.url !== url)].slice(0, 8);
-          lsSet(LS_IMAGES, next);
-          return next;
-        });
-        setActiveImg(entry);
-        setSelectedIds(prev => new Set([...prev, entry.id]));
-      };
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
+  // Load library on mount.
+  useEffect(() => {
+    let cancelled = false;
+    fetchImageLibrary().then(rows => {
+      if (cancelled) return;
+      setImages(rows);
+      setActiveImg(rows[0] || null);
+      setSelectedIds(new Set(rows.map(r => r.id)));
+    });
+    return () => { cancelled = true; };
   }, []);
 
-  const removeImage = useCallback((id) => {
-    setImages(prev => {
-      const next = prev.filter(x => x.id !== id);
-      lsSet(LS_IMAGES, next);
-      if (activeImg?.id === id) setActiveImg(next[0] || null);
-      return next;
-    });
+  const addImage = useCallback(async (file) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    setUploading(n => n + 1);
+    try {
+      const record = await uploadImageToLibrary(file, getToken);
+      if (!record) throw new Error('Upload failed');
+      setImages(prev => [record, ...prev]);
+      setActiveImg(record);
+      setSelectedIds(prev => new Set([...prev, record.id]));
+    } catch (err) {
+      alert(`Image upload failed: ${err?.message || err}`);
+    } finally {
+      setUploading(n => Math.max(0, n - 1));
+    }
+  }, [getToken]);
+
+  const removeImage = useCallback(async (id) => {
+    const prevImages = images;
+    setImages(prev => prev.filter(x => x.id !== id));
     setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
-  }, [activeImg]);
+    if (activeImg?.id === id) {
+      const next = prevImages.filter(x => x.id !== id);
+      setActiveImg(next[0] || null);
+    }
+    const ok = await deleteImageRecord(id);
+    if (!ok) {
+      // restore on failure
+      setImages(prevImages);
+      alert('Could not delete image.');
+    }
+  }, [images, activeImg]);
 
   const toggleSelected = (id) => {
     setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -645,7 +655,7 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
             style={{ borderRadius: 4, padding: dragging ? 6 : 0, margin: dragging ? -6 : 0, background: dragging ? 'rgba(220,68,10,0.10)' : 'transparent', outline: dragging ? '1px dashed #DC440A' : 'none' }}
           >
             <div style={{ ...S.label, display: 'flex', justifyContent: 'space-between' }}>
-              <span>Images {mode === 'batch' && images.length > 0 && <span style={{ color: '#DC440A' }}>({selectedIds.size} selected)</span>}</span>
+              <span>Images {mode === 'batch' && images.length > 0 && <span style={{ color: '#DC440A' }}>({selectedIds.size} selected)</span>}{uploading > 0 && <span style={{ color: '#8b949e', marginLeft: 6 }}>· uploading {uploading}…</span>}</span>
               <button onClick={() => fileInputRef.current?.click()} style={S.link}>+ Add</button>
             </div>
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={e => { Array.from(e.target.files).forEach(addImage); e.target.value = ''; }} style={{ display: 'none' }} />
