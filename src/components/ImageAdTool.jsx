@@ -24,7 +24,7 @@ function alignFor(x) {
 
 const TEXT_COLORS = [
   { id: 'white',  label: 'White',  value: '#ffffff' },
-  { id: 'dark',   label: 'Dark',   value: '#f0f4f8' },
+  { id: 'dark',   label: 'Dark',   value: '#1c2330' },
   { id: 'orange', label: 'Orange', value: COLORS.flame },
 ];
 
@@ -98,7 +98,7 @@ async function renderToCanvas(imgSrc, text, bodyText, fw, fh, opts) {
     ctx.font = canvasFont('body', bodySz);
     ctx.fillStyle = opts.color === '#ffffff' ? 'rgba(255,255,255,0.82)'
       : opts.color === COLORS.flame ? 'rgba(220,68,10,0.82)'
-      : 'rgba(51,63,76,0.75)';
+      : 'rgba(28,35,48,0.82)';
     setShadow();
     bodyLines.forEach((line, i) => ctx.fillText(line, x, y + quoteH + gap + i * bodyLineH));
   }
@@ -458,23 +458,29 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
       <div>
         <div style={S.label}>Text Color</div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {TEXT_COLORS.map(c => (
-            <button key={c.id} onClick={() => setColorId(c.id)} style={{
-              flex: 1, padding: '7px 0', borderRadius: 4, cursor: 'pointer',
-              border: `2px solid ${colorId === c.id ? c.value : '#2a3441'}`,
-              background: c.value === '#ffffff' ? '#f5f5f5' : c.value,
-              color: c.value === '#ffffff' ? '#333' : '#fff',
-              fontFamily: 'inherit', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase',
-              fontWeight: colorId === c.id ? 700 : 400,
-            }}>{c.label}</button>
-          ))}
+          {TEXT_COLORS.map(c => {
+            const isLight = c.value === '#ffffff';
+            return (
+              <button key={c.id} onClick={() => setColorId(c.id)} style={{
+                flex: 1, padding: '7px 0', borderRadius: 4, cursor: 'pointer',
+                border: `2px solid ${colorId === c.id ? '#DC440A' : '#2a3441'}`,
+                background: isLight ? '#f5f5f5' : c.value,
+                color: isLight ? '#333' : '#fff',
+                fontFamily: 'inherit', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase',
+                fontWeight: colorId === c.id ? 700 : 400,
+              }}>{c.label}</button>
+            );
+          })}
         </div>
       </div>
 
       <div>
         <div style={{ ...S.label, display: 'flex', justifyContent: 'space-between' }}>
           <span>Position</span>
-          <button onClick={() => setTextPos(DEFAULT_TEXT_POS)} style={S.link}>Reset</button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={() => setTextPos({ x: 0.5, y: 0.5 })} style={S.link}>Center</button>
+            <button onClick={() => setTextPos(DEFAULT_TEXT_POS)} style={S.link}>Reset</button>
+          </div>
         </div>
         <div style={{ fontSize: 9, color: '#8b949e', lineHeight: 1.5 }}>
           Drag the text on the preview to reposition.
@@ -572,7 +578,12 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
           </div>
 
           {/* Image library */}
-          <div>
+          <div
+            onDrop={e => { e.preventDefault(); setDragging(false); Array.from(e.dataTransfer.files).forEach(addImage); }}
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={e => { if (e.currentTarget.contains(e.relatedTarget)) return; setDragging(false); }}
+            style={{ borderRadius: 4, padding: dragging ? 6 : 0, margin: dragging ? -6 : 0, background: dragging ? 'rgba(220,68,10,0.10)' : 'transparent', outline: dragging ? '1px dashed #DC440A' : 'none' }}
+          >
             <div style={{ ...S.label, display: 'flex', justifyContent: 'space-between' }}>
               <span>Images {mode === 'batch' && images.length > 0 && <span style={{ color: '#DC440A' }}>({selectedIds.size} selected)</span>}</span>
               <button onClick={() => fileInputRef.current?.click()} style={S.link}>+ Add</button>
@@ -580,10 +591,8 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={e => { Array.from(e.target.files).forEach(addImage); e.target.value = ''; }} style={{ display: 'none' }} />
             {images.length === 0 ? (
               <label
-                onDrop={e => { e.preventDefault(); setDragging(false); Array.from(e.dataTransfer.files).forEach(addImage); }}
-                onDragOver={e => { e.preventDefault(); setDragging(true); }}
-                onDragLeave={() => setDragging(false)}
-                style={{ display: 'block', padding: '18px 12px', borderRadius: 4, cursor: 'pointer', textAlign: 'center', border: `1px dashed ${dragging ? '#DC440A' : '#374151'}`, background: dragging ? 'rgba(220,68,10,0.15)' : 'transparent' }}
+                onClick={() => fileInputRef.current?.click()}
+                style={{ display: 'block', padding: '18px 12px', borderRadius: 4, cursor: 'pointer', textAlign: 'center', border: `1px dashed ${dragging ? '#DC440A' : '#374151'}`, background: 'transparent' }}
               >
                 <div style={{ fontSize: 10, color: dragging ? '#DC440A' : '#8b949e' }}>{dragging ? 'Drop images here' : 'Upload or drag images'}</div>
               </label>
