@@ -346,15 +346,19 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
     setExporting(true);
     try {
       const [squareCanvas, storyCanvas] = await Promise.all([
-        renderToCanvas(activeImg.url, overlayText, bodyText || null, 1080, 1080, styleOpts),
+        renderToCanvas(activeImg.url, overlayText, bodyText || null, 1080, 1350, styleOpts),
         renderToCanvas(activeImg.url, overlayText, bodyText || null, 1080, 1920, styleOpts),
       ]);
+      const squareUrl = squareCanvas.toDataURL('image/jpeg', 0.92);
+      const storyUrl = storyCanvas.toDataURL('image/jpeg', 0.92);
       const monthDay = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       await onAddToCart?.({
         id: Date.now(),
         type: 'static',
-        squareUrl: squareCanvas.toDataURL('image/jpeg', 0.92),
-        storyUrl:  storyCanvas.toDataURL('image/jpeg', 0.92),
+        paired: true,
+        squareUrl,
+        storyUrl,
+        url: squareUrl,
         name: `HOWL | Static | ${overlayText.slice(0, 30).trim()} | ${monthDay}`,
         hook: overlayText,
         body: bodyText || '',
@@ -391,15 +395,19 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
       for (const img of selImgs) {
         for (const hook of hooks) {
           const [sq, st] = await Promise.all([
-            renderToCanvas(img.url, hook, bodyText || null, 1080, 1080, styleOpts),
+            renderToCanvas(img.url, hook, bodyText || null, 1080, 1350, styleOpts),
             renderToCanvas(img.url, hook, bodyText || null, 1080, 1920, styleOpts),
           ]);
+          const squareUrl = sq.toDataURL('image/jpeg', 0.85);
+          const storyUrl = st.toDataURL('image/jpeg', 0.85);
           const monthDay = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
           await onAddToCart({
             id: Date.now() + Math.random(),
             type: 'static',
-            squareUrl: sq.toDataURL('image/jpeg', 0.85),
-            storyUrl:  st.toDataURL('image/jpeg', 0.85),
+            paired: true,
+            squareUrl,
+            storyUrl,
+            url: squareUrl,
             name: `HOWL | Static | ${hook.slice(0, 30).trim()} | ${monthDay}`,
             hook,
             body: bodyText || '',

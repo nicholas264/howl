@@ -383,7 +383,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     setStatuses(prev => ({ ...prev, [id]: { status: 'pushing', steps: {}, currentStep: null } }));
     const adName = buildAdName({ creator: m.creator || 'Static Builder', productId: m.productId });
     const mimeType = item.type === 'video' ? 'video/mp4' : 'image';
-    const isPairedImage = item.paired && item.storyUrl && item.type !== 'video';
+    const hasFeedImage = !!(item.squareUrl || item.url);
+    const isPairedImage = hasFeedImage && !!item.storyUrl && item.type !== 'video';
 
     try {
       // Paired callout image — upload both, create one creative with asset_feed_spec.
@@ -664,7 +665,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                     fallback={<div style={S.thumbBox}>{(item.mimeType || '').startsWith('video/') ? <><div style={{ fontSize: 24 }}>▶</div><div>Video</div></> : 'Image'}</div>}
                   />
                 )
-              ) : item.paired && item.storyUrl ? (
+              ) : (item.squareUrl || item.url) && item.storyUrl && item.type !== 'video' ? (
                 <div style={{ display: 'flex', gap: 4 }}>
                   <img src={item.squareUrl || item.url} alt={`${item.name} 4:5`} style={{ width: 84, height: 105, objectFit: 'cover', borderRadius: 4 }} />
                   <img src={item.storyUrl} alt={`${item.name} 9:16`} style={{ width: 52, height: 92, objectFit: 'cover', borderRadius: 4 }} />
@@ -687,7 +688,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                   {item.source === 'drive' && item.kind === 'pair' && (
                     <span style={{ marginLeft: 6, ...S.badge('#3fb950') }}>1:1 + 9:16</span>
                   )}
-                  {item.paired && item.storyUrl && (
+                  {(item.squareUrl || item.url) && item.storyUrl && item.type !== 'video' && (
                     <span style={{ marginLeft: 6, ...S.badge('#3fb950') }}>4:5 + 9:16</span>
                   )}
                 </span>
