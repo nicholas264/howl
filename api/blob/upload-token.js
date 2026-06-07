@@ -16,6 +16,12 @@ export const config = {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  // Server-side sanity check so any silent prod misconfiguration shows up in
+  // the response instead of looking like a generic "Access denied" from Blob.
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return res.status(500).json({ error: 'BLOB_READ_WRITE_TOKEN is not set in this function environment' });
+  }
+
   try {
     const jsonResponse = await handleUpload({
       body: req.body,
