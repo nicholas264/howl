@@ -1,7 +1,10 @@
 // Shared image library — Vercel Blob upload + Neon record. Used by
 // ImageAdTool and ReviewAdTool. Replaces the old localStorage key
 // 'howl_saved_images', which silently dropped uploads past the LS quota.
-import { upload } from '@vercel/blob/client';
+//
+// Manual upload (not @vercel/blob/client) so we can surface the raw Blob
+// response when something goes wrong in the browser. The SDK was wrapping
+// the actual error in a generic "Access denied" string.
 
 export async function fetchImageLibrary() {
   try {
@@ -24,27 +27,52 @@ export async function uploadImageToLibrary(file, getToken) {
   const resized = await resizeImage(file, 2160);
   const slug = (file.name || 'image').replace(/\.[^.]+$/, '').replace(/\W+/g, '-').slice(0, 40).toLowerCase() || 'image';
   const fileName = `${slug}-${Date.now()}.jpg`;
+  const pathname = `image-library/${fileName}`;
 
   const token = await getToken();
   if (!token) throw new Error('Not signed in — please reload and sign in again.');
 
-  let blobRes;
-  try {
-    blobRes = await upload(`image-library/${fileName}`, resized, {
-      access: 'public',
-      handleUploadUrl: '/api/blob/upload-token',
-      clientPayload: token,
-      contentType: resized.type || 'image/jpeg',
-    });
-  } catch (err) {
-    console.error('Blob upload failed:', err);
-    throw new Error(`Blob upload failed: ${err?.message || err}`);
+  // Step 1: get a clientToken from our handleUpload endpoint.
+  const tokenRes = await fetch('/api/blob/upload-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type: 'blob.generate-client-token',
+      payload: { pathname, clientPayload: token, multipart: false },
+    }),
+  });
+  if (!tokenRes.ok) {
+    const txt = await tokenRes.text().catch(() => '');
+    throw new Error(`upload-token failed (${tokenRes.status}): ${txt.slice(0, 200)}`);
   }
+  const tokenData = await tokenRes.json();
+  const clientToken = tokenData.clientToken;
+  if (!clientToken) throw new Error(`upload-token returned no clientToken: ${JSON.stringify(tokenData).slice(0, 200)}`);
 
+  // Step 2: PUT the blob directly. If Blob rejects, surface the exact body.
+  const blobUrl = `https://blob.vercel-storage.com/?pathname=${encodeURIComponent(pathname)}`;
+  const putRes = await fetch(blobUrl, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${clientToken}`,
+      'x-api-version': '12',
+      'x-vercel-blob-access': 'public',
+      'x-content-type': resized.type || 'image/jpeg',
+    },
+    body: resized,
+  });
+  if (!putRes.ok) {
+    const txt = await putRes.text().catch(() => '');
+    console.error('Blob PUT failed:', putRes.status, txt);
+    throw new Error(`Blob PUT failed (${putRes.status}): ${txt.slice(0, 300)}`);
+  }
+  const blobJson = await putRes.json();
+
+  // Step 3: record the URL in our DB.
   const r = await fetch('/api/db/image-library', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: blobRes.url, file_name: file.name }),
+    body: JSON.stringify({ url: blobJson.url, file_name: file.name }),
   });
   if (!r.ok) {
     const txt = await r.text().catch(() => '');
