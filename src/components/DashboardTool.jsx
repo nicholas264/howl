@@ -1346,6 +1346,16 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           </a>{' '}to pull real costs.
         </div>
       )}
+      {shopifyData?._meta?.errors?.length > 0 && (
+        <div style={{ ...S.err, marginBottom: 20, color: '#f5a623', borderColor: 'rgba(245,166,35,0.4)', background: 'rgba(245,166,35,0.1)' }}>
+          One or more Shopify stores failed to load and were skipped:
+          <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
+            {shopifyData._meta.errors.map((e, i) => (
+              <li key={i}><b>{e.role}</b> ({e.store}) — {e.error}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* ── CFO / Head of Growth Section ──────────────────────────────────── */}
       {view === 'cfo' && (() => {

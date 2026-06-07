@@ -416,20 +416,36 @@ export default async function handler(req, res) {
   try {
     const { action } = req.body;
 
+    // Run each store's fetch in isolation. If one store fails (expired token,
+    // missing scope, GraphQL error) the others still return — previously a
+    // dealer-store failure 500'd the whole call and emptied the dashboard.
+    const settle = async (fn, role, store) => {
+      try { return { role, store, result: await fn(store) }; }
+      catch (err) {
+        console.error(`Shopify ${role} (${store}) failed:`, err.message);
+        return { role, store, error: err.message };
+      }
+    };
+
     if (action === 'get_inventory') {
-      const results = await Promise.all(stores.map(async ({ role, store, token }) => {
-        const result = await fetchStoreInventory(store, token);
-        return { role, store, result };
-      }));
-      return res.json(mergeInventoryResults(results));
+      const results = await Promise.all(stores.map(s =>
+        settle(store => fetchStoreInventory(store, s.token), s.role, s.store)
+      ));
+      const ok = results.filter(r => r.result);
+      if (!ok.length) return res.status(500).json({ error: results.map(r => `${r.role}: ${r.error}`).join(' | ') });
+      const merged = mergeInventoryResults(ok);
+      merged._meta.errors = results.filter(r => r.error).map(r => ({ role: r.role, store: r.store, error: r.error }));
+      return res.json(merged);
     }
 
     if (action === 'get_analytics') {
-      const results = await Promise.all(stores.map(async ({ role, store, token }) => {
-        const result = await fetchStoreAnalytics(store, token);
-        return { role, store, result };
-      }));
-      const merged = mergeStoreResults(results);
+      const results = await Promise.all(stores.map(s =>
+        settle(store => fetchStoreAnalytics(store, s.token), s.role, s.store)
+      ));
+      const ok = results.filter(r => r.result);
+      if (!ok.length) return res.status(500).json({ error: results.map(r => `${r.role}: ${r.error}`).join(' | ') });
+      const merged = mergeStoreResults(ok);
+      merged._meta.errors = results.filter(r => r.error).map(r => ({ role: r.role, store: r.store, error: r.error }));
       return res.json(merged);
     }
 
