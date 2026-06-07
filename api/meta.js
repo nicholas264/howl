@@ -52,6 +52,22 @@ async function uploadImage(base64, adAccountId, accessToken, BASE) {
   return hash;
 }
 
+const PURCHASE_ACTION_TYPES = [
+  'omni_purchase',
+  'offsite_conversion.fb_pixel_purchase',
+  'purchase',
+  'web_in_store_purchase',
+];
+
+function pickPurchaseMetric(arr) {
+  if (!Array.isArray(arr)) return null;
+  for (const type of PURCHASE_ACTION_TYPES) {
+    const hit = arr.find(a => a.action_type === type);
+    if (hit) return parseFloat(hit.value || 0);
+  }
+  return null;
+}
+
 export const config = {
   api: {
     bodyParser: {
@@ -265,17 +281,17 @@ export default async function handler(req, res) {
         const monthlyInsightsError = monthlyInsightsData?.error?.message || null;
         const monthlyInsights = (monthlyInsightsData.data || []).map(row => {
           const month = (row.date_start || '').slice(0, 7);
-          const purchases = parseInt(((row.actions || []).find(a => a.action_type === 'purchase')?.value) || 0);
-          const cpaRaw = (row.cost_per_action_type || []).find(a => a.action_type === 'purchase')?.value;
-          const roasRaw = (row.purchase_roas || []).find(a => a.action_type === 'omni_purchase' || a.action_type === 'purchase')?.value;
+          const purchases = pickPurchaseMetric(row.actions) || 0;
+          const cpaRaw = pickPurchaseMetric(row.cost_per_action_type);
+          const roasRaw = pickPurchaseMetric(row.purchase_roas);
           return {
             month,
             spend: parseFloat(row.spend || 0),
             impressions: parseInt(row.impressions || 0),
             clicks: parseInt(row.clicks || 0),
             purchases,
-            cpa: cpaRaw ? parseFloat(cpaRaw) : null,
-            roas: roasRaw ? parseFloat(roasRaw) : null,
+            cpa: cpaRaw,
+            roas: roasRaw,
           };
         });
 
