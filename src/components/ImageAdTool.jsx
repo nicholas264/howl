@@ -114,6 +114,7 @@ async function renderToCanvas(imgSrc, text, bodyText, fw, fh, opts) {
 function loadImg(src) {
   return new Promise((res, rej) => {
     const img = new Image();
+    img.crossOrigin = 'anonymous';
     img.onload = () => res(img);
     img.onerror = rej;
     img.src = src;
@@ -163,7 +164,7 @@ function BatchCard({ img, hook, body, fmt, textPos, bodyPos, color, fontSize, bo
 
   return (
     <div style={{ position: 'relative', width: cardW, height: CARD_H, flexShrink: 0, borderRadius: 4, overflow: 'hidden', background: '#000', cursor: 'pointer' }} onClick={onExport} title="Click to export this combination">
-      <img src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      <img crossOrigin="anonymous" src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
       <div style={headlineStyle}>{hook.toUpperCase()}</div>
       {body && <div style={bodyStyle}>{body}</div>}
       <div style={{ position: 'absolute', bottom: 4, right: 4, background: 'rgba(0,0,0,0.55)', borderRadius: 3, padding: '2px 5px', fontSize: 8, color: '#fff', letterSpacing: 1 }}>↓</div>
@@ -686,7 +687,7 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
                   return (
                     <div key={img.id} style={{ position: 'relative', width: 72, height: 72, borderRadius: 4, overflow: 'hidden', border: `2px solid ${isActive ? '#DC440A' : '#2a3441'}`, cursor: 'pointer', flexShrink: 0 }}
                       onClick={() => mode === 'single' ? setActiveImg(img) : toggleSelected(img.id)}>
-                      <img src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      <img crossOrigin="anonymous" src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                       {mode === 'batch' && selectedIds.has(img.id) && (
                         <div style={{ position: 'absolute', top: 3, left: 3, width: 14, height: 14, background: '#DC440A', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <span style={{ color: '#fff', fontSize: 9, lineHeight: 1 }}>✓</span>
@@ -793,7 +794,7 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
         {mode === 'single' ? (
           activeImg ? (
             <div ref={previewBoxRef} style={{ position: 'relative', width: displayW, height: displayH, flexShrink: 0 }}>
-              <img ref={imgRef} src={activeImg.url} alt="" draggable={false} style={{ width: displayW, height: displayH, objectFit: 'cover', display: 'block' }} />
+              <img crossOrigin="anonymous" ref={imgRef} src={activeImg.url} alt="" draggable={false} style={{ width: displayW, height: displayH, objectFit: 'cover', display: 'block' }} />
               {overlayText && (
                 <div
                   style={headlineOverlayStyle}

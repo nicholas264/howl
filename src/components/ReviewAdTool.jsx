@@ -642,7 +642,7 @@ function BgImagePicker({ bgImage, savedImages, onSelect, onUpload, onClear, file
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
           {savedImages.map(img => (
             <div key={img.id} onClick={() => onSelect(img.url)} style={{ width: 48, height: 48, borderRadius: 3, overflow: 'hidden', border: `2px solid ${bgImage === img.url ? '#DC440A' : '#e0d9c4'}`, cursor: 'pointer', flexShrink: 0 }}>
-              <img src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              <img crossOrigin="anonymous" src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
             </div>
           ))}
         </div>
