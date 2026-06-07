@@ -117,15 +117,19 @@ async function fetchStoreAnalytics(store, token) {
   // Guest orders (no customer.id): treat as new. No customer record = no history
   // = a net-new acquisition for MER purposes. Previous behaviour silently dropped
   // these from both new and returning buckets, understating newRevenue.
+  const canClassifyCustomers = !customerScopeMissing;
   const customerOrders = {};
-  for (const o of orders) {
-    const cid = o.customer?.id;
-    if (!cid) continue;
-    if (!customerOrders[cid]) customerOrders[cid] = [];
-    customerOrders[cid].push(o);
+  if (canClassifyCustomers) {
+    for (const o of orders) {
+      const cid = o.customer?.id;
+      if (!cid) continue;
+      if (!customerOrders[cid]) customerOrders[cid] = [];
+      customerOrders[cid].push(o);
+    }
   }
   const newOrderIds = new Set();
   for (const [cid, list] of Object.entries(customerOrders)) {
+    list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     const lifetime = list[0].customer?.numberOfOrders ?? list.length;
     if (lifetime <= list.length) newOrderIds.add(list[0].id);
   }
@@ -137,20 +141,34 @@ async function fetchStoreAnalytics(store, token) {
     // before tax and shipping. The standard "net sales" definition for MER/aMER.
     const orderRev = parseFloat(o.currentSubtotalPriceSet?.shopMoney?.amount || 0);
     const shipping = parseFloat(o.totalShippingPriceSet?.shopMoney?.amount || 0);
-    const isNew = !o.customer?.id || newOrderIds.has(o.id);
+    const isNew = canClassifyCustomers
+      ? (!o.customer?.id || newOrderIds.has(o.id))
+      : null;
     if (!monthMap[mKey]) monthMap[mKey] = { netSales: 0, orders: 0, shipping: 0, newCustomers: 0, returningCustomers: 0, newRevenue: 0, returningRevenue: 0, cogs: 0, costedRevenue: 0, uncostedRevenue: 0 };
     monthMap[mKey].netSales += orderRev;
     monthMap[mKey].orders += 1;
     monthMap[mKey].shipping += shipping;
-    if (isNew) {
+    if (isNew === true) {
       monthMap[mKey].newCustomers += 1;
       monthMap[mKey].newRevenue += orderRev;
-    } else {
+    } else if (isNew === false) {
       monthMap[mKey].returningCustomers += 1;
       monthMap[mKey].returningRevenue += orderRev;
     }
-    for (const li of (o.lineItems?.edges || [])) {
-      const liRev = parseFloat(li.node.originalTotalSet?.shopMoney?.amount || 0);
+
+    const lineItems = o.lineItems?.edges || [];
+    const originalOrderTotal = lineItems.reduce(
+      (sum, li) => sum + parseFloat(li.node.originalTotalSet?.shopMoney?.amount || 0),
+      0,
+    );
+    const allocatedRevenue = (li) => {
+      const original = parseFloat(li.node.originalTotalSet?.shopMoney?.amount || 0);
+      if (originalOrderTotal > 0) return orderRev * (original / originalOrderTotal);
+      return lineItems.length > 0 ? orderRev / lineItems.length : 0;
+    };
+
+    for (const li of lineItems) {
+      const liRev = allocatedRevenue(li);
       const unitCost = parseFloat(li.node.variant?.inventoryItem?.unitCost?.amount || 0);
       const qty = parseInt(li.node.quantity || 0);
       if (unitCost > 0 && qty > 0) {
@@ -162,9 +180,9 @@ async function fetchStoreAnalytics(store, token) {
     }
 
     const productTotalsThisOrder = {};
-    for (const li of (o.lineItems?.edges || [])) {
+    for (const li of lineItems) {
       const title = li.node.name?.split(' - ')[0] || 'Other';
-      const rev = parseFloat(li.node.originalTotalSet?.shopMoney?.amount || 0);
+      const rev = allocatedRevenue(li);
       productTotalsThisOrder[title] = (productTotalsThisOrder[title] || 0) + rev;
     }
     for (const [title, rev] of Object.entries(productTotalsThisOrder)) {
@@ -202,9 +220,11 @@ async function fetchStoreAnalytics(store, token) {
 function mergeStoreResults(stores) {
   const monthMap = {};
   const productMap = {};
+  const sourceStores = {};
   const meta = { ordersScanned: 0, pages: 0, customerScopeMissing: false, inventoryScopeMissing: false, perStore: {} };
 
   for (const { role, result } of stores) {
+    sourceStores[role] = { months: result.months };
     meta.perStore[role] = result._meta;
     meta.ordersScanned += result._meta.ordersScanned;
     meta.pages += result._meta.pages;
@@ -267,7 +287,7 @@ function mergeStoreResults(stores) {
     .slice(0, 8)
     .map(([name, data]) => ({ name, ...data }));
 
-  return { months, topProducts, _meta: meta };
+  return { months, topProducts, _stores: sourceStores, _meta: meta };
 }
 
 // Inventory snapshot: per-variant on-hand / available / committed / incoming, broken down by location.

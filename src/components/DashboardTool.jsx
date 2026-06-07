@@ -373,15 +373,35 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
   // Snapshot fresh Shopify months to DB so they survive the 60-day window.
   useEffect(() => {
     if (!shopifyData?.months?.length) return;
-    const snapshots = shopifyData.months.map(m => ({
-      month: m.month,
-      shopify: {
+    const hasStoreBreakdown = !!shopifyData._stores;
+    const primaryMonths = hasStoreBreakdown
+      ? (shopifyData._stores?.primary?.months || [])
+      : shopifyData.months;
+    const dealerMonths = shopifyData._stores?.dealer?.months || [];
+    const byMonth = new Map();
+    for (const m of primaryMonths) {
+      byMonth.set(m.month, {
+        month: m.month,
+        shopify: {
+          netSales: m.netSales, orders: m.orders, shipping: m.shipping,
+          newCustomers: m.newCustomers, returningCustomers: m.returningCustomers,
+          newRevenue: m.newRevenue, returningRevenue: m.returningRevenue,
+          cogs: m.cogs, costedRevenue: m.costedRevenue, uncostedRevenue: m.uncostedRevenue,
+        },
+      });
+    }
+    for (const m of dealerMonths) {
+      const snapshot = byMonth.get(m.month) || { month: m.month };
+      snapshot.shopify_dealer = {
         netSales: m.netSales, orders: m.orders, shipping: m.shipping,
         newCustomers: m.newCustomers, returningCustomers: m.returningCustomers,
         newRevenue: m.newRevenue, returningRevenue: m.returningRevenue,
         cogs: m.cogs, costedRevenue: m.costedRevenue, uncostedRevenue: m.uncostedRevenue,
-      },
-    }));
+      };
+      byMonth.set(m.month, snapshot);
+    }
+    const snapshots = [...byMonth.values()];
+    if (!snapshots.length) return;
     fetch('/api/db/monthly-metrics', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'snapshot', snapshots }),
@@ -1373,7 +1393,12 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
 
         // Live data (current pull)
         const liveSpendByMonth = Object.fromEntries(monthlyInsights.map(m => [m.month, m]));
-        const liveShopByMonth = Object.fromEntries(shopifyMonths.map(m => [m.month, m]));
+        const livePrimaryMonths = shopifyData?._stores
+          ? (shopifyData._stores?.primary?.months || [])
+          : shopifyMonths;
+        const liveDealerMonths = shopifyData?._stores?.dealer?.months || [];
+        const liveShopByMonth = Object.fromEntries(livePrimaryMonths.map(m => [m.month, m]));
+        const liveDealerByMonth = Object.fromEntries(liveDealerMonths.map(m => [m.month, m]));
 
         // Snapshotted history from DB (overlay BEHIND live data — live always wins for current months)
         const snapshotShopByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.shopify).map(r => [r.month, r.shopify]));
@@ -1391,12 +1416,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           return out;
         };
         const allShopMonths = new Set([
-          ...Object.keys(snapshotShopByMonth), ...Object.keys(liveShopByMonth), ...Object.keys(dealerByMonth),
+          ...Object.keys(snapshotShopByMonth), ...Object.keys(liveShopByMonth),
+          ...Object.keys(dealerByMonth), ...Object.keys(liveDealerByMonth),
         ]);
         const shopByMonth = {};
         for (const mk of allShopMonths) {
           const primary = liveShopByMonth[mk] || snapshotShopByMonth[mk] || null;
-          const dealer = dealerByMonth[mk] || null;
+          const dealer = liveDealerByMonth[mk] || dealerByMonth[mk] || null;
           shopByMonth[mk] = sumShopify(primary, dealer);
         }
         const spendByMonth = { ...snapshotMetaByMonth, ...liveSpendByMonth };
@@ -1413,6 +1439,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
         const ordersAddByMonth = s.ordersAddByMonth || {};
         const newCustomersAddByMonth = s.newCustomersAddByMonth || {};
         const returningCustomersAddByMonth = s.returningCustomersAddByMonth || {};
+        const overlappingManualDealerMonths = Object.keys(revenueAddByMonth).filter(
+          mk => Number(revenueAddByMonth[mk] || 0) !== 0
+            && (dealerByMonth[mk] || liveDealerByMonth[mk]),
+        );
 
         // Union of all months (live + snapshotted + manual overrides), filtered to start month
         const startMonth = settings?.cfoStartMonth || '2026-03';
@@ -1575,6 +1605,12 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
               </button>
             </div>
 
+            {overlappingManualDealerMonths.length > 0 && (
+              <div style={{ ...S.err, marginBottom: 16, color: '#f5a623', borderColor: 'rgba(245,166,35,0.4)', background: 'rgba(245,166,35,0.1)' }}>
+                Additional Revenue overlaps dealer-store data for {overlappingManualDealerMonths.join(', ')}. Confirm those overrides are truly off-platform revenue or the CFO totals will be overstated.
+              </div>
+            )}
+
             {showAssumptions && settings && (
               <div style={{ ...S.card, marginBottom: 16 }}>
                 <span style={S.label}>Assumptions (used for COGS, fees, CM3)</span>
@@ -1614,7 +1650,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                 <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid #2a3441' }}>
                   <span style={S.label}>Monthly Overrides — OpEx, Add'l Revenue</span>
                   <div style={{ fontSize: 9, color: '#6e7681', marginBottom: 10, letterSpacing: 1 }}>
-                    Leave blank to use defaults. <strong>Add'l Revenue</strong> is added on top of Shopify primary — use it for dealer-store sales and pre-window months (Jan/Feb '26). Add'l Orders drives correct fees/ship/pick math.
+                    Leave blank to use defaults. <strong>Add'l Revenue</strong> is added on top of connected and imported Shopify stores — use it only for off-platform or otherwise missing historical revenue. Add'l Orders drives correct fees/ship/pick math.
                   </div>
                   <div style={{ overflowX: 'auto', maxHeight: 480 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '60px 90px 100px 70px 70px 70px', gap: 5, alignItems: 'center', minWidth: 490 }}>
@@ -2046,7 +2082,12 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
         // Build pacing rows: filter forecast months to start month forward, intersect with snapshots+live actuals.
         const startMonth = settings?.cfoStartMonth || '2026-03';
         const liveSpendByMonth = Object.fromEntries((data?.monthlyInsights || []).map(m => [m.month, m]));
-        const liveShopByMonth = Object.fromEntries((shopifyData?.months || []).map(m => [m.month, m]));
+        const livePrimaryMonths = shopifyData?._stores
+          ? (shopifyData._stores?.primary?.months || [])
+          : (shopifyData?.months || []);
+        const liveDealerMonths = shopifyData?._stores?.dealer?.months || [];
+        const liveShopByMonth = Object.fromEntries(livePrimaryMonths.map(m => [m.month, m]));
+        const liveDealerByMonth = Object.fromEntries(liveDealerMonths.map(m => [m.month, m]));
         const snapShopByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.shopify).map(r => [r.month, r.shopify]));
         const snapMetaByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.meta).map(r => [r.month, r.meta]));
         const dealerByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.shopify_dealer).map(r => [r.month, r.shopify_dealer]));
@@ -2057,10 +2098,16 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           for (const k of ['netSales','orders','shipping','newCustomers','returningCustomers','newRevenue','returningRevenue','cogs','costedRevenue','uncostedRevenue']) out[k] = (a[k] || 0) + (b[k] || 0);
           return out;
         };
-        const allShopMonths = new Set([...Object.keys(snapShopByMonth), ...Object.keys(liveShopByMonth), ...Object.keys(dealerByMonth)]);
+        const allShopMonths = new Set([
+          ...Object.keys(snapShopByMonth), ...Object.keys(liveShopByMonth),
+          ...Object.keys(dealerByMonth), ...Object.keys(liveDealerByMonth),
+        ]);
         const shopByMonth = {};
         for (const mk of allShopMonths) {
-          shopByMonth[mk] = sumShop(liveShopByMonth[mk] || snapShopByMonth[mk] || null, dealerByMonth[mk] || null);
+          shopByMonth[mk] = sumShop(
+            liveShopByMonth[mk] || snapShopByMonth[mk] || null,
+            liveDealerByMonth[mk] || dealerByMonth[mk] || null,
+          );
         }
         const metaByMonth = { ...snapMetaByMonth, ...liveSpendByMonth };
         // Google spend from live Ads API (via monthly_metrics.google snapshot).
