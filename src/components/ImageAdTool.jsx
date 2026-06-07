@@ -606,9 +606,22 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <div style={{ padding: '20px 28px', borderBottom: '1px solid #2a3441', flexShrink: 0 }}>
-        <div className="eyebrow" style={{ marginBottom: 4 }}>Create</div>
-        <div className="display-md" style={{ color: '#f0f4f8' }}>Image Ads</div>
+      <div style={{ padding: '20px 28px', borderBottom: '1px solid #2a3441', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <div>
+          <div className="eyebrow" style={{ marginBottom: 4 }}>Create</div>
+          <div className="display-md" style={{ color: '#f0f4f8' }}>Image Ads</div>
+        </div>
+        <button
+          onClick={async () => {
+            try {
+              const r = await fetch('/api/db/schema', { method: 'POST' });
+              const d = await r.json();
+              alert(r.ok ? 'Schema synced — image_library table is ready.' : `Schema failed: ${d.error || r.status}`);
+            } catch (err) { alert(`Schema failed: ${err.message}`); }
+          }}
+          style={{ fontSize: 9, padding: '6px 12px', borderRadius: 4, border: '1px solid #2a3441', background: '#1c2330', color: '#8b949e', fontFamily: 'inherit', letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer' }}
+          title="Run /api/db/schema — idempotent, safe to click."
+        >Init DB Schema</button>
       </div>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 
