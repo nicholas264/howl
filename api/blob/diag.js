@@ -2,6 +2,7 @@
 // function so we can confirm whether the production environment can actually
 // reach the Blob store with the configured token. Returns a JSON report.
 import { put, list } from '@vercel/blob';
+import { generateClientTokenFromReadWriteToken } from '@vercel/blob/client';
 
 export default async function handler(req, res) {
   const out = {
@@ -31,6 +32,40 @@ export default async function handler(req, res) {
   } catch (err) {
     out.putOk = false;
     out.putError = err.message;
+  }
+
+  // Sign a clientToken the same way handleUpload would, then PUT with it as
+  // the browser does. If THIS fails but putOk is true, the clientToken flow
+  // is broken even though direct uploads work.
+  try {
+    const pathname = `image-library/diag-client-${Date.now()}.jpg`;
+    const clientToken = await generateClientTokenFromReadWriteToken({
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+      pathname,
+      allowedContentTypes: ['image/jpeg'],
+      maximumSizeInBytes: 10 * 1024 * 1024,
+      addRandomSuffix: true,
+      validUntil: Date.now() + 60_000,
+    });
+    out.clientTokenOk = true;
+    out.clientTokenLen = clientToken.length;
+
+    const putRes = await fetch(`https://blob.vercel-storage.com/?pathname=${encodeURIComponent(pathname)}`, {
+      method: 'PUT',
+      headers: {
+        authorization: `Bearer ${clientToken}`,
+        'content-type': 'image/jpeg',
+        'x-api-version': '12',
+        'x-add-random-suffix': '1',
+        'x-add-access': 'public',
+      },
+      body: 'fake-jpeg-body',
+    });
+    out.clientPutStatus = putRes.status;
+    out.clientPutBody = (await putRes.text()).slice(0, 300);
+  } catch (err) {
+    out.clientTokenOk = false;
+    out.clientTokenError = err.message;
   }
 
   return res.json(out);
