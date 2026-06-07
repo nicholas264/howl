@@ -52,6 +52,10 @@ export default async function handler(req, res) {
           ],
           maximumSizeInBytes: 10 * 1024 * 1024 * 1024, // 10 GB
           addRandomSuffix: true,
+          // Don't let the Clerk JWT (clientPayload) become the tokenPayload —
+          // it inflates the signed clientToken past header limits and Blob
+          // backend then rejects the PUT with a generic "Access denied".
+          tokenPayload: '',
         };
       },
       onUploadCompleted: async () => {
