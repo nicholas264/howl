@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import DealerCsvImport from './DealerCsvImport';
+import CreativePerformanceWorkspace from './CreativePerformanceWorkspace';
 
 const TYPE_COLORS = {
   static:  '#6e40c9',
@@ -168,6 +169,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
   const [creativeSyncing, setCreativeSyncing] = useState(false);
   const [creativeSyncMsg, setCreativeSyncMsg] = useState('');
   const [creativeExpanded, setCreativeExpanded] = useState({}); // groupKey -> { loading, ads }
+  const creativeWorkspaceMode = 'motion';
 
   const loadCreativeTable = useCallback(async (days) => {
     setCreativeTableLoading(true); setCreativeTableError('');
@@ -720,8 +722,24 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
         </div>
       )}
 
-      {/* Top Creatives — Motion-style sortable table, Creative sub-tab only */}
-      {view === 'creative' && (() => {
+      {view === 'creative' && creativeWorkspaceMode === 'motion' && (
+        <CreativePerformanceWorkspace
+          creativeTable={creativeTable}
+          loading={creativeTableLoading}
+          error={creativeTableError}
+          windowDays={creativeWindowDays}
+          setWindowDays={setCreativeWindowDays}
+          syncing={creativeSyncing}
+          syncMessage={creativeSyncMsg}
+          onSync={syncCreativeAnalytics}
+          onAnalyze={runAnalysis}
+          onOpenAnalysis={openAnalysis}
+          setActiveTab={setActiveTab}
+        />
+      )}
+
+      {/* Legacy operating table kept behind the workspace mode during rollout. */}
+      {view === 'creative' && creativeWorkspaceMode === 'legacy' && (() => {
         const COLS = [
           { key: 'name',            label: 'Creative',     align: 'left',  sortable: false, kind: 'name' },
           { key: 'status',          label: 'Status',       align: 'left',  sortable: false, kind: 'status' },

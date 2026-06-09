@@ -1,249 +1,314 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-/**
- * From Winners — pulls analyzed creatives from /api/meta:list_analyzed_winners,
- * lets the user multi-select, then generates new script variations that iterate
- * on the selected winners' patterns. Output is dropped into the same `variations`
- * state used by the existing Results panel so the rest of the pipeline (Image
- * Ads, Video Ads, etc.) is unchanged.
- */
+const STRATEGIES = [
+  { key: 'controlled', label: 'Controlled iterations', description: 'Keep the winning structure and change one variable at a time.' },
+  { key: 'crossbreed', label: 'Crossbreed winners', description: 'Combine the hook mechanic of one winner with the proof or format of another.' },
+  { key: 'frontier', label: 'Adjacent bets', description: 'Use the learning, but move into a genuinely new angle or execution.' },
+];
+
+const PRODUCTS = [
+  { key: 'mixed', label: 'Mixed products' },
+  { key: 'r1', label: 'R1' },
+  { key: 'r4mkii', label: 'R4 MKii' },
+];
+
+function money(value) {
+  return `$${Math.round(Number(value) || 0).toLocaleString()}`;
+}
+
+function parseJsonArray(text) {
+  const cleaned = text.replace(/```json|```/gi, '').trim();
+  const start = cleaned.indexOf('[');
+  const end = cleaned.lastIndexOf(']');
+  if (start < 0 || end < start) throw new Error('The model did not return a JSON array.');
+  const parsed = JSON.parse(cleaned.slice(start, end + 1));
+  if (!Array.isArray(parsed)) throw new Error('Concept response was not an array.');
+  return parsed;
+}
+
 export default function FromWinnersTool({ setActiveTab, setVariations }) {
   const [windowDays, setWindowDays] = useState(30);
   const [winners, setWinners] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [selected, setSelected] = useState(new Set());
-  const [count, setCount] = useState(8);
-  const [extraContext, setExtraContext] = useState('');
+  const [selected, setSelected] = useState(() => new Set());
+  const [count, setCount] = useState(6);
+  const [strategy, setStrategy] = useState('controlled');
+  const [product, setProduct] = useState('mixed');
+  const [objective, setObjective] = useState('Lower NCAC while protecting conversion quality');
+  const [mustInclude, setMustInclude] = useState('');
+  const [avoid, setAvoid] = useState('Generic campfire lifestyle montage; vague “game changer” language; unsupported claims');
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState('');
+  const [concepts, setConcepts] = useState([]);
 
   const load = useCallback(async (days) => {
-    setLoading(true); setError('');
+    setLoading(true);
+    setError('');
     try {
-      const r = await fetch('/api/meta', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const response = await fetch('/api/meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'list_analyzed_winners', sinceDays: days }),
       });
-      const d = await r.json();
-      if (d.error) throw new Error(d.error);
-      setWinners(d.winners || []);
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+      setWinners(data.winners || []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { load(windowDays); }, [load, windowDays]);
 
-  const toggle = (key) => setSelected(prev => {
-    const next = new Set(prev);
-    if (next.has(key)) next.delete(key); else next.add(key);
-    return next;
-  });
+  useEffect(() => {
+    if (!winners?.length) return;
+    try {
+      const carried = JSON.parse(sessionStorage.getItem('howl:selected-winners') || '[]');
+      if (Array.isArray(carried) && carried.length) {
+        const available = new Set(winners.map(w => w.group_key));
+        setSelected(new Set(carried.filter(key => available.has(key))));
+        sessionStorage.removeItem('howl:selected-winners');
+      }
+    } catch {}
+  }, [winners]);
 
-  const fmtMoney = (n) => `$${(Number(n) || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const selectedWinners = useMemo(
+    () => (winners || []).filter(winner => selected.has(winner.group_key)),
+    [winners, selected],
+  );
+
+  const toggle = (key) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const generate = async () => {
-    if (selected.size === 0 || !winners) return;
-    const refs = winners.filter(w => selected.has(w.group_key));
+    if (!selectedWinners.length) return;
+    const references = selectedWinners.map((winner, index) => {
+      const spend = Number(winner.spend) || 0;
+      const revenue = Number(winner.purchase_value) || 0;
+      const purchases = Number(winner.purchases) || 0;
+      return [
+        `WINNER ${index + 1}: ${winner.name || 'Untitled'}`,
+        `Performance: spend ${money(spend)}, purchase value ${money(revenue)}, ROAS ${spend ? (revenue / spend).toFixed(2) : 'n/a'}, purchases ${purchases}, CPA ${purchases ? money(spend / purchases) : 'n/a'}`,
+        `DNA: format=${winner.format || 'unknown'}; hook_type=${winner.hook_type || 'unknown'}; angle=${winner.angle || 'unknown'}`,
+        winner.hook_text_verbatim ? `Opening: "${winner.hook_text_verbatim}"` : null,
+        winner.visual_summary ? `Visual system: ${winner.visual_summary}` : null,
+        winner.talent_description ? `Talent: ${winner.talent_description}` : null,
+        winner.why_it_worked ? `Observed reason it worked: ${winner.why_it_worked}` : null,
+        winner.transcript ? `Transcript:\n${winner.transcript}` : null,
+      ].filter(Boolean).join('\n');
+    }).join('\n\n-----\n\n');
 
-    const refBlocks = refs.map((r, i) => {
-      const lines = [
-        `WINNER ${i + 1}: ${r.name || '(unnamed)'}`,
-        `Spend: ${fmtMoney(r.spend)} · Revenue: ${fmtMoney(r.purchase_value)} · Purchases: ${r.purchases || 0}`,
-        `Format: ${r.format || '—'} · Hook type: ${r.hook_type || '—'} · Angle: ${r.angle || '—'}`,
-        r.hook_text_verbatim ? `Hook (verbatim): "${r.hook_text_verbatim}"` : null,
-        r.talent_description ? `Talent: ${r.talent_description}` : null,
-        r.visual_summary ? `Visual: ${r.visual_summary}` : null,
-        r.why_it_worked ? `Why it worked: ${r.why_it_worked}` : null,
-        r.transcript ? `Full script:\n${r.transcript}` : null,
-      ].filter(Boolean);
-      return lines.join('\n');
-    }).join('\n\n---\n\n');
+    const strategyInstruction = {
+      controlled: 'Create a test matrix. Preserve one proven control from a winner and change exactly one major variable per concept.',
+      crossbreed: 'Each concept must explicitly combine two different winners. Name what comes from each and ensure the combination is coherent.',
+      frontier: 'Move one step beyond the winners into adjacent unmet angles. Preserve a proven psychological mechanism, but do not copy the surface execution.',
+    }[strategy];
 
-    const systemPrompt = `You write Meta ad scripts for HOWL Campfires (smokeless propane fire pits — R1, R4 MKii). You're given proven winners from the brand's account with their performance and structural breakdowns. Generate NEW script variations that iterate on these patterns.
+    const system = `You are HOWL Campfires' senior performance creative strategist. You turn observed ad performance into disciplined, shootable test concepts.
+
+HOWL sells portable propane fire pits, primarily R1 and R4 MKii. The voice is direct, practical, specific, outdoor-literate, and confident without macho filler.
+
+Your job is not to paraphrase winning scripts. Your job is to identify the mechanism that likely drove performance and design distinct tests that can teach the team something.
 
 Rules:
-- Match HOWL's voice: direct, masculine, outdoor, no fluff, no AI tells.
-- Never use em dashes (— or –) anywhere.
-- Don't use "It's not X, it's Y" antithesis or other LLM tells.
-- Each variation should pull from the winners' DNA but feel fresh — not paraphrased.
-- If multiple winners are referenced, blend their patterns intentionally (e.g. winner A's hook style on winner B's angle).
-- Vary product, hook, angle, talent type across the set.
+- ${strategyInstruction}
+- Every concept needs a falsifiable hypothesis and one clearly named primary variable.
+- Ground claims in proof that can be filmed or shown.
+- The first three seconds must be visually specific, not just a spoken hook.
+- Avoid em dashes, fake testimonials, invented specs, and generic AI copy patterns.
+- Scripts must sound spoken, use short sentences, and include a clear product reveal and CTA.
+- Concepts must be meaningfully different from one another in angle, opening image, or persuasion mechanism.
+- Prefer practical production that HOWL can shoot outdoors with a creator, founder, customer, product, phone, and existing footage.
 
-Output ONLY a valid JSON array. Each element:
+Return ONLY a JSON array with this exact shape:
 {
-  "hook": "the spoken/on-screen opening line",
-  "script": "full script — pure spoken word, no production notes, no visual cues",
-  "product": "r1 | r4mkii | other",
-  "angle": "short label",
-  "format": "ugc-talking-head | ugc-product-demo | studio-product | founder | callout-graphic | review-collage | static-image",
-  "inspired_by": "1 short sentence naming which winner(s) and what you pulled forward"
-}
+  "concept_name": "short memorable name",
+  "product": "r1 | r4mkii",
+  "format": "ugc-demo | founder-demo | comparison | problem-solution | customer-story | static | montage",
+  "angle": "specific persuasion angle",
+  "inspired_by": ["winner name"],
+  "winning_pattern_kept": "the proven mechanism retained",
+  "primary_variable": "the single main variable this test changes",
+  "hypothesis": "If we change X, then Y should improve because Z",
+  "opening_visual": "what appears in frame 0-3 seconds",
+  "hook": "spoken or on-screen opening line",
+  "proof_sequence": ["specific proof beat 1", "beat 2", "beat 3"],
+  "script": "complete spoken script, approximately 20-35 seconds",
+  "shot_list": ["shot 1", "shot 2", "shot 3", "shot 4"],
+  "cta": "specific CTA",
+  "why_new": "how this differs from the references",
+  "risk": "what could make the test fail"
+}`;
 
-No prose outside the array. No markdown fences.`;
+    const user = `Build ${count} creative concepts.
 
-    const userPrompt = `Generate ${count} new script variations.
+BUSINESS OBJECTIVE:
+${objective}
+
+PRODUCT DIRECTION:
+${product === 'mixed' ? 'Use both R1 and R4 MKii across the set when relevant.' : `Focus on ${product}.`}
+
+MUST INCLUDE:
+${mustInclude || 'No additional requirement.'}
+
+AVOID:
+${avoid || 'No additional exclusions.'}
 
 REFERENCE WINNERS:
+${references}`;
 
-${refBlocks}
-
-${extraContext ? `\nADDITIONAL CONTEXT FROM USER:\n${extraContext}\n` : ''}
-Now write ${count} new variations that iterate on the patterns above.`;
-
-    setGenerating(true); setGenerateError('');
+    setGenerating(true);
+    setGenerateError('');
     try {
-      const r = await fetch('/api/generate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 8000,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: userPrompt }],
+          max_tokens: 12000,
+          system,
+          messages: [{ role: 'user', content: user }],
         }),
       });
-      const data = await r.json();
+      const data = await response.json();
       if (data.error) throw new Error(data.error.message || data.error);
-      const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
-      const cleaned = text.replace(/```json|```/g, '').trim();
-      const variations = JSON.parse(cleaned);
-      setVariations(variations);
-      setActiveTab('results');
-    } catch (err) { setGenerateError(err.message); }
-    finally { setGenerating(false); }
+      const text = (data.content || []).filter(block => block.type === 'text').map(block => block.text).join('');
+      setConcepts(parseJsonArray(text));
+    } catch (err) {
+      setGenerateError(err.message);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const sendToResults = () => {
+    setVariations(concepts.map(concept => ({
+      hook: concept.hook,
+      script: concept.script,
+      product: concept.product,
+      angle: concept.angle,
+      format: concept.format,
+      concept_name: concept.concept_name,
+      hypothesis: concept.hypothesis,
+      opening_visual: concept.opening_visual,
+      proof_sequence: concept.proof_sequence,
+      shot_list: concept.shot_list,
+      inspired_by: (concept.inspired_by || []).join(', '),
+    })));
+    setActiveTab('results');
   };
 
   return (
-    <div style={{ padding: '28px 36px', maxWidth: 1400, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, flexWrap: 'wrap', gap: 12 }}>
+    <div className="concept-studio">
+      <header className="concept-head">
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: '#f0f4f8', margin: 0 }}>From Winners</h2>
-          <div style={{ fontSize: 11, color: '#8b949e', marginTop: 4 }}>
-            Select analyzed creatives, then generate iterations that pull from their DNA.
+          <div className="motion-kicker">Creative strategy</div>
+          <h1>Concept studio</h1>
+          <p>Turn winning creative patterns into controlled tests, not cosmetic remixes.</p>
+        </div>
+        <div className="concept-window">
+          {[7, 14, 30, 90].map(days => <button className={windowDays === days ? 'active' : ''} onClick={() => setWindowDays(days)} key={days}>{days}d</button>)}
+        </div>
+      </header>
+
+      {error ? <div className="motion-error">{error}</div> : null}
+      {loading && !winners ? <div className="motion-loading">Loading analyzed winners…</div> : null}
+
+      <div className="concept-layout">
+        <aside className="concept-controls">
+          <section>
+            <label>1. Testing strategy</label>
+            {STRATEGIES.map(item => (
+              <button className={`concept-choice ${strategy === item.key ? 'active' : ''}`} onClick={() => setStrategy(item.key)} key={item.key}>
+                <strong>{item.label}</strong><span>{item.description}</span>
+              </button>
+            ))}
+          </section>
+          <section>
+            <label>2. Product</label>
+            <div className="concept-segmented">
+              {PRODUCTS.map(item => <button className={product === item.key ? 'active' : ''} onClick={() => setProduct(item.key)} key={item.key}>{item.label}</button>)}
+            </div>
+          </section>
+          <section>
+            <label htmlFor="concept-objective">3. Objective</label>
+            <textarea id="concept-objective" value={objective} onChange={event => setObjective(event.target.value)} rows={3} />
+          </section>
+          <section>
+            <label htmlFor="concept-include">Must include</label>
+            <textarea id="concept-include" value={mustInclude} onChange={event => setMustInclude(event.target.value)} rows={2} placeholder="Launch, offer, proof, audience, season…" />
+          </section>
+          <section>
+            <label htmlFor="concept-avoid">Avoid</label>
+            <textarea id="concept-avoid" value={avoid} onChange={event => setAvoid(event.target.value)} rows={3} />
+          </section>
+        </aside>
+
+        <main className="concept-main">
+          <div className="concept-section-title">
+            <div><span>Reference set</span><strong>{selected.size} selected</strong></div>
+            <label>Concepts <input type="number" min="1" max="12" value={count} onChange={event => setCount(Math.max(1, Math.min(12, Number(event.target.value) || 6)))} /></label>
           </div>
-        </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {[7, 14, 30, 90].map(d => (
-            <button key={d} onClick={() => setWindowDays(d)} disabled={loading} style={{
-              padding: '5px 10px',
-              background: windowDays === d ? 'rgba(220,68,10,0.15)' : 'none',
-              border: `1px solid ${windowDays === d ? '#DC440A' : '#2a3441'}`,
-              color: windowDays === d ? '#DC440A' : '#8b949e',
-              fontFamily: 'inherit', fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase',
-              cursor: loading ? 'not-allowed' : 'pointer', borderRadius: 3,
-            }}>{d}d</button>
-          ))}
-        </div>
-      </div>
 
-      {error && <div style={{ padding: '8px 12px', border: '1px solid rgba(248,81,73,0.4)', background: 'rgba(248,81,73,0.08)', color: '#f85149', fontSize: 11, borderRadius: 4, marginBottom: 16 }}>{error}</div>}
-
-      {loading && !winners && (
-        <div style={{ fontSize: 12, color: '#8b949e', padding: 24 }}>Loading…</div>
-      )}
-
-      {winners && winners.length === 0 && (
-        <div style={{ padding: 24, border: '1px solid #2a3441', borderRadius: 4, color: '#8b949e', fontSize: 12, marginTop: 18 }}>
-          No analyzed creatives yet. Go to <strong style={{ color: '#DC440A' }}>Insights → Creative Analytics</strong>, click <strong>Analyze</strong> on a few high-performing rows, then come back here.
-        </div>
-      )}
-
-      {winners && winners.length > 0 && (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 14, marginTop: 18, marginBottom: 28 }}>
-            {winners.map(w => {
-              const isOn = selected.has(w.group_key);
+          <div className="concept-winners">
+            {(winners || []).map(winner => {
+              const active = selected.has(winner.group_key);
+              const spend = Number(winner.spend) || 0;
+              const revenue = Number(winner.purchase_value) || 0;
               return (
-                <div key={w.group_key} onClick={() => toggle(w.group_key)} style={{
-                  padding: 14, borderRadius: 6, cursor: 'pointer',
-                  background: isOn ? 'rgba(220,68,10,0.06)' : '#0d1117',
-                  border: `1px solid ${isOn ? '#DC440A' : '#2a3441'}`,
-                  transition: 'border-color 0.15s, background 0.15s',
-                }}>
-                  <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-                    {w.thumbnail_url
-                      ? <img src={w.thumbnail_url} alt="" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, flexShrink: 0, background: '#1c2330' }} onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
-                      : <div style={{ width: 48, height: 48, background: '#1c2330', borderRadius: 4, flexShrink: 0 }} />
-                    }
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ color: '#f0f4f8', fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name || '(unnamed)'}</div>
-                      <div style={{ display: 'flex', gap: 10, fontSize: 9.5, color: '#8b949e', letterSpacing: 1, textTransform: 'uppercase', marginTop: 4 }}>
-                        <span style={{ color: '#3fb950', fontWeight: 700 }}>{fmtMoney(w.purchase_value)}</span>
-                        <span>{fmtMoney(w.spend)} spend</span>
-                      </div>
-                    </div>
-                    <div style={{
-                      width: 18, height: 18, flexShrink: 0, borderRadius: 3,
-                      background: isOn ? '#DC440A' : 'transparent',
-                      border: `1px solid ${isOn ? '#DC440A' : '#3a4452'}`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 11, color: '#0d1117', fontWeight: 700,
-                    }}>{isOn ? '✓' : ''}</div>
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
-                    {w.hook_type && <span style={pillStyle}>{w.hook_type}</span>}
-                    {w.format && <span style={pillStyle}>{w.format}</span>}
-                    {w.angle && <span style={{ ...pillStyle, background: 'rgba(63,185,80,0.1)', borderColor: 'rgba(63,185,80,0.4)', color: '#3fb950' }}>{w.angle}</span>}
-                  </div>
-                  {w.hook_text_verbatim && (
-                    <div style={{ fontSize: 11, color: '#c9d1d9', fontStyle: 'italic', lineHeight: 1.4, marginBottom: 8, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                      "{w.hook_text_verbatim}"
-                    </div>
-                  )}
-                  {w.why_it_worked && (
-                    <div style={{ fontSize: 10.5, color: '#8b949e', lineHeight: 1.45, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>
-                      {w.why_it_worked}
-                    </div>
-                  )}
-                </div>
+                <button className={`concept-winner ${active ? 'active' : ''}`} onClick={() => toggle(winner.group_key)} key={winner.group_key}>
+                  {winner.thumbnail_url ? <img src={winner.thumbnail_url} alt="" /> : <div className="concept-thumb" />}
+                  <div><strong>{winner.name}</strong><span>{spend ? (revenue / spend).toFixed(2) : '0.00'}x ROAS · {money(spend)} spend</span></div>
+                  <i>{active ? '✓' : '+'}</i>
+                </button>
               );
             })}
           </div>
 
-          <div style={{ position: 'sticky', bottom: 0, background: '#0d1117', borderTop: '1px solid #2a3441', padding: '16px 0', marginTop: 8 }}>
-            <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 11, color: '#8b949e' }}>
-                {selected.size === 0 ? 'Select winners to generate from' : `${selected.size} selected`}
-              </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: '#8b949e', letterSpacing: 1, textTransform: 'uppercase' }}>
-                Variations
-                <input type="number" min={1} max={20} value={count} onChange={(e) => setCount(Math.max(1, Math.min(20, parseInt(e.target.value) || 8)))} style={{
-                  width: 56, padding: '4px 8px', background: '#1c2330', border: '1px solid #2a3441',
-                  color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11, borderRadius: 3,
-                }} />
-              </label>
-              <button onClick={generate} disabled={selected.size === 0 || generating} style={{
-                padding: '8px 18px', fontSize: 10.5, letterSpacing: 1.5, textTransform: 'uppercase', fontWeight: 700,
-                background: selected.size > 0 && !generating ? '#DC440A' : 'rgba(220,68,10,0.2)',
-                border: '1px solid #DC440A', color: selected.size > 0 && !generating ? '#fff' : 'rgba(255,255,255,0.5)',
-                fontFamily: 'inherit', borderRadius: 3, cursor: selected.size > 0 && !generating ? 'pointer' : 'not-allowed',
-                marginLeft: 'auto',
-              }}>
-                {generating ? 'Generating…' : `Generate ${count} variations`}
-              </button>
-            </div>
-            <textarea
-              placeholder="Optional: extra context (e.g. 'focus on R4 launch', 'lean into burn-ban angle for summer')"
-              value={extraContext}
-              onChange={(e) => setExtraContext(e.target.value)}
-              rows={2}
-              style={{
-                width: '100%', marginTop: 10, padding: '8px 10px',
-                background: '#1c2330', border: '1px solid #2a3441',
-                color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11.5, lineHeight: 1.5,
-                borderRadius: 3, resize: 'vertical', boxSizing: 'border-box',
-              }}
-            />
-            {generateError && <div style={{ fontSize: 11, color: '#f85149', marginTop: 8 }}>{generateError}</div>}
+          <div className="concept-generate-row">
+            <p>{selectedWinners.length ? `${selectedWinners.length} references ready.` : 'Select two to four winners with complementary learnings.'}</p>
+            <button onClick={generate} disabled={!selectedWinners.length || generating}>{generating ? 'Building test matrix…' : `Generate ${count} concepts`}</button>
           </div>
-        </>
-      )}
+          {generateError ? <div className="motion-error">{generateError}</div> : null}
+
+          {concepts.length > 0 ? (
+            <>
+              <div className="concept-output-head"><div><span>Test matrix</span><strong>{concepts.length} shootable concepts</strong></div><button onClick={sendToResults}>Send scripts to Results</button></div>
+              <div className="concept-output-grid">
+                {concepts.map((concept, index) => (
+                  <article className="concept-output" key={`${concept.concept_name}-${index}`}>
+                    <div className="concept-number">{String(index + 1).padStart(2, '0')}</div>
+                    <div className="concept-tags"><span>{concept.product}</span><span>{concept.format}</span><span>{concept.angle}</span></div>
+                    <h2>{concept.concept_name}</h2>
+                    <blockquote>{concept.hook}</blockquote>
+                    <dl>
+                      <div><dt>Hypothesis</dt><dd>{concept.hypothesis}</dd></div>
+                      <div><dt>Keep</dt><dd>{concept.winning_pattern_kept}</dd></div>
+                      <div><dt>Change</dt><dd>{concept.primary_variable}</dd></div>
+                      <div><dt>Opening frame</dt><dd>{concept.opening_visual}</dd></div>
+                    </dl>
+                    <details><summary>Proof and shot plan</summary>
+                      <h4>Proof sequence</h4><ol>{(concept.proof_sequence || []).map(item => <li key={item}>{item}</li>)}</ol>
+                      <h4>Shot list</h4><ol>{(concept.shot_list || []).map(item => <li key={item}>{item}</li>)}</ol>
+                    </details>
+                    <details><summary>Full script</summary><p className="concept-script">{concept.script}</p></details>
+                    <footer><span>Why new: {concept.why_new}</span><span>Risk: {concept.risk}</span></footer>
+                  </article>
+                ))}
+              </div>
+            </>
+          ) : null}
+        </main>
+      </div>
     </div>
   );
 }
-
-const pillStyle = {
-  display: 'inline-block', padding: '2px 7px', fontSize: 8.5, letterSpacing: 1.2, textTransform: 'uppercase',
-  background: 'rgba(220,68,10,0.1)', border: '1px solid rgba(220,68,10,0.4)', color: '#DC440A',
-  borderRadius: 3, fontWeight: 600,
-};

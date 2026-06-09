@@ -4,6 +4,7 @@ import { ClerkProvider, SignedIn, SignedOut, SignIn, useAuth } from '@clerk/cler
 import App from './App.jsx'
 
 const PUB_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+const DEV_AUTH_BYPASS = import.meta.env.DEV && import.meta.env.VITE_AUTH_DISABLED === 'true'
 if (!PUB_KEY) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY')
 
 // Patch window.fetch so every /api/* call carries the Clerk session JWT.
@@ -39,18 +40,26 @@ const appearance = {
   },
 }
 
+const app = DEV_AUTH_BYPASS ? (
+  <ClerkProvider publishableKey={PUB_KEY} appearance={appearance}>
+    <App />
+  </ClerkProvider>
+) : (
+  <ClerkProvider publishableKey={PUB_KEY} appearance={appearance}>
+    <SignedIn>
+      <FetchInterceptor />
+      <App />
+    </SignedIn>
+    <SignedOut>
+      <div style={{ minHeight: '100vh', background: '#0d1117', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+        <SignIn routing="hash" />
+      </div>
+    </SignedOut>
+  </ClerkProvider>
+)
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <ClerkProvider publishableKey={PUB_KEY} appearance={appearance}>
-      <SignedIn>
-        <FetchInterceptor />
-        <App />
-      </SignedIn>
-      <SignedOut>
-        <div style={{ minHeight: '100vh', background: '#0d1117', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-          <SignIn routing="hash" />
-        </div>
-      </SignedOut>
-    </ClerkProvider>
+    {app}
   </React.StrictMode>,
 )

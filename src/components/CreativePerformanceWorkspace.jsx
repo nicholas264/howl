@@ -1,0 +1,219 @@
+import React, { useMemo, useState } from 'react';
+
+const METRICS = {
+  cpa: { label: 'CPA', format: v => v == null ? '—' : `$${v.toFixed(0)}`, better: 'low' },
+  roas: { label: 'ROAS', format: v => `${(v || 0).toFixed(2)}x`, better: 'high' },
+  purchases: { label: 'Purchases', format: v => Math.round(v || 0).toLocaleString(), better: 'high' },
+  spend: { label: 'Spend', format: v => `$${Math.round(v || 0).toLocaleString()}`, better: 'high' },
+  purchaseValue: { label: 'Purchase value', format: v => `$${Math.round(v || 0).toLocaleString()}`, better: 'high' },
+  ctr: { label: 'CTR', format: v => `${((v || 0) * 100).toFixed(2)}%`, better: 'high' },
+  hookRate: { label: 'Hook rate', format: v => `${((v || 0) * 100).toFixed(1)}%`, better: 'high' },
+};
+
+function statusFor(g) {
+  if ((g.spend || 0) < 50 && !(g.purchases > 0)) return 'Learning';
+  if ((g.roas || 0) >= 2 && (g.purchases || 0) >= 2) return 'Winner';
+  if ((g.spend || 0) >= 100 && (g.roas || 0) < 1) return 'Stop';
+  if ((g.ctr || 0) < 0.008 && (g.spend || 0) >= 75) return 'Hook weak';
+  if ((g.hookRate || 0) > 0.25 && (g.roas || 0) < 1.5) return 'Fix offer';
+  return 'Watch';
+}
+
+function metricRange(groups, key) {
+  const values = groups.map(g => g[key]).filter(v => typeof v === 'number' && Number.isFinite(v));
+  return { min: Math.min(...values, 0), max: Math.max(...values, 1) };
+}
+
+export default function CreativePerformanceWorkspace({
+  creativeTable,
+  loading,
+  error,
+  windowDays,
+  setWindowDays,
+  syncing,
+  syncMessage,
+  onSync,
+  onAnalyze,
+  onOpenAnalysis,
+  setActiveTab,
+}) {
+  const [viewMode, setViewMode] = useState('cards');
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('All');
+  const [sortKey, setSortKey] = useState('purchaseValue');
+  const [selectedMetrics, setSelectedMetrics] = useState(['cpa', 'roas', 'purchases', 'spend', 'purchaseValue']);
+  const [selected, setSelected] = useState(() => new Set());
+
+  const groups = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return [...(creativeTable?.groups || [])]
+      .filter(g => !needle || (g.name || '').toLowerCase().includes(needle))
+      .filter(g => status === 'All' || statusFor(g) === status)
+      .sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
+  }, [creativeTable, query, status, sortKey]);
+
+  const topGroups = groups.slice(0, 12);
+  const metricRanges = useMemo(
+    () => Object.keys(METRICS).reduce((ranges, key) => {
+      ranges[key] = metricRange(groups, key);
+      return ranges;
+    }, {}),
+    [groups],
+  );
+  const selectedSet = selected;
+  const toggleSelected = (key) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+  const toggleMetric = (key) => {
+    setSelectedMetrics(prev => prev.includes(key)
+      ? (prev.length > 1 ? prev.filter(k => k !== key) : prev)
+      : [...prev, key]);
+  };
+  const sendToConcepts = () => {
+    const selectedAnalyzed = groups.filter(g => selected.has(g.groupKey) && g.isAnalyzed);
+    const fallbackWinners = topGroups
+      .filter(g => g.isAnalyzed && statusFor(g) === 'Winner')
+      .slice(0, 4);
+    const keys = (selectedAnalyzed.length ? selectedAnalyzed : fallbackWinners).map(g => g.groupKey);
+    sessionStorage.setItem('howl:selected-winners', JSON.stringify(keys));
+    setActiveTab('from-winners');
+  };
+
+  const totalSpend = groups.reduce((sum, g) => sum + (g.spend || 0), 0);
+  const totalRevenue = groups.reduce((sum, g) => sum + (g.purchaseValue || 0), 0);
+  const winners = groups.filter(g => statusFor(g) === 'Winner').length;
+
+  return (
+    <section className="motion-workspace">
+      <header className="motion-report-head">
+        <div>
+          <div className="motion-kicker">Creative intelligence</div>
+          <h1>Top creatives</h1>
+          <p>See where HOWL is spending money, making money, and finding repeatable creative patterns.</p>
+        </div>
+        <div className="motion-summary">
+          <div><span>Spend</span><strong>${Math.round(totalSpend).toLocaleString()}</strong></div>
+          <div><span>Purchase value</span><strong>${Math.round(totalRevenue).toLocaleString()}</strong></div>
+          <div><span>Winners</span><strong>{winners}</strong></div>
+        </div>
+      </header>
+
+      <div className="motion-toolbar">
+        <div className="motion-toolbar-group">
+          {[7, 14, 30, 90].map(days => (
+            <button className={windowDays === days ? 'active' : ''} onClick={() => setWindowDays(days)} key={days}>{days}d</button>
+          ))}
+          <input aria-label="Search creatives" placeholder="Search creatives" value={query} onChange={e => setQuery(e.target.value)} />
+          <select aria-label="Filter by status" value={status} onChange={e => setStatus(e.target.value)}>
+            {['All', 'Winner', 'Watch', 'Learning', 'Hook weak', 'Fix offer', 'Stop'].map(item => <option key={item}>{item}</option>)}
+          </select>
+        </div>
+        <div className="motion-toolbar-group">
+          <button onClick={onSync} disabled={syncing}>{syncing ? 'Syncing…' : 'Sync Meta'}</button>
+          <button className="motion-primary" onClick={sendToConcepts}>
+            Generate from {selected.size || 'winners'}
+          </button>
+        </div>
+      </div>
+
+      <div className="motion-metric-bar">
+        <span>Add metric</span>
+        {Object.entries(METRICS).map(([key, metric], index) => (
+          <button key={key} className={selectedMetrics.includes(key) ? 'active' : ''} onClick={() => toggleMetric(key)}>
+            <i>{index + 1}</i>{metric.label}
+          </button>
+        ))}
+        <div className="motion-view-toggle">
+          {['cards', 'chart', 'table'].map(mode => (
+            <button key={mode} className={viewMode === mode ? 'active' : ''} onClick={() => setViewMode(mode)}>{mode}</button>
+          ))}
+        </div>
+      </div>
+
+      {syncMessage ? <div className="motion-notice">{syncMessage}</div> : null}
+      {error ? <div className="motion-error">{error}</div> : null}
+      {loading && !creativeTable ? <div className="motion-loading">Loading creative performance…</div> : null}
+
+      {viewMode === 'cards' && (
+        <div className="motion-card-grid">
+          {topGroups.map(g => (
+            <article className={`motion-creative-card ${selectedSet.has(g.groupKey) ? 'selected' : ''}`} key={g.groupKey}>
+              <button className="motion-select" aria-label={`Select ${g.name}`} onClick={() => toggleSelected(g.groupKey)}>
+                {selectedSet.has(g.groupKey) ? '✓' : ''}
+              </button>
+              <div className="motion-media" onClick={() => onOpenAnalysis(g.groupKey, g.name)}>
+                {g.thumbnailUrl ? <img src={g.thumbnailUrl} alt="" /> : <div className="motion-media-empty">No preview</div>}
+                <span>{statusFor(g)}</span>
+              </div>
+              <div className="motion-card-body">
+                <h3>{g.name || 'Untitled creative'}</h3>
+                <p>{g.adCount} ad{g.adCount === 1 ? '' : 's'} · {g.firstLaunchDate ? new Date(g.firstLaunchDate).toLocaleDateString() : 'No launch date'}</p>
+                <dl>
+                  {selectedMetrics.slice(0, 5).map(key => (
+                    <div key={key}><dt>{METRICS[key].label}</dt><dd>{METRICS[key].format(g[key])}</dd></div>
+                  ))}
+                </dl>
+                <button className="motion-analysis-link" onClick={() => g.isAnalyzed ? onOpenAnalysis(g.groupKey, g.name) : onAnalyze(g.groupKey, g.name)}>
+                  {g.isAnalyzed ? 'Open creative DNA' : 'Analyze creative'}
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {viewMode === 'chart' && (
+        <div className="motion-chart">
+          <div className="motion-chart-legend">
+            <span><i className="cpa" />CPA</span><span><i className="roas" />ROAS</span>
+          </div>
+          <div className="motion-chart-bars">
+            {topGroups.slice(0, 8).map(g => {
+              return (
+                <div className="motion-chart-item" key={g.groupKey}>
+                  <div className="motion-bars">
+                    <div className="motion-bar cpa" style={{ height: `${Math.max(8, ((g.cpa || 0) / metricRanges.cpa.max) * 100)}%` }}><span>{METRICS.cpa.format(g.cpa)}</span></div>
+                    <div className="motion-bar roas" style={{ height: `${Math.max(8, ((g.roas || 0) / metricRanges.roas.max) * 100)}%` }}><span>{METRICS.roas.format(g.roas)}</span></div>
+                  </div>
+                  {g.thumbnailUrl ? <img src={g.thumbnailUrl} alt="" /> : <div className="motion-chart-thumb" />}
+                  <strong>{g.name}</strong>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {viewMode === 'table' && (
+        <div className="motion-table-wrap">
+          <table className="motion-table">
+            <thead><tr>
+              <th>Creative</th><th>Launch date</th><th>Status</th>
+              {selectedMetrics.map(key => <th key={key}><button onClick={() => setSortKey(key)}>{METRICS[key].label}</button></th>)}
+            </tr></thead>
+            <tbody>
+              {groups.map(g => <tr key={g.groupKey}>
+                <td><button className="motion-name" onClick={() => onOpenAnalysis(g.groupKey, g.name)}>
+                  {g.thumbnailUrl ? <img src={g.thumbnailUrl} alt="" /> : null}<span><strong>{g.name}</strong><small>{g.adCount} ads</small></span>
+                </button></td>
+                <td>{g.firstLaunchDate ? new Date(g.firstLaunchDate).toLocaleDateString() : '—'}</td>
+                <td><span className={`motion-status status-${statusFor(g).toLowerCase().replace(' ', '-')}`}>{statusFor(g)}</span></td>
+                {selectedMetrics.map(key => {
+                  const range = metricRanges[key];
+                  const normalized = range.max === range.min ? 0 : ((g[key] || 0) - range.min) / (range.max - range.min);
+                  const strength = METRICS[key].better === 'low' ? 1 - normalized : normalized;
+                  return <td key={key} style={{ background: `rgba(88, 190, 122, ${Math.max(0, strength) * 0.24})` }}>{METRICS[key].format(g[key])}</td>;
+                })}
+              </tr>)}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
