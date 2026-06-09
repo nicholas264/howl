@@ -13,7 +13,7 @@ function customerKey(order, store) {
 // Per-store fetch + aggregation. Returns:
 //   { months, topProducts, _meta: { ordersScanned, pages, customerScopeMissing, inventoryScopeMissing } }
 async function fetchStoreAnalytics(store, token) {
-  const GQL = `https://${store}/admin/api/2025-01/graphql.json`;
+  const GQL = `https://${store}/admin/api/2026-04/graphql.json`;
   const headers = { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': token };
 
   const gql = async (query, variables = {}) => {
@@ -40,10 +40,60 @@ async function fetchStoreAnalytics(store, token) {
     return d.data;
   };
 
+  const report = async (query) => {
+    const data = await gql(`query Report($query: String!) {
+      shopifyqlQuery(query: $query) {
+        tableData { columns { name dataType displayName } rows }
+        parseErrors
+      }
+    }`, { query });
+    const result = data.shopifyqlQuery;
+    if (result.parseErrors?.length) {
+      throw new Error(`ShopifyQL error (${store}): ${result.parseErrors.join('; ')}`);
+    }
+    return result.tableData?.rows || [];
+  };
+
   const since = new Date();
   since.setMonth(since.getMonth() - 13);
   since.setDate(1); since.setHours(0, 0, 0, 0);
   const sinceISO = since.toISOString();
+  const currentYear = new Date().getFullYear();
+
+  // ShopifyQL is the same reporting layer used by Shopify Analytics. It is the
+  // authority for revenue, orders, and customer cohorts; raw orders below remain
+  // useful for product detail and COGS but don't reproduce Shopify's report rules.
+  const [monthlyReport, ytdRows] = await Promise.all([
+    report(`FROM sales
+      SHOW total_sales, net_sales, orders, customers, new_customers, returning_customers
+      GROUP BY month
+      SINCE -13m UNTIL today
+      ORDER BY month`),
+    report(`FROM sales
+      SHOW total_sales, net_sales, orders, customers, new_customers, returning_customers
+      SINCE ${currentYear}-01-01 UNTIL today`),
+  ]);
+  const reportByMonth = Object.fromEntries(monthlyReport.map(row => [
+    String(row.month).slice(0, 7),
+    {
+      totalSales: Number(row.total_sales || 0),
+      netSales: Number(row.net_sales || 0),
+      orders: Number(row.orders || 0),
+      customers: Number(row.customers || 0),
+      newCustomers: Number(row.new_customers || 0),
+      returningCustomers: Number(row.returning_customers || 0),
+    },
+  ]));
+  const ytdRow = ytdRows[0] || {};
+  const ytd = {
+    year: currentYear,
+    totalSales: Number(ytdRow.total_sales || 0),
+    netSales: Number(ytdRow.net_sales || 0),
+    orders: Number(ytdRow.orders || 0),
+    customers: Number(ytdRow.customers || 0),
+    newCustomers: Number(ytdRow.new_customers || 0),
+    returningCustomers: Number(ytdRow.returning_customers || 0),
+  };
 
   // Query notes:
   // - test:false excludes Bogus Gateway / dev orders.
@@ -212,33 +262,50 @@ async function fetchStoreAnalytics(store, token) {
     }
   }
 
-  const months = Object.entries(monthMap).map(([month, v]) => ({
+  for (const month of Object.keys(reportByMonth)) {
+    if (!monthMap[month]) monthMap[month] = {
+      netSales: 0, orders: 0, shipping: 0,
+      newRevenue: 0, returningRevenue: 0,
+      cogs: 0, costedRevenue: 0, uncostedRevenue: 0,
+      customerKeys: new Set(), newCustomerKeys: new Set(), returningCustomerKeys: new Set(),
+    };
+  }
+
+  const months = Object.entries(monthMap).map(([month, v]) => {
+    const authoritative = reportByMonth[month];
+    return {
     ...(() => {
       // A customer acquired this month stays in the "new" bucket even if they
       // place another order later in the same month.
       const returningKeys = [...v.returningCustomerKeys].filter(k => !v.newCustomerKeys.has(k));
       return {
-        newCustomers: v.newCustomerKeys.size,
-        returningCustomers: returningKeys.length,
+        customers: authoritative?.customers ?? v.customerKeys.size,
+        newCustomers: authoritative?.newCustomers ?? v.newCustomerKeys.size,
+        returningCustomers: authoritative?.returningCustomers ?? returningKeys.length,
         customerKeys: [...v.customerKeys],
         newCustomerKeys: [...v.newCustomerKeys],
         returningCustomerKeys: returningKeys,
       };
     })(),
     month,
-    netSales: v.netSales,
-    orders: v.orders,
+    netSales: authoritative?.totalSales ?? v.netSales,
+    shopifyNetSales: authoritative?.netSales ?? v.netSales,
+    orders: authoritative?.orders ?? v.orders,
     shipping: v.shipping,
-    aov: v.orders > 0 ? v.netSales / v.orders : 0,
+    aov: (authoritative?.orders ?? v.orders) > 0
+      ? (authoritative?.totalSales ?? v.netSales) / (authoritative?.orders ?? v.orders)
+      : 0,
     newRevenue: v.newRevenue,
     returningRevenue: v.returningRevenue,
     cogs: v.cogs,
     costedRevenue: v.costedRevenue,
     uncostedRevenue: v.uncostedRevenue,
-  })).sort((a, b) => a.month.localeCompare(b.month));
+    reportSource: authoritative ? 'shopifyql' : 'orders',
+  };
+  }).sort((a, b) => a.month.localeCompare(b.month));
 
   return {
-    months, productMap,
+    months, productMap, ytd,
     _meta: { ordersScanned: orders.length, ordersRejected: rejectedCount, pages, customerScopeMissing, inventoryScopeMissing },
   };
 }
@@ -251,7 +318,7 @@ function mergeStoreResults(stores) {
   const meta = { ordersScanned: 0, pages: 0, customerScopeMissing: false, inventoryScopeMissing: false, perStore: {} };
 
   for (const { role, result } of stores) {
-    sourceStores[role] = { months: result.months };
+    sourceStores[role] = { months: result.months, ytd: result.ytd };
     meta.perStore[role] = result._meta;
     meta.ordersScanned += result._meta.ordersScanned;
     meta.pages += result._meta.pages;
@@ -508,6 +575,9 @@ export default async function handler(req, res) {
       if (!ok.length) return res.status(500).json({ error: results.map(r => `${r.role}: ${r.error}`).join(' | ') });
       const merged = mergeStoreResults(ok);
       merged._meta.errors = results.filter(r => r.error).map(r => ({ role: r.role, store: r.store, error: r.error }));
+      merged._meta.dealerConfigured = !!(process.env.SHOPIFY_DEALER_STORE && process.env.SHOPIFY_DEALER_ACCESS_TOKEN);
+      merged._meta.dealerStorePresent = !!process.env.SHOPIFY_DEALER_STORE;
+      merged._meta.dealerStore = process.env.SHOPIFY_DEALER_STORE || null;
       return res.json(merged);
     }
 

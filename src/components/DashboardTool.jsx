@@ -390,11 +390,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
         month: m.month,
         shopify: {
           netSales: m.netSales, orders: m.orders, shipping: m.shipping,
+          customers: m.customers, shopifyNetSales: m.shopifyNetSales,
           newCustomers: m.newCustomers, returningCustomers: m.returningCustomers,
           newRevenue: m.newRevenue, returningRevenue: m.returningRevenue,
           cogs: m.cogs, costedRevenue: m.costedRevenue, uncostedRevenue: m.uncostedRevenue,
           customerKeys: m.customerKeys, newCustomerKeys: m.newCustomerKeys,
           returningCustomerKeys: m.returningCustomerKeys,
+          reportYtd: shopifyData?._stores?.primary?.ytd,
           snapshotAt,
         },
       });
@@ -403,11 +405,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
       const snapshot = byMonth.get(m.month) || { month: m.month };
       snapshot.shopify_dealer = {
         netSales: m.netSales, orders: m.orders, shipping: m.shipping,
+        customers: m.customers, shopifyNetSales: m.shopifyNetSales,
         newCustomers: m.newCustomers, returningCustomers: m.returningCustomers,
         newRevenue: m.newRevenue, returningRevenue: m.returningRevenue,
         cogs: m.cogs, costedRevenue: m.costedRevenue, uncostedRevenue: m.uncostedRevenue,
         customerKeys: m.customerKeys, newCustomerKeys: m.newCustomerKeys,
         returningCustomerKeys: m.returningCustomerKeys,
+        reportYtd: shopifyData?._stores?.dealer?.ytd,
         snapshotAt,
       };
       byMonth.set(m.month, snapshot);
@@ -1397,6 +1401,17 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           </ul>
         </div>
       )}
+      {shopifyData && shopifyData?._meta?.dealerStorePresent && !shopifyData?._meta?.dealerConfigured && (
+        <div style={{ ...S.err, marginBottom: 20, color: '#f85149', borderColor: 'rgba(248,81,73,0.5)', background: 'rgba(248,81,73,0.1)' }}>
+          Dealer Shopify is disconnected: <code>SHOPIFY_DEALER_ACCESS_TOKEN</code> is empty in Vercel. Dealer revenue will only include previously imported CSV snapshots.{' '}
+          <a
+            href={`/api/shopify-install?shop=${encodeURIComponent(shopifyData._meta.dealerStore)}&role=dealer`}
+            style={{ color: '#f85149', fontWeight: 700, textDecoration: 'underline' }}
+          >
+            Reconnect dealer Shopify
+          </a>
+        </div>
+      )}
 
       {/* ── CFO / Head of Growth Section ──────────────────────────────────── */}
       {view === 'cfo' && (() => {
@@ -1456,9 +1471,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           ...Object.keys(dealerByMonth), ...Object.keys(liveDealerByMonth),
         ]);
         const shopByMonth = {};
+        const primaryByMonth = {};
         for (const mk of allShopMonths) {
           const primary = liveShopByMonth[mk] || snapshotShopByMonth[mk] || null;
           const dealer = liveDealerByMonth[mk] || dealerByMonth[mk] || null;
+          primaryByMonth[mk] = primary;
           shopByMonth[mk] = sumShopify(primary, dealer);
         }
         const spendByMonth = { ...snapshotMetaByMonth, ...liveSpendByMonth };
@@ -1515,6 +1532,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
 
         const allRows = recent24.map(mk => {
           const sh = shopByMonth[mk] || { netSales: 0, orders: 0, newCustomers: 0, returningCustomers: 0, newRevenue: 0, returningRevenue: 0, cogs: 0, costedRevenue: 0, uncostedRevenue: 0 };
+          const dtc = primaryByMonth[mk] || {};
           const meta = spendByMonth[mk] || { spend: 0, purchases: 0 };
           const addRev = Number(revenueAddByMonth[mk] || 0);
           const addOrders = Number(ordersAddByMonth[mk] || 0);
@@ -1542,7 +1560,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           const googleRoasReported = googleSpend > 0 ? googleConvValue / googleSpend : null;
           const cm3 = revenue - cogs - paymentFees - shipCost - fulfill - adSpend;
           // NCAC = total ad spend (Meta + Google) ÷ new customers.
-          const totalNewCust = (sh.newCustomers || 0) + addNewCust;
+          const totalNewCust = (dtc.newCustomers || 0) + addNewCust;
           const ncac = totalNewCust > 0 ? adSpend / totalNewCust : null;
           const blendedNcac = ncac;
           const blendedRoas = adSpend > 0 ? revenue / adSpend : null;
@@ -1551,19 +1569,20 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           // <100% = new customer doesn't pay back on first order (need repeats).
           const newOrderMargin = (sh.newRevenue || 0) * (s.grossMarginPct / 100)
                                 - (sh.newRevenue || 0) * (s.paymentFeePct / 100)
-                                - (sh.newCustomers || 0) * (s.paymentFeeFixed + s.shippingCostPerOrder + s.fulfillmentCostPerOrder);
+                                - (dtc.newCustomers || 0) * (s.paymentFeeFixed + s.shippingCostPerOrder + s.fulfillmentCostPerOrder);
           const firstOrderPayback = adSpend > 0 ? newOrderMargin / adSpend : null;
           const opexThis = opexFor(mk);
           const opexCoverage = opexThis > 0 ? cm3 / opexThis : null;
           const isCurrent = mk === currentMonthKey;
-          const newCustomers = (sh.newCustomers || 0) + addNewCust;
-          const returningCustomers = (sh.returningCustomers || 0) + addReturningCust;
+          const newCustomers = (dtc.newCustomers || 0) + addNewCust;
+          const returningCustomers = (dtc.returningCustomers || 0) + addReturningCust;
           return {
             month: mk, revenue, orders, newCustomers, returningCustomers,
-            customerKeys: sh.customerKeys || [], newCustomerKeys: sh.newCustomerKeys || [],
-            returningCustomerKeys: sh.returningCustomerKeys || [],
-            legacyNewCustomers: sh.legacyNewCustomers || 0,
-            legacyReturningCustomers: sh.legacyReturningCustomers || 0,
+            customers: dtc.customers || 0,
+            customerKeys: dtc.customerKeys || [], newCustomerKeys: dtc.newCustomerKeys || [],
+            returningCustomerKeys: dtc.returningCustomerKeys || [],
+            legacyNewCustomers: dtc.legacyNewCustomers || 0,
+            legacyReturningCustomers: dtc.legacyReturningCustomers || 0,
             manualNewCustomers: addNewCust, manualReturningCustomers: addReturningCust,
             newRevenue: sh.newRevenue || 0, returningRevenue: sh.returningRevenue || 0,
             metaSpend, googleSpend, adSpend, metaPurchaseValue, googleConvValue,
@@ -1605,6 +1624,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           opex: a.opex + r.opex,
         }), { revenue: 0, orders: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, newRevenue: 0, opex: 0 });
 
+        const livePrimaryYtd = shopifyData?._stores?.primary?.ytd;
+        const snapPrimaryYtd = [...Object.values(snapshotShopByMonth)]
+          .reverse()
+          .find(month => month?.reportYtd)?.reportYtd;
+        const authoritativeYtd = livePrimaryYtd?.year === Number(summaryYear)
+          ? livePrimaryYtd
+          : snapPrimaryYtd?.year === Number(summaryYear) ? snapPrimaryYtd : null;
         const uniqueCustomerKeys = new Set(rollupRows.flatMap(r => r.customerKeys || []));
         const uniqueNewCustomerKeys = new Set(rollupRows.flatMap(r => r.newCustomerKeys || []));
         const legacyNewCustomers = rollupRows.reduce((sum, r) => sum + r.legacyNewCustomers, 0);
@@ -1612,12 +1638,16 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
         const manualNewCustomers = rollupRows.reduce((sum, r) => sum + r.manualNewCustomers, 0);
         const manualReturningCustomers = rollupRows.reduce((sum, r) => sum + r.manualReturningCustomers, 0);
         const hasLegacyCustomerMonths = legacyNewCustomers > 0 || legacyReturningCustomers > 0;
-        const totalCustomers = uniqueCustomerKeys.size
-          + legacyNewCustomers + legacyReturningCustomers
-          + manualNewCustomers + manualReturningCustomers;
-        ltm.newCustomers = uniqueNewCustomerKeys.size
-          + legacyNewCustomers + manualNewCustomers;
-        ltm.returningCustomers = Math.max(totalCustomers - ltm.newCustomers, 0);
+        const totalCustomers = authoritativeYtd
+          ? authoritativeYtd.customers + manualNewCustomers + manualReturningCustomers
+          : uniqueCustomerKeys.size + legacyNewCustomers + legacyReturningCustomers
+            + manualNewCustomers + manualReturningCustomers;
+        ltm.newCustomers = authoritativeYtd
+          ? authoritativeYtd.newCustomers + manualNewCustomers
+          : uniqueNewCustomerKeys.size + legacyNewCustomers + manualNewCustomers;
+        ltm.returningCustomers = authoritativeYtd
+          ? authoritativeYtd.returningCustomers + manualReturningCustomers
+          : Math.max(totalCustomers - ltm.newCustomers, 0);
 
         const ltmNcac = ltm.newCustomers > 0 ? ltm.adSpend / ltm.newCustomers : null;
         const ltmBlendedNcac = ltmNcac;
