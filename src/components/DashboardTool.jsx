@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import DealerCsvImport from './DealerCsvImport';
 import CreativePerformanceWorkspace from './CreativePerformanceWorkspace';
+import { getAnnualRevenuePace } from '../utils/forecastPace';
 
 const TYPE_COLORS = {
   static:  '#6e40c9',
@@ -311,6 +312,17 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
     shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000,
     googleSpend: {}, opexByMonth: {}, dealerRevenueByMonth: {}, dealerOrdersByMonth: {},
     offPlatformRevenueByMonth: {}, offPlatformOrdersByMonth: {}, cfoStartMonth: '2026-01',
+    annualRevenueTargetBase: 13000000, annualRevenueTargetStretch: 15000000,
+    annualRevenueCurveBase: [
+      286002.327, 326854.894, 509399.839, 487593.84,
+      598425.6439, 672240.6439, 1162449.05, 1263926.085,
+      1373676.285, 1527816.515, 3260132.345, 994944.915,
+    ],
+    annualRevenueCurveStretch: [
+      307279.9112, 471602.8484, 721536.7344, 738059.3916,
+      735743.7212, 996673.7412, 861438.8592, 1224937.8,
+      1537078.032, 1678832.376, 3792607.048, 1484514.324,
+    ],
   });
 
   // Forecast (parsed from HOWL projections Google Sheet).
@@ -2197,7 +2209,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
               </button>
             </div>
             <div style={{ fontSize: 9, color: '#6e7681', marginTop: 8, letterSpacing: 1 }}>
-              Make sure the sheet is shared (Viewer) with <code style={{ color: '#f5a623' }}>howl-drive-uploader@howl-creative-studio.iam.gserviceaccount.com</code>. After saving, click Refresh Forecast.
+              Make sure the forecast sheet is shared (Viewer) with <code style={{ color: '#f5a623' }}>howl-drive-uploader@howl-creative-studio.iam.gserviceaccount.com</code>. After saving, click Refresh Forecast.
             </div>
           </div>
         );
@@ -2280,9 +2292,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
         const dayOfMonth = nowD.getDate();
         const daysInMonth = new Date(nowD.getFullYear(), nowD.getMonth() + 1, 0).getDate();
 
-        const forecastMonths = (forecast.months || []).filter(m => m.month >= startMonth && m.month.startsWith(thisYear));
+        const forecastMonths = (forecast.months || []).filter(m => m.month.startsWith(thisYear));
 
-        const rows = forecastMonths.map(f => {
+        const annualRows = forecastMonths.map(f => {
           const sh = shopByMonth[f.month] || {};
           const dtc = primaryByMonth[f.month] || {};
           const dealer = dealerSourceByMonth[f.month] || {};
@@ -2338,16 +2350,17 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
             forecast: f,
           };
         });
+        const rows = annualRows.filter(r => r.month >= startMonth);
 
         // YTD totals (sum of past months actual + current MTD actual). Targets = sum of all forecast months in range.
-        const ytdActual = rows.filter(r => r.isPast || r.isCurrent).reduce((a, r) => ({
+        const ytdActual = annualRows.filter(r => r.isPast || r.isCurrent).reduce((a, r) => ({
           revenue: a.revenue + r.actRevenue,
           cac:     a.cac + r.actCac,
           opex:    a.opex + r.actOpex,
           cm3:     a.cm3 + r.actCm3,
         }), { revenue: 0, cac: 0, opex: 0, cm3: 0 });
 
-        const ytdTargetSoFar = rows.filter(r => r.isPast || r.isCurrent).reduce((a, r) => ({
+        const ytdTargetSoFar = annualRows.filter(r => r.isPast || r.isCurrent).reduce((a, r) => ({
           revenue: a.revenue + r.tgtRevenue,
           cac:     a.cac + r.tgtCac,
           opex:    a.opex + r.tgtOpex,
@@ -2355,14 +2368,14 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
         }), { revenue: 0, cac: 0, opex: 0, cm3: 0 });
 
         // Year-end projection: sum of past actuals + current MTD projected + future targets
-        const eoyProjected = rows.reduce((a, r) => ({
+        const eoyProjected = annualRows.reduce((a, r) => ({
           revenue: a.revenue + (r.isPast ? r.actRevenue : r.isCurrent ? r.projRevenue : r.tgtRevenue),
           cac:     a.cac + (r.isPast ? r.actCac : r.isCurrent ? r.projCac : r.tgtCac),
           opex:    a.opex + (r.isPast ? r.actOpex : r.isCurrent ? r.actOpex : r.tgtOpex), // future opex still uses target
           cm3:     a.cm3 + (r.isPast ? r.actCm3 : r.isCurrent ? r.projCm3 : r.tgtCm3),
         }), { revenue: 0, cac: 0, opex: 0, cm3: 0 });
 
-        const eoyTarget = rows.reduce((a, r) => ({
+        const eoyTarget = annualRows.reduce((a, r) => ({
           revenue: a.revenue + r.tgtRevenue,
           cac:     a.cac + r.tgtCac,
           opex:    a.opex + r.tgtOpex,
@@ -2371,6 +2384,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
 
         const fmt$ = (n) => n == null || isNaN(n) ? '—' : '$' + Math.round(n).toLocaleString();
         const fmtPct = (n) => n == null || isNaN(n) ? '—' : (n * 100).toFixed(1) + '%';
+        const fmtCompact$ = (n) => n == null || isNaN(n) ? '—' : '$' + (n / 1000000).toFixed(1) + 'M';
         const pctOf = (a, t) => t > 0 ? a / t : null;
         const fmtMo = (mk) => {
           const [y, m] = mk.split('-');
@@ -2390,6 +2404,28 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           if (goodWhen === 'lower')   return ratio <= 1 ? '#3fb950' : ratio <= 1.15 ? '#f5a623' : '#f85149';
           return Math.abs(ratio - 1) < 0.15 ? '#3fb950' : '#f5a623'; // tracking: ±15% of target
         };
+        const annualTargetPaces = [
+          {
+            label: 'Base Plan',
+            source: '$13M workbook curve',
+            pace: getAnnualRevenuePace(
+              ytdActual.revenue,
+              settings?.annualRevenueTargetBase || 13000000,
+              nowD,
+              settings?.annualRevenueCurveBase,
+            ),
+          },
+          {
+            label: 'Stretch Plan',
+            source: '$15M workbook curve',
+            pace: getAnnualRevenuePace(
+              ytdActual.revenue,
+              settings?.annualRevenueTargetStretch || 15000000,
+              nowD,
+              settings?.annualRevenueCurveStretch,
+            ),
+          },
+        ];
 
         return (
           <>
@@ -2398,6 +2434,72 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                 Forecast last pulled {forecastUpdatedAt.toLocaleString()} · Sheet: {forecast.sheetName} · {(forecast.months || []).length} months parsed
               </div>
             )}
+
+            {/* Annual revenue target pacing */}
+            <div style={{ ...S.card, marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                <span style={{ ...S.label, marginBottom: 0 }}>{thisYear} Annual Revenue Pace — through {nowD.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
+                  {[
+                    ['annualRevenueTargetBase', 'Base target'],
+                    ['annualRevenueTargetStretch', 'Stretch target'],
+                  ].map(([key, label]) => (
+                    <label key={key} style={{ display: 'block' }}>
+                      <span style={{ fontSize: 8, color: '#6e7681', letterSpacing: 1, textTransform: 'uppercase' }}>{label}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', marginTop: 4 }}>
+                        <span style={{ padding: '7px 0 7px 9px', background: '#1c2330', border: '1px solid #2a3441', borderRight: 0, color: '#8b949e', fontSize: 10, borderRadius: '4px 0 0 4px' }}>$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="100000"
+                          value={settings?.[key] || ''}
+                          onChange={e => setSettings({ ...settings, [key]: Number(e.target.value) })}
+                          style={{ width: 112, padding: '7px 8px 7px 4px', background: '#1c2330', border: '1px solid #2a3441', borderLeft: 0, color: '#f0f4f8', fontFamily: 'inherit', fontSize: 10, borderRadius: '0 4px 4px 0' }}
+                        />
+                      </div>
+                    </label>
+                  ))}
+                  <button onClick={() => saveSettings(settings)} disabled={savingSettings} style={{ ...S.ghostBtn, padding: '8px 12px' }}>
+                    {savingSettings ? 'Saving…' : 'Save Targets'}
+                  </button>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 14, marginTop: 12 }}>
+                {annualTargetPaces.map(({ label, pace, source }) => {
+                  if (!pace) return null;
+                  const ahead = pace.daysDelta >= 0;
+                  const paceColor = pace.percentToPace >= 1 ? '#3fb950' : pace.percentToPace >= 0.9 ? '#f5a623' : '#f85149';
+                  return (
+                    <div key={label} style={{ border: '1px solid #2a3441', borderRadius: 6, padding: '14px 16px', background: '#0d1117' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+                        <div>
+                          <div style={{ ...S.label, marginBottom: 5 }}>{label}</div>
+                          <div style={{ fontSize: 24, fontWeight: 700, color: '#f0f4f8', lineHeight: 1 }}>{fmtCompact$(pace.annualTarget)}</div>
+                          {source && <div style={{ fontSize: 8, color: '#6e7681', marginTop: 5, letterSpacing: 1, textTransform: 'uppercase' }}>{source}</div>}
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: paceColor }}>{(pace.percentToPace * 100).toFixed(1)}%</div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginTop: 16 }}>
+                        <div>
+                          <div style={{ fontSize: 8, color: '#6e7681', letterSpacing: 1, textTransform: 'uppercase' }}>Actual YTD</div>
+                          <div style={{ fontSize: 14, color: '#f0f4f8', fontWeight: 700, marginTop: 3 }}>{fmt$(pace.actualRevenue)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 8, color: '#6e7681', letterSpacing: 1, textTransform: 'uppercase' }}>Expected Today</div>
+                          <div style={{ fontSize: 14, color: '#c9d1d9', fontWeight: 700, marginTop: 3 }}>{fmt$(pace.expectedRevenue)}</div>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #2a3441', fontSize: 14, fontWeight: 700, color: ahead ? '#3fb950' : '#f85149' }}>
+                        {Math.abs(pace.daysDelta).toFixed(1)} days {ahead ? 'ahead of pace' : 'behind pace'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 9, color: '#6e7681', marginTop: 10, letterSpacing: 1 }}>
+                Both plans follow their supplied workbook's monthly Net Revenue curve, scaled to the saved annual target.
+              </div>
+            </div>
 
             {/* YTD Pacing strip */}
             <div style={{ ...S.card, marginBottom: 16 }}>
