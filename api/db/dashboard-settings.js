@@ -10,8 +10,12 @@ const DEFAULTS = {
   monthlyOpex: 50000,        // fallback monthly opex when no per-month override is set
   googleSpend: {},           // YYYY-MM → dollar spend (manual until we wire the Google Ads API)
   opexByMonth: {},           // YYYY-MM → dollar opex from P&L; falls back to monthlyOpex
-  revenueAddByMonth: {},     // YYYY-MM → additional revenue (dealer store, historical pre-window months) added on top of Shopify primary
-  ordersAddByMonth: {},      // YYYY-MM → additional orders for the same months (drives correct fees/ship/pick)
+  dealerRevenueByMonth: {},  // YYYY-MM → dealer revenue override; replaces an incomplete dealer snapshot for that month
+  dealerOrdersByMonth: {},   // YYYY-MM → dealer order override
+  offPlatformRevenueByMonth: {}, // YYYY-MM → revenue outside either Shopify store
+  offPlatformOrdersByMonth: {},  // YYYY-MM → orders outside either Shopify store
+  revenueAddByMonth: {},     // Legacy field retained for backwards-compatible settings reads; no longer included in totals
+  ordersAddByMonth: {},      // Legacy field retained for backwards-compatible settings reads; no longer included in totals
   newCustomersAddByMonth: {},      // YYYY-MM → additional new customers for pre-window months
   returningCustomersAddByMonth: {}, // YYYY-MM → additional returning customers for pre-window months
   cfoStartMonth: '2026-01',  // Detailed table start; annual KPI rollup always uses the full current calendar year

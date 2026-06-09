@@ -307,7 +307,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
   const [settings, setSettings] = useState({
     grossMarginPct: 60, paymentFeePct: 2.9, paymentFeeFixed: 0.30,
     shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000,
-    googleSpend: {}, opexByMonth: {}, cfoStartMonth: '2026-01',
+    googleSpend: {}, opexByMonth: {}, dealerRevenueByMonth: {}, dealerOrdersByMonth: {},
+    offPlatformRevenueByMonth: {}, offPlatformOrdersByMonth: {}, cfoStartMonth: '2026-01',
   });
 
   // Forecast (parsed from HOWL projections Google Sheet).
@@ -1472,30 +1473,30 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
         ]);
         const shopByMonth = {};
         const primaryByMonth = {};
+        const dealerSourceByMonth = {};
         for (const mk of allShopMonths) {
           const primary = liveShopByMonth[mk] || snapshotShopByMonth[mk] || null;
           const dealer = liveDealerByMonth[mk] || dealerByMonth[mk] || null;
           primaryByMonth[mk] = primary;
+          dealerSourceByMonth[mk] = dealer;
           shopByMonth[mk] = sumShopify(primary, dealer);
         }
         const spendByMonth = { ...snapshotMetaByMonth, ...liveSpendByMonth };
 
         // Settings-derived maps (declared before allMonthKeys to avoid TDZ).
-        const s = settings || { grossMarginPct: 60, paymentFeePct: 2.9, paymentFeeFixed: 0.30, shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000, googleSpend: {}, opexByMonth: {}, revenueAddByMonth: {}, ordersAddByMonth: {} };
+        const s = settings || { grossMarginPct: 60, paymentFeePct: 2.9, paymentFeeFixed: 0.30, shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000, googleSpend: {}, opexByMonth: {}, dealerRevenueByMonth: {}, dealerOrdersByMonth: {}, offPlatformRevenueByMonth: {}, offPlatformOrdersByMonth: {} };
         // Google spend pulled live from /api/google → monthly_metrics.google → snapshot.
         // Manual settings.googleSpend is ignored (column removed from assumptions UI).
         const googleByMonth = Object.fromEntries(
           Object.entries(snapshotGoogleByMonth).map(([k, v]) => [k, Number(v?.spend || 0)])
         );
         const opexByMonth = s.opexByMonth || {};
-        const revenueAddByMonth = s.revenueAddByMonth || {};
-        const ordersAddByMonth = s.ordersAddByMonth || {};
+        const dealerRevenueByMonth = s.dealerRevenueByMonth || {};
+        const dealerOrdersByMonth = s.dealerOrdersByMonth || {};
+        const offPlatformRevenueByMonth = s.offPlatformRevenueByMonth || {};
+        const offPlatformOrdersByMonth = s.offPlatformOrdersByMonth || {};
         const newCustomersAddByMonth = s.newCustomersAddByMonth || {};
         const returningCustomersAddByMonth = s.returningCustomersAddByMonth || {};
-        const overlappingManualDealerMonths = Object.keys(revenueAddByMonth).filter(
-          mk => Number(revenueAddByMonth[mk] || 0) !== 0
-            && (dealerByMonth[mk] || liveDealerByMonth[mk]),
-        );
 
         // Build every available month first. The table start month controls display
         // only; the annual rollup always uses the full current calendar year.
@@ -1503,8 +1504,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
         const allMonthKeys = Array.from(new Set([
           ...Object.keys(shopByMonth),
           ...Object.keys(spendByMonth),
-          ...Object.keys(revenueAddByMonth),
-          ...Object.keys(ordersAddByMonth),
+          ...Object.keys(dealerRevenueByMonth),
+          ...Object.keys(dealerOrdersByMonth),
+          ...Object.keys(offPlatformRevenueByMonth),
+          ...Object.keys(offPlatformOrdersByMonth),
           ...Object.keys(googleByMonth),
           ...Object.keys(opexByMonth),
         ])).filter(Boolean).sort();
@@ -1533,17 +1536,30 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
         const allRows = recent24.map(mk => {
           const sh = shopByMonth[mk] || { netSales: 0, orders: 0, newCustomers: 0, returningCustomers: 0, newRevenue: 0, returningRevenue: 0, cogs: 0, costedRevenue: 0, uncostedRevenue: 0 };
           const dtc = primaryByMonth[mk] || {};
+          const dealer = dealerSourceByMonth[mk] || {};
           const meta = spendByMonth[mk] || { spend: 0, purchases: 0 };
-          const addRev = Number(revenueAddByMonth[mk] || 0);
-          const addOrders = Number(ordersAddByMonth[mk] || 0);
+          const hasDealerRevenueOverride = Object.prototype.hasOwnProperty.call(dealerRevenueByMonth, mk)
+            && dealerRevenueByMonth[mk] !== '';
+          const hasDealerOrdersOverride = Object.prototype.hasOwnProperty.call(dealerOrdersByMonth, mk)
+            && dealerOrdersByMonth[mk] !== '';
+          const dtcRevenue = Number(dtc.netSales || 0);
+          const dealerRevenue = hasDealerRevenueOverride
+            ? Number(dealerRevenueByMonth[mk] || 0)
+            : Number(dealer.netSales || 0);
+          const offPlatformRevenue = Number(offPlatformRevenueByMonth[mk] || 0);
+          const dtcOrders = Number(dtc.orders || 0);
+          const dealerOrders = hasDealerOrdersOverride
+            ? Number(dealerOrdersByMonth[mk] || 0)
+            : Number(dealer.orders || 0);
+          const offPlatformOrders = Number(offPlatformOrdersByMonth[mk] || 0);
           const addNewCust = Number(newCustomersAddByMonth[mk] || 0);
           const addReturningCust = Number(returningCustomersAddByMonth[mk] || 0);
-          const revenue = (sh.netSales || 0) + addRev;
-          const orders = (sh.orders || 0) + addOrders;
+          const revenue = dtcRevenue + dealerRevenue + offPlatformRevenue;
+          const orders = dtcOrders + dealerOrders + offPlatformOrders;
           // Hybrid COGS: actual unitCost × qty for line items where Shopify has cost set,
           // GM% assumption applied to (uncosted Shopify revenue + manual additions).
           const realCogs = sh.cogs || 0;
-          const fallbackCogs = ((sh.uncostedRevenue || 0) + addRev) * (1 - (s.grossMarginPct / 100));
+          const fallbackCogs = Math.max(revenue - (sh.costedRevenue || 0), 0) * (1 - (s.grossMarginPct / 100));
           const cogs = realCogs + fallbackCogs;
           const cogsActualPct = revenue > 0 ? (sh.costedRevenue || 0) / revenue : 0; // 1.0 = 100% real, 0 = all fallback
           const paymentFees = revenue * (s.paymentFeePct / 100) + orders * s.paymentFeeFixed;
@@ -1564,11 +1580,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           const ncac = totalNewCust > 0 ? adSpend / totalNewCust : null;
           const blendedNcac = ncac;
           const blendedRoas = adSpend > 0 ? revenue / adSpend : null;
-          const newRoas = adSpend > 0 ? (sh.newRevenue || 0) / adSpend : null;
+          const newRoas = adSpend > 0 ? (dtc.newRevenue || 0) / adSpend : null;
           // First-order payback: variable margin generated by new-customer first orders ÷ NCAC.
           // <100% = new customer doesn't pay back on first order (need repeats).
-          const newOrderMargin = (sh.newRevenue || 0) * (s.grossMarginPct / 100)
-                                - (sh.newRevenue || 0) * (s.paymentFeePct / 100)
+          const newOrderMargin = (dtc.newRevenue || 0) * (s.grossMarginPct / 100)
+                                - (dtc.newRevenue || 0) * (s.paymentFeePct / 100)
                                 - (dtc.newCustomers || 0) * (s.paymentFeeFixed + s.shippingCostPerOrder + s.fulfillmentCostPerOrder);
           const firstOrderPayback = adSpend > 0 ? newOrderMargin / adSpend : null;
           const opexThis = opexFor(mk);
@@ -1577,14 +1593,15 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           const newCustomers = (dtc.newCustomers || 0) + addNewCust;
           const returningCustomers = (dtc.returningCustomers || 0) + addReturningCust;
           return {
-            month: mk, revenue, orders, newCustomers, returningCustomers,
+            month: mk, revenue, dtcRevenue, dealerRevenue, offPlatformRevenue,
+            orders, dtcOrders, dealerOrders, offPlatformOrders, newCustomers, returningCustomers,
             customers: dtc.customers || 0,
             customerKeys: dtc.customerKeys || [], newCustomerKeys: dtc.newCustomerKeys || [],
             returningCustomerKeys: dtc.returningCustomerKeys || [],
             legacyNewCustomers: dtc.legacyNewCustomers || 0,
             legacyReturningCustomers: dtc.legacyReturningCustomers || 0,
             manualNewCustomers: addNewCust, manualReturningCustomers: addReturningCust,
-            newRevenue: sh.newRevenue || 0, returningRevenue: sh.returningRevenue || 0,
+            newRevenue: dtc.newRevenue || 0, returningRevenue: dtc.returningRevenue || 0,
             metaSpend, googleSpend, adSpend, metaPurchaseValue, googleConvValue,
             metaRoasReported, googleRoasReported, cogs, cogsActualPct, paymentFees,
             shipCost, fulfill, cm3, ncac, blendedNcac, blendedRoas, newRoas,
@@ -1611,6 +1628,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
 
         const ltm = rollupRows.reduce((a, r) => ({
           revenue: a.revenue + r.revenue,
+          dtcRevenue: a.dtcRevenue + r.dtcRevenue,
+          dealerRevenue: a.dealerRevenue + r.dealerRevenue,
+          offPlatformRevenue: a.offPlatformRevenue + r.offPlatformRevenue,
           orders: a.orders + r.orders,
           newCustomers: a.newCustomers + r.newCustomers,
           returningCustomers: a.returningCustomers + r.returningCustomers,
@@ -1622,7 +1642,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           cm3: a.cm3 + r.cm3,
           newRevenue: a.newRevenue + r.newRevenue,
           opex: a.opex + r.opex,
-        }), { revenue: 0, orders: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, newRevenue: 0, opex: 0 });
+        }), { revenue: 0, dtcRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, newRevenue: 0, opex: 0 });
 
         const livePrimaryYtd = shopifyData?._stores?.primary?.ytd;
         const snapPrimaryYtd = [...Object.values(snapshotShopByMonth)]
@@ -1702,12 +1722,6 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
               </button>
             </div>
 
-            {overlappingManualDealerMonths.length > 0 && (
-              <div style={{ ...S.err, marginBottom: 16, color: '#f5a623', borderColor: 'rgba(245,166,35,0.4)', background: 'rgba(245,166,35,0.1)' }}>
-                Additional Revenue overlaps dealer-store data for {overlappingManualDealerMonths.join(', ')}. Confirm those overrides are truly off-platform revenue or the CFO totals will be overstated.
-              </div>
-            )}
-
             {hasLegacyCustomerMonths && (
               <div style={{ ...S.err, marginBottom: 16, color: '#f5a623', borderColor: 'rgba(245,166,35,0.4)', background: 'rgba(245,166,35,0.1)' }}>
                 Some {summaryYear} customer snapshots predate unique-customer tracking. Click Load Shopify to refresh the year and replace legacy summed customer counts.
@@ -1748,19 +1762,21 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                     <span style={{ fontSize: 9, color: '#6e7681' }}>YYYY-MM</span>
                   </div>
                 </div>
-                {/* Monthly OpEx + additional revenue (dealer + historical). Google spend
+                {/* Monthly OpEx + explicit revenue-source overrides. Google spend
                     pulls live from the Ads API — no manual override column. */}
                 <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid #2a3441' }}>
-                  <span style={S.label}>Monthly Overrides — OpEx, Add'l Revenue</span>
+                  <span style={S.label}>Monthly Overrides — OpEx and Revenue Sources</span>
                   <div style={{ fontSize: 9, color: '#6e7681', marginBottom: 10, letterSpacing: 1 }}>
-                    Leave blank to use defaults. <strong>Add'l Revenue</strong> is added on top of connected and imported Shopify stores — use it only for off-platform or otherwise missing historical revenue. Add'l Orders drives correct fees/ship/pick math.
+                    Dealer values replace that month's imported/connected dealer snapshot. Off-platform values are added only for sales outside both Shopify stores.
                   </div>
                   <div style={{ overflowX: 'auto', maxHeight: 480 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '60px 90px 100px 70px 70px 70px', gap: 5, alignItems: 'center', minWidth: 490 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '60px 90px 95px 70px 95px 70px 70px 70px', gap: 5, alignItems: 'center', minWidth: 680 }}>
                       <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>Month</div>
                       <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>OpEx</div>
-                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>Add'l Rev</div>
-                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>Add'l Ord</div>
+                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>Dealer Rev</div>
+                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>Dealer Ord</div>
+                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>Other Rev</div>
+                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>Other Ord</div>
                       <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>+ New</div>
                       <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>+ Ret</div>
                       {recent13.map(mk => {
@@ -1776,8 +1792,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                           <React.Fragment key={mk}>
                             <span style={{ fontSize: 11, color: '#c9d1d9' }}>{fmtMo(mk)}</span>
                             {inp('opexByMonth', String(defaultOpex))}
-                            {inp('revenueAddByMonth', '0')}
-                            {inp('ordersAddByMonth', '0')}
+                            {inp('dealerRevenueByMonth', 'snapshot')}
+                            {inp('dealerOrdersByMonth', 'snapshot')}
+                            {inp('offPlatformRevenueByMonth', '0')}
+                            {inp('offPlatformOrdersByMonth', '0')}
                             {inp('newCustomersAddByMonth', '0')}
                             {inp('returningCustomersAddByMonth', '0')}
                           </React.Fragment>
@@ -1806,7 +1824,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                 {/* Calendar-year KPI strip */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 12 }}>
                   {[
-                    { label: `${summaryYear} YTD Revenue`,   value: fmt$(ltm.revenue) },
+                    { label: `${summaryYear} Total Revenue`, value: fmt$(ltm.revenue), sub: 'DTC + dealer + off-platform' },
+                    { label: `${summaryYear} DTC Revenue`,   value: fmt$(ltm.dtcRevenue), sub: fmtPct(ltm.dtcRevenue / Math.max(ltm.revenue, 1)) + ' of total' },
+                    { label: `${summaryYear} Dealer Revenue`, value: fmt$(ltm.dealerRevenue), sub: fmtPct(ltm.dealerRevenue / Math.max(ltm.revenue, 1)) + ' of total' },
                     { label: `${summaryYear} YTD Ad Spend`,  value: fmt$(ltm.adSpend), sub: fmt$(ltm.metaSpend) + ' Meta · ' + fmt$(ltm.googleSpend) + ' Google' },
                     { label: `${summaryYear} YTD CM3`,       value: fmt$(ltm.cm3), color: ltm.cm3 >= 0 ? '#3fb950' : '#f85149', sub: fmtPct(ltmCmMargin) + ' margin' },
                     { label: `${summaryYear} OpEx Cov.`,     value: ltmOpexCoverage == null ? '—' : fmtPct(ltmOpexCoverage), color: ltmOpexCoverage >= 1 ? '#3fb950' : '#f5a623', sub: fmt$(opex) + ' / mo opex' },
@@ -2060,10 +2080,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                 <div style={{ ...S.card, marginBottom: 20 }}>
                   <span style={S.label}>Monthly P&L (CM3 build)</span>
                   <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8, minWidth: 900 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8, minWidth: 1080 }}>
                       <thead>
                         <tr>
-                          {['Month', 'Revenue', 'Orders', 'New', 'Ret', 'Meta', 'Google', 'NCAC', '1st Pay', 'COGS', 'Fees', 'Ship', 'Pick', 'CM3', 'CM%', 'OpEx', 'OpEx Cov', 'ROAS'].map(h => (
+                          {['Month', 'DTC', 'Dealer', 'Other', 'Total', 'Orders', 'New', 'Ret', 'Meta', 'Google', 'NCAC', '1st Pay', 'COGS', 'Fees', 'Ship', 'Pick', 'CM3', 'CM%', 'OpEx', 'OpEx Cov', 'ROAS'].map(h => (
                             <th key={h} style={{ fontSize: 8, letterSpacing: 1, color: '#6e7681', textAlign: h === 'Month' ? 'left' : 'right', padding: '4px 6px 8px 0', textTransform: 'uppercase', fontWeight: 600 }}>{h}</th>
                           ))}
                         </tr>
@@ -2074,6 +2094,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                           return (
                             <tr key={r.month} style={{ borderTop: '1px solid #2a3441' }}>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#c9d1d9' }}>{fmtMo(r.month)}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#f0f4f8', textAlign: 'right' }}>{fmt$(r.dtcRevenue)}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#f5a623', textAlign: 'right' }}>{r.dealerRevenue ? fmt$(r.dealerRevenue) : '—'}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#8b949e', textAlign: 'right' }}>{r.offPlatformRevenue ? fmt$(r.offPlatformRevenue) : '—'}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#f0f4f8', textAlign: 'right', fontWeight: 600 }}>{fmt$(r.revenue)}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.orders < (r.newCustomers + r.returningCustomers) ? '#f85149' : '#c9d1d9', textAlign: 'right' }} title={r.orders < (r.newCustomers + r.returningCustomers) ? `Orders (${r.orders}) < customers (${r.newCustomers + r.returningCustomers}) — data inconsistency` : ''}>{r.orders || '—'}{r.orders < (r.newCustomers + r.returningCustomers) ? '⚠' : ''}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#DC440A', textAlign: 'right', fontWeight: 600 }}>{r.newCustomers || '—'}</td>
@@ -2098,6 +2121,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                       <tfoot>
                         <tr style={{ borderTop: '2px solid #2a3441' }}>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 9, letterSpacing: 1, color: '#6e7681', textTransform: 'uppercase', fontWeight: 700 }}>{summaryYear} YTD</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#f0f4f8', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.dtcRevenue)}</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#f5a623', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.dealerRevenue)}</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#8b949e', textAlign: 'right', fontWeight: 700 }}>{ltm.offPlatformRevenue ? fmt$(ltm.offPlatformRevenue) : '—'}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#f0f4f8', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.revenue)}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#c9d1d9', textAlign: 'right' }}>{ltm.orders.toLocaleString()}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#DC440A', textAlign: 'right', fontWeight: 700 }}>{ltm.newCustomers.toLocaleString()}</td>
@@ -2206,11 +2232,14 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           ...Object.keys(dealerByMonth), ...Object.keys(liveDealerByMonth),
         ]);
         const shopByMonth = {};
+        const primaryByMonth = {};
+        const dealerSourceByMonth = {};
         for (const mk of allShopMonths) {
-          shopByMonth[mk] = sumShop(
-            liveShopByMonth[mk] || snapShopByMonth[mk] || null,
-            liveDealerByMonth[mk] || dealerByMonth[mk] || null,
-          );
+          const primary = liveShopByMonth[mk] || snapShopByMonth[mk] || null;
+          const dealer = liveDealerByMonth[mk] || dealerByMonth[mk] || null;
+          primaryByMonth[mk] = primary;
+          dealerSourceByMonth[mk] = dealer;
+          shopByMonth[mk] = sumShop(primary, dealer);
         }
         const metaByMonth = { ...snapMetaByMonth, ...liveSpendByMonth };
         // Google spend from live Ads API (via monthly_metrics.google snapshot).
@@ -2219,8 +2248,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           Object.entries(snapGoogleByMonth).map(([k, v]) => [k, Number(v?.spend || 0)])
         );
         const opexByMonth = settings?.opexByMonth || {};
-        const revenueAddByMonth = settings?.revenueAddByMonth || {};
-        const ordersAddByMonth = settings?.ordersAddByMonth || {};
+        const dealerRevenueByMonth = settings?.dealerRevenueByMonth || {};
+        const dealerOrdersByMonth = settings?.dealerOrdersByMonth || {};
+        const offPlatformRevenueByMonth = settings?.offPlatformRevenueByMonth || {};
+        const offPlatformOrdersByMonth = settings?.offPlatformOrdersByMonth || {};
         const defaultOpex = settings?.monthlyOpex || 0;
         const s = settings;
 
@@ -2235,17 +2266,28 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
 
         const rows = forecastMonths.map(f => {
           const sh = shopByMonth[f.month] || {};
+          const dtc = primaryByMonth[f.month] || {};
+          const dealer = dealerSourceByMonth[f.month] || {};
           const meta = metaByMonth[f.month] || {};
           const isCurrent = f.month === currentMonthKey;
           const isPast = f.month < currentMonthKey;
 
-          // Actuals — include manual revenue/orders adds (dealer + pre-window historical)
-          const addRev = Number(revenueAddByMonth[f.month] || 0);
-          const addOrders = Number(ordersAddByMonth[f.month] || 0);
-          const actRevenue = (sh.netSales || 0) + addRev;
-          const orders = (sh.orders || 0) + addOrders;
+          const hasDealerRevenueOverride = Object.prototype.hasOwnProperty.call(dealerRevenueByMonth, f.month)
+            && dealerRevenueByMonth[f.month] !== '';
+          const hasDealerOrdersOverride = Object.prototype.hasOwnProperty.call(dealerOrdersByMonth, f.month)
+            && dealerOrdersByMonth[f.month] !== '';
+          const dealerRevenue = hasDealerRevenueOverride
+            ? Number(dealerRevenueByMonth[f.month] || 0)
+            : Number(dealer.netSales || 0);
+          const dealerOrders = hasDealerOrdersOverride
+            ? Number(dealerOrdersByMonth[f.month] || 0)
+            : Number(dealer.orders || 0);
+          const offPlatformRevenue = Number(offPlatformRevenueByMonth[f.month] || 0);
+          const offPlatformOrders = Number(offPlatformOrdersByMonth[f.month] || 0);
+          const actRevenue = Number(dtc.netSales || 0) + dealerRevenue + offPlatformRevenue;
+          const orders = Number(dtc.orders || 0) + dealerOrders + offPlatformOrders;
           const realCogs = sh.cogs || 0;
-          const fallbackCogs = ((sh.uncostedRevenue || 0) + addRev) * (1 - ((s?.grossMarginPct || 60) / 100));
+          const fallbackCogs = Math.max(actRevenue - (sh.costedRevenue || 0), 0) * (1 - ((s?.grossMarginPct || 60) / 100));
           const actCogs = realCogs + fallbackCogs;
           const actMetaSpend = meta.spend || 0;
           const actGoogleSpend = Number(googleByMonth[f.month] || 0);
