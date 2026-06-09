@@ -102,6 +102,7 @@ async function upsertMonthly(sql, monthsArr) {
         ${JSON.stringify({
           spend: m.spend, impressions: m.impressions, clicks: m.clicks,
           conversions: m.conversions, conversionValue: m.conversionValue,
+          snapshotAt: new Date().toISOString(),
         })}::jsonb,
         now()
       )

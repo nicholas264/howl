@@ -1,4 +1,14 @@
 import { requireAuth } from './_lib/auth.js';
+import { createHash } from 'node:crypto';
+
+function customerKey(order, store) {
+  const email = (order.email || '').trim().toLowerCase();
+  if (email) {
+    return `email:${createHash('sha256').update(email).digest('hex')}`;
+  }
+  if (order.customer?.id) return `customer:${store}:${order.customer.id}`;
+  return `guest:${store}:${order.id}`;
+}
 
 // Per-store fetch + aggregation. Returns:
 //   { months, topProducts, _meta: { ordersScanned, pages, customerScopeMissing, inventoryScopeMissing } }
@@ -11,7 +21,7 @@ async function fetchStoreAnalytics(store, token) {
     const d = await r.json();
     if (d.errors) {
       const errs = Array.isArray(d.errors) ? d.errors : [];
-      if (errs.some(e => /access denied for customer field/i.test(e.message || ''))) {
+      if (errs.some(e => /access denied for (customer|email) field/i.test(e.message || ''))) {
         const err = new Error('missing_scope:read_customers');
         err.code = 'MISSING_CUSTOMER_SCOPE';
         throw err;
@@ -54,7 +64,7 @@ async function fetchStoreAnalytics(store, token) {
         displayFinancialStatus
         currentSubtotalPriceSet { shopMoney { amount } }
         totalShippingPriceSet { shopMoney { amount } }
-        ${includeCustomer ? 'customer { id numberOfOrders }' : ''}
+        ${includeCustomer ? 'email customer { id numberOfOrders }' : ''}
         lineItems(first: 50) {
           edges { node {
             name
@@ -114,23 +124,23 @@ async function fetchStoreAnalytics(store, token) {
   // New/returning classification.
   // Logged-in customers: compare lifetime numberOfOrders to orders in window —
   // if all known orders fall inside the window, the earliest is the acquisition.
-  // Guest orders (no customer.id): treat as new. No customer record = no history
-  // = a net-new acquisition for MER purposes. Previous behaviour silently dropped
-  // these from both new and returning buckets, understating newRevenue.
+  // Email hashes are preferred so the same buyer can be deduplicated across stores.
+  // Registered customers use lifetime order count to determine whether the first
+  // order in this window is truly their acquisition order. Guest-email orders use
+  // the earliest order in the fetched window as the best available approximation.
   const canClassifyCustomers = !customerScopeMissing;
   const customerOrders = {};
   if (canClassifyCustomers) {
     for (const o of orders) {
-      const cid = o.customer?.id;
-      if (!cid) continue;
-      if (!customerOrders[cid]) customerOrders[cid] = [];
-      customerOrders[cid].push(o);
+      const key = customerKey(o, store);
+      if (!customerOrders[key]) customerOrders[key] = [];
+      customerOrders[key].push(o);
     }
   }
   const newOrderIds = new Set();
-  for (const [cid, list] of Object.entries(customerOrders)) {
+  for (const list of Object.values(customerOrders)) {
     list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-    const lifetime = list[0].customer?.numberOfOrders ?? list.length;
+    const lifetime = list.find(o => o.customer?.numberOfOrders != null)?.customer?.numberOfOrders ?? list.length;
     if (lifetime <= list.length) newOrderIds.add(list[0].id);
   }
 
@@ -141,18 +151,25 @@ async function fetchStoreAnalytics(store, token) {
     // before tax and shipping. The standard "net sales" definition for MER/aMER.
     const orderRev = parseFloat(o.currentSubtotalPriceSet?.shopMoney?.amount || 0);
     const shipping = parseFloat(o.totalShippingPriceSet?.shopMoney?.amount || 0);
+    const key = canClassifyCustomers ? customerKey(o, store) : null;
     const isNew = canClassifyCustomers
-      ? (!o.customer?.id || newOrderIds.has(o.id))
+      ? newOrderIds.has(o.id)
       : null;
-    if (!monthMap[mKey]) monthMap[mKey] = { netSales: 0, orders: 0, shipping: 0, newCustomers: 0, returningCustomers: 0, newRevenue: 0, returningRevenue: 0, cogs: 0, costedRevenue: 0, uncostedRevenue: 0 };
+    if (!monthMap[mKey]) monthMap[mKey] = {
+      netSales: 0, orders: 0, shipping: 0,
+      newRevenue: 0, returningRevenue: 0,
+      cogs: 0, costedRevenue: 0, uncostedRevenue: 0,
+      customerKeys: new Set(), newCustomerKeys: new Set(), returningCustomerKeys: new Set(),
+    };
     monthMap[mKey].netSales += orderRev;
     monthMap[mKey].orders += 1;
     monthMap[mKey].shipping += shipping;
+    if (key) monthMap[mKey].customerKeys.add(key);
     if (isNew === true) {
-      monthMap[mKey].newCustomers += 1;
+      monthMap[mKey].newCustomerKeys.add(key);
       monthMap[mKey].newRevenue += orderRev;
     } else if (isNew === false) {
-      monthMap[mKey].returningCustomers += 1;
+      monthMap[mKey].returningCustomerKeys.add(key);
       monthMap[mKey].returningRevenue += orderRev;
     }
 
@@ -196,13 +213,23 @@ async function fetchStoreAnalytics(store, token) {
   }
 
   const months = Object.entries(monthMap).map(([month, v]) => ({
+    ...(() => {
+      // A customer acquired this month stays in the "new" bucket even if they
+      // place another order later in the same month.
+      const returningKeys = [...v.returningCustomerKeys].filter(k => !v.newCustomerKeys.has(k));
+      return {
+        newCustomers: v.newCustomerKeys.size,
+        returningCustomers: returningKeys.length,
+        customerKeys: [...v.customerKeys],
+        newCustomerKeys: [...v.newCustomerKeys],
+        returningCustomerKeys: returningKeys,
+      };
+    })(),
     month,
     netSales: v.netSales,
     orders: v.orders,
     shipping: v.shipping,
     aov: v.orders > 0 ? v.netSales / v.orders : 0,
-    newCustomers: v.newCustomers,
-    returningCustomers: v.returningCustomers,
     newRevenue: v.newRevenue,
     returningRevenue: v.returningRevenue,
     cogs: v.cogs,
@@ -235,6 +262,7 @@ function mergeStoreResults(stores) {
       if (!monthMap[m.month]) monthMap[m.month] = {
         netSales: 0, orders: 0, shipping: 0, newCustomers: 0, returningCustomers: 0,
         newRevenue: 0, returningRevenue: 0, cogs: 0, costedRevenue: 0, uncostedRevenue: 0,
+        customerKeys: new Set(), newCustomerKeys: new Set(), returningCustomerKeys: new Set(),
       };
       const t = monthMap[m.month];
       t.netSales += m.netSales || 0;
@@ -247,6 +275,9 @@ function mergeStoreResults(stores) {
       t.cogs += m.cogs || 0;
       t.costedRevenue += m.costedRevenue || 0;
       t.uncostedRevenue += m.uncostedRevenue || 0;
+      for (const key of (m.customerKeys || [])) t.customerKeys.add(key);
+      for (const key of (m.newCustomerKeys || [])) t.newCustomerKeys.add(key);
+      for (const key of (m.returningCustomerKeys || [])) t.returningCustomerKeys.add(key);
     }
 
     for (const [title, p] of Object.entries(result.productMap || {})) {
@@ -261,26 +292,37 @@ function mergeStoreResults(stores) {
     }
   }
 
-  const months = Object.entries(monthMap).map(([month, v]) => ({
-    month,
-    netSales: v.netSales,
-    grossSales: v.netSales,
-    orders: v.orders,
-    shipping: v.shipping,
-    sessions: 0,
-    cvr: 0,
-    aov: v.orders > 0 ? v.netSales / v.orders : 0,
-    newCustomers: v.newCustomers,
-    returningCustomers: v.returningCustomers,
-    newRevenue: v.newRevenue,
-    returningRevenue: v.returningRevenue,
-    newAov: v.newCustomers > 0 ? v.newRevenue / v.newCustomers : 0,
-    returningAov: v.returningCustomers > 0 ? v.returningRevenue / v.returningCustomers : 0,
-    repeatRate: v.orders > 0 ? v.returningCustomers / v.orders : 0,
-    cogs: v.cogs,
-    costedRevenue: v.costedRevenue,
-    uncostedRevenue: v.uncostedRevenue,
-  })).sort((a, b) => a.month.localeCompare(b.month));
+  const months = Object.entries(monthMap).map(([month, v]) => {
+    const newCustomerKeys = [...v.newCustomerKeys];
+    const returningCustomerKeys = [...v.returningCustomerKeys].filter(k => !v.newCustomerKeys.has(k));
+    const newCustomers = v.customerKeys.size > 0 ? newCustomerKeys.length : v.newCustomers;
+    const returningCustomers = v.customerKeys.size > 0 ? returningCustomerKeys.length : v.returningCustomers;
+    return {
+      month,
+      netSales: v.netSales,
+      grossSales: v.netSales,
+      orders: v.orders,
+      shipping: v.shipping,
+      sessions: 0,
+      cvr: 0,
+      aov: v.orders > 0 ? v.netSales / v.orders : 0,
+      newCustomers,
+      returningCustomers,
+      customerKeys: [...v.customerKeys],
+      newCustomerKeys,
+      returningCustomerKeys,
+      newRevenue: v.newRevenue,
+      returningRevenue: v.returningRevenue,
+      newAov: newCustomers > 0 ? v.newRevenue / newCustomers : 0,
+      returningAov: returningCustomers > 0 ? v.returningRevenue / returningCustomers : 0,
+      repeatRate: (newCustomers + returningCustomers) > 0
+        ? returningCustomers / (newCustomers + returningCustomers)
+        : 0,
+      cogs: v.cogs,
+      costedRevenue: v.costedRevenue,
+      uncostedRevenue: v.uncostedRevenue,
+    };
+  }).sort((a, b) => a.month.localeCompare(b.month));
 
   const topProducts = Object.entries(productMap)
     .sort((a, b) => b[1].totalRevenue - a[1].totalRevenue)

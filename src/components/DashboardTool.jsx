@@ -307,7 +307,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
   const [settings, setSettings] = useState({
     grossMarginPct: 60, paymentFeePct: 2.9, paymentFeeFixed: 0.30,
     shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000,
-    googleSpend: {}, opexByMonth: {}, cfoStartMonth: '2026-03',
+    googleSpend: {}, opexByMonth: {}, cfoStartMonth: '2026-01',
   });
 
   // Forecast (parsed from HOWL projections Google Sheet).
@@ -354,13 +354,18 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
     }).catch(() => {}).finally(() => setSnapshotsLoaded(true));
   }, []);
 
-  // Most recent snapshot timestamp — used to decide whether to auto-refresh.
-  const newestSnapshotAt = historySnapshots.reduce((max, r) => {
-    const t = r.updated_at ? new Date(r.updated_at).getTime() : 0;
-    return t > max ? t : max;
-  }, 0);
   const STALE_MS = 24 * 60 * 60 * 1000;
-  const dataIsStale = !newestSnapshotAt || (Date.now() - newestSnapshotAt) > STALE_MS;
+  const newestSourceSnapshotAt = (...fields) => historySnapshots.reduce((max, row) => {
+    for (const field of fields) {
+      const t = row[field]?.snapshotAt ? new Date(row[field].snapshotAt).getTime() : 0;
+      if (t > max) max = t;
+    }
+    return max;
+  }, 0);
+  const newestShopifySnapshotAt = newestSourceSnapshotAt('shopify', 'shopify_dealer');
+  const newestMetaSnapshotAt = newestSourceSnapshotAt('meta');
+  const shopifyIsStale = !newestShopifySnapshotAt || (Date.now() - newestShopifySnapshotAt) > STALE_MS;
+  const metaIsStale = !newestMetaSnapshotAt || (Date.now() - newestMetaSnapshotAt) > STALE_MS;
   const [showAssumptions, setShowAssumptions] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -373,6 +378,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
   // Snapshot fresh Shopify months to DB so they survive the 60-day window.
   useEffect(() => {
     if (!shopifyData?.months?.length) return;
+    const snapshotAt = new Date().toISOString();
     const hasStoreBreakdown = !!shopifyData._stores;
     const primaryMonths = hasStoreBreakdown
       ? (shopifyData._stores?.primary?.months || [])
@@ -387,6 +393,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           newCustomers: m.newCustomers, returningCustomers: m.returningCustomers,
           newRevenue: m.newRevenue, returningRevenue: m.returningRevenue,
           cogs: m.cogs, costedRevenue: m.costedRevenue, uncostedRevenue: m.uncostedRevenue,
+          customerKeys: m.customerKeys, newCustomerKeys: m.newCustomerKeys,
+          returningCustomerKeys: m.returningCustomerKeys,
+          snapshotAt,
         },
       });
     }
@@ -397,6 +406,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
         newCustomers: m.newCustomers, returningCustomers: m.returningCustomers,
         newRevenue: m.newRevenue, returningRevenue: m.returningRevenue,
         cogs: m.cogs, costedRevenue: m.costedRevenue, uncostedRevenue: m.uncostedRevenue,
+        customerKeys: m.customerKeys, newCustomerKeys: m.newCustomerKeys,
+        returningCustomerKeys: m.returningCustomerKeys,
+        snapshotAt,
       };
       byMonth.set(m.month, snapshot);
     }
@@ -413,9 +425,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
   // Snapshot fresh Meta months to DB.
   useEffect(() => {
     if (!data?.monthlyInsights?.length) return;
+    const snapshotAt = new Date().toISOString();
     const snapshots = data.monthlyInsights.map(m => ({
       month: m.month,
-      meta: { spend: m.spend, impressions: m.impressions, clicks: m.clicks, purchases: m.purchases, cpa: m.cpa, roas: m.roas },
+      meta: { spend: m.spend, impressions: m.impressions, clicks: m.clicks, purchases: m.purchases, cpa: m.cpa, roas: m.roas, snapshotAt },
     }));
     fetch('/api/db/monthly-metrics', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -508,12 +521,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
   const [autoTried, setAutoTried] = useState(false);
   useEffect(() => {
     if (!snapshotsLoaded || autoTried) return;
-    if (dataIsStale) {
-      if (!data && !loading) loadDashboard();
-      if (!shopifyData && !shopifyLoading) loadShopify();
-    }
+    if (metaIsStale && !data && !loading) loadDashboard();
+    if (shopifyIsStale && !shopifyData && !shopifyLoading) loadShopify();
     setAutoTried(true);
-  }, [snapshotsLoaded, autoTried, dataIsStale, data, shopifyData, loading, shopifyLoading, loadDashboard, loadShopify]);
+  }, [snapshotsLoaded, autoTried, metaIsStale, shopifyIsStale, data, shopifyData, loading, shopifyLoading, loadDashboard, loadShopify]);
 
   // ── Derived stats ──────────────────────────────────────────────────────────
   const ads = data?.ads || [];
@@ -656,10 +667,20 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {newestSnapshotAt > 0 && (
-            <span style={{ fontSize: 9, color: dataIsStale ? '#f5a623' : '#6e7681', letterSpacing: 1 }}>
-              Cache: {(() => {
-                const ageMs = Date.now() - newestSnapshotAt;
+          {(newestShopifySnapshotAt > 0 || newestMetaSnapshotAt > 0) && (
+            <span style={{ fontSize: 9, color: (shopifyIsStale || metaIsStale) ? '#f5a623' : '#6e7681', letterSpacing: 1 }}>
+              Shopify {(() => {
+                if (!newestShopifySnapshotAt) return 'not synced';
+                const ageMs = Date.now() - newestShopifySnapshotAt;
+                const m = Math.floor(ageMs / 60000);
+                if (m < 60) return `${m}m ago`;
+                const h = Math.floor(m / 60);
+                if (h < 24) return `${h}h ago`;
+                const d = Math.floor(h / 24);
+                return `${d}d ago`;
+              })()} · Meta {(() => {
+                if (!newestMetaSnapshotAt) return 'not synced';
+                const ageMs = Date.now() - newestMetaSnapshotAt;
                 const m = Math.floor(ageMs / 60000);
                 if (m < 60) return `${m}m ago`;
                 const h = Math.floor(m / 60);
@@ -1413,6 +1434,21 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           const keys = ['netSales','orders','shipping','newCustomers','returningCustomers','newRevenue','returningRevenue','cogs','costedRevenue','uncostedRevenue'];
           const out = {};
           for (const k of keys) out[k] = (a[k] || 0) + (b[k] || 0);
+          const legacyCount = (source, key) => {
+            if ((source.customerKeys || []).length > 0) return Number(source[`legacy${key}`] || 0);
+            return Number(source[key.charAt(0).toLowerCase() + key.slice(1)] || 0)
+              + Number(source[`legacy${key}`] || 0);
+          };
+          out.legacyNewCustomers = legacyCount(a, 'NewCustomers') + legacyCount(b, 'NewCustomers');
+          out.legacyReturningCustomers = legacyCount(a, 'ReturningCustomers') + legacyCount(b, 'ReturningCustomers');
+          for (const k of ['customerKeys', 'newCustomerKeys', 'returningCustomerKeys']) {
+            out[k] = [...new Set([...(a[k] || []), ...(b[k] || [])])];
+          }
+          out.returningCustomerKeys = out.returningCustomerKeys.filter(
+            key => !out.newCustomerKeys.includes(key),
+          );
+          out.newCustomers = out.newCustomerKeys.length + out.legacyNewCustomers;
+          out.returningCustomers = out.returningCustomerKeys.length + out.legacyReturningCustomers;
           return out;
         };
         const allShopMonths = new Set([
@@ -1444,8 +1480,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
             && (dealerByMonth[mk] || liveDealerByMonth[mk]),
         );
 
-        // Union of all months (live + snapshotted + manual overrides), filtered to start month
-        const startMonth = settings?.cfoStartMonth || '2026-03';
+        // Build every available month first. The table start month controls display
+        // only; the annual rollup always uses the full current calendar year.
+        const startMonth = settings?.cfoStartMonth || '2026-01';
         const allMonthKeys = Array.from(new Set([
           ...Object.keys(shopByMonth),
           ...Object.keys(spendByMonth),
@@ -1453,9 +1490,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           ...Object.keys(ordersAddByMonth),
           ...Object.keys(googleByMonth),
           ...Object.keys(opexByMonth),
-        ])).filter(Boolean).filter(m => m >= startMonth).sort();
+        ])).filter(Boolean).sort();
         // Hard cap to keep tables readable; will grow as we accumulate snapshots forward
-        const recent13 = allMonthKeys.slice(-24);
+        const recent24 = allMonthKeys.slice(-24);
         const defaultOpex = s.monthlyOpex || 0;
         const opexFor = (mk) => {
           const v = opexByMonth[mk];
@@ -1476,7 +1513,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
         const daysInCurrentMonth = new Date(nowD.getFullYear(), nowD.getMonth() + 1, 0).getDate();
         const paceFactor = daysInCurrentMonth / dayOfMonth;
 
-        const rows = recent13.map(mk => {
+        const allRows = recent24.map(mk => {
           const sh = shopByMonth[mk] || { netSales: 0, orders: 0, newCustomers: 0, returningCustomers: 0, newRevenue: 0, returningRevenue: 0, cogs: 0, costedRevenue: 0, uncostedRevenue: 0 };
           const meta = spendByMonth[mk] || { spend: 0, purchases: 0 };
           const addRev = Number(revenueAddByMonth[mk] || 0);
@@ -1521,8 +1558,24 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           const isCurrent = mk === currentMonthKey;
           const newCustomers = (sh.newCustomers || 0) + addNewCust;
           const returningCustomers = (sh.returningCustomers || 0) + addReturningCust;
-          return { month: mk, revenue, orders, newCustomers, returningCustomers, newRevenue: sh.newRevenue || 0, returningRevenue: sh.returningRevenue || 0, metaSpend, googleSpend, adSpend, metaPurchaseValue, googleConvValue, metaRoasReported, googleRoasReported, cogs, cogsActualPct, paymentFees, shipCost, fulfill, cm3, ncac, blendedNcac, blendedRoas, newRoas, firstOrderPayback, opex: opexThis, opexCoverage, isCurrent };
+          return {
+            month: mk, revenue, orders, newCustomers, returningCustomers,
+            customerKeys: sh.customerKeys || [], newCustomerKeys: sh.newCustomerKeys || [],
+            returningCustomerKeys: sh.returningCustomerKeys || [],
+            legacyNewCustomers: sh.legacyNewCustomers || 0,
+            legacyReturningCustomers: sh.legacyReturningCustomers || 0,
+            manualNewCustomers: addNewCust, manualReturningCustomers: addReturningCust,
+            newRevenue: sh.newRevenue || 0, returningRevenue: sh.returningRevenue || 0,
+            metaSpend, googleSpend, adSpend, metaPurchaseValue, googleConvValue,
+            metaRoasReported, googleRoasReported, cogs, cogsActualPct, paymentFees,
+            shipCost, fulfill, cm3, ncac, blendedNcac, blendedRoas, newRoas,
+            firstOrderPayback, opex: opexThis, opexCoverage, isCurrent,
+          };
         });
+        const rows = allRows.filter(r => r.month >= startMonth);
+        const recent13 = rows;
+        const summaryYear = String(nowD.getFullYear());
+        const rollupRows = allRows.filter(r => r.month.startsWith(`${summaryYear}-`) && r.month <= currentMonthKey);
 
         // Current-month pace projection (last row if it's the current month)
         const currentRow = rows.find(r => r.isCurrent);
@@ -1537,7 +1590,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           ncac: currentRow.newCustomers > 0 ? currentRow.adSpend / currentRow.newCustomers : null,
         } : null;
 
-        const ltm = rows.reduce((a, r) => ({
+        const ltm = rollupRows.reduce((a, r) => ({
           revenue: a.revenue + r.revenue,
           orders: a.orders + r.orders,
           newCustomers: a.newCustomers + r.newCustomers,
@@ -1551,6 +1604,20 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           newRevenue: a.newRevenue + r.newRevenue,
           opex: a.opex + r.opex,
         }), { revenue: 0, orders: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, newRevenue: 0, opex: 0 });
+
+        const uniqueCustomerKeys = new Set(rollupRows.flatMap(r => r.customerKeys || []));
+        const uniqueNewCustomerKeys = new Set(rollupRows.flatMap(r => r.newCustomerKeys || []));
+        const legacyNewCustomers = rollupRows.reduce((sum, r) => sum + r.legacyNewCustomers, 0);
+        const legacyReturningCustomers = rollupRows.reduce((sum, r) => sum + r.legacyReturningCustomers, 0);
+        const manualNewCustomers = rollupRows.reduce((sum, r) => sum + r.manualNewCustomers, 0);
+        const manualReturningCustomers = rollupRows.reduce((sum, r) => sum + r.manualReturningCustomers, 0);
+        const hasLegacyCustomerMonths = legacyNewCustomers > 0 || legacyReturningCustomers > 0;
+        const totalCustomers = uniqueCustomerKeys.size
+          + legacyNewCustomers + legacyReturningCustomers
+          + manualNewCustomers + manualReturningCustomers;
+        ltm.newCustomers = uniqueNewCustomerKeys.size
+          + legacyNewCustomers + manualNewCustomers;
+        ltm.returningCustomers = Math.max(totalCustomers - ltm.newCustomers, 0);
 
         const ltmNcac = ltm.newCustomers > 0 ? ltm.adSpend / ltm.newCustomers : null;
         const ltmBlendedNcac = ltmNcac;
@@ -1569,7 +1636,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
         const ltmCmMargin = ltm.revenue > 0 ? ltm.cm3 / ltm.revenue : 0;
         const ltmOpexCoverage = ltm.opex > 0 ? ltm.cm3 / ltm.opex : null;
         // For UI: show the default opex if no per-month overrides, else "$X avg"
-        const opex = ltm.opex / Math.max(rows.length, 1);
+        const opex = ltm.opex / Math.max(rollupRows.length, 1);
 
         const fmtPct = (n) => (n == null || isNaN(n)) ? '—' : (n * 100).toFixed(1) + '%';
         const fmt$ = (n) => (n == null || isNaN(n)) ? '—' : '$' + Math.round(n).toLocaleString();
@@ -1611,6 +1678,12 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
               </div>
             )}
 
+            {hasLegacyCustomerMonths && (
+              <div style={{ ...S.err, marginBottom: 16, color: '#f5a623', borderColor: 'rgba(245,166,35,0.4)', background: 'rgba(245,166,35,0.1)' }}>
+                Some {summaryYear} customer snapshots predate unique-customer tracking. Click Load Shopify to refresh the year and replace legacy summed customer counts.
+              </div>
+            )}
+
             {showAssumptions && settings && (
               <div style={{ ...S.card, marginBottom: 16 }}>
                 <span style={S.label}>Assumptions (used for COGS, fees, CM3)</span>
@@ -1635,11 +1708,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                     </div>
                   ))}
                   <div>
-                    <span style={{ ...S.label, marginBottom: 4 }}>CFO View Start</span>
+                    <span style={{ ...S.label, marginBottom: 4 }}>Monthly Table Start</span>
                     <input
                       type="month"
-                      value={settings.cfoStartMonth || '2026-03'}
-                      onChange={e => setSettings({ ...settings, cfoStartMonth: e.target.value || '2026-03' })}
+                      value={settings.cfoStartMonth || '2026-01'}
+                      onChange={e => setSettings({ ...settings, cfoStartMonth: e.target.value || '2026-01' })}
                       style={{ width: '100%', padding: '6px 8px', background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 12, borderRadius: 4 }}
                     />
                     <span style={{ fontSize: 9, color: '#6e7681' }}>YYYY-MM</span>
@@ -1700,14 +1773,14 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
 
             {dataReady && (
               <>
-                {/* LTM KPI strip */}
+                {/* Calendar-year KPI strip */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 12 }}>
                   {[
-                    { label: 'LTM Revenue',     value: fmt$(ltm.revenue) },
-                    { label: 'LTM Ad Spend',    value: fmt$(ltm.adSpend), sub: fmt$(ltm.metaSpend) + ' Meta · ' + fmt$(ltm.googleSpend) + ' Google' },
-                    { label: 'LTM CM3',         value: fmt$(ltm.cm3), color: ltm.cm3 >= 0 ? '#3fb950' : '#f85149', sub: fmtPct(ltmCmMargin) + ' margin' },
-                    { label: 'LTM OpEx Cov.',   value: ltmOpexCoverage == null ? '—' : fmtPct(ltmOpexCoverage), color: ltmOpexCoverage >= 1 ? '#3fb950' : '#f5a623', sub: fmt$(opex) + ' / mo opex' },
-                    { label: 'LTM New Custs',   value: ltm.newCustomers.toLocaleString(), sub: ltm.returningCustomers.toLocaleString() + ' returning' },
+                    { label: `${summaryYear} YTD Revenue`,   value: fmt$(ltm.revenue) },
+                    { label: `${summaryYear} YTD Ad Spend`,  value: fmt$(ltm.adSpend), sub: fmt$(ltm.metaSpend) + ' Meta · ' + fmt$(ltm.googleSpend) + ' Google' },
+                    { label: `${summaryYear} YTD CM3`,       value: fmt$(ltm.cm3), color: ltm.cm3 >= 0 ? '#3fb950' : '#f85149', sub: fmtPct(ltmCmMargin) + ' margin' },
+                    { label: `${summaryYear} OpEx Cov.`,     value: ltmOpexCoverage == null ? '—' : fmtPct(ltmOpexCoverage), color: ltmOpexCoverage >= 1 ? '#3fb950' : '#f5a623', sub: fmt$(opex) + ' / mo opex' },
+                    { label: `${summaryYear} New Custs`,     value: ltm.newCustomers.toLocaleString(), sub: `${totalCustomers.toLocaleString()} total unique` },
                     { label: 'Avg NCAC',        value: ltmNcac == null ? '—' : '$' + ltmNcac.toFixed(0) },
                     { label: 'Blended CPA',     value: ltmCpa == null ? '—' : '$' + ltmCpa.toFixed(0), sub: 'ad spend ÷ all orders' },
                     { label: 'MER',             value: ltmMer == null ? '—' : ltmMer.toFixed(2) + 'x', color: (ltmMer || 0) >= 2 ? '#3fb950' : (ltmMer || 0) >= 1 ? '#f5a623' : '#f85149', sub: 'revenue ÷ ad spend' },
@@ -1797,8 +1870,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                     // Per-channel purchases (Meta) / conversions (Google) — pulled from snapshots.
                     const metaPurchasesByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.meta).map(r => [r.month, Number(r.meta.purchases || 0)]));
                     const googleConvByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.google).map(r => [r.month, Number(r.google.conversions || 0)]));
-                    const ltmMetaPurchases = rows.reduce((a, r) => a + (metaPurchasesByMonth[r.month] || 0), 0);
-                    const ltmGoogleConv = rows.reduce((a, r) => a + (googleConvByMonth[r.month] || 0), 0);
+                    const ltmMetaPurchases = rollupRows.reduce((a, r) => a + (metaPurchasesByMonth[r.month] || 0), 0);
+                    const ltmGoogleConv = rollupRows.reduce((a, r) => a + (googleConvByMonth[r.month] || 0), 0);
                     const ltmMetaCpa = ltmMetaPurchases > 0 ? ltm.metaSpend / ltmMetaPurchases : null;
                     const ltmGoogleCpa = ltmGoogleConv > 0 ? ltm.googleSpend / ltmGoogleConv : null;
                     return (
@@ -1806,7 +1879,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
                           <span style={S.label}>Media Mix — Meta vs Google</span>
                           <span style={{ fontSize: 10, color: '#8b949e', letterSpacing: 1 }}>
-                            LTM: <span style={{ color: '#1877f2', fontWeight: 700 }}>{fmtPct(mixMetaPct)} Meta</span>
+                            {summaryYear} YTD: <span style={{ color: '#1877f2', fontWeight: 700 }}>{fmtPct(mixMetaPct)} Meta</span>
                             {' · '}
                             <span style={{ color: '#fbbc05', fontWeight: 700 }}>{fmtPct(mixGooglePct)} Google</span>
                             {' · '}
@@ -1994,7 +2067,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                       </tbody>
                       <tfoot>
                         <tr style={{ borderTop: '2px solid #2a3441' }}>
-                          <td style={{ padding: '8px 6px 4px 0', fontSize: 9, letterSpacing: 1, color: '#6e7681', textTransform: 'uppercase', fontWeight: 700 }}>LTM</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 9, letterSpacing: 1, color: '#6e7681', textTransform: 'uppercase', fontWeight: 700 }}>{summaryYear} YTD</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#f0f4f8', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.revenue)}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#c9d1d9', textAlign: 'right' }}>{ltm.orders.toLocaleString()}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#DC440A', textAlign: 'right', fontWeight: 700 }}>{ltm.newCustomers.toLocaleString()}</td>
@@ -2080,7 +2153,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
         }
 
         // Build pacing rows: filter forecast months to start month forward, intersect with snapshots+live actuals.
-        const startMonth = settings?.cfoStartMonth || '2026-03';
+        const startMonth = settings?.cfoStartMonth || '2026-01';
         const liveSpendByMonth = Object.fromEntries((data?.monthlyInsights || []).map(m => [m.month, m]));
         const livePrimaryMonths = shopifyData?._stores
           ? (shopifyData._stores?.primary?.months || [])
