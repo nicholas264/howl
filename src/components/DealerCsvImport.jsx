@@ -9,13 +9,21 @@ const S = {
   err:     { padding: '8px 12px', border: '1px solid rgba(220,68,10,0.4)', background: 'rgba(220,68,10,0.1)', color: '#DC440A', fontSize: 10, borderRadius: 4, marginTop: 10 },
 };
 
+async function customerKey(email) {
+  const bytes = new TextEncoder().encode(email);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const hex = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+  return `email:${hex}`;
+}
+
 // Parse a Shopify orders export CSV → per-month aggregates.
 // Each row in the export is a line item; orders span multiple rows. Order Name (e.g. "#1234")
 // is repeated. Columns we care about: "Name", "Created at", "Total" (currency), "Shipping",
 // "Subtotal", "Email", "Lineitem quantity", "Lineitem price".
-function aggregateOrders(rows) {
+async function aggregateOrders(rows) {
   const seen = new Set(); // dedupe by Name (one Name = one order, multiple line item rows)
-  const customerFirstSeen = {}; // email → earliest YYYY-MM
+  const customerFirstOrder = {}; // email → earliest { date, order name }
+  const customerKeys = {};
   const monthMap = {};
 
   // First pass: track earliest month per email so new vs returning is consistent.
@@ -25,11 +33,15 @@ function aggregateOrders(rows) {
     if (!email || !created) continue;
     const d = new Date(created);
     if (isNaN(d)) continue;
-    const mk = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    if (!customerFirstSeen[email] || mk < customerFirstSeen[email]) {
-      customerFirstSeen[email] = mk;
+    const name = (r['Name'] || '').trim();
+    if (!name) continue;
+    if (!customerFirstOrder[email] || d < customerFirstOrder[email].date) {
+      customerFirstOrder[email] = { date: d, name };
     }
   }
+  await Promise.all(Object.keys(customerFirstOrder).map(async email => {
+    customerKeys[email] = await customerKey(email);
+  }));
 
   // Second pass: aggregate, dedup by Order Name.
   for (const r of rows) {
@@ -51,30 +63,43 @@ function aggregateOrders(rows) {
     const total = parseFloat(r['Total'] || r['Subtotal'] || 0) || 0;
     const shipping = parseFloat(r['Shipping'] || 0) || 0;
     const email = (r['Email'] || '').toLowerCase().trim();
-    const isNew = email && customerFirstSeen[email] === mk;
+    const key = email ? customerKeys[email] : `dealer-guest:${name}`;
+    const isNew = email ? customerFirstOrder[email]?.name === name : true;
 
     if (!monthMap[mk]) monthMap[mk] = {
       netSales: 0, orders: 0, shipping: 0,
-      newCustomers: 0, returningCustomers: 0,
       newRevenue: 0, returningRevenue: 0,
       uncostedRevenue: 0, // dealer CSV has no unit cost — treat all as uncosted (GM% fallback applies)
+      customerKeys: new Set(), newCustomerKeys: new Set(), returningCustomerKeys: new Set(),
     };
 
     monthMap[mk].netSales += total;
     monthMap[mk].orders += 1;
     monthMap[mk].shipping += shipping;
     monthMap[mk].uncostedRevenue += total;
+    monthMap[mk].customerKeys.add(key);
     if (isNew) {
-      monthMap[mk].newCustomers += 1;
+      monthMap[mk].newCustomerKeys.add(key);
       monthMap[mk].newRevenue += total;
-    } else if (email) {
-      monthMap[mk].returningCustomers += 1;
+    } else {
+      monthMap[mk].returningCustomerKeys.add(key);
       monthMap[mk].returningRevenue += total;
     }
   }
 
   return Object.entries(monthMap)
-    .map(([month, v]) => ({ month, ...v }))
+    .map(([month, v]) => {
+      const returningKeys = [...v.returningCustomerKeys].filter(k => !v.newCustomerKeys.has(k));
+      return {
+        month,
+        ...v,
+        newCustomers: v.newCustomerKeys.size,
+        returningCustomers: returningKeys.length,
+        customerKeys: [...v.customerKeys],
+        newCustomerKeys: [...v.newCustomerKeys],
+        returningCustomerKeys: returningKeys,
+      };
+    })
     .sort((a, b) => a.month.localeCompare(b.month));
 }
 
@@ -91,7 +116,7 @@ export default function DealerCsvImport({ onUploaded }) {
     Papa.parse(f, {
       header: true,
       skipEmptyLines: true,
-      complete: (results) => {
+      complete: async (results) => {
         try {
           if (!results.data || results.data.length === 0) {
             setError('CSV looks empty.');
@@ -103,7 +128,7 @@ export default function DealerCsvImport({ onUploaded }) {
             setError(`CSV missing required columns: ${missing.join(', ')}. Re-export from Shopify with the default order export.`);
             return;
           }
-          const months = aggregateOrders(results.data);
+          const months = await aggregateOrders(results.data);
           if (months.length === 0) {
             setError('No paid orders found in this file.');
             return;
@@ -121,6 +146,7 @@ export default function DealerCsvImport({ onUploaded }) {
     if (!parsed) return;
     setUploading(true); setError(''); setSuccess('');
     try {
+      const snapshotAt = new Date().toISOString();
       const snapshots = parsed.map(m => ({
         month: m.month,
         shopify_dealer: {
@@ -128,6 +154,9 @@ export default function DealerCsvImport({ onUploaded }) {
           newCustomers: m.newCustomers, returningCustomers: m.returningCustomers,
           newRevenue: m.newRevenue, returningRevenue: m.returningRevenue,
           uncostedRevenue: m.uncostedRevenue, costedRevenue: 0, cogs: 0,
+          customerKeys: m.customerKeys, newCustomerKeys: m.newCustomerKeys,
+          returningCustomerKeys: m.returningCustomerKeys,
+          snapshotAt,
         },
       }));
       const r = await fetch('/api/db/monthly-metrics', {

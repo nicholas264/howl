@@ -14,7 +14,7 @@ const DEFAULTS = {
   ordersAddByMonth: {},      // YYYY-MM → additional orders for the same months (drives correct fees/ship/pick)
   newCustomersAddByMonth: {},      // YYYY-MM → additional new customers for pre-window months
   returningCustomersAddByMonth: {}, // YYYY-MM → additional returning customers for pre-window months
-  cfoStartMonth: '2026-03',  // CFO View hides months before this (Shopify only returns last 60d so we snapshot history)
+  cfoStartMonth: '2026-01',  // Detailed table start; annual KPI rollup always uses the full current calendar year
   forecastSheetId: '1uzteHW4sWB6Q49Rt7pOFzmIMD_s0Dxec0lQwgTfFHRI', // HOWL '26-'27 Projections sheet
   forecastSheetName: 'P&L Monthly',
 };
