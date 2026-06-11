@@ -1809,7 +1809,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
                       <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>Other Ord</div>
                       <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>+ New</div>
                       <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', fontWeight: 600 }}>+ Ret</div>
-                      {recent13.map(mk => {
+                      {recent13.map(({ month: mk }) => {
                         const inp = (key, ph) => (
                           <input
                             type="number" step="1" placeholder={ph}
