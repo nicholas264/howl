@@ -58,6 +58,7 @@ export default function CreatorWorkspace({ canWrite = false }) {
   const [gmailConnected, setGmailConnected] = useState(() => document.cookie.split('; ').some(cookie => cookie.startsWith('gmail_connected=1')));
   const [deliverable, setDeliverable] = useState({ title: '', due_at: '', source_url: '' });
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [syncingSocial, setSyncingSocial] = useState(null);
 
   const loadCreators = useCallback(async () => {
     setLoading(true);
@@ -443,6 +444,25 @@ export default function CreatorWorkspace({ canWrite = false }) {
     }
   };
 
+  const syncSocial = async (account) => {
+    setSyncingSocial(account.id);
+    setError('');
+    try {
+      const response = await fetch('/api/creator-social-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creator_id: selected.id, platform: account.platform }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not refresh social metrics');
+      await openCreator(selected);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSyncingSocial(null);
+    }
+  };
+
   return (
     <div className="creator-workspace">
       <header className="creator-head">
@@ -552,13 +572,21 @@ export default function CreatorWorkspace({ canWrite = false }) {
               </div>
               <div className="social-account-grid">
                 {selected.social_accounts?.map(account => (
-                  <a key={account.id} href={account.profile_url || undefined} target="_blank" rel="noreferrer" className="social-account">
+                  <div key={account.id} className="social-account-wrap">
+                  <a href={account.profile_url || undefined} target="_blank" rel="noreferrer" className="social-account">
                     <span>{account.platform}</span>
                     <strong>{account.handle || 'Profile'}</strong>
                     <div><b>{displayMetric(account.followers)}</b><small>followers</small></div>
                     <div><b>{displayMetric(account.avg_views)}</b><small>avg views</small></div>
                     <div><b>{account.engagement_rate == null ? '—' : `${account.engagement_rate}%`}</b><small>engagement</small></div>
                   </a>
+                  {canWrite && account.platform === 'instagram' && (
+                    <button className="social-sync" disabled={syncingSocial === account.id} onClick={() => syncSocial(account)}>
+                      {syncingSocial === account.id ? 'Syncing' : 'Refresh'}
+                    </button>
+                  )}
+                  {account.last_synced_at && <small className="social-synced">Synced {new Date(account.last_synced_at).toLocaleDateString()}</small>}
+                  </div>
                 ))}
               </div>
               {canWrite && (
