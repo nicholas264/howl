@@ -6,6 +6,13 @@ function cleanEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
 }
 
+async function audit(sql, access, action, target, metadata = {}) {
+  await sql`
+    INSERT INTO app_admin_audit (actor_id, actor_email, action, target, metadata)
+    VALUES (${access.userId}, ${access.email || null}, ${action}, ${target || null}, ${JSON.stringify(metadata)}::jsonb)
+  `;
+}
+
 export default async function handler(req, res) {
   const access = await requirePermission(req, res, 'admin.users');
   if (!access) return;
@@ -34,10 +41,17 @@ export default async function handler(req, res) {
           created_at DESC
         LIMIT 100
       `;
+      const auditLog = await sql`
+        SELECT id, actor_email, action, target, metadata, created_at
+        FROM app_admin_audit
+        ORDER BY created_at DESC
+        LIMIT 50
+      `;
       return res.json({
         users,
         invitations,
         feedback,
+        audit_log: auditLog,
         roles: ROLE_LABELS,
         permissions: ROLE_PERMISSIONS,
         integrations: {
@@ -104,6 +118,7 @@ export default async function handler(req, res) {
         )
         RETURNING *
       `;
+      await audit(sql, access, 'invite.sent', email, { role });
       return res.status(201).json({ invitation });
     }
 
@@ -120,6 +135,7 @@ export default async function handler(req, res) {
           WHERE id = ${id}
           RETURNING id, email, kind, message, page_url, status, created_at
         `;
+        if (item) await audit(sql, access, 'feedback.updated', `feedback:${id}`, { status });
         return item ? res.json({ feedback: item }) : res.status(404).json({ error: 'Feedback not found' });
       }
       const { user_id, role, status } = req.body || {};
@@ -137,6 +153,7 @@ export default async function handler(req, res) {
         WHERE user_id = ${user_id}
         RETURNING user_id, email, display_name, role, status, last_seen_at, created_at, updated_at
       `;
+      if (user) await audit(sql, access, 'user.updated', user.email, { role, status });
       return user ? res.json({ user }) : res.status(404).json({ error: 'User not found' });
     }
 
@@ -153,6 +170,7 @@ export default async function handler(req, res) {
         const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
         await clerk.invitations.revokeInvitation(invitation.clerk_invitation_id).catch(() => {});
       }
+      await audit(sql, access, 'invite.revoked', `invitation:${invitationId}`);
       return res.json({ ok: true });
     }
 

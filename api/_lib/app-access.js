@@ -90,6 +90,18 @@ async function createAppTables(sql) {
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS app_admin_audit (
+      id          BIGSERIAL PRIMARY KEY,
+      actor_id    TEXT,
+      actor_email TEXT,
+      action      TEXT NOT NULL,
+      target      TEXT,
+      metadata    JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_app_admin_audit_created ON app_admin_audit(created_at DESC)`;
 }
 
 export async function ensureAppTables(sql) {

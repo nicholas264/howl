@@ -16,7 +16,7 @@ const DEFAULT_PERMISSIONS = {
 };
 
 export default function AdminWorkspace() {
-  const [data, setData] = useState({ users: [], invitations: [], feedback: [], roles: DEFAULT_ROLES, permissions: DEFAULT_PERMISSIONS, integrations: {} });
+  const [data, setData] = useState({ users: [], invitations: [], feedback: [], audit_log: [], roles: DEFAULT_ROLES, permissions: DEFAULT_PERMISSIONS, integrations: {} });
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('viewer');
   const [loading, setLoading] = useState(true);
@@ -197,6 +197,23 @@ export default function AdminWorkspace() {
             </article>
           ))}
           {!loading && !data.feedback.length && <div className="workflow-empty">No product feedback yet.</div>}
+        </div>
+      </section>
+
+      <section className="admin-panel admin-audit-panel">
+        <div className="admin-panel-head">
+          <div><span>Access activity</span></div>
+          <small>Recent administrative changes.</small>
+        </div>
+        <div className="admin-audit-list">
+          {data.audit_log.map(item => (
+            <div key={item.id}>
+              <span>{item.action.replace('.', ' ')}</span>
+              <strong>{item.target || 'HOWL workspace'}</strong>
+              <small>{item.actor_email || 'System'} · {new Date(item.created_at).toLocaleString()}</small>
+            </div>
+          ))}
+          {!loading && !data.audit_log.length && <div className="workflow-empty">No administrative changes recorded yet.</div>}
         </div>
       </section>
 
