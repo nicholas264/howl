@@ -200,7 +200,9 @@ ${references}`;
   };
 
   const sendToResults = () => {
-    setVariations(concepts.map(concept => ({
+    setVariations(concepts.map(rawConcept => {
+      const concept = rawConcept || {};
+      return {
       hook: concept.hook,
       script: concept.script,
       product: concept.product,
@@ -212,8 +214,13 @@ ${references}`;
       proof_sequence: concept.proof_sequence,
       shot_list: concept.shot_list,
       inspired_by: (concept.inspired_by || []).join(', '),
-    })));
+      };
+    }));
     setActiveTab('results');
+  };
+
+  const deleteConcept = (indexToDelete) => {
+    setConcepts(current => current.filter((_, index) => index !== indexToDelete));
   };
 
   return (
@@ -302,17 +309,29 @@ ${references}`;
             <>
               <div className="concept-output-head"><div><span>Test matrix</span><strong>{concepts.length} shootable concepts</strong></div><button onClick={sendToResults}>Send scripts to Results</button></div>
               <div className="concept-output-grid">
-                {concepts.map((concept, index) => (
-                  <article className="concept-output" key={`${concept.concept_name}-${index}`}>
+                {concepts.map((rawConcept, index) => {
+                  const concept = rawConcept || {};
+                  return (
+                  <article className="concept-output" key={`${concept.concept_name || 'blank'}-${index}`}>
                     <div className="concept-number">{String(index + 1).padStart(2, '0')}</div>
-                    <div className="concept-tags"><span>{concept.product}</span><span>{concept.format}</span><span>{concept.angle}</span></div>
-                    <h2>{concept.concept_name}</h2>
-                    <blockquote>{concept.hook}</blockquote>
+                    <button
+                      className="concept-delete"
+                      type="button"
+                      aria-label={`Delete ${concept.concept_name || `concept ${index + 1}`}`}
+                      onClick={() => deleteConcept(index)}
+                    >
+                      Delete
+                    </button>
+                    <div className="concept-tags">
+                      {[concept.product, concept.format, concept.angle].filter(Boolean).map((tag, tagIndex) => <span key={`${tag}-${tagIndex}`}>{tag}</span>)}
+                    </div>
+                    <h2>{concept.concept_name || 'Blank concept'}</h2>
+                    <blockquote>{concept.hook || 'No hook was generated.'}</blockquote>
                     <dl>
-                      <div><dt>Hypothesis</dt><dd>{concept.hypothesis}</dd></div>
-                      <div><dt>Keep</dt><dd>{concept.winning_pattern_kept}</dd></div>
-                      <div><dt>Change</dt><dd>{concept.primary_variable}</dd></div>
-                      <div><dt>Opening frame</dt><dd>{concept.opening_visual}</dd></div>
+                      <div><dt>Hypothesis</dt><dd>{concept.hypothesis || '—'}</dd></div>
+                      <div><dt>Keep</dt><dd>{concept.winning_pattern_kept || '—'}</dd></div>
+                      <div><dt>Change</dt><dd>{concept.primary_variable || '—'}</dd></div>
+                      <div><dt>Opening frame</dt><dd>{concept.opening_visual || '—'}</dd></div>
                     </dl>
                     <details><summary>Proof and shot plan</summary>
                       <h4>Proof sequence</h4><ol>{(concept.proof_sequence || []).map(item => <li key={item}>{item}</li>)}</ol>
@@ -321,7 +340,8 @@ ${references}`;
                     <details><summary>Full script</summary><p className="concept-script">{concept.script}</p></details>
                     <footer><span>Why new: {concept.why_new}</span><span>Risk: {concept.risk}</span></footer>
                   </article>
-                ))}
+                  );
+                })}
               </div>
             </>
           ) : null}
