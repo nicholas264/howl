@@ -55,6 +55,7 @@ export default function CreatorWorkspace({ canWrite = false }) {
   const [workflow, setWorkflow] = useState({ briefs: [], outreach: [], deliverables: [] });
   const [briefForm, setBriefForm] = useState({ product: '', objective: '', angle: '', direction: '' });
   const [outreach, setOutreach] = useState({ channel: 'email', subject: '', body: '', status: 'draft' });
+  const [gmailConnected, setGmailConnected] = useState(() => document.cookie.split('; ').some(cookie => cookie.startsWith('gmail_connected=1')));
   const [deliverable, setDeliverable] = useState({ title: '', due_at: '', source_url: '' });
   const [uploadProgress, setUploadProgress] = useState(0);
 
@@ -89,6 +90,13 @@ export default function CreatorWorkspace({ canWrite = false }) {
     fetch('/api/creators-import')
       .then(response => response.ok ? response.json() : Promise.reject())
       .then(data => setClickupConfigured(Boolean(data.clickup_configured)))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/creator-email')
+      .then(response => response.ok ? response.json() : Promise.reject())
+      .then(data => setGmailConnected(Boolean(data.connected)))
       .catch(() => {});
   }, []);
 
@@ -155,6 +163,42 @@ export default function CreatorWorkspace({ canWrite = false }) {
       if (!response.ok) throw new Error(data.error || 'Could not save outreach');
       setWorkflow(data.workflow);
       setOutreach({ channel: 'email', subject: '', body: '', status: 'draft' });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendEmail = async () => {
+    if (!selected?.email) {
+      setError('Add an email address to this creator before sending.');
+      return;
+    }
+    if (!outreach.subject.trim() || !outreach.body.trim()) {
+      setError('Subject and message are required.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      const response = await fetch('/api/creator-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          creator_id: selected.id,
+          to: selected.email,
+          subject: outreach.subject,
+          body: outreach.body,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        if (data.reconnect_required) setGmailConnected(false);
+        throw new Error(data.error || 'Could not send email');
+      }
+      setOutreach({ channel: 'email', subject: '', body: '', status: 'draft' });
+      await refreshWorkflow(selected.id);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -587,7 +631,12 @@ export default function CreatorWorkspace({ canWrite = false }) {
                     </div>
                     <input placeholder="Subject" value={outreach.subject} onChange={event => setOutreach({ ...outreach, subject: event.target.value })} />
                     <textarea required rows="5" placeholder="Write the message" value={outreach.body} onChange={event => setOutreach({ ...outreach, body: event.target.value })} />
-                    <button className="primary-action" disabled={saving}>Save outreach</button>
+                    <div className="outreach-actions">
+                      <button className="primary-action" disabled={saving}>Save outreach</button>
+                      {gmailConnected
+                        ? <button type="button" disabled={saving || outreach.channel !== 'email'} onClick={sendEmail}>Send with Gmail</button>
+                        : <a href="/api/auth/google?purpose=creator_email">Connect Gmail</a>}
+                    </div>
                   </form>
                 )}
                 <div className="workflow-list">

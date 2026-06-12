@@ -12,7 +12,7 @@ export function useDriveAuth() {
   useEffect(() => {
     // Clean up post-OAuth URL params (still set by callback for UX, plus legacy errors)
     const params = new URLSearchParams(window.location.search);
-    if (params.get('drive_connected') || params.get('drive_error') || params.get('drive_token')) {
+    if (params.get('drive_connected') || params.get('gmail_connected') || params.get('drive_error') || params.get('drive_token')) {
       window.history.replaceState({}, '', window.location.pathname);
     }
     // One-time cleanup: legacy token used to live in localStorage. Drop it.

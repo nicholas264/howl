@@ -1,6 +1,6 @@
 // Handles Google OAuth2 callback — exchanges code for tokens, sets HttpOnly cookie
 export default async function handler(req, res) {
-  const { code, error } = req.query;
+  const { code, error, state } = req.query;
 
   if (error || !code) {
     return res.redirect('/?drive_error=1');
@@ -30,8 +30,9 @@ export default async function handler(req, res) {
     res.setHeader('Set-Cookie', [
       `drive_refresh=${encodeURIComponent(tokens.refresh_token)}; HttpOnly; ${baseAttrs}`,
       `drive_connected=1; ${baseAttrs}`,
+      `gmail_connected=1; ${baseAttrs}`,
     ]);
-    res.redirect('/?drive_connected=1');
+    res.redirect(state === 'creator_email' ? '/?gmail_connected=1' : '/?drive_connected=1');
   } catch {
     res.redirect('/?drive_error=1');
   }
