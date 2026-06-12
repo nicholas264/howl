@@ -546,6 +546,12 @@ export async function listAnalyzedWinners({ sinceDays: rawSince }) {
   const sinceDays = Math.max(1, Math.min(365, parseInt(rawSince || 30, 10)));
   const sql = neon(process.env.DATABASE_URL);
   await ensureCreativeAnalysisColumns(sql);
+  await sql`
+    CREATE TABLE IF NOT EXISTS creative_analysis_dismissals (
+      group_key TEXT PRIMARY KEY,
+      dismissed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
   const fmtYmd = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const tsNow = new Date();
   const tsSince = new Date(tsNow.getTime() - sinceDays * 24 * 60 * 60 * 1000);
@@ -579,8 +585,29 @@ export async function listAnalyzedWinners({ sinceDays: rawSince }) {
           AND i.date BETWEEN ${fmtYmd(tsSince)} AND ${fmtYmd(tsNow)}
       ), 0) AS purchases
     FROM creative_analysis ca
+    WHERE NOT EXISTS (
+      SELECT 1 FROM creative_analysis_dismissals d WHERE d.group_key = ca.group_key
+    )
     ORDER BY spend DESC NULLS LAST, ca.generated_at DESC
     LIMIT 100
   `;
   return { status: 200, body: { winners: rows, sinceDays } };
+}
+
+export async function dismissAnalyzedWinner({ groupKey }) {
+  if (!process.env.DATABASE_URL) return { status: 200, body: { error: 'DATABASE_URL not configured' } };
+  if (!groupKey) return { status: 400, body: { error: 'groupKey required' } };
+  const sql = neon(process.env.DATABASE_URL);
+  await sql`
+    CREATE TABLE IF NOT EXISTS creative_analysis_dismissals (
+      group_key TEXT PRIMARY KEY,
+      dismissed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`
+    INSERT INTO creative_analysis_dismissals (group_key)
+    VALUES (${groupKey})
+    ON CONFLICT (group_key) DO UPDATE SET dismissed_at = now()
+  `;
+  return { status: 200, body: { ok: true, groupKey } };
 }

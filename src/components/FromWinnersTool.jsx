@@ -89,6 +89,27 @@ export default function FromWinnersTool({ setActiveTab, setVariations }) {
     });
   };
 
+  const dismissWinner = async (winner) => {
+    setError('');
+    try {
+      const response = await fetch('/api/meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'dismiss_analyzed_winner', groupKey: winner.group_key }),
+      });
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+      setWinners(current => (current || []).filter(item => item.group_key !== winner.group_key));
+      setSelected(current => {
+        const next = new Set(current);
+        next.delete(winner.group_key);
+        return next;
+      });
+    } catch (err) {
+      setError(`Could not remove concept: ${err.message}`);
+    }
+  };
+
   const generate = async () => {
     if (!selectedWinners.length) return;
     const incompleteVideos = selectedWinners.filter(
@@ -282,19 +303,29 @@ ${references}`;
               const revenue = Number(winner.purchase_value) || 0;
               const transcriptReady = winner.asset_kind !== 'video' || winner.transcription_status === 'complete';
               return (
-                <button className={`concept-winner ${active ? 'active' : ''} ${transcriptReady ? '' : 'incomplete'}`} onClick={() => toggle(winner.group_key)} key={winner.group_key}>
-                  {winner.thumbnail_url ? <img src={winner.thumbnail_url} alt="" /> : <div className="concept-thumb" />}
-                  <div>
-                    <strong>{winner.name}</strong>
-                    <span>{spend ? (revenue / spend).toFixed(2) : '0.00'}x ROAS · {money(spend)} spend</span>
-                    <span className={transcriptReady ? 'analysis-ready' : 'analysis-missing'}>
-                      {transcriptReady
-                        ? `${winner.asset_kind === 'video' ? 'Transcript ready · ' : ''}${Number(winner.vision_frame_count) || 1} visual frame${Number(winner.vision_frame_count) === 1 ? '' : 's'}`
-                        : 'Transcript missing · re-analyze'}
-                    </span>
-                  </div>
-                  <i>{active ? '✓' : '+'}</i>
-                </button>
+                <div className={`concept-winner ${active ? 'active' : ''} ${transcriptReady ? '' : 'incomplete'}`} key={winner.group_key}>
+                  <button className="concept-winner-select" type="button" onClick={() => toggle(winner.group_key)}>
+                    {winner.thumbnail_url ? <img src={winner.thumbnail_url} alt="" /> : <div className="concept-thumb" />}
+                    <div>
+                      <strong>{winner.name || 'Blank concept'}</strong>
+                      <span>{spend ? (revenue / spend).toFixed(2) : '0.00'}x ROAS · {money(spend)} spend</span>
+                      <span className={transcriptReady ? 'analysis-ready' : 'analysis-missing'}>
+                        {transcriptReady
+                          ? `${winner.asset_kind === 'video' ? 'Transcript ready · ' : ''}${Number(winner.vision_frame_count) || 1} visual frame${Number(winner.vision_frame_count) === 1 ? '' : 's'}`
+                          : 'Transcript missing · re-analyze'}
+                      </span>
+                    </div>
+                    <i>{active ? '✓' : '+'}</i>
+                  </button>
+                  <button
+                    className="concept-winner-delete"
+                    type="button"
+                    aria-label={`Remove ${winner.name || 'blank concept'} from Concept Studio`}
+                    onClick={() => dismissWinner(winner)}
+                  >
+                    Delete
+                  </button>
+                </div>
               );
             })}
           </div>

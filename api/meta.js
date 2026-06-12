@@ -81,6 +81,7 @@ export const config = {
 import { requireAuth } from './_lib/auth.js';
 import {
   analyzeCreativeGroup,
+  dismissAnalyzedWinner,
   getCreativeAnalysisQueue,
   getCreativeAnalysis,
   listAnalyzedWinners,
@@ -1336,6 +1337,11 @@ export default async function handler(req, res) {
 
       case 'list_analyzed_winners': {
         const out = await listAnalyzedWinners({ sinceDays: req.body.sinceDays });
+        return res.status(out.status).json(out.body);
+      }
+
+      case 'dismiss_analyzed_winner': {
+        const out = await dismissAnalyzedWinner({ groupKey: req.body.groupKey });
         return res.status(out.status).json(out.body);
       }
 
