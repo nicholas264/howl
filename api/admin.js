@@ -26,7 +26,42 @@ export default async function handler(req, res) {
         ORDER BY created_at DESC
         LIMIT 200
       `;
-      return res.json({ users, invitations, roles: ROLE_LABELS, permissions: ROLE_PERMISSIONS });
+      return res.json({
+        users,
+        invitations,
+        roles: ROLE_LABELS,
+        permissions: ROLE_PERMISSIONS,
+        integrations: {
+          clerk: {
+            ready: (process.env.VITE_CLERK_PUBLISHABLE_KEY || '').startsWith('pk_live_'),
+            label: 'Clerk production',
+            detail: (process.env.VITE_CLERK_PUBLISHABLE_KEY || '').startsWith('pk_live_')
+              ? 'Production authentication keys are active.'
+              : 'Development keys are active on the production domain.',
+          },
+          clickup: {
+            ready: Boolean(process.env.CLICKUP_API_TOKEN && process.env.CLICKUP_CREATOR_LIST_ID),
+            label: 'ClickUp intake',
+            detail: process.env.CLICKUP_API_TOKEN && process.env.CLICKUP_CREATOR_LIST_ID
+              ? 'Direct applicant sync is configured.'
+              : 'CSV import works; direct sync needs token and list ID.',
+          },
+          gmail: {
+            ready: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+            label: 'Gmail outreach',
+            detail: process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+              ? 'Users can connect Gmail from a creator record.'
+              : 'Google OAuth credentials are missing.',
+          },
+          instagram: {
+            ready: Boolean(process.env.META_ACCESS_TOKEN && process.env.META_PAGE_ID),
+            label: 'Instagram metrics',
+            detail: process.env.META_ACCESS_TOKEN && process.env.META_PAGE_ID
+              ? 'Business Discovery refresh is available.'
+              : 'Meta token or Page ID is missing.',
+          },
+        },
+      });
     }
 
     if (req.method === 'POST') {

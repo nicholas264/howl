@@ -16,7 +16,7 @@ const DEFAULT_PERMISSIONS = {
 };
 
 export default function AdminWorkspace() {
-  const [data, setData] = useState({ users: [], invitations: [], roles: DEFAULT_ROLES, permissions: DEFAULT_PERMISSIONS });
+  const [data, setData] = useState({ users: [], invitations: [], roles: DEFAULT_ROLES, permissions: DEFAULT_PERMISSIONS, integrations: {} });
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('viewer');
   const [loading, setLoading] = useState(true);
@@ -151,6 +151,19 @@ export default function AdminWorkspace() {
             <div key={key}>
               <strong>{label}</strong>
               <p>{data.permissions[key]?.includes('*') ? 'Full application and administrative access.' : data.permissions[key]?.map(item => item.replace('.', ' ')).join(' · ')}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="admin-panel integration-panel">
+        <div className="admin-panel-head"><div><span>System connections</span></div><small>Only dependencies that affect live workflows are shown.</small></div>
+        <div className="integration-grid">
+          {Object.entries(data.integrations || {}).map(([key, item]) => (
+            <div key={key}>
+              <span className={item.ready ? 'ready' : 'setup'}>{item.ready ? 'Ready' : 'Setup'}</span>
+              <strong>{item.label}</strong>
+              <p>{item.detail}</p>
             </div>
           ))}
         </div>
