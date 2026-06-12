@@ -53,7 +53,7 @@ export default function CreatorWorkspace({ canWrite = false }) {
   const [social, setSocial] = useState({ platform: 'instagram', handle: '', profile_url: '', followers: '', avg_views: '', engagement_rate: '' });
   const [detailTab, setDetailTab] = useState('profile');
   const [workflow, setWorkflow] = useState({ briefs: [], outreach: [], deliverables: [] });
-  const [briefForm, setBriefForm] = useState({ product: '', objective: '', angle: '', direction: '' });
+  const [briefForm, setBriefForm] = useState({ product: '', objective: '', angle: '', direction: '', strategy_mode: 'past_performers' });
   const [outreach, setOutreach] = useState({ channel: 'email', subject: '', body: '', status: 'draft' });
   const [gmailConnected, setGmailConnected] = useState(() => document.cookie.split('; ').some(cookie => cookie.startsWith('gmail_connected=1')));
   const [deliverable, setDeliverable] = useState({ title: '', due_at: '', source_url: '' });
@@ -199,6 +199,30 @@ export default function CreatorWorkspace({ canWrite = false }) {
       }
       setOutreach({ channel: 'email', subject: '', body: '', status: 'draft' });
       await refreshWorkflow(selected.id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const draftOutreach = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      const response = await fetch('/api/creator-workflow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'generate_outreach',
+          creator_id: selected.id,
+          purpose: outreach.body || 'Introduce HOWL and explore a paid creator partnership',
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not draft outreach');
+      setWorkflow(data.workflow);
+      setOutreach(current => ({ ...current, channel: 'email', subject: data.message.subject || '', body: data.message.body || '' }));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -600,6 +624,10 @@ export default function CreatorWorkspace({ canWrite = false }) {
                     <input required placeholder="Product" value={briefForm.product} onChange={event => setBriefForm({ ...briefForm, product: event.target.value })} />
                     <input placeholder="Objective" value={briefForm.objective} onChange={event => setBriefForm({ ...briefForm, objective: event.target.value })} />
                     <input placeholder="Angle or leave open" value={briefForm.angle} onChange={event => setBriefForm({ ...briefForm, angle: event.target.value })} />
+                    <select value={briefForm.strategy_mode} onChange={event => setBriefForm({ ...briefForm, strategy_mode: event.target.value })}>
+                      <option value="past_performers">Use past performers</option>
+                      <option value="net_new">Build net new</option>
+                    </select>
                     <textarea rows="3" placeholder="Additional direction" value={briefForm.direction} onChange={event => setBriefForm({ ...briefForm, direction: event.target.value })} />
                     <button className="primary-action" disabled={saving}>{saving ? 'Building brief...' : 'Generate brief + script'}</button>
                   </form>
@@ -633,6 +661,7 @@ export default function CreatorWorkspace({ canWrite = false }) {
                     <textarea required rows="5" placeholder="Write the message" value={outreach.body} onChange={event => setOutreach({ ...outreach, body: event.target.value })} />
                     <div className="outreach-actions">
                       <button className="primary-action" disabled={saving}>Save outreach</button>
+                      <button type="button" disabled={saving} onClick={draftOutreach}>Draft with AI</button>
                       {gmailConnected
                         ? <button type="button" disabled={saving || outreach.channel !== 'email'} onClick={sendEmail}>Send with Gmail</button>
                         : <a href="/api/auth/google?purpose=creator_email">Connect Gmail</a>}

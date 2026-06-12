@@ -39,9 +39,24 @@ async function generateBrief(sql, creatorId, input) {
         WHERE creator_id = c.id ORDER BY created_at DESC LIMIT 15
       ) a), '[]'::json) AS recent_activity,
       COALESCE((SELECT json_agg(l) FROM (
-        SELECT ad_name, product_id, angle_id, launched_at FROM launch_history
-        WHERE creator_id = c.id OR lower(creator) = lower(c.name)
-        ORDER BY launched_at DESC LIMIT 15
+        SELECT
+          lh.ad_id, lh.ad_name, lh.product_id, lh.angle_id, lh.launched_at,
+          COALESCE(sum(i.spend), 0) AS spend,
+          COALESCE(sum(i.purchase_value), 0) AS revenue,
+          COALESCE(sum(i.purchases), 0) AS purchases,
+          max(ca.hook_text_verbatim) AS hook,
+          max(ca.hook_type) AS hook_type,
+          max(ca.format) AS format,
+          max(ca.why_it_worked) AS why_it_worked
+        FROM launch_history lh
+        LEFT JOIN creative_insights_daily i ON i.ad_id = lh.ad_id
+          AND i.date >= current_date - interval '180 days'
+        LEFT JOIN creative_performance cp ON cp.ad_id = lh.ad_id
+        LEFT JOIN creative_analysis ca ON ca.group_key = cp.group_key
+        WHERE lh.creator_id = c.id OR lower(lh.creator) = lower(c.name)
+        GROUP BY lh.ad_id, lh.ad_name, lh.product_id, lh.angle_id, lh.launched_at
+        ORDER BY COALESCE(sum(i.purchase_value), 0) DESC, lh.launched_at DESC
+        LIMIT 15
       ) l), '[]'::json) AS past_launches
     FROM creators c WHERE c.id = ${creatorId}
   `;
@@ -59,6 +74,7 @@ Product: ${clean(input.product, 200) || 'Choose the strongest HOWL product fit'}
 Objective: ${clean(input.objective, 1000) || 'Create a direct-response paid social asset'}
 Angle: ${clean(input.angle, 500) || 'Choose an authentic angle based on this creator'}
 Additional direction: ${clean(input.direction, 3000) || 'None'}
+Strategy mode: ${input.strategy_mode === 'net_new' ? 'NET NEW - build a fresh concept from the creator profile and activities' : 'PAST PERFORMERS - preserve proven patterns when useful, without copying'}
 
 The brief must explain the premise, filming environment, hook, proof, product moments, CTA, and exact deliverables.
 The script should sound natural for this creator and be usable as a shot-by-shot production guide.`;
@@ -83,6 +99,43 @@ The script should sound natural for this creator and be usable as a shot-by-shot
   const text = data.content?.filter(block => block.type === 'text').map(block => block.text).join('') || '';
   const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
   return parsed;
+}
+
+async function generateOutreach(sql, creatorId, input) {
+  const [creator] = await sql`
+    SELECT c.*,
+      COALESCE((SELECT json_agg(s) FROM creator_social_accounts s WHERE s.creator_id = c.id), '[]'::json) AS social_accounts,
+      COALESCE((SELECT json_agg(b) FROM (
+        SELECT title, product, objective, angle, status
+        FROM creator_briefs WHERE creator_id = c.id
+        ORDER BY created_at DESC LIMIT 5
+      ) b), '[]'::json) AS recent_briefs
+    FROM creators c WHERE c.id = ${creatorId}
+  `;
+  if (!creator) throw new Error('Creator not found');
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1200,
+      temperature: 0.6,
+      system: `Write concise creator outreach for HOWL Campfires. Be specific, human, and direct. Never invent personal facts. Return only JSON with subject and body.`,
+      messages: [{
+        role: 'user',
+        content: `Creator context:\n${JSON.stringify(creator, null, 2)}\n\nPurpose: ${clean(input.purpose, 1000) || 'Introduce HOWL and explore a paid creator partnership'}\nTone: ${clean(input.tone, 100) || 'warm and direct'}\nInclude a clear, low-friction next step.`,
+      }],
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error?.message || 'Outreach generation failed');
+  const raw = data.content?.filter(block => block.type === 'text').map(block => block.text).join('') || '';
+  return JSON.parse(raw.replace(/```json|```/g, '').trim());
 }
 
 export default async function handler(req, res) {
@@ -119,6 +172,20 @@ export default async function handler(req, res) {
           VALUES (${creatorId}, 'brief_created', ${`Brief created: ${brief.title}`}, ${JSON.stringify({ brief_id: brief.id })}::jsonb, ${access.userId})
         `;
         return res.status(201).json({ brief, workflow: await getWorkflow(sql, creatorId) });
+      }
+
+      if (body.action === 'generate_outreach') {
+        const generated = await generateOutreach(sql, creatorId, body);
+        const [message] = await sql`
+          INSERT INTO creator_outreach (
+            creator_id, channel, direction, subject, body, status, created_by
+          ) VALUES (
+            ${creatorId}, 'email', 'outbound', ${clean(generated.subject, 500)},
+            ${clean(generated.body)}, 'draft', ${access.userId}
+          )
+          RETURNING *
+        `;
+        return res.status(201).json({ message, workflow: await getWorkflow(sql, creatorId) });
       }
 
       if (body.action === 'outreach') {
