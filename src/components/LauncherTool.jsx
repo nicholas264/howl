@@ -96,6 +96,13 @@ const S = {
 };
 
 export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem, onRemoveCartItem }) {
+  const [creators, setCreators] = useState([]);
+  useEffect(() => {
+    fetch('/api/creators')
+      .then(response => response.ok ? response.json() : Promise.reject())
+      .then(data => setCreators(data.creators || []))
+      .catch(() => {});
+  }, []);
   // ── shared settings ────────────────────────────────────────────────────
   const [config, setConfig] = useState(() => ls(LS_CONFIG, {
     pageId: import.meta.env.VITE_META_PAGE_ID || '',
@@ -246,6 +253,10 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   // Single state map keyed by unified item id (drive ids are file ids; cart ids prefixed).
   const [meta, setMeta] = useState({});
   const updateMeta = (id, patch) => setMeta(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  const updateCreator = (id, name) => {
+    const creator = creators.find(item => item.name.toLowerCase() === name.trim().toLowerCase());
+    updateMeta(id, { creator: name, creatorId: creator?.id || null });
+  };
 
   // Seed defaults for new drive files using folder-aware creator extraction.
   useEffect(() => {
@@ -269,7 +280,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         const id = `cart:${c.id}`;
         if (!next[id]) {
           next[id] = {
-            creator: config.defaultCreator || 'Static Builder',
+            creator: c.creator || config.defaultCreator || 'Static Builder',
+            creatorId: c.creatorId || null,
             productId: config.defaultProduct,
             headline: c.hook || '',
             primaryText: c.body || '',
@@ -325,6 +337,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       headline: m.headline?.trim() || '',
       primaryText: m.primaryText?.trim() || '',
       creator: m.creator.trim(),
+      creatorId: m.creatorId || null,
       productId: m.productId || '',
       campaignId: selectedCampaignId,
     };
@@ -411,6 +424,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           pageId: config.pageId,
           instagramUserId: (config.instagramUserId || '').trim() || undefined,
           creator: m.creator || 'Static Builder',
+          creatorId: m.creatorId || null,
+          sourceVideoUrl: item.sourceVideoUrl || null,
         }) });
         const pd = await pr.json();
         if (pd.error) { setStep(id, 'meta_creative', 'error', pd.error); throw new Error(pd.error); }
@@ -455,7 +470,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
 
       // 3. Create ad
       setStep(id, 'meta_ad', 'running');
-      const ar = await fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_ad_from_creative', creativeId: cd.creativeId, adName, adsetId: selectedAdsetId, headline: m.headline, primaryText: m.primaryText || m.headline, destUrl: productUrl, mimeType, creator: m.creator || 'Static Builder' }) });
+      const ar = await fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_ad_from_creative', creativeId: cd.creativeId, adName, adsetId: selectedAdsetId, headline: m.headline, primaryText: m.primaryText || m.headline, destUrl: productUrl, mimeType, creator: m.creator || 'Static Builder', creatorId: m.creatorId || null, sourceVideoUrl: item.sourceVideoUrl || null }) });
       const ad = await ar.json();
       if (ad.error) { setStep(id, 'meta_ad', 'error', ad.error); throw new Error(ad.error); }
       setStep(id, 'meta_ad', 'done', ad.adId);
@@ -708,7 +723,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
               <div style={S.row}>
                 <div>
                   <label style={S.label}>Creator</label>
-                  <input style={S.input} value={m.creator || ''} onChange={e => updateMeta(id, { creator: e.target.value })} placeholder="name" />
+                  <input style={S.input} list="howl-creators" value={m.creator || ''} onChange={e => updateCreator(id, e.target.value)} placeholder="Search creator" />
+                  <datalist id="howl-creators">{creators.map(creator => <option key={creator.id} value={creator.name} />)}</datalist>
                 </div>
                 <div>
                   <label style={S.label}>Product</label>

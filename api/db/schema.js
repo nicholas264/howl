@@ -3,6 +3,8 @@ import { neon } from '@neondatabase/serverless';
 import { requireAdmin } from '../_lib/auth.js';
 import { backfillCreativeAssetsFromLaunchHistory, ensureCreativeAssetTables } from '../_lib/creative-assets.js';
 import { ensureCreativeAnalysisQueue } from '../_lib/creative-analysis-queue.js';
+import { ensureAppTables } from '../_lib/app-access.js';
+import { ensureCreatorOpsTables } from '../_lib/creator-ops.js';
 
 export default async function handler(req, res) {
   if (!(await requireAdmin(req, res))) return;
@@ -256,6 +258,8 @@ export default async function handler(req, res) {
     `;
     await sql`CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at DESC)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)`;
+    await ensureAppTables(sql);
+    await ensureCreatorOpsTables(sql);
 
     return res.json({ ok: true });
   } catch (err) {

@@ -14,7 +14,13 @@ export default async function handler(req, res) {
   // Returns null when the row exists but is owned by someone else, so we
   // surface the same 404 either way and don't leak existence.
   const ownRow = async (id) => {
-    const rows = await sql`SELECT * FROM ugc_sessions WHERE id = ${id} AND user_id = ${userId} LIMIT 1`;
+    const rows = await sql`
+      SELECT u.*, c.name AS creator_name
+      FROM ugc_sessions u
+      LEFT JOIN creators c ON c.id = u.creator_id
+      WHERE u.id = ${id} AND u.user_id = ${userId}
+      LIMIT 1
+    `;
     return rows[0] || null;
   };
 
@@ -28,10 +34,13 @@ export default async function handler(req, res) {
       }
       const limit = Math.min(parseInt(req.query.limit || '50'), 200);
       const rows = await sql`
-        SELECT id, title, file_name, file_size, duration, video_url, thumbnail_url, status, created_at, updated_at
-        FROM ugc_sessions
-        WHERE user_id = ${userId}
-        ORDER BY updated_at DESC
+        SELECT u.id, u.title, u.file_name, u.file_size, u.duration, u.video_url,
+          u.thumbnail_url, u.status, u.creator_id, u.brief_id, u.deliverable_id,
+          u.created_at, u.updated_at, c.name AS creator_name
+        FROM ugc_sessions u
+        LEFT JOIN creators c ON c.id = u.creator_id
+        WHERE u.user_id = ${userId}
+        ORDER BY u.updated_at DESC
         LIMIT ${limit}
       `;
       return res.json({ sessions: rows });
@@ -48,10 +57,13 @@ export default async function handler(req, res) {
         settings,
         thumbnail_url,
         status,
+        creator_id,
+        brief_id,
+        deliverable_id,
       } = req.body || {};
       if (!video_url) return res.status(400).json({ error: 'video_url required' });
       const rows = await sql`
-        INSERT INTO ugc_sessions (user_id, title, file_name, file_size, duration, video_url, words, settings, thumbnail_url, status)
+        INSERT INTO ugc_sessions (user_id, title, file_name, file_size, duration, video_url, words, settings, thumbnail_url, status, creator_id, brief_id, deliverable_id)
         VALUES (
           ${userId},
           ${title || file_name || 'Untitled session'},
@@ -62,7 +74,10 @@ export default async function handler(req, res) {
           ${words ? JSON.stringify(words) : null},
           ${settings ? JSON.stringify(settings) : null},
           ${thumbnail_url || null},
-          ${status || 'uploaded'}
+          ${status || 'uploaded'},
+          ${Number(creator_id) || null},
+          ${Number(brief_id) || null},
+          ${Number(deliverable_id) || null}
         )
         RETURNING *
       `;
@@ -88,8 +103,7 @@ export default async function handler(req, res) {
       if ('thumbnail_url' in set) await sql`UPDATE ugc_sessions SET thumbnail_url = ${set.thumbnail_url}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
       if ('status' in set) await sql`UPDATE ugc_sessions SET status = ${set.status}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
 
-      const rows = await sql`SELECT * FROM ugc_sessions WHERE id = ${id} AND user_id = ${userId} LIMIT 1`;
-      return res.json({ session: rows[0] });
+      return res.json({ session: await ownRow(id) });
     }
 
     if (req.method === 'DELETE') {

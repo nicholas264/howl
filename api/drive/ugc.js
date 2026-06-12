@@ -3,6 +3,7 @@
 // Actions: list, download, mark_launched, ensure_subfolders, launch_meta_ad
 import { neon } from '@neondatabase/serverless';
 import { requireAuth } from '../_lib/auth.js';
+import { getAppAccess, hasPermission } from '../_lib/app-access.js';
 import { getGoogleAccessToken } from '../_lib/gcp-auth.js';
 import { mirrorAssetToBlob } from '../_lib/blob/mirror.js';
 import { ensureCreativeAssetTables, markCreativeAssetLaunched, upsertDriveAsset } from '../_lib/creative-assets.js';
@@ -43,6 +44,7 @@ async function ensureFolder(token, parentId, name) {
 export default async function handler(req, res) {
   const auth = await requireAuth(req, res);
   if (!auth) return;
+  const appAccess = await getAppAccess(auth);
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const rootId = process.env.UGC_INBOX_FOLDER_ID;
@@ -51,6 +53,15 @@ export default async function handler(req, res) {
   try {
     const token = await getAccessToken();
     const { action } = req.body;
+    if (action === 'launch_meta_ad' && !hasPermission(appAccess, 'launch.write')) {
+      return res.status(403).json({ error: 'Forbidden - launch.write required' });
+    }
+    if (['delete', 'mark_launched', 'ensure_subfolders'].includes(action) && !hasPermission(appAccess, 'assets.write')) {
+      return res.status(403).json({ error: 'Forbidden - assets.write required' });
+    }
+    if (['list', 'count', 'download'].includes(action) && !hasPermission(appAccess, 'assets.read')) {
+      return res.status(403).json({ error: 'Forbidden - assets.read required' });
+    }
 
     if (action === 'delete') {
       // Tool-local hide: file stays in Drive, just gets filtered out of `list`.
@@ -281,7 +292,7 @@ export default async function handler(req, res) {
       // End-to-end launch: streams NDJSON progress events so the client can render a live timeline.
       // Events: { step, status: "start"|"done"|"error", detail? }. Final: { done: true, adId, ... } or { done: true, error }.
       // Accepts EITHER a single fileId OR a pair { feedFileId, storyFileId } for placement-asset customization.
-      const { fileId, pair, adsetId, pageId, destUrl, adName, headline, primaryText, creator, productId, angleId, campaignId } = req.body;
+      const { fileId, pair, adsetId, pageId, destUrl, adName, headline, primaryText, creator, creatorId, productId, angleId, campaignId } = req.body;
       const isPair = !!pair && pair.feedFileId && pair.storyFileId;
       // Instagram User ID is required by Meta when the ad targets Instagram
       // placements (Reels, Stories). Allow per-launch override but fall back
@@ -551,9 +562,9 @@ export default async function handler(req, res) {
               const sql = neon(process.env.DATABASE_URL);
               await sql`
                 INSERT INTO launch_history
-                  (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
+                  (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
                 VALUES
-                  (${adData.id}, ${adsetId}, ${campaignId || null}, ${pair.feedFileId}, ${feed.fileMeta.name + ' + ' + story.fileMeta.name}, ${creator || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${feed.mimeType + ' (paired)'}, ${auth.userId}, ${auth.email || null}, ${feed.blobUrl || null})
+                  (${adData.id}, ${adsetId}, ${campaignId || null}, ${pair.feedFileId}, ${feed.fileMeta.name + ' + ' + story.fileMeta.name}, ${creator || null}, ${creatorId || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${feed.mimeType + ' (paired)'}, ${auth.userId}, ${auth.email || null}, ${feed.blobUrl || null})
               `;
               await Promise.all([
                 markCreativeAssetLaunched(sql, {
@@ -561,14 +572,14 @@ export default async function handler(req, res) {
                   metaVideoId: feed.videoId, metaImageHash: feed.imageHash,
                   adId: adData.id, placementRole: 'feed',
                   groupKey: feed.videoId || feed.imageHash,
-                  creator, productId, angleId,
+                  creator, creatorId, productId, angleId,
                 }),
                 markCreativeAssetLaunched(sql, {
                   driveFileId: pair.storyFileId, durableUrl: story.blobUrl,
                   metaVideoId: story.videoId, metaImageHash: story.imageHash,
                   adId: adData.id, placementRole: 'story',
                   groupKey: story.videoId || story.imageHash,
-                  creator, productId, angleId,
+                  creator, creatorId, productId, angleId,
                 }),
               ]);
               emit({ step: 'db_log', status: 'done' });
@@ -786,9 +797,9 @@ export default async function handler(req, res) {
           const sql = neon(process.env.DATABASE_URL);
           await sql`
             INSERT INTO launch_history
-              (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
+              (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
             VALUES
-              (${adData.id}, ${adsetId}, ${campaignId || null}, ${fileId}, ${fileMeta.name}, ${creator || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${mimeType}, ${auth.userId}, ${auth.email || null}, ${sourceVideoUrl})
+              (${adData.id}, ${adsetId}, ${campaignId || null}, ${fileId}, ${fileMeta.name}, ${creator || null}, ${creatorId || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${mimeType}, ${auth.userId}, ${auth.email || null}, ${sourceVideoUrl})
           `;
           await markCreativeAssetLaunched(sql, {
             driveFileId: fileId,
@@ -799,6 +810,7 @@ export default async function handler(req, res) {
             placementRole: 'single',
             groupKey: videoId || imageHash,
             creator,
+            creatorId,
             productId,
             angleId,
           });

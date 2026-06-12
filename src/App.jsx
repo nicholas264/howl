@@ -21,6 +21,9 @@ const UgcEditorTool = lazy(() => import("./components/UgcEditorTool"));
 const GalleryTab = lazy(() => import("./components/GalleryTab"));
 const FromWinnersTool = lazy(() => import("./components/FromWinnersTool"));
 const LauncherTool = lazy(() => import("./components/LauncherTool"));
+const CreatorWorkspace = lazy(() => import("./components/CreatorWorkspace"));
+const AdminWorkspace = lazy(() => import("./components/AdminWorkspace"));
+const WorkspaceHub = lazy(() => import("./components/WorkspaceHub"));
 import { useDriveAuth } from "./hooks/useDriveAuth";
 import { cartGetAll, cartPut, cartDelete } from "./utils/cartDb";
 import "./styles.css";
@@ -51,6 +54,22 @@ export default function HowlAdEngine() {
     try { return JSON.parse(localStorage.getItem('howl_favorites') || '[]'); }
     catch { return []; }
   });
+  const [appAccess, setAppAccess] = useState({ role: 'viewer', permissions: [] });
+
+  useEffect(() => {
+    fetch('/api/app-context')
+      .then(response => response.ok ? response.json() : Promise.reject(new Error('access unavailable')))
+      .then(setAppAccess)
+      .catch(() => {
+        if (import.meta.env.DEV && import.meta.env.VITE_AUTH_DISABLED === 'true') {
+          setAppAccess({ role: 'owner', permissions: ['*'] });
+        }
+      });
+  }, []);
+
+  const can = useCallback((permission) => (
+    appAccess.permissions?.includes('*') || appAccess.permissions?.includes(permission)
+  ), [appAccess.permissions]);
 
   // ── Cart state (IndexedDB-backed) ─────────────────────────────────────────
   const [cart, setCart] = useState([]);
@@ -189,33 +208,13 @@ export default function HowlAdEngine() {
   }, [activeTab, refreshUgcCount]);
 
   const NAV = [
-    { group: 'Home', items: [
-      { key: 'welcome', label: 'Campfire' },
-    ]},
-    { group: 'Generate', items: [
-      { key: 'config', label: 'Configure' },
-      { key: 'from-winners', label: 'From Winners' },
-      { key: 'results', label: 'Results', disabled: variations.length === 0, count: variations.length || null },
-    ]},
-    { group: 'Create', items: [
-      { key: 'image', label: 'Image Ads' },
-      { key: 'callout', label: 'Callout Ads' },
-      { key: 'review', label: 'Review Ads' },
-      { key: 'video', label: 'Video Ads' },
-      { key: 'founder', label: 'Founder Ads' },
-      { key: 'ugc-editor', label: 'UGC Editor' },
-    ]},
-    { group: 'Launch', items: [
-      { key: 'launcher', label: 'Launcher', count: (ugcCount + cartCount) || null },
-      { key: 'gallery', label: 'Gallery', count: cartCount || null },
-    ]},
-    { group: 'Insights', items: [
-      { key: 'creative-analytics', label: 'Creative Analytics' },
-      { key: 'dashboard-cfo', label: 'Dashboard', matchPrefix: 'dashboard-' },
-      { key: 'inventory', label: 'Inventory' },
-      { key: 'log', label: 'Launch Log' },
-    ]},
-  ];
+    { key: 'welcome', label: 'Home' },
+    { key: 'creators', label: 'Creators', hidden: !can('creators.read') },
+    { key: 'creative', label: 'Creative', hidden: !can('briefs.read') && !can('assets.read'), match: ['creative', 'config', 'from-winners', 'results', 'image', 'callout', 'review', 'video', 'founder', 'ugc-editor'] },
+    { key: 'launcher', label: 'Launch', hidden: !can('launch.read'), count: (ugcCount + cartCount) || null, match: ['launcher', 'gallery', 'publish'] },
+    { key: 'performance', label: 'Performance', hidden: !can('analytics.read'), matchPrefix: 'dashboard-', match: ['performance', 'creative-analytics', 'inventory', 'log'] },
+    { key: 'admin', label: 'Admin', hidden: !can('admin.users') },
+  ].filter(item => !item.hidden);
 
   return (
     <div style={{ minHeight: "100vh", background: "#0d1117", color: "#f0f4f8", fontFamily: "'JetBrains Mono', 'SF Mono', monospace" }}>
@@ -226,27 +225,18 @@ export default function HowlAdEngine() {
             <div className="sidebar-sub">The Campfire</div>
           </div>
           <nav className="side-nav">
-            {NAV.map(group => (
-              <React.Fragment key={group.group}>
-                <div className="sidebar-section">{group.group}</div>
-                {group.items.map((item, idx) => {
-                  const isActive = item.matchPrefix
-                    ? activeTab.startsWith(item.matchPrefix)
-                    : activeTab === item.key;
-                  return (
-                    <button
-                      key={`${item.key}-${idx}`}
-                      className={`side-item ${isActive ? 'on' : ''}`}
-                      onClick={() => setActiveTab(item.key)}
-                      disabled={item.disabled}
-                    >
-                      <span>{item.label}</span>
-                      {item.count ? <span className="count">{item.count > 99 ? '99+' : item.count}</span> : null}
-                    </button>
-                  );
-                })}
-              </React.Fragment>
-            ))}
+            <div className="sidebar-section">Workspace</div>
+            {NAV.map(item => {
+              const isActive = item.matchPrefix && activeTab.startsWith(item.matchPrefix)
+                || item.match?.includes(activeTab)
+                || activeTab === item.key;
+              return (
+                <button key={item.key} className={`side-item ${isActive ? 'on' : ''}`} onClick={() => setActiveTab(item.key)}>
+                  <span>{item.label}</span>
+                  {item.count ? <span className="count">{item.count > 99 ? '99+' : item.count}</span> : null}
+                </button>
+              );
+            })}
           </nav>
           <div className="sidebar-foot">
             <UserButton
@@ -256,7 +246,7 @@ export default function HowlAdEngine() {
                 elements: { userButtonAvatarBox: { width: 26, height: 26 } },
               }}
             />
-            <span className="acct-lbl">Account</span>
+            <span className="acct-lbl">{appAccess.role || 'Account'}</span>
           </div>
         </aside>
 
@@ -287,6 +277,10 @@ export default function HowlAdEngine() {
       )}
 
       <Suspense fallback={<TabFallback />}>
+        {activeTab === "creators" && <CreatorWorkspace canWrite={can('creators.write')} />}
+        {activeTab === "creative" && <WorkspaceHub type="creative" setActiveTab={setActiveTab} />}
+        {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={setActiveTab} />}
+        {activeTab === "admin" && can('admin.users') && <AdminWorkspace />}
         {activeTab === "from-winners" && <FromWinnersTool setActiveTab={setActiveTab} setVariations={setVariations} />}
         {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} driveAuth={driveAuth} onAddToCart={addToCart} />}
         {activeTab === "callout" && <CalloutAdTool onAddToCart={addToCart} />}

@@ -315,7 +315,15 @@ export default function UgcEditorTool({ onAddToCart }) {
         type: 'video',
         kind: 'ugc-edit',
         dataUrl: reader.result,
-        name: `UGC edit ${new Date().toLocaleString()}`,
+        videoUrl: reader.result,
+        name: activeSession?.creator_name
+          ? `${activeSession.creator_name} UGC edit`
+          : `UGC edit ${new Date().toLocaleString()}`,
+        creator: activeSession?.creator_name || null,
+        creatorId: activeSession?.creator_id || null,
+        briefId: activeSession?.brief_id || null,
+        deliverableId: activeSession?.deliverable_id || null,
+        sourceVideoUrl: activeSession?.video_url || null,
         createdAt: Date.now(),
       });
     };
@@ -353,6 +361,7 @@ export default function UgcEditorTool({ onAddToCart }) {
             >
               <div style={{ fontSize: 12, color: '#f0f4f8', fontWeight: 600, wordBreak: 'break-all' }}>
                 {s.title || s.file_name || `Session ${s.id}`}
+                {s.creator_name && <span style={{ display: 'block', color: '#DC440A', fontSize: 8, marginTop: 3 }}>{s.creator_name}</span>}
               </div>
               <div style={{ fontSize: 10, color: '#8b949e', marginTop: 4 }}>
                 {s.file_size ? `${(s.file_size / 1024 / 1024).toFixed(1)} MB · ` : ''}

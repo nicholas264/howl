@@ -10,9 +10,9 @@ async function logLaunch(row) {
     const sql = neon(process.env.DATABASE_URL);
     await sql`
       INSERT INTO launch_history
-        (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
+        (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
       VALUES
-        (${row.ad_id}, ${row.adset_id || null}, ${row.campaign_id || null}, ${row.drive_file_id || null}, ${row.drive_file_name || null}, ${row.creator || null}, ${row.product_id || null}, ${row.angle_id || null}, ${row.ad_name || null}, ${row.headline || null}, ${row.primary_text || null}, ${row.dest_url || null}, ${row.mime_type || null}, ${row.launched_by_user_id || null}, ${row.launched_by_email || null}, ${row.source_video_url || null})
+        (${row.ad_id}, ${row.adset_id || null}, ${row.campaign_id || null}, ${row.drive_file_id || null}, ${row.drive_file_name || null}, ${row.creator || null}, ${row.creator_id || null}, ${row.product_id || null}, ${row.angle_id || null}, ${row.ad_name || null}, ${row.headline || null}, ${row.primary_text || null}, ${row.dest_url || null}, ${row.mime_type || null}, ${row.launched_by_user_id || null}, ${row.launched_by_email || null}, ${row.source_video_url || null})
     `;
   } catch (err) {
     console.error('launch_history insert failed:', err.message);
@@ -79,6 +79,7 @@ export const config = {
 };
 
 import { requireAuth } from './_lib/auth.js';
+import { getAppAccess, hasPermission } from './_lib/app-access.js';
 import {
   analyzeCreativeGroup,
   dismissAnalyzedWinner,
@@ -92,6 +93,7 @@ import {
 export default async function handler(req, res) {
   const auth = await requireAuth(req, res);
   if (!auth) return;
+  const appAccess = await getAppAccess(auth);
   const actor = { launched_by_user_id: auth.userId, launched_by_email: auth.email };
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -108,6 +110,20 @@ export default async function handler(req, res) {
 
   const BASE = 'https://graph.facebook.com/v21.0';
   const { action } = req.body;
+  const launchActions = new Set([
+    'create_campaign', 'create_adset', 'create_creative', 'create_ad_from_creative',
+    'create_paired_image_ad', 'push_ad', 'push_carousel', 'upload_image', 'upload_video',
+    'create_creative_test',
+  ]);
+  if (launchActions.has(action) && !hasPermission(appAccess, 'launch.write')) {
+    return res.status(403).json({ error: 'Forbidden - launch.write required' });
+  }
+  if (!launchActions.has(action)
+      && !hasPermission(appAccess, 'analytics.read')
+      && !hasPermission(appAccess, 'launch.read')
+      && !hasPermission(appAccess, 'briefs.write')) {
+    return res.status(403).json({ error: 'Forbidden - analytics access required' });
+  }
 
   try {
     switch (action) {
@@ -495,6 +511,7 @@ export default async function handler(req, res) {
           dest_url: destUrl,
           mime_type: mimeType || 'image',
           creator: req.body.creator || 'Static Builder',
+          creator_id: req.body.creatorId || null,
           source_video_url: req.body.sourceVideoUrl || null,
           ...actor,
         });
@@ -577,6 +594,8 @@ export default async function handler(req, res) {
           dest_url: destUrl,
           mime_type: 'image (paired)',
           creator: req.body.creator || 'Static Builder',
+          creator_id: req.body.creatorId || null,
+          source_video_url: req.body.sourceVideoUrl || null,
           ...actor,
         });
 
@@ -666,6 +685,7 @@ export default async function handler(req, res) {
           dest_url: destUrl,
           mime_type: preUploadedVideoId ? 'video/mp4' : 'image',
           creator: req.body.creator || 'Static Builder',
+          creator_id: req.body.creatorId || null,
           source_video_url: req.body.sourceVideoUrl || null,
           ...actor,
         });
@@ -746,6 +766,7 @@ export default async function handler(req, res) {
           dest_url: destUrl,
           mime_type: 'carousel',
           creator: req.body.creator || 'Static Builder',
+          creator_id: req.body.creatorId || null,
           ...actor,
         });
 
@@ -950,6 +971,7 @@ export default async function handler(req, res) {
             product_id: item.product || null,
             mime_type: item.type || 'static',
             creator: item.creator || req.body.creator || 'Static Builder',
+            creator_id: item.creatorId || req.body.creatorId || null,
             source_video_url: item.sourceVideoUrl || null,
             ...actor,
           });

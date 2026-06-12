@@ -117,6 +117,7 @@ export async function markCreativeAssetLaunched(sql, {
   placementRole,
   groupKey,
   creator,
+  creatorId,
   productId,
   angleId,
 }) {
@@ -130,6 +131,7 @@ export async function markCreativeAssetLaunched(sql, {
       placement_role = COALESCE(${placementRole || null}, placement_role),
       group_key = COALESCE(${groupKey || metaVideoId || metaImageHash || null}, group_key),
       creator = COALESCE(${creator || null}, creator),
+      creator_id = COALESCE(${creatorId || null}, creator_id),
       product_id = COALESCE(${productId || null}, product_id),
       angle_id = COALESCE(${angleId || null}, angle_id),
       updated_at = now()
