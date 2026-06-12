@@ -311,7 +311,7 @@ export default function HowlAdEngine() {
         )}
         {activeTab === "creative" && <WorkspaceHub type="creative" setActiveTab={setActiveTab} can={can} />}
         {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={setActiveTab} can={can} />}
-        {activeTab === "admin" && can('admin.users') && <AdminWorkspace />}
+        {activeTab === "admin" && can('admin.users') && <AdminWorkspace onOpenEditor={openEditorSession} />}
         {activeTab === "from-winners" && <FromWinnersTool setActiveTab={setActiveTab} setVariations={setVariations} />}
         {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} driveAuth={driveAuth} onAddToCart={addToCart} />}
         {activeTab === "callout" && <CalloutAdTool onAddToCart={addToCart} />}

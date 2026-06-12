@@ -9,16 +9,16 @@
 //   5. Send the audio to OpenAI Whisper with word-level timestamps
 //   6. Persist `words` + `duration` on the session, return them to the client
 import { spawn } from 'node:child_process';
-import { createWriteStream, createReadStream, statSync, unlinkSync, existsSync } from 'node:fs';
+import { createReadStream, statSync, unlinkSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
 import { put } from '@vercel/blob';
-import { neon } from '@neondatabase/serverless';
 
 import { requirePermission } from './_lib/app-access.js';
+import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 
 // ffmpeg-static exports the absolute path to a prebuilt static binary
 import ffmpegPath from 'ffmpeg-static';
@@ -31,21 +31,45 @@ export const config = {
 const WHISPER_MAX_BYTES = 25 * 1024 * 1024;
 
 export default async function handler(req, res) {
-  if (!(await requirePermission(req, res, 'assets.write'))) return;
+  const access = await requirePermission(req, res, 'assets.write');
+  if (!access) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   if (!process.env.OPENAI_API_KEY) {
     return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
   }
 
-  const { videoUrl, sessionId } = req.body || {};
-  if (!videoUrl) return res.status(400).json({ error: 'videoUrl required' });
+  const sessionId = Number(req.body?.sessionId);
+  if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
+  const { sql } = access;
+  await ensureCreatorOpsTables(sql);
+  const [session] = await sql`
+    SELECT id, video_url
+    FROM ugc_sessions
+    WHERE id = ${sessionId}
+    LIMIT 1
+  `;
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  let sourceUrl;
+  try {
+    sourceUrl = new URL(session.video_url);
+  } catch {
+    return res.status(400).json({ error: 'Session source URL is invalid' });
+  }
+  if (sourceUrl.protocol !== 'https:' || !sourceUrl.hostname.endsWith('.blob.vercel-storage.com')) {
+    return res.status(400).json({ error: 'Session source must be stored in HOWL Vercel Blob' });
+  }
 
   const audioPath = join(tmpdir(), `audio_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`);
 
   try {
+    await sql`
+      UPDATE ugc_sessions
+      SET status = 'transcribing', last_error = NULL, updated_at = now()
+      WHERE id = ${sessionId}
+    `;
     // 1. Stream the source video into ffmpeg via stdin, write audio to /tmp
-    const videoRes = await fetch(videoUrl);
+    const videoRes = await fetch(sourceUrl);
     if (!videoRes.ok || !videoRes.body) {
       throw new Error(`Failed to fetch source video: ${videoRes.status}`);
     }
@@ -86,14 +110,18 @@ export default async function handler(req, res) {
       contentType: 'audio/mpeg',
       addRandomSuffix: true,
     });
+    await sql`
+      UPDATE ugc_sessions
+      SET audio_url = ${audioBlob.url}, updated_at = now()
+      WHERE id = ${sessionId}
+    `;
 
     // 3. Hand the audio to Whisper. Whisper has a 25 MB cap; if we exceed it,
     //    surface a clear error rather than silently truncating.
     if (audioStat.size > WHISPER_MAX_BYTES) {
-      return res.status(413).json({
-        error: `Audio is ${(audioStat.size / 1024 / 1024).toFixed(1)} MB which exceeds Whisper's 25 MB cap. Source video is too long — chunked transcription not yet wired.`,
-        audioUrl: audioBlob.url,
-      });
+      const error = new Error(`Audio is ${(audioStat.size / 1024 / 1024).toFixed(1)} MB which exceeds Whisper's 25 MB cap`);
+      error.statusCode = 413;
+      throw error;
     }
 
     const audioBuf = await new Promise((resolve, reject) => {
@@ -118,7 +146,9 @@ export default async function handler(req, res) {
     });
     const whisperData = await whisperRes.json();
     if (!whisperRes.ok) {
-      return res.status(whisperRes.status).json({ error: whisperData.error?.message || 'Whisper failed', detail: whisperData });
+      const error = new Error(whisperData.error?.message || 'Whisper failed');
+      error.statusCode = whisperRes.status;
+      throw error;
     }
 
     const words = attachPunctuation(
@@ -127,28 +157,27 @@ export default async function handler(req, res) {
     );
     const duration = whisperData.duration || (words.length ? words[words.length - 1].end : 0);
 
-    // 4. Persist on session row if one was provided
-    if (sessionId) {
-      try {
-        const sql = neon(process.env.DATABASE_URL);
-        await sql`
-          UPDATE ugc_sessions
-          SET words = ${JSON.stringify(words)},
-              duration = ${duration},
-              audio_url = ${audioBlob.url},
-              status = 'transcribed',
-              updated_at = now()
-          WHERE id = ${sessionId}
-        `;
-      } catch (err) {
-        console.error('failed to persist transcript on session', err);
-      }
-    }
+    await sql`
+      UPDATE ugc_sessions
+      SET words = ${JSON.stringify(words)},
+          duration = ${duration},
+          audio_url = ${audioBlob.url},
+          status = 'transcribed',
+          last_error = NULL,
+          updated_at = now()
+      WHERE id = ${sessionId}
+    `;
 
     return res.json({ words, duration, audioUrl: audioBlob.url });
   } catch (err) {
     console.error('transcribe-url error', err);
-    return res.status(500).json({ error: err.message || 'Transcription failed' });
+    const message = (err.message || 'Transcription failed').slice(0, 2000);
+    await sql`
+      UPDATE ugc_sessions
+      SET status = 'transcription_error', last_error = ${message}, updated_at = now()
+      WHERE id = ${sessionId}
+    `.catch(() => {});
+    return res.status(err.statusCode || 500).json({ error: message });
   } finally {
     if (existsSync(audioPath)) {
       try { unlinkSync(audioPath); } catch { /* noop */ }

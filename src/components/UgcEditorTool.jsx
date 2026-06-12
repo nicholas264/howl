@@ -152,7 +152,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       const r = await fetch('/api/transcribe-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoUrl: activeSession.video_url, sessionId: activeSession.id }),
+        body: JSON.stringify({ sessionId: activeSession.id }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || 'Transcription failed');
@@ -191,6 +191,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       setDuration(parseFloat(sess.duration) || 0);
       setSettings({ ...DEFAULT_SETTINGS, ...(sess.settings || {}) });
       setOutputUrl(sess.rendered_url || null);
+      setError(sess.last_error || '');
       setStage(sess.rendered_url ? 'done' : (sess.words?.length ? 'ready' : 'uploaded'));
       dirtyRef.current = false;
     } catch (err) {

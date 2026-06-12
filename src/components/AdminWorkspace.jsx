@@ -15,8 +15,12 @@ const DEFAULT_PERMISSIONS = {
   viewer: ['creators read', 'briefs read', 'assets read', 'launch read', 'analytics read'],
 };
 
-export default function AdminWorkspace() {
-  const [data, setData] = useState({ users: [], invitations: [], feedback: [], audit_log: [], roles: DEFAULT_ROLES, permissions: DEFAULT_PERMISSIONS, integrations: {} });
+export default function AdminWorkspace({ onOpenEditor }) {
+  const [data, setData] = useState({
+    users: [], invitations: [], feedback: [], audit_log: [],
+    roles: DEFAULT_ROLES, permissions: DEFAULT_PERMISSIONS, integrations: {},
+    health: { creative_analysis: {}, ugc: {}, overdue_deliverables: 0, ugc_failures: [] },
+  });
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('viewer');
   const [loading, setLoading] = useState(true);
@@ -215,6 +219,40 @@ export default function AdminWorkspace() {
           ))}
           {!loading && !data.audit_log.length && <div className="workflow-empty">No administrative changes recorded yet.</div>}
         </div>
+      </section>
+
+      <section className="admin-panel admin-health-panel">
+        <div className="admin-panel-head">
+          <div><span>Workflow health</span></div>
+          <small>Persisted failures and stalled work that need attention.</small>
+        </div>
+        <div className="admin-health-grid">
+          <div className={data.health.creative_analysis.failed ? 'attention' : ''}>
+            <span>Creative analysis</span>
+            <strong>{data.health.creative_analysis.failed || 0} failed</strong>
+            <small>{data.health.creative_analysis.pending || 0} waiting · {data.health.creative_analysis.processing || 0} running</small>
+          </div>
+          <div className={(data.health.ugc.failed || data.health.ugc.stale) ? 'attention' : ''}>
+            <span>UGC processing</span>
+            <strong>{data.health.ugc.failed || 0} failed</strong>
+            <small>{data.health.ugc.processing || 0} running · {data.health.ugc.stale || 0} stalled</small>
+          </div>
+          <div className={data.health.overdue_deliverables ? 'attention' : ''}>
+            <span>Deliverables</span>
+            <strong>{data.health.overdue_deliverables || 0} overdue</strong>
+            <small>Open creator work past its due date</small>
+          </div>
+        </div>
+        {!!data.health.ugc_failures.length && (
+          <div className="admin-health-failures">
+            {data.health.ugc_failures.map(item => (
+              <button key={item.id} onClick={() => onOpenEditor?.(item.id)}>
+                <span><strong>{item.title || `UGC session ${item.id}`}</strong><small>{item.creator_name || item.created_by_email || 'Unassigned creator'}</small></span>
+                <i>{item.status.replace('_', ' ')}</i>
+              </button>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="admin-panel integration-panel">

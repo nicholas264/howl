@@ -1,5 +1,7 @@
 import { createClerkClient } from '@clerk/backend';
 import { ensureAppTables, isValidRole, ROLE_LABELS, ROLE_PERMISSIONS, requirePermission } from './_lib/app-access.js';
+import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+import { ensureCreativeAnalysisQueue } from './_lib/creative-analysis-queue.js';
 
 function cleanEmail(value) {
   const email = (value || '').toString().trim().toLowerCase();
@@ -22,6 +24,10 @@ export default async function handler(req, res) {
     await ensureAppTables(sql);
 
     if (req.method === 'GET') {
+      await Promise.all([
+        ensureCreatorOpsTables(sql),
+        ensureCreativeAnalysisQueue(sql),
+      ]);
       const users = await sql`
         SELECT user_id, email, display_name, role, status, last_seen_at, created_at, updated_at
         FROM app_users
@@ -47,11 +53,56 @@ export default async function handler(req, res) {
         ORDER BY created_at DESC
         LIMIT 50
       `;
+      const [creativeHealth] = await sql`
+        SELECT
+          count(*) FILTER (WHERE status = 'pending')::int AS pending,
+          count(*) FILTER (WHERE status = 'processing')::int AS processing,
+          count(*) FILTER (WHERE status = 'failed')::int AS failed,
+          max(completed_at) FILTER (WHERE status = 'completed') AS last_completed_at
+        FROM creative_analysis_queue
+      `;
+      const [ugcHealth] = await sql`
+        SELECT
+          count(*) FILTER (WHERE status IN ('transcription_error', 'render_error'))::int AS failed,
+          count(*) FILTER (
+            WHERE status IN ('transcribing', 'rendering')
+              AND updated_at < now() - interval '15 minutes'
+          )::int AS stale,
+          count(*) FILTER (WHERE status IN ('transcribing', 'rendering'))::int AS processing
+        FROM ugc_sessions
+      `;
+      const ugcFailures = await sql`
+        SELECT
+          u.id, u.title, u.status, u.last_error, u.updated_at,
+          c.name AS creator_name, a.email AS created_by_email
+        FROM ugc_sessions u
+        LEFT JOIN creators c ON c.id = u.creator_id
+        LEFT JOIN app_users a ON a.user_id = u.user_id
+        WHERE u.status IN ('transcription_error', 'render_error')
+           OR (
+             u.status IN ('transcribing', 'rendering')
+             AND u.updated_at < now() - interval '15 minutes'
+           )
+        ORDER BY u.updated_at DESC
+        LIMIT 10
+      `;
+      const [deliverableHealth] = await sql`
+        SELECT count(*)::int AS overdue
+        FROM creator_deliverables
+        WHERE due_at < now()
+          AND status NOT IN ('launched', 'complete', 'cancelled')
+      `;
       return res.json({
         users,
         invitations,
         feedback,
         audit_log: auditLog,
+        health: {
+          creative_analysis: creativeHealth,
+          ugc: ugcHealth,
+          overdue_deliverables: Number(deliverableHealth?.overdue || 0),
+          ugc_failures: ugcFailures,
+        },
         roles: ROLE_LABELS,
         permissions: ROLE_PERMISSIONS,
         integrations: {

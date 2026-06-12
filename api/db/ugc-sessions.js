@@ -8,17 +8,12 @@ export default async function handler(req, res) {
   const auth = await requirePermission(req, res, req.method === 'GET' ? 'assets.read' : 'assets.write');
   if (!auth) return;
   const sql = neon(process.env.DATABASE_URL);
-  const userId = auth.userId;
-
-  // Returns the session row only if it belongs to the authenticated user.
-  // Returns null when the row exists but is owned by someone else, so we
-  // surface the same 404 either way and don't leak existence.
   const ownRow = async (id) => {
     const rows = await sql`
       SELECT u.*, c.name AS creator_name
       FROM ugc_sessions u
       LEFT JOIN creators c ON c.id = u.creator_id
-      WHERE u.id = ${id} AND u.user_id = ${userId}
+      WHERE u.id = ${id}
       LIMIT 1
     `;
     return rows[0] || null;
@@ -35,11 +30,10 @@ export default async function handler(req, res) {
       const limit = Math.min(parseInt(req.query.limit || '50'), 200);
       const rows = await sql`
         SELECT u.id, u.title, u.file_name, u.file_size, u.duration, u.video_url,
-          u.thumbnail_url, u.status, u.creator_id, u.brief_id, u.deliverable_id, u.rendered_url,
+          u.thumbnail_url, u.status, u.last_error, u.creator_id, u.brief_id, u.deliverable_id, u.rendered_url,
           u.created_at, u.updated_at, c.name AS creator_name
         FROM ugc_sessions u
         LEFT JOIN creators c ON c.id = u.creator_id
-        WHERE u.user_id = ${userId}
         ORDER BY u.updated_at DESC
         LIMIT ${limit}
       `;
@@ -65,7 +59,7 @@ export default async function handler(req, res) {
       const rows = await sql`
         INSERT INTO ugc_sessions (user_id, title, file_name, file_size, duration, video_url, words, settings, thumbnail_url, status, creator_id, brief_id, deliverable_id)
         VALUES (
-          ${userId},
+          ${auth.userId},
           ${title || file_name || 'Untitled session'},
           ${file_name || null},
           ${file_size || null},
@@ -95,13 +89,13 @@ export default async function handler(req, res) {
       for (const k of allowed) if (k in fields) set[k] = fields[k];
       if (!Object.keys(set).length) return res.status(400).json({ error: 'no fields to update' });
 
-      if ('title' in set) await sql`UPDATE ugc_sessions SET title = ${set.title}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
-      if ('duration' in set) await sql`UPDATE ugc_sessions SET duration = ${set.duration}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
-      if ('words' in set) await sql`UPDATE ugc_sessions SET words = ${JSON.stringify(set.words)}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
-      if ('settings' in set) await sql`UPDATE ugc_sessions SET settings = ${JSON.stringify(set.settings)}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
-      if ('audio_url' in set) await sql`UPDATE ugc_sessions SET audio_url = ${set.audio_url}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
-      if ('thumbnail_url' in set) await sql`UPDATE ugc_sessions SET thumbnail_url = ${set.thumbnail_url}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
-      if ('status' in set) await sql`UPDATE ugc_sessions SET status = ${set.status}, updated_at = now() WHERE id = ${id} AND user_id = ${userId}`;
+      if ('title' in set) await sql`UPDATE ugc_sessions SET title = ${set.title}, updated_at = now() WHERE id = ${id}`;
+      if ('duration' in set) await sql`UPDATE ugc_sessions SET duration = ${set.duration}, updated_at = now() WHERE id = ${id}`;
+      if ('words' in set) await sql`UPDATE ugc_sessions SET words = ${JSON.stringify(set.words)}, updated_at = now() WHERE id = ${id}`;
+      if ('settings' in set) await sql`UPDATE ugc_sessions SET settings = ${JSON.stringify(set.settings)}, updated_at = now() WHERE id = ${id}`;
+      if ('audio_url' in set) await sql`UPDATE ugc_sessions SET audio_url = ${set.audio_url}, updated_at = now() WHERE id = ${id}`;
+      if ('thumbnail_url' in set) await sql`UPDATE ugc_sessions SET thumbnail_url = ${set.thumbnail_url}, updated_at = now() WHERE id = ${id}`;
+      if ('status' in set) await sql`UPDATE ugc_sessions SET status = ${set.status}, updated_at = now() WHERE id = ${id}`;
 
       return res.json({ session: await ownRow(id) });
     }
@@ -115,7 +109,7 @@ export default async function handler(req, res) {
       for (const url of urls) {
         try { await del(url); } catch (err) { console.error('blob del failed', url, err); }
       }
-      await sql`DELETE FROM ugc_sessions WHERE id = ${id} AND user_id = ${userId}`;
+      await sql`DELETE FROM ugc_sessions WHERE id = ${id}`;
       return res.json({ ok: true });
     }
 

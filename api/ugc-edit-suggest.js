@@ -27,7 +27,7 @@ export default async function handler(req, res) {
     const [session] = await sql`
       SELECT id, words
       FROM ugc_sessions
-      WHERE id = ${sessionId} AND user_id = ${access.userId}
+      WHERE id = ${sessionId}
       LIMIT 1
     `;
     if (!session) return res.status(404).json({ error: 'Session not found' });

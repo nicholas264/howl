@@ -52,12 +52,17 @@ export default async function handler(req, res) {
   const [session] = await sql`
     SELECT *
     FROM ugc_sessions
-    WHERE id = ${sessionId} AND user_id = ${access.userId}
+    WHERE id = ${sessionId}
     LIMIT 1
   `;
   if (!session) return res.status(404).json({ error: 'Session not found' });
   let sourceUrl;
   try {
+    await sql`
+      UPDATE ugc_sessions
+      SET status = 'rendering', last_error = NULL, updated_at = now()
+      WHERE id = ${sessionId}
+    `;
     sourceUrl = new URL(session.video_url);
   } catch {
     return res.status(400).json({ error: 'Session source URL is invalid' });
@@ -113,8 +118,8 @@ export default async function handler(req, res) {
     });
     await sql`
       UPDATE ugc_sessions
-      SET rendered_url = ${blob.url}, status = 'rendered', updated_at = now()
-      WHERE id = ${sessionId} AND user_id = ${access.userId}
+      SET rendered_url = ${blob.url}, status = 'rendered', last_error = NULL, updated_at = now()
+      WHERE id = ${sessionId}
     `;
     if (session.deliverable_id) {
       await sql`
@@ -138,8 +143,8 @@ export default async function handler(req, res) {
   } catch (err) {
     await sql`
       UPDATE ugc_sessions
-      SET status = 'render_error', updated_at = now()
-      WHERE id = ${sessionId} AND user_id = ${access.userId}
+      SET status = 'render_error', last_error = ${(err.message || 'Render failed').slice(0, 2000)}, updated_at = now()
+      WHERE id = ${sessionId}
     `.catch(() => {});
     return res.status(500).json({ error: err.message || 'Render failed' });
   } finally {
