@@ -1,6 +1,7 @@
 // One-shot endpoint to ensure schema exists. Idempotent — safe to call repeatedly.
 import { neon } from '@neondatabase/serverless';
 import { requireAdmin } from '../_lib/auth.js';
+import { backfillCreativeAssetsFromLaunchHistory, ensureCreativeAssetTables } from '../_lib/creative-assets.js';
 
 export default async function handler(req, res) {
   if (!(await requireAdmin(req, res))) return;
@@ -225,6 +226,11 @@ export default async function handler(req, res) {
       )
     `;
     await sql`CREATE INDEX IF NOT EXISTS idx_creative_analysis_generated_at ON creative_analysis(generated_at DESC)`;
+    await ensureCreativeAssetTables(sql);
+    await backfillCreativeAssetsFromLaunchHistory(sql);
+    await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS source_asset_id BIGINT`;
+    await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS vision_frame_count INTEGER`;
+    await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS transcription_status TEXT`;
 
     // Attribution columns on launch_history (idempotent).
     await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS launched_by_user_id TEXT`;

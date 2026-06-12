@@ -1,4 +1,5 @@
 import { mirrorVideoToBlob } from './_lib/blob/mirror.js';
+import { backfillCreativeAssetsFromLaunchHistory, ensureCreativeAssetTables } from './_lib/creative-assets.js';
 
 // Best-effort launch logger — swallows errors so a DB outage doesn't break Meta publishes.
 async function logLaunch(row) {
@@ -1022,6 +1023,8 @@ export default async function handler(req, res) {
         const force = !!req.body.force;
         const { neon } = await import('@neondatabase/serverless');
         const sql = neon(process.env.DATABASE_URL);
+        await ensureCreativeAssetTables(sql);
+        await backfillCreativeAssetsFromLaunchHistory(sql);
 
         // Throttle to once / 10 min unless forced
         if (!force) {
@@ -1100,6 +1103,17 @@ export default async function handler(req, res) {
                 thumbnail_url = COALESCE(EXCLUDED.thumbnail_url, creative_performance.thumbnail_url),
                 status = EXCLUDED.status,
                 synced_at = NOW()
+            `;
+            await sql`
+              UPDATE creative_assets SET
+                ad_id = COALESCE(ad_id, ${ad.id}),
+                meta_video_id = COALESCE(meta_video_id, ${videoId}),
+                meta_image_hash = COALESCE(meta_image_hash, ${imageHash}),
+                group_key = ${groupKey},
+                updated_at = now()
+              WHERE ad_id = ${ad.id}
+                 OR (${videoId}::text IS NOT NULL AND meta_video_id = ${videoId})
+                 OR (${imageHash}::text IS NOT NULL AND meta_image_hash = ${imageHash})
             `;
             adsUpserted++;
             adIds.push(ad.id);

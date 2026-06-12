@@ -8,13 +8,13 @@ import { put } from '@vercel/blob';
 const sanitize = (name) =>
   (name || 'video').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'video';
 
-export async function mirrorVideoToBlob(buffer, mimeType, fileName) {
+export async function mirrorAssetToBlob(buffer, mimeType, fileName) {
   try {
     if (!buffer || !buffer.length) return null;
     if (!process.env.BLOB_READ_WRITE_TOKEN) return null;
     const d = new Date();
     const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-    const key = `launches/${ym}/${Date.now()}-${sanitize(fileName)}`;
+    const key = `creative-assets/${ym}/${Date.now()}-${sanitize(fileName)}`;
     const { url } = await put(key, buffer, {
       access: 'public',
       contentType: mimeType || 'video/mp4',
@@ -22,7 +22,9 @@ export async function mirrorVideoToBlob(buffer, mimeType, fileName) {
     });
     return url;
   } catch (err) {
-    console.error('mirrorVideoToBlob failed:', err.message);
+    console.error('mirrorAssetToBlob failed:', err.message);
     return null;
   }
 }
+
+export const mirrorVideoToBlob = mirrorAssetToBlob;

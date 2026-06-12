@@ -4,7 +4,8 @@
 import { neon } from '@neondatabase/serverless';
 import { requireAuth } from '../_lib/auth.js';
 import { getGoogleAccessToken } from '../_lib/gcp-auth.js';
-import { mirrorVideoToBlob } from '../_lib/blob/mirror.js';
+import { mirrorAssetToBlob } from '../_lib/blob/mirror.js';
+import { ensureCreativeAssetTables, markCreativeAssetLaunched, upsertDriveAsset } from '../_lib/creative-assets.js';
 
 const DRIVE = 'https://www.googleapis.com/drive/v3';
 
@@ -132,6 +133,19 @@ export default async function handler(req, res) {
         return parts.join(' / ');
       };
       const enriched = files.map(f => ({ ...f, folderPath: pathFor(f.parents?.[0]) }));
+      if (process.env.DATABASE_URL) {
+        try {
+          const sql = neon(process.env.DATABASE_URL);
+          await ensureCreativeAssetTables(sql);
+          for (let i = 0; i < enriched.length; i += 20) {
+            await Promise.all(
+              enriched.slice(i, i + 20).map(file => upsertDriveAsset(sql, file, file.folderPath, false)),
+            );
+          }
+        } catch (err) {
+          console.error('creative asset indexing failed:', err.message);
+        }
+      }
 
       // ── Pair detection ──────────────────────────────────────────────────────
       // Group siblings under the same immediate parent folder. If a folder has
@@ -406,14 +420,12 @@ export default async function handler(req, res) {
           emit({ step: stepLabel('meta_thumbnail'), status: 'done', detail: thumb ? 'ready' : 'ready (no thumb — auto)' });
         }
 
-        // Mirror video to Vercel Blob so the DNA analyzer can pull it later
-        // even if Meta restricts video.source. Best-effort — never breaks launch.
+        // Mirror the original asset so analysis is independent of expiring Drive
+        // and Meta URLs. Best-effort — never breaks launch.
         let blobUrl = null;
-        if (isVid) {
-          emit({ step: stepLabel('blob_mirror'), status: 'start' });
-          blobUrl = await mirrorVideoToBlob(buf, mt, fmeta.name);
-          emit({ step: stepLabel('blob_mirror'), status: 'done', detail: blobUrl ? 'mirrored' : 'skipped' });
-        }
+        emit({ step: stepLabel('blob_mirror'), status: 'start' });
+        blobUrl = await mirrorAssetToBlob(buf, mt, fmeta.name);
+        emit({ step: stepLabel('blob_mirror'), status: 'done', detail: blobUrl ? 'mirrored' : 'skipped' });
 
         return { videoId: vId, imageHash: iHash, thumbnailUrl: thumb, fileMeta: fmeta, mimeType: mt, blobUrl };
       };
@@ -543,6 +555,22 @@ export default async function handler(req, res) {
                 VALUES
                   (${adData.id}, ${adsetId}, ${campaignId || null}, ${pair.feedFileId}, ${feed.fileMeta.name + ' + ' + story.fileMeta.name}, ${creator || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${feed.mimeType + ' (paired)'}, ${auth.userId}, ${auth.email || null}, ${feed.blobUrl || null})
               `;
+              await Promise.all([
+                markCreativeAssetLaunched(sql, {
+                  driveFileId: pair.feedFileId, durableUrl: feed.blobUrl,
+                  metaVideoId: feed.videoId, metaImageHash: feed.imageHash,
+                  adId: adData.id, placementRole: 'feed',
+                  groupKey: feed.videoId || feed.imageHash,
+                  creator, productId, angleId,
+                }),
+                markCreativeAssetLaunched(sql, {
+                  driveFileId: pair.storyFileId, durableUrl: story.blobUrl,
+                  metaVideoId: story.videoId, metaImageHash: story.imageHash,
+                  adId: adData.id, placementRole: 'story',
+                  groupKey: story.videoId || story.imageHash,
+                  creator, productId, angleId,
+                }),
+              ]);
               emit({ step: 'db_log', status: 'done' });
             } else {
               emit({ step: 'db_log', status: 'done', detail: 'no DB configured' });
@@ -645,13 +673,12 @@ export default async function handler(req, res) {
       // Mirror video to Blob in parallel with Meta thumbnail polling.
       // Best-effort: failure does not break the launch.
       let sourceVideoUrl = null;
-      const blobMirrorPromise = isVideo
-        ? (emit({ step: 'blob_mirror', status: 'start' }),
-           mirrorVideoToBlob(fileBuffer, mimeType, fileMeta.name).then(url => {
+      const blobMirrorPromise =
+        (emit({ step: 'blob_mirror', status: 'start' }),
+           mirrorAssetToBlob(fileBuffer, mimeType, fileMeta.name).then(url => {
              sourceVideoUrl = url;
              emit({ step: 'blob_mirror', status: 'done', detail: url ? 'mirrored' : 'skipped' });
-           }))
-        : Promise.resolve();
+           }));
 
       // Ads with video_data need a thumbnail. Poll Meta for the auto-generated one
       // with exponential-ish backoff to stay gentle on the rate limit.
@@ -763,6 +790,18 @@ export default async function handler(req, res) {
             VALUES
               (${adData.id}, ${adsetId}, ${campaignId || null}, ${fileId}, ${fileMeta.name}, ${creator || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${mimeType}, ${auth.userId}, ${auth.email || null}, ${sourceVideoUrl})
           `;
+          await markCreativeAssetLaunched(sql, {
+            driveFileId: fileId,
+            durableUrl: sourceVideoUrl,
+            metaVideoId: videoId,
+            metaImageHash: imageHash,
+            adId: adData.id,
+            placementRole: 'single',
+            groupKey: videoId || imageHash,
+            creator,
+            productId,
+            angleId,
+          });
           emit({ step: 'db_log', status: 'done' });
         } else {
           emit({ step: 'db_log', status: 'done', detail: 'no DB configured' });
@@ -797,6 +836,14 @@ export default async function handler(req, res) {
           body: JSON.stringify({ name: finalName }),
         }
       );
+      if (process.env.DATABASE_URL) {
+        try {
+          const sql = neon(process.env.DATABASE_URL);
+          await markCreativeAssetLaunched(sql, { driveFileId: fileId, adId });
+        } catch (err) {
+          console.error('creative asset launch linkage failed:', err.message);
+        }
+      }
       return res.json({ success: true, file: updated });
     }
 

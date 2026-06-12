@@ -91,6 +91,15 @@ export default function FromWinnersTool({ setActiveTab, setVariations }) {
 
   const generate = async () => {
     if (!selectedWinners.length) return;
+    const incompleteVideos = selectedWinners.filter(
+      winner => winner.asset_kind === 'video' && winner.transcription_status !== 'complete',
+    );
+    if (incompleteVideos.length) {
+      setGenerateError(
+        `${incompleteVideos.length} selected video winner${incompleteVideos.length === 1 ? ' needs' : 's need'} a complete transcript. Re-analyze ${incompleteVideos.length === 1 ? 'it' : 'them'} in Creative Analytics before generating.`,
+      );
+      return;
+    }
     const references = selectedWinners.map((winner, index) => {
       const spend = Number(winner.spend) || 0;
       const revenue = Number(winner.purchase_value) || 0;
@@ -264,10 +273,19 @@ ${references}`;
               const active = selected.has(winner.group_key);
               const spend = Number(winner.spend) || 0;
               const revenue = Number(winner.purchase_value) || 0;
+              const transcriptReady = winner.asset_kind !== 'video' || winner.transcription_status === 'complete';
               return (
-                <button className={`concept-winner ${active ? 'active' : ''}`} onClick={() => toggle(winner.group_key)} key={winner.group_key}>
+                <button className={`concept-winner ${active ? 'active' : ''} ${transcriptReady ? '' : 'incomplete'}`} onClick={() => toggle(winner.group_key)} key={winner.group_key}>
                   {winner.thumbnail_url ? <img src={winner.thumbnail_url} alt="" /> : <div className="concept-thumb" />}
-                  <div><strong>{winner.name}</strong><span>{spend ? (revenue / spend).toFixed(2) : '0.00'}x ROAS · {money(spend)} spend</span></div>
+                  <div>
+                    <strong>{winner.name}</strong>
+                    <span>{spend ? (revenue / spend).toFixed(2) : '0.00'}x ROAS · {money(spend)} spend</span>
+                    <span className={transcriptReady ? 'analysis-ready' : 'analysis-missing'}>
+                      {transcriptReady
+                        ? `${winner.asset_kind === 'video' ? 'Transcript ready · ' : ''}${Number(winner.vision_frame_count) || 1} visual frame${Number(winner.vision_frame_count) === 1 ? '' : 's'}`
+                        : 'Transcript missing · re-analyze'}
+                    </span>
+                  </div>
                   <i>{active ? '✓' : '+'}</i>
                 </button>
               );
