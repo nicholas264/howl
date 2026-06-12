@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { Player } from '@remotion/player';
 import { upload } from '@vercel/blob/client';
 import { useAuth } from '@clerk/clerk-react';
-import { renderCuts, buildSrtFromWords } from '../utils/ffmpegClient';
+import { buildSrtFromWords } from '../utils/ffmpegClient';
 import { UgcVideo, calcDurationInFrames } from '../remotion/UgcVideo';
 
 const SILENCE_THRESHOLD_S = 0.6;
@@ -196,8 +196,8 @@ export default function UgcEditorTool({ onAddToCart }) {
       setWords(sess.words || []);
       setDuration(parseFloat(sess.duration) || 0);
       setSettings({ ...DEFAULT_SETTINGS, ...(sess.settings || {}) });
-      setOutputUrl(null);
-      setStage(sess.words?.length ? 'ready' : (sess.audio_url ? 'uploaded' : 'uploaded'));
+      setOutputUrl(sess.rendered_url || null);
+      setStage(sess.rendered_url ? 'done' : (sess.words?.length ? 'ready' : 'uploaded'));
       dirtyRef.current = false;
     } catch (err) {
       console.error(err);
@@ -267,11 +267,8 @@ export default function UgcEditorTool({ onAddToCart }) {
     outro: { headline: settings.outroHeadline, cta: settings.outroCta },
   }), [videoUrl, segments, keptWords, settings]);
 
-  // ── Render (in-browser, only when local File is still in memory) ──────────
-  const canRenderLocally = !!file;
-
   const render = async () => {
-    if (!file || !segments.length) return;
+    if (!segments.length || !activeSession) return;
     setStage('rendering');
     setProgress(0);
     setError('');
@@ -282,13 +279,27 @@ export default function UgcEditorTool({ onAddToCart }) {
         const remapped = remapWordsToOutput(keptWords, segments);
         captionsSrt = buildSrtFromWords(remapped);
       }
-      const blob = await renderCuts(file, segments, {
-        captionsSrt,
-        onProgress: setProgress,
-        onLog: (msg) => setLogTail(msg),
+      setLogTail('Rendering and saving footage on the server...');
+      const response = await fetch('/api/render-ugc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: activeSession.id,
+          segments,
+          captions_srt: captionsSrt,
+        }),
       });
-      const url = URL.createObjectURL(blob);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Server render failed');
+      const url = data.url;
       setOutputUrl(url);
+      setActiveSession(prev => prev ? { ...prev, rendered_url: url, status: 'rendered' } : prev);
+      setSessions(prev => prev.map(session => (
+        session.id === activeSession.id
+          ? { ...session, rendered_url: url, status: 'rendered' }
+          : session
+      )));
+      setProgress(1);
       setStage('done');
     } catch (err) {
       console.error(err);
@@ -307,27 +318,23 @@ export default function UgcEditorTool({ onAddToCart }) {
 
   const sendToCart = async () => {
     if (!outputUrl || !onAddToCart) return;
-    const blob = await fetch(outputUrl).then(r => r.blob());
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      onAddToCart({
-        id: Date.now(),
-        type: 'video',
-        kind: 'ugc-edit',
-        dataUrl: reader.result,
-        videoUrl: reader.result,
-        name: activeSession?.creator_name
-          ? `${activeSession.creator_name} UGC edit`
-          : `UGC edit ${new Date().toLocaleString()}`,
-        creator: activeSession?.creator_name || null,
-        creatorId: activeSession?.creator_id || null,
-        briefId: activeSession?.brief_id || null,
-        deliverableId: activeSession?.deliverable_id || null,
-        sourceVideoUrl: activeSession?.video_url || null,
-        createdAt: Date.now(),
-      });
-    };
-    reader.readAsDataURL(blob);
+    onAddToCart({
+      id: Date.now(),
+      type: 'video',
+      kind: 'ugc-edit',
+      dataUrl: outputUrl,
+      videoUrl: outputUrl,
+      name: activeSession?.creator_name
+        ? `${activeSession.creator_name} UGC edit`
+        : `UGC edit ${new Date().toLocaleString()}`,
+      creator: activeSession?.creator_name || null,
+      creatorId: activeSession?.creator_id || null,
+      briefId: activeSession?.brief_id || null,
+      deliverableId: activeSession?.deliverable_id || null,
+      sourceVideoUrl: outputUrl,
+      originalSourceVideoUrl: activeSession?.video_url || null,
+      createdAt: Date.now(),
+    });
   };
 
   const seekTo = (t) => {
@@ -484,17 +491,15 @@ export default function UgcEditorTool({ onAddToCart }) {
 
                     {stage !== 'rendering' && (
                       <div style={{ display: 'flex', gap: 8 }}>
-                        <button onClick={render} style={primaryBtn} disabled={!segments.length || settings.remotionMode || !canRenderLocally}>
+                        <button onClick={render} style={primaryBtn} disabled={!segments.length || settings.remotionMode}>
                           {stage === 'done' ? 'Re-render' : 'Render'}
                         </button>
                         <button onClick={resetWords} style={secondaryBtn}>Reset cuts</button>
                       </div>
                     )}
-                    {!canRenderLocally && (
-                      <div style={{ fontSize: 11, color: '#8b949e' }}>
-                        In-browser render disabled — source file isn't loaded locally. Lambda render coming soon.
-                      </div>
-                    )}
+                    <div style={{ fontSize: 11, color: '#8b949e' }}>
+                      Rendering uses the saved source and keeps the finished edit available after reload.
+                    </div>
                     {settings.remotionMode && (
                       <div style={{ fontSize: 11, color: '#8b949e' }}>
                         Remotion render-to-mp4 ships once Lambda is wired (env + AWS account). Preview-only for now.

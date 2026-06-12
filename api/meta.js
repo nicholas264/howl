@@ -8,12 +8,40 @@ async function logLaunch(row) {
     if (!process.env.DATABASE_URL) return;
     const { neon } = await import('@neondatabase/serverless');
     const sql = neon(process.env.DATABASE_URL);
-    await sql`
+    const [launch] = await sql`
       INSERT INTO launch_history
-        (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
+        (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, brief_id, deliverable_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
       VALUES
-        (${row.ad_id}, ${row.adset_id || null}, ${row.campaign_id || null}, ${row.drive_file_id || null}, ${row.drive_file_name || null}, ${row.creator || null}, ${row.creator_id || null}, ${row.product_id || null}, ${row.angle_id || null}, ${row.ad_name || null}, ${row.headline || null}, ${row.primary_text || null}, ${row.dest_url || null}, ${row.mime_type || null}, ${row.launched_by_user_id || null}, ${row.launched_by_email || null}, ${row.source_video_url || null})
+        (${row.ad_id}, ${row.adset_id || null}, ${row.campaign_id || null}, ${row.drive_file_id || null}, ${row.drive_file_name || null}, ${row.creator || null}, ${row.creator_id || null}, ${row.brief_id || null}, ${row.deliverable_id || null}, ${row.product_id || null}, ${row.angle_id || null}, ${row.ad_name || null}, ${row.headline || null}, ${row.primary_text || null}, ${row.dest_url || null}, ${row.mime_type || null}, ${row.launched_by_user_id || null}, ${row.launched_by_email || null}, ${row.source_video_url || null})
+      RETURNING id
     `;
+    if (row.source_video_url) {
+      await ensureCreativeAssetTables(sql);
+      const [asset] = await sql`
+        INSERT INTO creative_assets
+          (drive_file_name, mime_type, durable_url, ad_id, creator, creator_id,
+           brief_id, deliverable_id, product_id, angle_id, placement_role,
+           transcript_status, updated_at)
+        VALUES
+          (${row.ad_name || null}, ${row.mime_type || 'video/mp4'}, ${row.source_video_url},
+           ${row.ad_id}, ${row.creator || null}, ${row.creator_id || null},
+           ${row.brief_id || null}, ${row.deliverable_id || null}, ${row.product_id || null},
+           ${row.angle_id || null}, 'launched', 'pending', now())
+        RETURNING id
+      `;
+      if (row.deliverable_id) {
+        await sql`
+          UPDATE creator_deliverables
+          SET status = 'launched',
+              output_url = COALESCE(${row.source_video_url}, output_url),
+              creative_asset_id = ${asset?.id || null},
+              updated_at = now()
+          WHERE id = ${row.deliverable_id}
+            AND creator_id = ${row.creator_id || null}
+        `;
+      }
+    }
+    return launch;
   } catch (err) {
     console.error('launch_history insert failed:', err.message);
   }
@@ -33,6 +61,23 @@ async function uploadVideo(base64, name, adAccountId, accessToken, BASE) {
   if (!d.id) throw new Error('Video upload returned no ID');
   const blobUrl = await mirrorVideoToBlob(videoBuffer, 'video/mp4', name || 'howl-video');
   return { videoId: d.id, blobUrl };
+}
+
+async function uploadVideoFromUrl(videoUrl, name, adAccountId, accessToken, BASE) {
+  const params = new URLSearchParams({
+    access_token: accessToken,
+    title: name || `howl-video-${Date.now()}`,
+    file_url: videoUrl,
+  });
+  const response = await fetch(`${BASE}/${adAccountId}/advideos`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params,
+  });
+  const data = await response.json();
+  if (data.error) throw new Error(data.error.error_user_msg || data.error.message);
+  if (!data.id) throw new Error('Video upload returned no ID');
+  return { videoId: data.id, blobUrl: videoUrl };
 }
 
 async function uploadImage(base64, adAccountId, accessToken, BASE) {
@@ -113,6 +158,7 @@ export default async function handler(req, res) {
   const launchActions = new Set([
     'create_campaign', 'create_adset', 'create_creative', 'create_ad_from_creative',
     'create_paired_image_ad', 'push_ad', 'push_carousel', 'upload_image', 'upload_video',
+    'upload_video_url',
     'create_creative_test',
   ]);
   if (launchActions.has(action) && !hasPermission(appAccess, 'launch.write')) {
@@ -512,6 +558,8 @@ export default async function handler(req, res) {
           mime_type: mimeType || 'image',
           creator: req.body.creator || 'Static Builder',
           creator_id: req.body.creatorId || null,
+          brief_id: req.body.briefId || null,
+          deliverable_id: req.body.deliverableId || null,
           source_video_url: req.body.sourceVideoUrl || null,
           ...actor,
         });
@@ -595,6 +643,8 @@ export default async function handler(req, res) {
           mime_type: 'image (paired)',
           creator: req.body.creator || 'Static Builder',
           creator_id: req.body.creatorId || null,
+          brief_id: req.body.briefId || null,
+          deliverable_id: req.body.deliverableId || null,
           source_video_url: req.body.sourceVideoUrl || null,
           ...actor,
         });
@@ -686,6 +736,8 @@ export default async function handler(req, res) {
           mime_type: preUploadedVideoId ? 'video/mp4' : 'image',
           creator: req.body.creator || 'Static Builder',
           creator_id: req.body.creatorId || null,
+          brief_id: req.body.briefId || null,
+          deliverable_id: req.body.deliverableId || null,
           source_video_url: req.body.sourceVideoUrl || null,
           ...actor,
         });
@@ -767,6 +819,8 @@ export default async function handler(req, res) {
           mime_type: 'carousel',
           creator: req.body.creator || 'Static Builder',
           creator_id: req.body.creatorId || null,
+          brief_id: req.body.briefId || null,
+          deliverable_id: req.body.deliverableId || null,
           ...actor,
         });
 
@@ -792,6 +846,27 @@ export default async function handler(req, res) {
           return res.json({ success: true, videoId, sourceVideoUrl: blobUrl });
         } catch (err) {
           return res.status(400).json({ error: err.message, step: 'upload_video' });
+        }
+      }
+
+      case 'upload_video_url': {
+        const { videoUrl, name } = req.body;
+        if (!videoUrl) return res.status(400).json({ error: 'No video URL provided' });
+        try {
+          const parsed = new URL(videoUrl);
+          if (parsed.protocol !== 'https:' || !parsed.hostname.endsWith('.blob.vercel-storage.com')) {
+            throw new Error('Only HOWL Vercel Blob video URLs are accepted');
+          }
+          const { videoId, blobUrl } = await uploadVideoFromUrl(
+            parsed.toString(),
+            name,
+            adAccountId,
+            accessToken,
+            BASE,
+          );
+          return res.json({ success: true, videoId, sourceVideoUrl: blobUrl || videoUrl });
+        } catch (err) {
+          return res.status(400).json({ error: err.message, step: 'upload_video_url' });
         }
       }
 
@@ -972,6 +1047,8 @@ export default async function handler(req, res) {
             mime_type: item.type || 'static',
             creator: item.creator || req.body.creator || 'Static Builder',
             creator_id: item.creatorId || req.body.creatorId || null,
+            brief_id: item.briefId || req.body.briefId || null,
+            deliverable_id: item.deliverableId || req.body.deliverableId || null,
             source_video_url: item.sourceVideoUrl || null,
             ...actor,
           });

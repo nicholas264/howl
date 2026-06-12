@@ -557,7 +557,7 @@ export default function CreatorWorkspace({ canWrite = false }) {
             </div>
 
             <div className="creator-detail-tabs">
-              {['profile', 'briefs', 'outreach', 'deliverables'].map(tab => (
+              {['profile', 'briefs', 'outreach', 'deliverables', 'performance'].map(tab => (
                 <button key={tab} className={detailTab === tab ? 'active' : ''} onClick={() => setDetailTab(tab)}>
                   {tab}{tab === 'briefs' && workflow.briefs.length ? ` ${workflow.briefs.length}` : ''}
                 </button>
@@ -731,10 +731,56 @@ export default function CreatorWorkspace({ canWrite = false }) {
                     <article className="workflow-card deliverable-card" key={item.id}>
                       <header><span><strong>{item.title}</strong><small>{item.due_at ? `Due ${new Date(item.due_at).toLocaleDateString()}` : 'No due date'}</small></span><i>{item.status}</i></header>
                       {item.source_url && <a href={item.source_url} target="_blank" rel="noreferrer">Open source asset</a>}
+                      {item.output_url && <a href={item.output_url} target="_blank" rel="noreferrer">Open finished edit</a>}
                       {item.ugc_session_id && <span className="editor-linked">UGC Editor session #{item.ugc_session_id}</span>}
                     </article>
                   ))}
                   {!workflow.deliverables.length && <div className="workflow-empty">No deliverables requested or received.</div>}
+                </div>
+              </section>
+            )}
+
+            {detailTab === 'performance' && (
+              <section className="creator-detail-section workflow-section creator-performance-detail">
+                <div className="detail-section-head">
+                  <span>Launched creative · 90 days</span>
+                  <small>{selected.performance_assets?.length || 0} attributed ads</small>
+                </div>
+                <div className="creator-performance-list">
+                  {selected.performance_assets?.map(asset => {
+                    const spend = Number(asset.spend || 0);
+                    const revenue = Number(asset.revenue || 0);
+                    const isVideo = asset.mime_type?.startsWith('video/') || /\.mp4(?:$|\?)/i.test(asset.asset_url || '');
+                    return (
+                      <article key={`${asset.ad_id}-${asset.launched_at}`} className="creator-performance-asset">
+                        <a className="performance-asset-preview" href={asset.asset_url || undefined} target="_blank" rel="noreferrer">
+                          {asset.thumbnail_url
+                            ? <img src={asset.thumbnail_url} alt="" />
+                            : isVideo && asset.asset_url
+                              ? <video src={asset.asset_url} muted preload="metadata" />
+                              : asset.asset_url
+                                ? <img src={asset.asset_url} alt="" />
+                            : <span>No preview</span>}
+                        </a>
+                        <div className="performance-asset-copy">
+                          <strong>{asset.ad_name || `Meta ad ${asset.ad_id}`}</strong>
+                          <small>{asset.deliverable_title || asset.brief_title || 'Unlinked historical asset'}</small>
+                          <span>{asset.launched_at ? new Date(asset.launched_at).toLocaleDateString() : 'Launch date unavailable'}</span>
+                        </div>
+                        <dl>
+                          <div><dt>Spend</dt><dd>${spend.toLocaleString(undefined, { maximumFractionDigits: 0 })}</dd></div>
+                          <div><dt>Revenue</dt><dd>${revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</dd></div>
+                          <div><dt>ROAS</dt><dd>{spend > 0 ? (revenue / spend).toFixed(2) : '—'}</dd></div>
+                          <div><dt>Orders</dt><dd>{Number(asset.purchases || 0).toLocaleString()}</dd></div>
+                        </dl>
+                      </article>
+                    );
+                  })}
+                  {!selected.performance_assets?.length && (
+                    <div className="workflow-empty">
+                      No attributed launches yet. Finished creator edits will appear here after launch and analytics sync.
+                    </div>
+                  )}
                 </div>
               </section>
             )}

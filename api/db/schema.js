@@ -240,7 +240,13 @@ export default async function handler(req, res) {
     // Attribution columns on launch_history (idempotent).
     await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS launched_by_user_id TEXT`;
     await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS launched_by_email TEXT`;
+    await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS creator_id BIGINT`;
+    await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS brief_id BIGINT`;
+    await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS deliverable_id BIGINT`;
     await sql`CREATE INDEX IF NOT EXISTS idx_launch_history_launched_by ON launch_history(launched_by_user_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_launch_history_creator_id ON launch_history(creator_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_launch_history_brief_id ON launch_history(brief_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_launch_history_deliverable_id ON launch_history(deliverable_id)`;
 
     // Internal bug/feature/edge-case reports submitted from the in-app widget.
     await sql`

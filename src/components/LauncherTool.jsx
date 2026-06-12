@@ -282,6 +282,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           next[id] = {
             creator: c.creator || config.defaultCreator || 'Static Builder',
             creatorId: c.creatorId || null,
+            briefId: c.briefId || null,
+            deliverableId: c.deliverableId || null,
             productId: config.defaultProduct,
             headline: c.hook || '',
             primaryText: c.body || '',
@@ -425,6 +427,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           instagramUserId: (config.instagramUserId || '').trim() || undefined,
           creator: m.creator || 'Static Builder',
           creatorId: m.creatorId || null,
+          briefId: m.briefId || item.briefId || null,
+          deliverableId: m.deliverableId || item.deliverableId || null,
           sourceVideoUrl: item.sourceVideoUrl || null,
         }) });
         const pd = await pr.json();
@@ -448,7 +452,14 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         instagramUserId: (config.instagramUserId || '').trim() || undefined,
       };
       if (item.type === 'video') {
-        const ur = await fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'upload_video', videoBase64: item.videoUrl, name: item.name }) });
+        const remoteVideo = /^https:\/\//i.test(item.videoUrl || '');
+        const ur = await fetch('/api/meta', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(remoteVideo
+            ? { action: 'upload_video_url', videoUrl: item.videoUrl, name: item.name }
+            : { action: 'upload_video', videoBase64: item.videoUrl, name: item.name }),
+        });
         const ud = await ur.json();
         if (ud.error) throw new Error(`Video upload: ${ud.error}`);
         creativeBody.videoId = ud.videoId;
@@ -470,7 +481,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
 
       // 3. Create ad
       setStep(id, 'meta_ad', 'running');
-      const ar = await fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_ad_from_creative', creativeId: cd.creativeId, adName, adsetId: selectedAdsetId, headline: m.headline, primaryText: m.primaryText || m.headline, destUrl: productUrl, mimeType, creator: m.creator || 'Static Builder', creatorId: m.creatorId || null, sourceVideoUrl: item.sourceVideoUrl || null }) });
+      const ar = await fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_ad_from_creative', creativeId: cd.creativeId, adName, adsetId: selectedAdsetId, headline: m.headline, primaryText: m.primaryText || m.headline, destUrl: productUrl, mimeType, creator: m.creator || 'Static Builder', creatorId: m.creatorId || null, briefId: m.briefId || item.briefId || null, deliverableId: m.deliverableId || item.deliverableId || null, sourceVideoUrl: item.sourceVideoUrl || null }) });
       const ad = await ar.json();
       if (ad.error) { setStep(id, 'meta_ad', 'error', ad.error); throw new Error(ad.error); }
       setStep(id, 'meta_ad', 'done', ad.adId);

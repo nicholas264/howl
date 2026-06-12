@@ -34,6 +34,12 @@ export async function ensureCreativeAssetTables(sql) {
   await sql`CREATE INDEX IF NOT EXISTS idx_creative_assets_group_key ON creative_assets(group_key)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creative_assets_meta_video ON creative_assets(meta_video_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creative_assets_meta_image ON creative_assets(meta_image_hash)`;
+  await sql`ALTER TABLE creative_assets ADD COLUMN IF NOT EXISTS creator_id BIGINT`;
+  await sql`ALTER TABLE creative_assets ADD COLUMN IF NOT EXISTS brief_id BIGINT`;
+  await sql`ALTER TABLE creative_assets ADD COLUMN IF NOT EXISTS deliverable_id BIGINT`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creative_assets_creator_id ON creative_assets(creator_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creative_assets_brief_id ON creative_assets(brief_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creative_assets_deliverable_id ON creative_assets(deliverable_id)`;
 }
 
 export async function backfillCreativeAssetsFromLaunchHistory(sql) {

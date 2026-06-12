@@ -52,7 +52,53 @@ async function creatorDetail(sql, id) {
         JOIN creative_insights_daily i ON i.ad_id = l.ad_id
         WHERE (l.creator_id = c.id OR lower(l.creator) = lower(c.name))
           AND i.date >= current_date - interval '90 days'
-      ), '{}'::json) AS performance
+      ), '{}'::json) AS performance,
+      COALESCE((
+        SELECT json_agg(asset ORDER BY asset.revenue DESC, asset.launched_at DESC)
+        FROM (
+          SELECT
+            l.ad_id,
+            l.ad_name,
+            l.mime_type,
+            l.launched_at,
+            l.brief_id,
+            l.deliverable_id,
+            b.title AS brief_title,
+            d.title AS deliverable_title,
+            COALESCE(ca.durable_url, l.source_video_url, cp.asset_url) AS asset_url,
+            cp.thumbnail_url,
+            COALESCE(metrics.spend, 0) AS spend,
+            COALESCE(metrics.revenue, 0) AS revenue,
+            COALESCE(metrics.purchases, 0) AS purchases,
+            COALESCE(metrics.impressions, 0) AS impressions,
+            COALESCE(metrics.clicks, 0) AS clicks
+          FROM launch_history l
+          LEFT JOIN creator_briefs b ON b.id = l.brief_id
+          LEFT JOIN creator_deliverables d ON d.id = l.deliverable_id
+          LEFT JOIN creative_performance cp ON cp.ad_id = l.ad_id
+          LEFT JOIN LATERAL (
+            SELECT durable_url
+            FROM creative_assets
+            WHERE ad_id = l.ad_id
+            ORDER BY updated_at DESC
+            LIMIT 1
+          ) ca ON true
+          LEFT JOIN LATERAL (
+            SELECT
+              sum(i.spend) AS spend,
+              sum(i.purchase_value) AS revenue,
+              sum(i.purchases) AS purchases,
+              sum(i.impressions) AS impressions,
+              sum(i.clicks) AS clicks
+            FROM creative_insights_daily i
+            WHERE i.ad_id = l.ad_id
+              AND i.date >= current_date - interval '90 days'
+          ) metrics ON true
+          WHERE l.creator_id = c.id OR lower(l.creator) = lower(c.name)
+          ORDER BY COALESCE(metrics.revenue, 0) DESC, l.launched_at DESC
+          LIMIT 50
+        ) asset
+      ), '[]'::json) AS performance_assets
     FROM creators c
     WHERE c.id = ${id}
   `;

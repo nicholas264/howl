@@ -35,7 +35,7 @@ export default async function handler(req, res) {
       const limit = Math.min(parseInt(req.query.limit || '50'), 200);
       const rows = await sql`
         SELECT u.id, u.title, u.file_name, u.file_size, u.duration, u.video_url,
-          u.thumbnail_url, u.status, u.creator_id, u.brief_id, u.deliverable_id,
+          u.thumbnail_url, u.status, u.creator_id, u.brief_id, u.deliverable_id, u.rendered_url,
           u.created_at, u.updated_at, c.name AS creator_name
         FROM ugc_sessions u
         LEFT JOIN creators c ON c.id = u.creator_id
@@ -111,7 +111,7 @@ export default async function handler(req, res) {
       if (!id) return res.status(400).json({ error: 'id required' });
       const owned = await ownRow(id);
       if (!owned) return res.status(404).json({ error: 'Not found' });
-      const urls = [owned.video_url, owned.audio_url].filter(Boolean);
+      const urls = [owned.video_url, owned.audio_url, owned.rendered_url].filter(Boolean);
       for (const url of urls) {
         try { await del(url); } catch (err) { console.error('blob del failed', url, err); }
       }

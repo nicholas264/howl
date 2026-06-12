@@ -9,6 +9,9 @@
     },
     "api/creative-analysis-worker.js": {
       "maxDuration": 300
+    },
+    "api/render-ugc.js": {
+      "maxDuration": 300
     }
   },
   "crons": [
