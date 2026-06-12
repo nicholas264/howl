@@ -170,6 +170,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
   const [creativeSyncing, setCreativeSyncing] = useState(false);
   const [creativeSyncMsg, setCreativeSyncMsg] = useState('');
   const [creativeExpanded, setCreativeExpanded] = useState({}); // groupKey -> { loading, ads }
+  const [analysisQueue, setAnalysisQueue] = useState(null);
+  const [analysisQueueLoading, setAnalysisQueueLoading] = useState(false);
+  const [analysisQueueMessage, setAnalysisQueueMessage] = useState('');
+  const [analysisBatchRunning, setAnalysisBatchRunning] = useState(false);
   const creativeWorkspaceMode = 'motion';
 
   const loadCreativeTable = useCallback(async (days) => {
@@ -191,6 +195,28 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
     if (view !== 'creative') return;
     loadCreativeTable(creativeWindowDays);
   }, [view, creativeWindowDays, loadCreativeTable]);
+
+  const loadAnalysisQueue = useCallback(async () => {
+    setAnalysisQueueLoading(true);
+    try {
+      const r = await fetch('/api/meta', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_creative_analysis_queue' }),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setAnalysisQueue(d.queue || null);
+    } catch (err) {
+      setAnalysisQueueMessage(`Queue status failed: ${err.message}`);
+    } finally {
+      setAnalysisQueueLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (view !== 'creative') return;
+    loadAnalysisQueue();
+  }, [view, loadAnalysisQueue]);
 
   const [creativeInitMsg, setCreativeInitMsg] = useState('');
   const [creativeIniting, setCreativeIniting] = useState(false);
@@ -217,11 +243,51 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
       });
       const d = await r.json();
       if (d.error) throw new Error(d.error);
-      setCreativeSyncMsg(`Synced ${d.adsUpserted || 0} ads · ${d.insightsUpserted || 0} daily rows`);
+      setCreativeSyncMsg(`Synced ${d.adsUpserted || 0} ads · ${d.insightsUpserted || 0} daily rows · ${d.queuedForAnalysis || 0} queued`);
       await loadCreativeTable(creativeWindowDays);
+      await loadAnalysisQueue();
     } catch (err) { setCreativeSyncMsg(`Sync failed: ${err.message}`); }
     finally { setCreativeSyncing(false); }
+  }, [creativeWindowDays, loadAnalysisQueue, loadCreativeTable]);
+
+  const processAnalysisBatch = useCallback(async () => {
+    setAnalysisBatchRunning(true);
+    setAnalysisQueueMessage('');
+    try {
+      const r = await fetch('/api/meta', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'process_creative_analysis_queue', batchSize: 3 }),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setAnalysisQueue(d.queue || null);
+      const completed = (d.results || []).filter(item => item.status === 'completed').length;
+      const retrying = (d.results || []).filter(item => item.status === 'retrying').length;
+      const failed = (d.results || []).filter(item => item.status === 'failed').length;
+      setAnalysisQueueMessage(`Processed ${d.processed || 0}: ${completed} complete${retrying ? ` · ${retrying} retrying` : ''}${failed ? ` · ${failed} failed` : ''}`);
+      await loadCreativeTable(creativeWindowDays);
+    } catch (err) {
+      setAnalysisQueueMessage(`Batch failed: ${err.message}`);
+    } finally {
+      setAnalysisBatchRunning(false);
+    }
   }, [creativeWindowDays, loadCreativeTable]);
+
+  const retryAnalysisBatch = useCallback(async () => {
+    setAnalysisQueueMessage('');
+    try {
+      const r = await fetch('/api/meta', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'retry_creative_analysis_queue' }),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setAnalysisQueue(d.queue || null);
+      setAnalysisQueueMessage(`${d.retried || 0} failed job${d.retried === 1 ? '' : 's'} returned to the queue`);
+    } catch (err) {
+      setAnalysisQueueMessage(`Retry failed: ${err.message}`);
+    }
+  }, []);
 
   // Creative DNA — per-group AI analysis. Drawer shows on demand.
   const [analyzingGroup, setAnalyzingGroup] = useState(null);   // groupKey currently being analyzed
@@ -265,12 +331,15 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
       // Reflect the new analyzed status on the row without a full refetch.
       setCreativeTable(prev => prev ? {
         ...prev,
-        groups: prev.groups.map(g => g.groupKey === groupKey ? { ...g, isAnalyzed: true } : g),
+        groups: prev.groups.map(g => g.groupKey === groupKey
+          ? { ...g, isAnalyzed: true, analysisQueueStatus: 'completed' }
+          : g),
       } : prev);
+      await loadAnalysisQueue();
     } catch (err) {
       setAnalysisDrawer({ groupKey, name, analysis: null, loading: false, error: err.message });
     } finally { setAnalyzingGroup(null); }
-  }, []);
+  }, [loadAnalysisQueue]);
 
   const toggleCreativeRow = useCallback(async (groupKey) => {
     setCreativeExpanded(prev => {
@@ -744,6 +813,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           syncing={creativeSyncing}
           syncMessage={creativeSyncMsg}
           onSync={syncCreativeAnalytics}
+          analysisQueue={analysisQueue}
+          analysisQueueLoading={analysisQueueLoading}
+          analysisQueueMessage={analysisQueueMessage}
+          analysisBatchRunning={analysisBatchRunning}
+          onProcessAnalysisBatch={processAnalysisBatch}
+          onRetryAnalysisBatch={retryAnalysisBatch}
+          onRefreshAnalysisQueue={loadAnalysisQueue}
           onAnalyze={runAnalysis}
           onOpenAnalysis={openAnalysis}
           setActiveTab={setActiveTab}

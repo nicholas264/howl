@@ -6,8 +6,17 @@
     },
     "api/meta.js": {
       "maxDuration": 300
+    },
+    "api/creative-analysis-worker.js": {
+      "maxDuration": 300
     }
   },
+  "crons": [
+    {
+      "path": "/api/creative-analysis-worker",
+      "schedule": "0 12 * * *"
+    }
+  ],
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],

@@ -16,6 +16,14 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import ffmpegPath from 'ffmpeg-static';
 import { backfillCreativeAssetsFromLaunchHistory, ensureCreativeAssetTables } from '../creative-assets.js';
+import {
+  claimCreativeAnalysisJob,
+  completeCreativeAnalysisJob,
+  enqueueCreativeAnalyses,
+  failCreativeAnalysisJob,
+  getCreativeAnalysisQueueStatus,
+  retryFailedCreativeAnalysisJobs,
+} from '../creative-analysis-queue.js';
 import { getGoogleAccessToken } from '../gcp-auth.js';
 
 const DRIVE = 'https://www.googleapis.com/drive/v3';
@@ -449,6 +457,7 @@ Analyze this creative.`;
   if (sourceAsset) {
     await sql`UPDATE creative_assets SET analyzed_at = now(), updated_at = now() WHERE id = ${sourceAsset.id}`;
   }
+  await completeCreativeAnalysisJob(sql, groupKey);
 
   return {
     status: 200,
@@ -473,6 +482,54 @@ Analyze this creative.`;
       debug,
     },
   };
+}
+
+export async function processCreativeAnalysisQueue({ ctx, batchSize: rawBatchSize = 2 }) {
+  if (!process.env.DATABASE_URL) return { status: 200, body: { error: 'DATABASE_URL not configured' } };
+  const batchSize = Math.max(1, Math.min(5, parseInt(rawBatchSize || 2, 10)));
+  const sql = neon(process.env.DATABASE_URL);
+  await ensureCreativeAnalysisColumns(sql);
+  await enqueueCreativeAnalyses(sql, 'worker');
+  const results = [];
+
+  for (let index = 0; index < batchSize; index++) {
+    const job = await claimCreativeAnalysisJob(sql);
+    if (!job) break;
+    try {
+      const out = await analyzeCreativeGroup({ groupKey: job.group_key, ctx });
+      if (out.status >= 200 && out.status < 300 && out.body?.ok) {
+        results.push({ groupKey: job.group_key, status: 'completed' });
+      } else {
+        const message = out.body?.error || `Analysis returned HTTP ${out.status}`;
+        const status = await failCreativeAnalysisJob(sql, job, message);
+        results.push({ groupKey: job.group_key, status, error: message });
+      }
+    } catch (err) {
+      const status = await failCreativeAnalysisJob(sql, job, err.message);
+      results.push({ groupKey: job.group_key, status, error: err.message });
+    }
+  }
+
+  const queue = await getCreativeAnalysisQueueStatus(sql);
+  return { status: 200, body: { ok: true, processed: results.length, results, queue } };
+}
+
+export async function getCreativeAnalysisQueue({ enqueue = true } = {}) {
+  if (!process.env.DATABASE_URL) return { status: 200, body: { error: 'DATABASE_URL not configured' } };
+  const sql = neon(process.env.DATABASE_URL);
+  await ensureCreativeAnalysisColumns(sql);
+  const enqueued = enqueue ? await enqueueCreativeAnalyses(sql, 'dashboard') : 0;
+  const queue = await getCreativeAnalysisQueueStatus(sql);
+  return { status: 200, body: { queue, enqueued } };
+}
+
+export async function retryCreativeAnalysisQueue() {
+  if (!process.env.DATABASE_URL) return { status: 200, body: { error: 'DATABASE_URL not configured' } };
+  const sql = neon(process.env.DATABASE_URL);
+  await ensureCreativeAnalysisColumns(sql);
+  const retried = await retryFailedCreativeAnalysisJobs(sql);
+  const queue = await getCreativeAnalysisQueueStatus(sql);
+  return { status: 200, body: { ok: true, retried, queue } };
 }
 
 export async function getCreativeAnalysis({ groupKey }) {

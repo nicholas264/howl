@@ -1,5 +1,6 @@
 import { mirrorVideoToBlob } from './_lib/blob/mirror.js';
 import { backfillCreativeAssetsFromLaunchHistory, ensureCreativeAssetTables } from './_lib/creative-assets.js';
+import { enqueueCreativeAnalyses, ensureCreativeAnalysisQueue } from './_lib/creative-analysis-queue.js';
 
 // Best-effort launch logger — swallows errors so a DB outage doesn't break Meta publishes.
 async function logLaunch(row) {
@@ -80,8 +81,11 @@ export const config = {
 import { requireAuth } from './_lib/auth.js';
 import {
   analyzeCreativeGroup,
+  getCreativeAnalysisQueue,
   getCreativeAnalysis,
   listAnalyzedWinners,
+  processCreativeAnalysisQueue,
+  retryCreativeAnalysisQueue,
 } from './_lib/meta/creative-analysis.js';
 
 export default async function handler(req, res) {
@@ -1189,13 +1193,15 @@ export default async function handler(req, res) {
           insightsPage = d.paging?.next || null;
         }
 
-        return res.json({ ok: true, adsUpserted, insightsUpserted, sinceDays });
+        const queuedForAnalysis = await enqueueCreativeAnalyses(sql, 'meta_sync');
+        return res.json({ ok: true, adsUpserted, insightsUpserted, queuedForAnalysis, sinceDays });
       }
 
       case 'get_creative_table': {
         if (!process.env.DATABASE_URL) return res.json({ error: 'DATABASE_URL not configured' });
         const { neon } = await import('@neondatabase/serverless');
         const sql = neon(process.env.DATABASE_URL);
+        await ensureCreativeAnalysisQueue(sql);
 
         const sinceDays = Math.max(1, Math.min(365, parseInt(req.body.sinceDays || 14, 10)));
         const fmtYmd = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -1241,7 +1247,8 @@ export default async function handler(req, res) {
             COALESCE(a.unique_link_clicks, 0) AS unique_link_clicks,
             COALESCE(a.video_3s_views, 0)     AS video_3s_views,
             COALESCE(a.video_thruplays, 0)    AS video_thruplays,
-            EXISTS (SELECT 1 FROM creative_analysis ca WHERE ca.group_key = m.group_key) AS is_analyzed
+            EXISTS (SELECT 1 FROM creative_analysis ca WHERE ca.group_key = m.group_key) AS is_analyzed,
+            (SELECT q.status FROM creative_analysis_queue q WHERE q.group_key = m.group_key) AS analysis_queue_status
           FROM meta m
           LEFT JOIN agg a USING (group_key)
           WHERE COALESCE(a.spend, 0) > 0 OR COALESCE(a.impressions, 0) > 0
@@ -1275,6 +1282,7 @@ export default async function handler(req, res) {
             impressions,
             clicks,
             isAnalyzed: !!r.is_analyzed,
+            analysisQueueStatus: r.analysis_queue_status || null,
           };
         });
 
@@ -1328,6 +1336,24 @@ export default async function handler(req, res) {
 
       case 'list_analyzed_winners': {
         const out = await listAnalyzedWinners({ sinceDays: req.body.sinceDays });
+        return res.status(out.status).json(out.body);
+      }
+
+      case 'get_creative_analysis_queue': {
+        const out = await getCreativeAnalysisQueue();
+        return res.status(out.status).json(out.body);
+      }
+
+      case 'process_creative_analysis_queue': {
+        const out = await processCreativeAnalysisQueue({
+          ctx: { BASE, accessToken, adAccountId },
+          batchSize: req.body.batchSize,
+        });
+        return res.status(out.status).json(out.body);
+      }
+
+      case 'retry_creative_analysis_queue': {
+        const out = await retryCreativeAnalysisQueue();
         return res.status(out.status).json(out.body);
       }
       default:

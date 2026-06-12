@@ -2,6 +2,7 @@
 import { neon } from '@neondatabase/serverless';
 import { requireAdmin } from '../_lib/auth.js';
 import { backfillCreativeAssetsFromLaunchHistory, ensureCreativeAssetTables } from '../_lib/creative-assets.js';
+import { ensureCreativeAnalysisQueue } from '../_lib/creative-analysis-queue.js';
 
 export default async function handler(req, res) {
   if (!(await requireAdmin(req, res))) return;
@@ -226,20 +227,18 @@ export default async function handler(req, res) {
       )
     `;
     await sql`CREATE INDEX IF NOT EXISTS idx_creative_analysis_generated_at ON creative_analysis(generated_at DESC)`;
+    await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS source_video_url TEXT`;
     await ensureCreativeAssetTables(sql);
     await backfillCreativeAssetsFromLaunchHistory(sql);
     await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS source_asset_id BIGINT`;
     await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS vision_frame_count INTEGER`;
     await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS transcription_status TEXT`;
+    await ensureCreativeAnalysisQueue(sql);
 
     // Attribution columns on launch_history (idempotent).
     await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS launched_by_user_id TEXT`;
     await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS launched_by_email TEXT`;
     await sql`CREATE INDEX IF NOT EXISTS idx_launch_history_launched_by ON launch_history(launched_by_user_id)`;
-
-    // Persistent video copy in Vercel Blob — used by the DNA analyzer when Meta
-    // restricts the video source URL on its end.
-    await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS source_video_url TEXT`;
 
     // Internal bug/feature/edge-case reports submitted from the in-app widget.
     await sql`

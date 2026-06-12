@@ -33,6 +33,13 @@ export default function CreativePerformanceWorkspace({
   syncing,
   syncMessage,
   onSync,
+  analysisQueue,
+  analysisQueueLoading,
+  analysisQueueMessage,
+  analysisBatchRunning,
+  onProcessAnalysisBatch,
+  onRetryAnalysisBatch,
+  onRefreshAnalysisQueue,
   onAnalyze,
   onOpenAnalysis,
   setActiveTab,
@@ -121,6 +128,45 @@ export default function CreativePerformanceWorkspace({
         </div>
       </div>
 
+      <div className="motion-queue">
+        <div className="motion-queue-copy">
+          <span>Batch creative analysis</span>
+          <strong>
+            {analysisQueueLoading && !analysisQueue
+              ? 'Loading queue…'
+              : `${analysisQueue?.summary?.pending || 0} waiting · ${analysisQueue?.summary?.processing || 0} running · ${analysisQueue?.summary?.failed || 0} failed`}
+          </strong>
+          <p>New Meta creatives are queued automatically. The scheduled worker processes them daily, or you can run the next three now.</p>
+        </div>
+        <div className="motion-queue-stats">
+          {[
+            ['Waiting', analysisQueue?.summary?.pending || 0],
+            ['Running', analysisQueue?.summary?.processing || 0],
+            ['Complete', analysisQueue?.summary?.completed || 0],
+            ['Failed', analysisQueue?.summary?.failed || 0],
+          ].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
+        </div>
+        <div className="motion-queue-actions">
+          <button onClick={onRefreshAnalysisQueue} disabled={analysisQueueLoading}>Refresh</button>
+          {(analysisQueue?.summary?.failed || 0) > 0
+            ? <button onClick={onRetryAnalysisBatch}>Retry failed</button>
+            : null}
+          <button className="motion-primary" onClick={onProcessAnalysisBatch} disabled={analysisBatchRunning || !(analysisQueue?.summary?.pending || 0)}>
+            {analysisBatchRunning ? 'Analyzing…' : 'Run next 3'}
+          </button>
+        </div>
+      </div>
+      {(analysisQueue?.recent || []).some(job => job.status === 'failed') ? (
+        <div className="motion-queue-failures">
+          {(analysisQueue.recent || []).filter(job => job.status === 'failed').slice(0, 3).map(job => (
+            <div key={job.group_key}>
+              <strong>{job.name || job.group_key}</strong>
+              <span>{job.last_error || 'Analysis failed after all retries.'}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       <div className="motion-metric-bar">
         <span>Add metric</span>
         {Object.entries(METRICS).map(([key, metric], index) => (
@@ -136,6 +182,7 @@ export default function CreativePerformanceWorkspace({
       </div>
 
       {syncMessage ? <div className="motion-notice">{syncMessage}</div> : null}
+      {analysisQueueMessage ? <div className="motion-notice">{analysisQueueMessage}</div> : null}
       {error ? <div className="motion-error">{error}</div> : null}
       {loading && !creativeTable ? <div className="motion-loading">Loading creative performance…</div> : null}
 
@@ -159,7 +206,15 @@ export default function CreativePerformanceWorkspace({
                   ))}
                 </dl>
                 <button className="motion-analysis-link" onClick={() => g.isAnalyzed ? onOpenAnalysis(g.groupKey, g.name) : onAnalyze(g.groupKey, g.name)}>
-                  {g.isAnalyzed ? 'Open creative DNA' : 'Analyze creative'}
+                  {g.isAnalyzed
+                    ? 'Open creative DNA'
+                    : g.analysisQueueStatus === 'processing'
+                      ? 'Analysis running'
+                      : g.analysisQueueStatus === 'pending'
+                        ? 'Queued for analysis'
+                        : g.analysisQueueStatus === 'failed'
+                          ? 'Analysis failed · retry manually'
+                          : 'Analyze creative'}
                 </button>
               </div>
             </article>
