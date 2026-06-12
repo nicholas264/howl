@@ -1,9 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { Player } from '@remotion/player';
 import { upload } from '@vercel/blob/client';
 import { useAuth } from '@clerk/clerk-react';
 import { buildSrtFromWords } from '../utils/ffmpegClient';
-import { UgcVideo, calcDurationInFrames } from '../remotion/UgcVideo';
 
 const SILENCE_THRESHOLD_S = 0.6;
 const AUTOSAVE_DEBOUNCE_MS = 1200;
@@ -11,16 +9,9 @@ const AUTOSAVE_DEBOUNCE_MS = 1200;
 const DEFAULT_SETTINGS = {
   burnCaptions: true,
   autoCutSilences: true,
-  remotionMode: false,
-  showIntro: true,
-  showOutro: true,
-  introTitle: 'HOWL',
-  introSubtitle: "World's hottest fire pit",
-  outroHeadline: 'Get yours.',
-  outroCta: 'howlcampfires.com',
 };
 
-export default function UgcEditorTool({ onAddToCart }) {
+export default function UgcEditorTool({ initialSessionId = null, onInitialSessionLoaded, onAddToCart }) {
   const { getToken } = useAuth();
   const [sessions, setSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
@@ -35,10 +26,13 @@ export default function UgcEditorTool({ onAddToCart }) {
   const [duration, setDuration] = useState(0);
   const [outputUrl, setOutputUrl] = useState(null);
   const [logTail, setLogTail] = useState('');
+  const [aiCleaning, setAiCleaning] = useState(false);
+  const [aiCleanupMessage, setAiCleanupMessage] = useState('');
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const videoRef = useRef(null);
   const autosaveTimer = useRef(null);
   const dirtyRef = useRef(false);
+  const initialSessionLoadRef = useRef(null);
 
   // ── Load session list on mount ─────────────────────────────────────────────
   useEffect(() => { refreshSessions(); }, []);
@@ -168,7 +162,7 @@ export default function UgcEditorTool({ onAddToCart }) {
         end: w.end,
         kept: true,
       }));
-      setWords(applyAutoSilence(ws, settings.autoCutSilences));
+      setWords(ws);
       setDuration(data.duration || (ws.length ? ws[ws.length - 1].end : 0));
       setStage('ready');
       // Already persisted server-side; no need to mark dirty
@@ -205,6 +199,12 @@ export default function UgcEditorTool({ onAddToCart }) {
     }
   }, [videoUrl]);
 
+  useEffect(() => {
+    if (!initialSessionId || initialSessionLoadRef.current === initialSessionId) return;
+    initialSessionLoadRef.current = initialSessionId;
+    loadSession(initialSessionId).finally(() => onInitialSessionLoaded?.());
+  }, [initialSessionId, loadSession, onInitialSessionLoaded]);
+
   const newSession = () => {
     if (videoUrl && videoUrl.startsWith('blob:')) URL.revokeObjectURL(videoUrl);
     setActiveSession(null);
@@ -236,36 +236,48 @@ export default function UgcEditorTool({ onAddToCart }) {
   };
 
   const resetWords = () => {
-    setWords(prev => applyAutoSilence(prev.map(w => ({ ...w, kept: true })), settings.autoCutSilences));
+    setWords(prev => prev.map(w => ({ ...w, kept: true })));
+    setAiCleanupMessage('');
     markDirty();
   };
 
-  useEffect(() => {
-    if (!words.length) return;
-    setWords(prev => applyAutoSilence(prev, settings.autoCutSilences));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.autoCutSilences]);
+  const suggestCleanup = async () => {
+    if (!activeSession || !words.length) return;
+    setAiCleaning(true);
+    setError('');
+    setAiCleanupMessage('');
+    try {
+      const response = await fetch('/api/ugc-edit-suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: activeSession.id }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'AI cleanup failed');
+      const remove = new Set(data.remove_indexes || []);
+      setWords(prev => prev.map((word, index) => (
+        remove.has(index) ? { ...word, kept: false } : word
+      )));
+      markDirty();
+      setAiCleanupMessage(
+        remove.size
+          ? `${remove.size} word${remove.size === 1 ? '' : 's'} proposed for removal. Review the crossed-out transcript before rendering.`
+          : (data.summary || 'No safe cleanup cuts found.'),
+      );
+    } catch (err) {
+      setError(err.message || 'AI cleanup failed');
+    } finally {
+      setAiCleaning(false);
+    }
+  };
 
-  const segments = useMemo(() => buildSegments(words, duration), [words, duration]);
+  const segments = useMemo(
+    () => buildSegments(words, duration, settings.autoCutSilences),
+    [words, duration, settings.autoCutSilences],
+  );
   const keptDuration = segments.reduce((s, seg) => s + (seg.end - seg.start), 0);
   const cutDuration = duration - keptDuration;
-
-  const REMOTION_FPS = 30;
   const keptWords = useMemo(() => words.filter(w => w.kept), [words]);
-  const remotionDuration = useMemo(
-    () => calcDurationInFrames({ segments, fps: REMOTION_FPS, showIntro: settings.showIntro, showOutro: settings.showOutro }),
-    [segments, settings.showIntro, settings.showOutro],
-  );
-  const remotionInputProps = useMemo(() => ({
-    videoSrc: videoUrl,
-    segments,
-    words: keptWords,
-    showCaptions: settings.burnCaptions,
-    showIntro: settings.showIntro,
-    showOutro: settings.showOutro,
-    intro: { title: settings.introTitle, subtitle: settings.introSubtitle },
-    outro: { headline: settings.outroHeadline, cta: settings.outroCta },
-  }), [videoUrl, segments, keptWords, settings]);
 
   const render = async () => {
     if (!segments.length || !activeSession) return;
@@ -416,21 +428,7 @@ export default function UgcEditorTool({ onAddToCart }) {
         {videoUrl && stage !== 'uploading' && (
           <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24, marginTop: 16, alignItems: 'start' }}>
             <div style={{ position: 'sticky', top: 16 }}>
-              {settings.remotionMode && (stage === 'ready' || stage === 'done') && segments.length > 0 ? (
-                <Player
-                  component={UgcVideo}
-                  inputProps={remotionInputProps}
-                  durationInFrames={remotionDuration}
-                  fps={REMOTION_FPS}
-                  compositionWidth={1080}
-                  compositionHeight={1920}
-                  style={{ width: '100%', borderRadius: 8, background: '#000', aspectRatio: '9/16' }}
-                  controls
-                  loop
-                />
-              ) : (
-                <video ref={videoRef} src={videoUrl} controls crossOrigin="anonymous" style={{ width: '100%', borderRadius: 8, background: '#000', maxHeight: 320 }} />
-              )}
+              <video ref={videoRef} src={videoUrl} controls crossOrigin="anonymous" style={{ width: '100%', borderRadius: 8, background: '#000', maxHeight: 320 }} />
               <div style={{ fontSize: 12, color: '#8b949e', marginTop: 6 }}>
                 {activeSession?.file_name || file?.name}
                 {activeSession?.file_size ? ` · ${(activeSession.file_size / 1024 / 1024).toFixed(1)} MB` : (file ? ` · ${(file.size / 1024 / 1024).toFixed(1)} MB` : '')}
@@ -459,53 +457,25 @@ export default function UgcEditorTool({ onAddToCart }) {
                       {duration ? `${duration.toFixed(1)}s raw · ${keptDuration.toFixed(1)}s kept · ${cutDuration.toFixed(1)}s removed` : null}
                     </div>
 
-                    <label style={checkboxRow}>
-                      <input type="checkbox" checked={settings.remotionMode} onChange={(e) => updateSetting('remotionMode', e.target.checked)} />
-                      Remotion preview (animated captions + brand intro/outro)
-                    </label>
-
-                    {settings.remotionMode && (
-                      <div style={{ background: '#161b22', border: '1px solid #2a3441', borderRadius: 6, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <label style={checkboxRow}>
-                          <input type="checkbox" checked={settings.showIntro} onChange={(e) => updateSetting('showIntro', e.target.checked)} />
-                          Brand intro (1.5s)
-                        </label>
-                        {settings.showIntro && (
-                          <>
-                            <input value={settings.introTitle} onChange={(e) => updateSetting('introTitle', e.target.value)} placeholder="Intro title" style={smallInput} />
-                            <input value={settings.introSubtitle} onChange={(e) => updateSetting('introSubtitle', e.target.value)} placeholder="Intro subtitle" style={smallInput} />
-                          </>
-                        )}
-                        <label style={checkboxRow}>
-                          <input type="checkbox" checked={settings.showOutro} onChange={(e) => updateSetting('showOutro', e.target.checked)} />
-                          Outro CTA (2s)
-                        </label>
-                        {settings.showOutro && (
-                          <>
-                            <input value={settings.outroHeadline} onChange={(e) => updateSetting('outroHeadline', e.target.value)} placeholder="Outro headline" style={smallInput} />
-                            <input value={settings.outroCta} onChange={(e) => updateSetting('outroCta', e.target.value)} placeholder="Outro CTA (URL)" style={smallInput} />
-                          </>
-                        )}
-                      </div>
-                    )}
-
                     {stage !== 'rendering' && (
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button onClick={render} style={primaryBtn} disabled={!segments.length || settings.remotionMode}>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button onClick={render} style={primaryBtn} disabled={!segments.length}>
                           {stage === 'done' ? 'Re-render' : 'Render'}
                         </button>
+                        <button onClick={suggestCleanup} style={secondaryBtn} disabled={aiCleaning || !words.length}>
+                          {aiCleaning ? 'Reviewing...' : 'AI cleanup'}
+                        </button>
                         <button onClick={resetWords} style={secondaryBtn}>Reset cuts</button>
+                      </div>
+                    )}
+                    {aiCleanupMessage && (
+                      <div style={{ fontSize: 11, color: '#c5ccd5', lineHeight: 1.5 }}>
+                        {aiCleanupMessage}
                       </div>
                     )}
                     <div style={{ fontSize: 11, color: '#8b949e' }}>
                       Rendering uses the saved source and keeps the finished edit available after reload.
                     </div>
-                    {settings.remotionMode && (
-                      <div style={{ fontSize: 11, color: '#8b949e' }}>
-                        Remotion render-to-mp4 ships once Lambda is wired (env + AWS account). Preview-only for now.
-                      </div>
-                    )}
-
                     {stage === 'rendering' && (
                       <div style={statusBox}>
                         Rendering… {Math.round(progress * 100)}%
@@ -565,12 +535,7 @@ export default function UgcEditorTool({ onAddToCart }) {
   );
 }
 
-function applyAutoSilence(words, _enabled) {
-  if (!words.length) return words;
-  return words;
-}
-
-function buildSegments(words, duration) {
+function buildSegments(words, duration, autoCutSilences) {
   if (!words.length) return [];
   const segs = [];
   const PAD = 0.05;
@@ -581,7 +546,7 @@ function buildSegments(words, duration) {
       cur = { start: Math.max(0, w.start - PAD), end: w.end + PAD };
     } else {
       const gap = w.start - cur.end;
-      if (gap > SILENCE_THRESHOLD_S) {
+      if (autoCutSilences && gap > SILENCE_THRESHOLD_S) {
         segs.push(cur);
         cur = { start: Math.max(0, w.start - PAD), end: w.end + PAD };
       } else {
@@ -639,10 +604,6 @@ const checkboxRow = { fontSize: 13, color: '#f0f4f8', display: 'flex', gap: 8, a
 const statusBox = {
   background: '#161b22', border: '1px solid #2a3441', borderRadius: 6,
   padding: 12, fontSize: 13, color: '#f0f4f8',
-};
-const smallInput = {
-  background: '#0d1117', border: '1px solid #2a3441', color: '#f0f4f8',
-  padding: '6px 8px', borderRadius: 4, fontSize: 12, fontFamily: 'inherit',
 };
 const transcriptBox = {
   background: '#0d1117', border: '1px solid #2a3441', borderRadius: 8,

@@ -35,7 +35,12 @@ function CreatorAvatar({ creator, large = false }) {
     : <div className={`creator-avatar fallback ${large ? 'large' : ''}`}>{initials(creator.name)}</div>;
 }
 
-export default function CreatorWorkspace({ canWrite = false }) {
+export default function CreatorWorkspace({
+  canManageCreators = false,
+  canWriteBriefs = false,
+  canWriteAssets = false,
+  onOpenEditor,
+}) {
   const { getToken } = useAuth();
   const [creators, setCreators] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -56,7 +61,7 @@ export default function CreatorWorkspace({ canWrite = false }) {
   const [briefForm, setBriefForm] = useState({ product: '', objective: '', angle: '', direction: '', strategy_mode: 'past_performers' });
   const [outreach, setOutreach] = useState({ channel: 'email', subject: '', body: '', status: 'draft' });
   const [gmailConnected, setGmailConnected] = useState(() => document.cookie.split('; ').some(cookie => cookie.startsWith('gmail_connected=1')));
-  const [deliverable, setDeliverable] = useState({ title: '', due_at: '', source_url: '' });
+  const [deliverable, setDeliverable] = useState({ title: '', due_at: '', source_url: '', brief_id: '' });
   const [uploadProgress, setUploadProgress] = useState(0);
   const [syncingSocial, setSyncingSocial] = useState(null);
 
@@ -243,7 +248,7 @@ export default function CreatorWorkspace({ canWrite = false }) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not add deliverable');
       setWorkflow(data.workflow);
-      setDeliverable({ title: '', due_at: '', source_url: '' });
+      setDeliverable({ title: '', due_at: '', source_url: '', brief_id: '' });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -271,37 +276,24 @@ export default function CreatorWorkspace({ canWrite = false }) {
           if (event?.total) setUploadProgress(Math.round((event.loaded / event.total) * 100));
         },
       });
-      const sessionResponse = await fetch('/api/db/ugc-sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: `${selected.name} - ${deliverable.title || file.name}`,
-          file_name: file.name,
-          file_size: file.size,
-          video_url: blob.url,
-          status: 'uploaded',
-          creator_id: selected.id,
-        }),
-      });
-      const sessionData = await sessionResponse.json();
-      if (!sessionResponse.ok) throw new Error(sessionData.error || 'Could not create editor session');
       const deliverableResponse = await fetch('/api/creator-workflow', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'deliverable',
+          action: 'ingest_footage',
           creator_id: selected.id,
           title: deliverable.title || file.name,
+          brief_id: deliverable.brief_id || null,
           due_at: deliverable.due_at || null,
-          source_url: blob.url,
-          ugc_session_id: sessionData.session.id,
-          status: 'received',
+          video_url: blob.url,
+          file_name: file.name,
+          file_size: file.size,
         }),
       });
       const workflowData = await deliverableResponse.json();
       if (!deliverableResponse.ok) throw new Error(workflowData.error || 'Could not connect footage');
       setWorkflow(workflowData.workflow);
-      setDeliverable({ title: '', due_at: '', source_url: '' });
+      setDeliverable({ title: '', due_at: '', source_url: '', brief_id: '' });
       setUploadProgress(100);
     } catch (err) {
       setError(err.message);
@@ -471,7 +463,7 @@ export default function CreatorWorkspace({ canWrite = false }) {
           <h1>Creators</h1>
           <p>Source, qualify, brief, produce, and measure creator relationships in one record.</p>
         </div>
-        {canWrite && <div className="creator-head-actions"><button onClick={() => setShowImport(true)}>Import</button><button className="primary-action" onClick={() => setShowCreate(true)}>Add creator</button></div>}
+        {canManageCreators && <div className="creator-head-actions"><button onClick={() => setShowImport(true)}>Import</button><button className="primary-action" onClick={() => setShowCreate(true)}>Add creator</button></div>}
       </header>
 
       <div className="creator-toolbar">
@@ -536,13 +528,13 @@ export default function CreatorWorkspace({ canWrite = false }) {
             <div className="creator-status-row">
               <label>
                 Stage
-                <select value={selected.stage} disabled={!canWrite} onChange={event => updateCreator({ stage: event.target.value })}>
+                <select value={selected.stage} disabled={!canManageCreators} onChange={event => updateCreator({ stage: event.target.value })}>
                   {STAGES.slice(1).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                 </select>
               </label>
               <label>
                 Status
-                <select value={selected.status} disabled={!canWrite} onChange={event => updateCreator({ status: event.target.value })}>
+                <select value={selected.status} disabled={!canManageCreators} onChange={event => updateCreator({ status: event.target.value })}>
                   <option value="prospect">Prospect</option>
                   <option value="qualified">Qualified</option>
                   <option value="contracted">Contracted</option>
@@ -580,7 +572,7 @@ export default function CreatorWorkspace({ canWrite = false }) {
                     <div><b>{displayMetric(account.avg_views)}</b><small>avg views</small></div>
                     <div><b>{account.engagement_rate == null ? '—' : `${account.engagement_rate}%`}</b><small>engagement</small></div>
                   </a>
-                  {canWrite && account.platform === 'instagram' && (
+                  {canManageCreators && account.platform === 'instagram' && (
                     <button className="social-sync" disabled={syncingSocial === account.id} onClick={() => syncSocial(account)}>
                       {syncingSocial === account.id ? 'Syncing' : 'Refresh'}
                     </button>
@@ -589,7 +581,7 @@ export default function CreatorWorkspace({ canWrite = false }) {
                   </div>
                 ))}
               </div>
-              {canWrite && (
+              {canManageCreators && (
                 <details className="inline-editor">
                   <summary>Add or update account</summary>
                   <form onSubmit={saveSocial}>
@@ -626,7 +618,7 @@ export default function CreatorWorkspace({ canWrite = false }) {
                 <span>Activity</span>
                 <small>{selected.launch_count || 0} launched assets</small>
               </div>
-              {canWrite && (
+              {canManageCreators && (
                 <form className="creator-note-form" onSubmit={addNote}>
                   <input value={note} onChange={event => setNote(event.target.value)} placeholder="Add a useful note" />
                   <button disabled={saving || !note.trim()}>Add</button>
@@ -646,7 +638,7 @@ export default function CreatorWorkspace({ canWrite = false }) {
 
             {detailTab === 'briefs' && (
               <section className="creator-detail-section workflow-section">
-                {canWrite && (
+                {canWriteBriefs && (
                   <form className="workflow-form" onSubmit={generateBrief}>
                     <div className="detail-section-head"><span>Generate from creator context</span><small>AI grounded in this profile and launch history</small></div>
                     <input required placeholder="Product" value={briefForm.product} onChange={event => setBriefForm({ ...briefForm, product: event.target.value })} />
@@ -678,7 +670,7 @@ export default function CreatorWorkspace({ canWrite = false }) {
 
             {detailTab === 'outreach' && (
               <section className="creator-detail-section workflow-section">
-                {canWrite && (
+                {canWriteBriefs && (
                   <form className="workflow-form" onSubmit={saveOutreach}>
                     <div className="detail-section-head"><span>Outreach</span><small>Email connection is credential-ready</small></div>
                     <div className="workflow-two">
@@ -710,16 +702,20 @@ export default function CreatorWorkspace({ canWrite = false }) {
 
             {detailTab === 'deliverables' && (
               <section className="creator-detail-section workflow-section">
-                {canWrite && (
+                {canWriteAssets && (
                   <form className="workflow-form" onSubmit={addDeliverable}>
                     <div className="detail-section-head"><span>Footage and deliverables</span><small>Connect raw footage to editing and launch</small></div>
                     <input required placeholder="Deliverable title" value={deliverable.title} onChange={event => setDeliverable({ ...deliverable, title: event.target.value })} />
+                    <select value={deliverable.brief_id} onChange={event => setDeliverable({ ...deliverable, brief_id: event.target.value })}>
+                      <option value="">No linked brief</option>
+                      {workflow.briefs.map(brief => <option key={brief.id} value={brief.id}>{brief.title}</option>)}
+                    </select>
                     <input type="datetime-local" value={deliverable.due_at} onChange={event => setDeliverable({ ...deliverable, due_at: event.target.value })} />
                     <input placeholder="Drive or asset URL" value={deliverable.source_url} onChange={event => setDeliverable({ ...deliverable, source_url: event.target.value })} />
                     <button className="primary-action" disabled={saving}>Add deliverable</button>
                   </form>
                 )}
-                {canWrite && (
+                {canWriteAssets && (
                   <label className="creator-footage-upload">
                     <input type="file" accept="video/*" onChange={event => uploadFootage(event.target.files?.[0])} />
                     <strong>{saving && uploadProgress < 100 ? `Uploading ${uploadProgress}%` : 'Upload creator footage'}</strong>
@@ -732,7 +728,11 @@ export default function CreatorWorkspace({ canWrite = false }) {
                       <header><span><strong>{item.title}</strong><small>{item.due_at ? `Due ${new Date(item.due_at).toLocaleDateString()}` : 'No due date'}</small></span><i>{item.status}</i></header>
                       {item.source_url && <a href={item.source_url} target="_blank" rel="noreferrer">Open source asset</a>}
                       {item.output_url && <a href={item.output_url} target="_blank" rel="noreferrer">Open finished edit</a>}
-                      {item.ugc_session_id && <span className="editor-linked">UGC Editor session #{item.ugc_session_id}</span>}
+                      {canWriteAssets && item.ugc_session_id && (
+                        <button className="editor-linked" onClick={() => onOpenEditor?.(item.ugc_session_id)}>
+                          Open in UGC Editor
+                        </button>
+                      )}
                     </article>
                   ))}
                   {!workflow.deliverables.length && <div className="workflow-empty">No deliverables requested or received.</div>}

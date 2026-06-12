@@ -1,9 +1,16 @@
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+import { del } from '@vercel/blob';
 
 function clean(value, max = 10000) {
   const result = (value ?? '').toString().trim();
   return result ? result.slice(0, max) : null;
+}
+
+function timestamp(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
 }
 
 async function getWorkflow(sql, creatorId) {
@@ -139,7 +146,12 @@ async function generateOutreach(sql, creatorId, input) {
 }
 
 export default async function handler(req, res) {
-  const permission = req.method === 'GET' ? 'briefs.read' : 'briefs.write';
+  const body = req.body || {};
+  const permission = req.method === 'GET'
+    ? 'briefs.read'
+    : ((body.action === 'deliverable' || body.action === 'ingest_footage' || body.resource === 'deliverable')
+      ? 'assets.write'
+      : 'briefs.write');
   const access = await requirePermission(req, res, permission);
   if (!access) return;
   const { sql } = access;
@@ -152,7 +164,6 @@ export default async function handler(req, res) {
     if (req.method === 'GET') return res.json(await getWorkflow(sql, creatorId));
 
     if (req.method === 'POST') {
-      const body = req.body || {};
       if (body.action === 'generate_brief') {
         const generated = await generateBrief(sql, creatorId, body);
         const [brief] = await sql`
@@ -214,6 +225,8 @@ export default async function handler(req, res) {
       if (body.action === 'deliverable') {
         const title = clean(body.title, 300);
         if (!title) return res.status(400).json({ error: 'Deliverable title required' });
+        const dueAt = timestamp(body.due_at);
+        if (dueAt === undefined) return res.status(400).json({ error: 'Deliverable due date is invalid' });
         const [deliverable] = await sql`
           INSERT INTO creator_deliverables (
             creator_id, brief_id, title, status, source_url, drive_file_id,
@@ -221,7 +234,7 @@ export default async function handler(req, res) {
           ) VALUES (
             ${creatorId}, ${Number(body.brief_id) || null}, ${title}, ${clean(body.status, 50) || 'requested'},
             ${clean(body.source_url, 3000)}, ${clean(body.drive_file_id, 300)},
-            ${Number(body.ugc_session_id) || null}, ${body.due_at || null}, ${access.userId}
+            ${Number(body.ugc_session_id) || null}, ${dueAt}, ${access.userId}
           )
           RETURNING *
         `;
@@ -235,11 +248,83 @@ export default async function handler(req, res) {
         }
         return res.status(201).json({ deliverable, workflow: await getWorkflow(sql, creatorId) });
       }
+      if (body.action === 'ingest_footage') {
+        const title = clean(body.title, 300);
+        const videoUrl = clean(body.video_url, 3000);
+        if (!title || !videoUrl) return res.status(400).json({ error: 'Footage title and video_url required' });
+        const dueAt = timestamp(body.due_at);
+        if (dueAt === undefined) return res.status(400).json({ error: 'Footage due date is invalid' });
+        let parsedUrl;
+        try {
+          parsedUrl = new URL(videoUrl);
+        } catch {
+          return res.status(400).json({ error: 'Footage URL is invalid' });
+        }
+        if (parsedUrl.protocol !== 'https:' || !parsedUrl.hostname.endsWith('.blob.vercel-storage.com')) {
+          return res.status(400).json({ error: 'Footage must be stored in HOWL Vercel Blob' });
+        }
+        const briefId = Number(body.brief_id) || null;
+        if (briefId) {
+          const [brief] = await sql`
+            SELECT id FROM creator_briefs
+            WHERE id = ${briefId} AND creator_id = ${creatorId}
+          `;
+          if (!brief) {
+            await del(parsedUrl.toString()).catch(() => {});
+            return res.status(400).json({ error: 'Selected brief does not belong to this creator' });
+          }
+        }
+        const [ids] = await sql`
+          SELECT
+            nextval(pg_get_serial_sequence('ugc_sessions', 'id')) AS session_id,
+            nextval(pg_get_serial_sequence('creator_deliverables', 'id')) AS deliverable_id
+        `;
+        const sessionId = Number(ids.session_id);
+        const deliverableId = Number(ids.deliverable_id);
+        try {
+          await sql.transaction(transaction => [
+            transaction`
+              INSERT INTO ugc_sessions (
+                id, user_id, title, file_name, file_size, video_url, settings, status,
+                creator_id, brief_id, deliverable_id
+              ) VALUES (
+                ${sessionId}, ${access.userId}, ${title}, ${clean(body.file_name, 500)},
+                ${Number(body.file_size) || null}, ${parsedUrl.toString()}, '{}'::jsonb, 'uploaded',
+                ${creatorId}, ${briefId}, ${deliverableId}
+              )
+            `,
+            transaction`
+              INSERT INTO creator_deliverables (
+                id, creator_id, brief_id, title, status, source_url, ugc_session_id,
+                due_at, created_by
+              ) VALUES (
+                ${deliverableId}, ${creatorId}, ${briefId}, ${title}, 'received',
+                ${parsedUrl.toString()}, ${sessionId}, ${dueAt}, ${access.userId}
+              )
+            `,
+            transaction`
+              INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+              VALUES (
+                ${creatorId}, 'footage_received', ${`Footage received: ${title}`},
+                ${JSON.stringify({ deliverable_id: deliverableId, ugc_session_id: sessionId, brief_id: briefId })}::jsonb,
+                ${access.userId}
+              )
+            `,
+          ]);
+        } catch (err) {
+          await del(parsedUrl.toString()).catch(() => {});
+          throw err;
+        }
+        const [linked] = await sql`
+          SELECT * FROM creator_deliverables
+          WHERE id = ${deliverableId} AND creator_id = ${creatorId}
+        `;
+        return res.status(201).json({ deliverable: linked, workflow: await getWorkflow(sql, creatorId) });
+      }
       return res.status(400).json({ error: 'Unknown action' });
     }
 
     if (req.method === 'PATCH') {
-      const body = req.body || {};
       if (body.resource === 'brief') {
         const [brief] = await sql`
           UPDATE creator_briefs SET

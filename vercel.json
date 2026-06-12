@@ -12,6 +12,9 @@
     },
     "api/render-ugc.js": {
       "maxDuration": 300
+    },
+    "api/ugc-edit-suggest.js": {
+      "maxDuration": 60
     }
   },
   "crons": [

@@ -50,6 +50,7 @@ export default function HowlAdEngine() {
   const [filterProduct, setFilterProduct] = useState("all");
   const [videoText, setVideoText] = useState(null);
   const [imageText, setImageText] = useState(null);
+  const [editorSessionId, setEditorSessionId] = useState(null);
   const [favorites, setFavorites] = useState(() => {
     try { return JSON.parse(localStorage.getItem('howl_favorites') || '[]'); }
     catch { return []; }
@@ -131,6 +132,12 @@ export default function HowlAdEngine() {
     setImageText(variation.hook);
     setActiveTab('image');
   }, []);
+
+  const openEditorSession = useCallback((sessionId) => {
+    setEditorSessionId(Number(sessionId) || null);
+    setActiveTab('ugc-editor');
+  }, []);
+  const clearInitialEditorSession = useCallback(() => setEditorSessionId(null), []);
 
   const toggleProduct = (id) => setSelectedProducts((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
   const toggleAngle = (id) => setSelectedAngles((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
@@ -294,9 +301,16 @@ export default function HowlAdEngine() {
       )}
 
       <Suspense fallback={<TabFallback />}>
-        {activeTab === "creators" && <CreatorWorkspace canWrite={can('creators.write')} />}
-        {activeTab === "creative" && <WorkspaceHub type="creative" setActiveTab={setActiveTab} />}
-        {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={setActiveTab} />}
+        {activeTab === "creators" && (
+          <CreatorWorkspace
+            canManageCreators={can('creators.write')}
+            canWriteBriefs={can('briefs.write')}
+            canWriteAssets={can('assets.write')}
+            onOpenEditor={openEditorSession}
+          />
+        )}
+        {activeTab === "creative" && <WorkspaceHub type="creative" setActiveTab={setActiveTab} can={can} />}
+        {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={setActiveTab} can={can} />}
         {activeTab === "admin" && can('admin.users') && <AdminWorkspace />}
         {activeTab === "from-winners" && <FromWinnersTool setActiveTab={setActiveTab} setVariations={setVariations} />}
         {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} driveAuth={driveAuth} onAddToCart={addToCart} />}
@@ -313,7 +327,13 @@ export default function HowlAdEngine() {
         {activeTab === "dashboard-forecast" && <DashboardTool setActiveTab={setActiveTab} view="forecast" />}
         {activeTab === "inventory" && <InventoryTool />}
         {activeTab === "log" && <LaunchLogTool />}
-        {activeTab === "ugc-editor" && <UgcEditorTool onAddToCart={addToCart} />}
+        {activeTab === "ugc-editor" && (
+          <UgcEditorTool
+            initialSessionId={editorSessionId}
+            onInitialSessionLoaded={clearInitialEditorSession}
+            onAddToCart={addToCart}
+          />
+        )}
         {activeTab === "launcher" && (
           <LauncherTool
             cart={cart}

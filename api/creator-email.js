@@ -19,7 +19,7 @@ function base64Url(value) {
 }
 
 export default async function handler(req, res) {
-  const access = await requirePermission(req, res, req.method === 'GET' ? 'creators.read' : 'creators.write');
+  const access = await requirePermission(req, res, req.method === 'GET' ? 'creators.read' : 'briefs.write');
   if (!access) return;
   if (req.method === 'GET') {
     return res.json({ connected: Boolean(req.cookies?.gmail_connected && req.cookies?.drive_refresh) });
