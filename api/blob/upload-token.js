@@ -8,6 +8,7 @@
 // `clientPayload`, and we verify it inside onBeforeGenerateToken.
 import { handleUpload } from '@vercel/blob/client';
 import { verifyToken } from '@clerk/backend';
+import { getAppAccess, hasPermission } from '../_lib/app-access.js';
 
 export const config = {
   api: { bodyParser: true },
@@ -33,7 +34,12 @@ export default async function handler(req, res) {
           if (!process.env.CLERK_SECRET_KEY) throw new Error('CLERK_SECRET_KEY not configured');
           if (!clientPayload) throw new Error('Unauthorized — clientPayload missing');
           try {
-            await verifyToken(clientPayload, { secretKey: process.env.CLERK_SECRET_KEY });
+            const payload = await verifyToken(clientPayload, { secretKey: process.env.CLERK_SECRET_KEY });
+            const access = await getAppAccess({
+              userId: payload.sub,
+              email: payload.email || null,
+            });
+            if (!hasPermission(access, 'assets.write')) throw new Error('assets.write required');
           } catch (err) {
             throw new Error(`Unauthorized — ${err.message}`);
           }

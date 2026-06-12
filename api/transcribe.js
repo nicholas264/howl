@@ -1,4 +1,4 @@
-import { requireAuth } from './_lib/auth.js';
+import { requirePermission } from './_lib/app-access.js';
 
 export const config = {
   api: { bodyParser: false },
@@ -6,7 +6,7 @@ export const config = {
 };
 
 export default async function handler(req, res) {
-  if (!(await requireAuth(req, res))) return;
+  if (!(await requirePermission(req, res, 'assets.write'))) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const apiKey = process.env.OPENAI_API_KEY;

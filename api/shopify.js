@@ -1,4 +1,4 @@
-import { requireAuth } from './_lib/auth.js';
+import { requirePermission } from './_lib/app-access.js';
 import { createHash } from 'node:crypto';
 
 function customerKey(order, store) {
@@ -528,7 +528,7 @@ function mergeInventoryResults(stores) {
 }
 
 export default async function handler(req, res) {
-  if (!(await requireAuth(req, res))) return;
+  if (!(await requirePermission(req, res, 'analytics.read'))) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   // Configure stores. Primary is required. Dealer is optional — only added

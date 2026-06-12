@@ -17,7 +17,7 @@
 //   GOOGLE_OAUTH_REDIRECT_URI      (e.g. https://howl-teal.vercel.app/api/google?action=callback)
 
 import { neon } from '@neondatabase/serverless';
-import { requireAuth } from './_lib/auth.js';
+import { requirePermission } from './_lib/app-access.js';
 
 const GOOGLE_ADS_API_VERSION = 'v20';
 const SCOPE = 'https://www.googleapis.com/auth/adwords';
@@ -152,7 +152,7 @@ export default async function handler(req, res) {
   }
 
   // Everything else requires Clerk auth.
-  if (!(await requireAuth(req, res))) return;
+  if (!(await requirePermission(req, res, 'analytics.read'))) return;
 
   if (req.method !== 'POST') return res.status(405).end();
 

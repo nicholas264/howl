@@ -1,13 +1,13 @@
 import { useUser } from "@clerk/clerk-react";
 
 const QUICK_ACTIONS = [
-  { tab: 'config',           eyebrow: 'Generate',  title: 'Spark Copy',         sub: 'Hooks, headlines, primary text — Claude-fired.' },
-  { tab: 'ugc',              eyebrow: 'Launch',    title: 'UGC Inbox',          sub: 'Whatever the team dropped in Drive, ready to ship.' },
-  { tab: 'dashboard-cfo',    eyebrow: 'Insights',  title: 'CFO View',           sub: 'NCAC, CM3, OpEx coverage — real numbers.' },
-  { tab: 'dashboard-meta',   eyebrow: 'Insights',  title: 'Meta',               sub: 'Live budget, format mix, monthly velocity.' },
+  { tab: 'config', permission: 'briefs.write', eyebrow: 'Generate', title: 'Spark Copy', sub: 'Hooks, headlines, primary text — Claude-fired.' },
+  { tab: 'launcher', permission: 'launch.write', eyebrow: 'Launch', title: 'UGC Inbox', sub: 'Whatever the team dropped in Drive, ready to ship.' },
+  { tab: 'dashboard-cfo', permission: 'analytics.read', eyebrow: 'Insights', title: 'CFO View', sub: 'NCAC, CM3, OpEx coverage — real numbers.' },
+  { tab: 'dashboard-meta', permission: 'analytics.read', eyebrow: 'Insights', title: 'Meta', sub: 'Live budget, format mix, monthly velocity.' },
 ];
 
-export default function WelcomeScreen({ setActiveTab }) {
+export default function WelcomeScreen({ setActiveTab, can = () => true }) {
   const { user } = useUser();
   const firstName = user?.firstName || user?.username || null;
 
@@ -65,7 +65,7 @@ export default function WelcomeScreen({ setActiveTab }) {
 
         <div style={{ marginTop: 36, display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
           <button
-            onClick={() => setActiveTab('config')}
+            onClick={() => setActiveTab(can('briefs.write') ? 'config' : 'performance')}
             style={{
               padding: '12px 28px',
               background: '#DC440A',
@@ -81,7 +81,7 @@ export default function WelcomeScreen({ setActiveTab }) {
               boxShadow: '0 6px 24px rgba(220,68,10,0.35)',
             }}
           >
-            Strike a spark
+            {can('briefs.write') ? 'Strike a spark' : 'View performance'}
           </button>
           <button
             onClick={() => setActiveTab('dashboard-cfo')}
@@ -108,7 +108,7 @@ export default function WelcomeScreen({ setActiveTab }) {
       <div style={{ marginTop: 36 }}>
         <div className="eyebrow" style={{ marginBottom: 14, color: '#6e7681' }}>Where the embers are</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
-          {QUICK_ACTIONS.map(a => (
+          {QUICK_ACTIONS.filter(action => can(action.permission)).map(a => (
             <button
               key={a.tab}
               onClick={() => setActiveTab(a.tab)}

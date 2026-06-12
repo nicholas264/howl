@@ -1,7 +1,7 @@
 // Hardened proxy to Anthropic. The browser cannot pass arbitrary fields:
 // only model (whitelisted), max_tokens (capped), system, messages,
 // temperature pass through. Tool calls and other features are not exposed.
-import { requireAuth } from './_lib/auth.js';
+import { requirePermission } from './_lib/app-access.js';
 
 const ALLOWED_MODELS = new Set([
   'claude-sonnet-4-20250514',
@@ -13,7 +13,7 @@ const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const MAX_TOKENS_CAP = 8192;
 
 export default async function handler(req, res) {
-  if (!(await requireAuth(req, res))) return;
+  if (!(await requirePermission(req, res, 'briefs.write'))) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;

@@ -7,7 +7,7 @@
 //   2. Either the request body must include { sheetId } or
 //      dashboard_settings.forecastSheetId must be set.
 import { neon } from '@neondatabase/serverless';
-import { requireAuth } from './_lib/auth.js';
+import { requirePermission } from './_lib/app-access.js';
 import { getGoogleAccessToken } from './_lib/gcp-auth.js';
 
 const SHEETS_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
@@ -57,7 +57,7 @@ function toNumber(v) {
 }
 
 export default async function handler(req, res) {
-  if (!(await requireAuth(req, res))) return;
+  if (!(await requirePermission(req, res, 'analytics.read'))) return;
   const sql = neon(process.env.DATABASE_URL);
 
   try {

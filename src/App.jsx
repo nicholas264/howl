@@ -210,8 +210,8 @@ export default function HowlAdEngine() {
   const NAV = [
     { key: 'welcome', label: 'Home' },
     { key: 'creators', label: 'Creators', hidden: !can('creators.read') },
-    { key: 'creative', label: 'Creative', hidden: !can('briefs.read') && !can('assets.read'), match: ['creative', 'config', 'from-winners', 'results', 'image', 'callout', 'review', 'video', 'founder', 'ugc-editor'] },
-    { key: 'launcher', label: 'Launch', hidden: !can('launch.read'), count: (ugcCount + cartCount) || null, match: ['launcher', 'gallery', 'publish'] },
+    { key: 'creative', label: 'Creative', hidden: !can('briefs.write') && !can('assets.write'), match: ['creative', 'config', 'from-winners', 'results', 'image', 'callout', 'review', 'video', 'founder', 'ugc-editor'] },
+    { key: 'launcher', label: 'Launch', hidden: !can('launch.write'), count: (ugcCount + cartCount) || null, match: ['launcher', 'gallery', 'publish'] },
     { key: 'performance', label: 'Performance', hidden: !can('analytics.read'), matchPrefix: 'dashboard-', match: ['performance', 'creative-analytics', 'inventory', 'log'] },
     { key: 'admin', label: 'Admin', hidden: !can('admin.users') },
   ].filter(item => !item.hidden);
@@ -251,7 +251,7 @@ export default function HowlAdEngine() {
         </aside>
 
         <main className="main-panel">
-      {activeTab === "welcome" && <WelcomeScreen setActiveTab={setActiveTab} />}
+      {activeTab === "welcome" && <WelcomeScreen setActiveTab={setActiveTab} can={can} />}
 
       {activeTab === "config" && (
         <ConfigPanel
