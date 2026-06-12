@@ -19,6 +19,7 @@
 }
 
 body { background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace; }
+.access-denied{min-height:100vh;display:grid;place-content:center;justify-items:start;gap:12px;padding:28px;background:radial-gradient(circle at 50% 35%,rgba(220,68,10,.12),transparent 34%)}.access-denied img{width:150px;margin-bottom:30px}.access-denied h1{max-width:600px;font-size:46px}.access-denied p{color:var(--muted);font-size:11px;margin-bottom:10px}
 
 /* Typography system
    Default: JetBrains Mono for data, UI labels, buttons, numbers, anything "operational".

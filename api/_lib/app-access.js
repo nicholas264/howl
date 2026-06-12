@@ -128,6 +128,14 @@ export async function getAppAccess(auth, sql = neon(process.env.DATABASE_URL)) {
       ORDER BY created_at DESC
       LIMIT 1
     `;
+    if (!isBootstrapAdmin && !invitation) {
+      return {
+        user: null,
+        role: 'uninvited',
+        permissions: [],
+        role_labels: ROLE_LABELS,
+      };
+    }
     const role = isBootstrapAdmin ? 'owner' : (invitation?.role || 'viewer');
     [user] = await sql`
       INSERT INTO app_users (user_id, email, role, status, last_seen_at)

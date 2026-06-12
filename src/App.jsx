@@ -55,14 +55,19 @@ export default function HowlAdEngine() {
     catch { return []; }
   });
   const [appAccess, setAppAccess] = useState({ role: 'viewer', permissions: [] });
+  const [accessLoaded, setAccessLoaded] = useState(false);
 
   useEffect(() => {
     fetch('/api/app-context')
       .then(response => response.ok ? response.json() : Promise.reject(new Error('access unavailable')))
-      .then(setAppAccess)
+      .then(data => {
+        setAppAccess(data);
+        setAccessLoaded(true);
+      })
       .catch(() => {
         if (import.meta.env.DEV && import.meta.env.VITE_AUTH_DISABLED === 'true') {
           setAppAccess({ role: 'owner', permissions: ['*'] });
+          setAccessLoaded(true);
         }
       });
   }, []);
@@ -188,6 +193,18 @@ export default function HowlAdEngine() {
   const uniqueAngles = [...new Set(variations.map((v) => v.angle))];
   const uniqueProducts = [...new Set(variations.map((v) => v.product))];
   const cartCount = cart.length;
+
+  if (accessLoaded && !appAccess.user && appAccess.role === 'uninvited') {
+    return (
+      <div className="access-denied">
+        <img src="/logos/howl-horizontal-wht.png" alt="HOWL Campfires" />
+        <span className="workspace-kicker">Access required</span>
+        <h1>This HOWL workspace is invite-only.</h1>
+        <p>Ask a workspace owner to invite your email address from Admin.</p>
+        <UserButton afterSignOutUrl="/" />
+      </div>
+    );
+  }
 
   // UGC Inbox waiting count — single Drive call, refreshed on app mount and when leaving the UGC tab.
   const [ugcCount, setUgcCount] = useState(0);
