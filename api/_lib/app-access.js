@@ -75,6 +75,21 @@ async function createAppTables(sql) {
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_app_invitations_email ON app_invitations(lower(email))`;
   await sql`CREATE INDEX IF NOT EXISTS idx_app_invitations_status ON app_invitations(status)`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS feedback (
+      id          BIGSERIAL PRIMARY KEY,
+      user_id     TEXT,
+      email       TEXT,
+      kind        TEXT NOT NULL,
+      message     TEXT NOT NULL,
+      page_url    TEXT,
+      user_agent  TEXT,
+      status      TEXT NOT NULL DEFAULT 'open',
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)`;
 }
 
 export async function ensureAppTables(sql) {

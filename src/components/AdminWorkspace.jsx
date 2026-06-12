@@ -16,7 +16,7 @@ const DEFAULT_PERMISSIONS = {
 };
 
 export default function AdminWorkspace() {
-  const [data, setData] = useState({ users: [], invitations: [], roles: DEFAULT_ROLES, permissions: DEFAULT_PERMISSIONS, integrations: {} });
+  const [data, setData] = useState({ users: [], invitations: [], feedback: [], roles: DEFAULT_ROLES, permissions: DEFAULT_PERMISSIONS, integrations: {} });
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('viewer');
   const [loading, setLoading] = useState(true);
@@ -89,6 +89,25 @@ export default function AdminWorkspace() {
     }
   };
 
+  const updateFeedback = async (id, status) => {
+    setError('');
+    try {
+      const response = await fetch('/api/admin', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'feedback', id, status }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not update feedback');
+      setData(current => ({
+        ...current,
+        feedback: current.feedback.map(item => item.id === id ? result.feedback : item),
+      }));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   return (
     <div className="admin-workspace">
       <header className="creator-head">
@@ -153,6 +172,31 @@ export default function AdminWorkspace() {
               <p>{data.permissions[key]?.includes('*') ? 'Full application and administrative access.' : data.permissions[key]?.map(item => item.replace('.', ' ')).join(' · ')}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="admin-panel admin-feedback-panel">
+        <div className="admin-panel-head">
+          <div><span>Product inbox</span><strong>{data.feedback.filter(item => item.status === 'open').length}</strong></div>
+          <small>Bug reports and feature requests submitted inside HOWL.</small>
+        </div>
+        <div className="admin-feedback-list">
+          {data.feedback.map(item => (
+            <article key={item.id} className={`admin-feedback-item ${item.status}`}>
+              <div>
+                <span>{item.kind.replace('_', ' ')}</span>
+                <strong>{item.message}</strong>
+                <small>{item.email || 'Unknown user'} · {new Date(item.created_at).toLocaleString()}</small>
+              </div>
+              <select value={item.status} onChange={event => updateFeedback(item.id, event.target.value)}>
+                <option value="open">Open</option>
+                <option value="planned">Planned</option>
+                <option value="resolved">Resolved</option>
+                <option value="dismissed">Dismissed</option>
+              </select>
+            </article>
+          ))}
+          {!loading && !data.feedback.length && <div className="workflow-empty">No product feedback yet.</div>}
         </div>
       </section>
 

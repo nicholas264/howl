@@ -26,9 +26,18 @@ export default async function handler(req, res) {
         ORDER BY created_at DESC
         LIMIT 200
       `;
+      const feedback = await sql`
+        SELECT id, email, kind, message, page_url, status, created_at
+        FROM feedback
+        ORDER BY
+          CASE status WHEN 'open' THEN 1 WHEN 'planned' THEN 2 ELSE 3 END,
+          created_at DESC
+        LIMIT 100
+      `;
       return res.json({
         users,
         invitations,
+        feedback,
         roles: ROLE_LABELS,
         permissions: ROLE_PERMISSIONS,
         integrations: {
@@ -99,6 +108,20 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'PATCH') {
+      if (req.body?.action === 'feedback') {
+        const id = Number(req.body.id);
+        const status = req.body.status;
+        if (!id || !['open', 'planned', 'resolved', 'dismissed'].includes(status)) {
+          return res.status(400).json({ error: 'Valid feedback id and status required' });
+        }
+        const [item] = await sql`
+          UPDATE feedback
+          SET status = ${status}
+          WHERE id = ${id}
+          RETURNING id, email, kind, message, page_url, status, created_at
+        `;
+        return item ? res.json({ feedback: item }) : res.status(404).json({ error: 'Feedback not found' });
+      }
       const { user_id, role, status } = req.body || {};
       if (!user_id) return res.status(400).json({ error: 'user_id required' });
       if (role !== undefined && !isValidRole(role)) return res.status(400).json({ error: 'Invalid role' });
