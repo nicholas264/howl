@@ -231,14 +231,61 @@ export default function HowlAdEngine() {
     if (activeTab !== 'ugc') refreshUgcCount();
   }, [activeTab, refreshUgcCount]);
 
-  const NAV = [
-    { key: 'welcome', label: 'Home' },
-    { key: 'creators', label: 'Creators', hidden: !can('creators.read') },
-    { key: 'creative', label: 'Creative', hidden: !can('briefs.write') && !can('assets.write'), match: ['creative', 'config', 'from-winners', 'results', 'image', 'callout', 'review', 'video', 'founder', 'ugc-editor'] },
-    { key: 'launcher', label: 'Launch', hidden: !can('launch.write'), count: (ugcCount + cartCount) || null, match: ['launcher', 'gallery', 'publish'] },
-    { key: 'performance', label: 'Performance', hidden: !can('analytics.read'), matchPrefix: 'dashboard-', match: ['performance', 'creative-analytics', 'inventory', 'log'] },
-    { key: 'admin', label: 'Admin', hidden: !can('admin.users') },
-  ].filter(item => !item.hidden);
+  const NAV_SECTIONS = [
+    {
+      label: 'Workspace',
+      items: [
+        { key: 'welcome', label: 'Home' },
+        { key: 'creators', label: 'Creators', permission: 'creators.read' },
+      ],
+    },
+    {
+      label: 'Creative',
+      items: [
+        { key: 'from-winners', label: 'Concept Studio', permission: 'briefs.write' },
+        { key: 'config', label: 'Copy Generator', permission: 'briefs.write', match: ['config', 'results'] },
+        { key: 'ugc-editor', label: 'UGC Editor', permission: 'assets.write' },
+        { key: 'image', label: 'Image Ads', permission: 'assets.write' },
+        { key: 'callout', label: 'Callout Ads', permission: 'assets.write' },
+        { key: 'review', label: 'Review Ads', permission: 'assets.write' },
+        { key: 'video', label: 'Video Ads', permission: 'assets.write' },
+        { key: 'founder', label: 'Founder Ads', permission: 'assets.write' },
+      ],
+    },
+    {
+      label: 'Launch',
+      items: [
+        {
+          key: 'launcher',
+          label: 'Launcher',
+          permission: 'launch.write',
+          count: (ugcCount + cartCount) || null,
+          match: ['launcher', 'gallery', 'publish'],
+        },
+      ],
+    },
+    {
+      label: 'Performance',
+      items: [
+        { key: 'dashboard-cfo', label: 'Dashboard', permission: 'analytics.read' },
+        { key: 'dashboard-forecast', label: 'Forecast', permission: 'analytics.read' },
+        { key: 'dashboard-meta', label: 'Meta', permission: 'analytics.read' },
+        { key: 'dashboard-shopify', label: 'Shopify', permission: 'analytics.read' },
+        { key: 'creative-analytics', label: 'Creative Analytics', permission: 'analytics.read' },
+        { key: 'inventory', label: 'Inventory', permission: 'analytics.read' },
+        { key: 'log', label: 'Launch Log', permission: 'launch.read' },
+      ],
+    },
+    {
+      label: 'System',
+      items: [
+        { key: 'admin', label: 'Admin', permission: 'admin.users' },
+      ],
+    },
+  ].map(section => ({
+    ...section,
+    items: section.items.filter(item => !item.permission || can(item.permission)),
+  })).filter(section => section.items.length);
 
   return (
     <div style={{ minHeight: "100vh", background: "#0d1117", color: "#f0f4f8", fontFamily: "'JetBrains Mono', 'SF Mono', monospace" }}>
@@ -249,18 +296,20 @@ export default function HowlAdEngine() {
             <div className="sidebar-sub">The Campfire</div>
           </div>
           <nav className="side-nav">
-            <div className="sidebar-section">Workspace</div>
-            {NAV.map(item => {
-              const isActive = item.matchPrefix && activeTab.startsWith(item.matchPrefix)
-                || item.match?.includes(activeTab)
-                || activeTab === item.key;
-              return (
-                <button key={item.key} className={`side-item ${isActive ? 'on' : ''}`} onClick={() => setActiveTab(item.key)}>
-                  <span>{item.label}</span>
-                  {item.count ? <span className="count">{item.count > 99 ? '99+' : item.count}</span> : null}
-                </button>
-              );
-            })}
+            {NAV_SECTIONS.map(section => (
+              <div className="sidebar-nav-group" key={section.label}>
+                <div className="sidebar-section">{section.label}</div>
+                {section.items.map(item => {
+                  const isActive = item.match?.includes(activeTab) || activeTab === item.key;
+                  return (
+                    <button key={item.key} className={`side-item ${isActive ? 'on' : ''}`} onClick={() => setActiveTab(item.key)}>
+                      <span>{item.label}</span>
+                      {item.count ? <span className="count">{item.count > 99 ? '99+' : item.count}</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
           <div className="sidebar-foot">
             <UserButton
