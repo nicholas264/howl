@@ -99,12 +99,12 @@ export default async function handler(req, res) {
       ),
       deliverable_insert AS (
         INSERT INTO creator_deliverables (
-          id, creator_id, brief_id, title, status, source_url, ugc_session_id,
-          due_at, created_by
+          id, creator_id, brief_id, title, status, expected_asset_count,
+          received_asset_count, source_url, ugc_session_id, due_at, received_at, created_by
         )
         SELECT
           ${deliverableId}, claimed.creator_id, claimed.brief_id, claimed.title,
-          'received', ${parsedUrl.toString()}, ${sessionId}, claimed.due_at,
+          'received', 1, 1, ${parsedUrl.toString()}, ${sessionId}, claimed.due_at, now(),
           ${`creator-submit:${submission.id}`}
         FROM claimed
         RETURNING id

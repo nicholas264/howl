@@ -124,7 +124,9 @@ export default async function handler(req, res) {
     if (session.deliverable_id) {
       await sql`
         UPDATE creator_deliverables
-        SET output_url = ${blob.url}, status = 'edited', updated_at = now()
+        SET output_url = ${blob.url}, status = 'edited',
+            completed_asset_count = GREATEST(completed_asset_count, 1),
+            completed_at = COALESCE(completed_at, now()), updated_at = now()
         WHERE id = ${session.deliverable_id}
           AND creator_id = ${session.creator_id}
       `;

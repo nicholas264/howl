@@ -69,7 +69,10 @@ export default function CreatorWorkspace({
   const [note, setNote] = useState('');
   const [social, setSocial] = useState({ platform: 'instagram', handle: '', profile_url: '', followers: '', avg_views: '', engagement_rate: '' });
   const [detailTab, setDetailTab] = useState('profile');
-  const [workflow, setWorkflow] = useState({ briefs: [], outreach: [], engagements: [], agreements: [], deliverables: [], submission_links: [] });
+  const [workflow, setWorkflow] = useState({
+    briefs: [], outreach: [], engagements: [], agreements: [], deliverables: [],
+    submission_links: [], production_summary: {},
+  });
   const [briefForm, setBriefForm] = useState({ product: '', objective: '', angle: '', direction: '', strategy_mode: 'past_performers' });
   const [outreach, setOutreach] = useState({ channel: 'email', subject: '', body: '', status: 'draft' });
   const [engagement, setEngagement] = useState({
@@ -85,7 +88,9 @@ export default function CreatorWorkspace({
   });
   const [preparedAgreement, setPreparedAgreement] = useState(null);
   const [gmailConnected, setGmailConnected] = useState(() => document.cookie.split('; ').some(cookie => cookie.startsWith('gmail_connected=1')));
-  const [deliverable, setDeliverable] = useState({ title: '', due_at: '', source_url: '', brief_id: '' });
+  const [deliverable, setDeliverable] = useState({
+    title: '', due_at: '', source_url: '', brief_id: '', engagement_id: '', expected_asset_count: '1',
+  });
   const [submissionLink, setSubmissionLink] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [syncingSocial, setSyncingSocial] = useState(null);
@@ -372,7 +377,26 @@ export default function CreatorWorkspace({
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not add deliverable');
       setWorkflow(data.workflow);
-      setDeliverable({ title: '', due_at: '', source_url: '', brief_id: '' });
+      setDeliverable({ title: '', due_at: '', source_url: '', brief_id: '', engagement_id: '', expected_asset_count: '1' });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateDeliverable = async (id, patch) => {
+    setSaving(true);
+    setError('');
+    try {
+      const response = await fetch('/api/creator-workflow', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resource: 'deliverable', creator_id: selected.id, id, ...patch }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not update deliverable');
+      await refreshWorkflow(selected.id);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -469,7 +493,7 @@ export default function CreatorWorkspace({
       const workflowData = await deliverableResponse.json();
       if (!deliverableResponse.ok) throw new Error(workflowData.error || 'Could not connect footage');
       setWorkflow(workflowData.workflow);
-      setDeliverable({ title: '', due_at: '', source_url: '', brief_id: '' });
+      setDeliverable({ title: '', due_at: '', source_url: '', brief_id: '', engagement_id: '', expected_asset_count: '1' });
       setUploadProgress(100);
     } catch (err) {
       setError(err.message);
@@ -1011,15 +1035,30 @@ export default function CreatorWorkspace({
 
             {detailTab === 'deliverables' && (
               <section className="creator-detail-section workflow-section">
+                <div className="production-summary">
+                  <div><span>Due this month</span><strong>{workflow.production_summary?.due_this_month || 0}</strong></div>
+                  <div><span>Received</span><strong>{workflow.production_summary?.received || 0}</strong></div>
+                  <div><span>Completed</span><strong>{workflow.production_summary?.completed || 0}</strong></div>
+                  <div className={Number(workflow.production_summary?.overdue || 0) > 0 ? 'risk' : ''}><span>Overdue</span><strong>{workflow.production_summary?.overdue || 0}</strong></div>
+                </div>
                 {canWriteAssets && (
                   <form className="workflow-form" onSubmit={addDeliverable}>
                     <div className="detail-section-head"><span>Footage and deliverables</span><small>Connect raw footage to editing and launch</small></div>
                     <input required placeholder="Deliverable title" value={deliverable.title} onChange={event => setDeliverable({ ...deliverable, title: event.target.value })} />
-                    <select value={deliverable.brief_id} onChange={event => setDeliverable({ ...deliverable, brief_id: event.target.value })}>
-                      <option value="">No linked brief</option>
-                      {workflow.briefs.map(brief => <option key={brief.id} value={brief.id}>{brief.title}</option>)}
-                    </select>
-                    <input type="datetime-local" value={deliverable.due_at} onChange={event => setDeliverable({ ...deliverable, due_at: event.target.value })} />
+                    <div className="workflow-two">
+                      <select value={deliverable.engagement_id} onChange={event => setDeliverable({ ...deliverable, engagement_id: event.target.value })}>
+                        <option value="">No linked engagement</option>
+                        {workflow.engagements.map(item => <option key={item.id} value={item.id}>{item.engagement_type === 'retainer' ? 'Retainer' : 'One-off'} · {item.asset_commitment || '—'} assets</option>)}
+                      </select>
+                      <select value={deliverable.brief_id} onChange={event => setDeliverable({ ...deliverable, brief_id: event.target.value })}>
+                        <option value="">No linked brief</option>
+                        {workflow.briefs.map(brief => <option key={brief.id} value={brief.id}>{brief.title}</option>)}
+                      </select>
+                    </div>
+                    <div className="workflow-two">
+                      <input type="datetime-local" value={deliverable.due_at} onChange={event => setDeliverable({ ...deliverable, due_at: event.target.value })} />
+                      <input type="number" min="1" max="10000" placeholder="Expected asset count" value={deliverable.expected_asset_count} onChange={event => setDeliverable({ ...deliverable, expected_asset_count: event.target.value })} />
+                    </div>
                     <input placeholder="Drive or asset URL" value={deliverable.source_url} onChange={event => setDeliverable({ ...deliverable, source_url: event.target.value })} />
                     <div className="deliverable-actions">
                       <button className="primary-action" disabled={saving}>Add deliverable</button>
@@ -1057,7 +1096,38 @@ export default function CreatorWorkspace({
                   ))}
                   {workflow.deliverables.map(item => (
                     <article className="workflow-card deliverable-card" key={item.id}>
-                      <header><span><strong>{item.title}</strong><small>{item.due_at ? `Due ${new Date(item.due_at).toLocaleDateString()}` : 'No due date'}</small></span><i>{item.status}</i></header>
+                      <header><span><strong>{item.title}</strong><small>{item.due_at ? `Due ${new Date(item.due_at).toLocaleDateString()}` : 'No due date'} · {item.expected_asset_count || 1} expected</small></span><i>{item.status}</i></header>
+                      <div className="deliverable-progress">
+                        {[
+                          ['Received', item.received_asset_count],
+                          ['Approved', item.approved_asset_count],
+                          ['Completed', item.completed_asset_count],
+                          ['Shipped', item.shipped_asset_count],
+                        ].map(([label, count]) => (
+                          <div key={label}>
+                            <span>{label}</span>
+                            <strong>{count || 0}/{item.expected_asset_count || 1}</strong>
+                            <i style={{ width: `${Math.min(100, ((Number(count) || 0) / Math.max(1, Number(item.expected_asset_count) || 1)) * 100)}%` }} />
+                          </div>
+                        ))}
+                      </div>
+                      {canWriteAssets && (
+                        <div className="deliverable-controls">
+                          <select value={item.status} disabled={saving} onChange={event => updateDeliverable(item.id, { status: event.target.value })}>
+                            <option value="requested">Requested</option>
+                            <option value="received">Received</option>
+                            <option value="editing">Editing</option>
+                            <option value="edited">Edited</option>
+                            <option value="approved">Approved</option>
+                            <option value="complete">Complete</option>
+                            <option value="launched">Launched</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
+                          <label>Received<input type="number" min="0" max={item.expected_asset_count || 1} defaultValue={item.received_asset_count || 0} onBlur={event => updateDeliverable(item.id, { received_asset_count: event.target.value })} /></label>
+                          <label>Approved<input type="number" min="0" max={item.expected_asset_count || 1} defaultValue={item.approved_asset_count || 0} onBlur={event => updateDeliverable(item.id, { approved_asset_count: event.target.value })} /></label>
+                          <label>Complete<input type="number" min="0" max={item.expected_asset_count || 1} defaultValue={item.completed_asset_count || 0} onBlur={event => updateDeliverable(item.id, { completed_asset_count: event.target.value })} /></label>
+                        </div>
+                      )}
                       {item.source_url && <a href={item.source_url} target="_blank" rel="noreferrer">Open source asset</a>}
                       {item.output_url && <a href={item.output_url} target="_blank" rel="noreferrer">Open finished edit</a>}
                       {canWriteAssets && item.ugc_session_id && (

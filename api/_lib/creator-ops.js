@@ -177,19 +177,41 @@ async function createCreatorOpsTables(sql) {
       id              BIGSERIAL PRIMARY KEY,
       creator_id      BIGINT NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
       brief_id        BIGINT REFERENCES creator_briefs(id) ON DELETE SET NULL,
+      engagement_id   BIGINT REFERENCES creator_engagements(id) ON DELETE SET NULL,
       title           TEXT NOT NULL,
       status          TEXT NOT NULL DEFAULT 'requested',
+      expected_asset_count INTEGER NOT NULL DEFAULT 1,
+      received_asset_count INTEGER NOT NULL DEFAULT 0,
+      approved_asset_count INTEGER NOT NULL DEFAULT 0,
+      completed_asset_count INTEGER NOT NULL DEFAULT 0,
+      shipped_asset_count INTEGER NOT NULL DEFAULT 0,
       source_url      TEXT,
       drive_file_id   TEXT,
       ugc_session_id  BIGINT,
       creative_asset_id BIGINT,
       due_at          TIMESTAMPTZ,
+      received_at     TIMESTAMPTZ,
+      approved_at     TIMESTAMPTZ,
+      completed_at    TIMESTAMPTZ,
+      shipped_at      TIMESTAMPTZ,
       created_by      TEXT,
       created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_deliverables_creator ON creator_deliverables(creator_id, created_at DESC)`;
+  await sql`ALTER TABLE creator_deliverables ADD COLUMN IF NOT EXISTS engagement_id BIGINT REFERENCES creator_engagements(id) ON DELETE SET NULL`;
+  await sql`ALTER TABLE creator_deliverables ADD COLUMN IF NOT EXISTS expected_asset_count INTEGER NOT NULL DEFAULT 1`;
+  await sql`ALTER TABLE creator_deliverables ADD COLUMN IF NOT EXISTS received_asset_count INTEGER NOT NULL DEFAULT 0`;
+  await sql`ALTER TABLE creator_deliverables ADD COLUMN IF NOT EXISTS approved_asset_count INTEGER NOT NULL DEFAULT 0`;
+  await sql`ALTER TABLE creator_deliverables ADD COLUMN IF NOT EXISTS completed_asset_count INTEGER NOT NULL DEFAULT 0`;
+  await sql`ALTER TABLE creator_deliverables ADD COLUMN IF NOT EXISTS shipped_asset_count INTEGER NOT NULL DEFAULT 0`;
+  await sql`ALTER TABLE creator_deliverables ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE creator_deliverables ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE creator_deliverables ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE creator_deliverables ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMPTZ`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_deliverables_engagement ON creator_deliverables(engagement_id, due_at)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_deliverables_due ON creator_deliverables(due_at, status)`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS creator_submission_links (

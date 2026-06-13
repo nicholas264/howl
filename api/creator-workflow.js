@@ -17,7 +17,7 @@ function timestamp(value) {
 }
 
 async function getWorkflow(sql, creatorId) {
-  const [outreach, engagements, agreements, briefs, deliverables, submissionLinks] = await Promise.all([
+  const [outreach, engagements, agreements, briefs, deliverables, submissionLinks, productionSummary] = await Promise.all([
     sql`
       SELECT * FROM creator_outreach
       WHERE creator_id = ${creatorId}
@@ -61,8 +61,33 @@ async function getWorkflow(sql, creatorId) {
       ORDER BY created_at DESC
       LIMIT 100
     `,
+    sql`
+      SELECT
+        COALESCE(sum(expected_asset_count), 0)::int AS expected,
+        COALESCE(sum(received_asset_count), 0)::int AS received,
+        COALESCE(sum(approved_asset_count), 0)::int AS approved,
+        COALESCE(sum(completed_asset_count), 0)::int AS completed,
+        COALESCE(sum(shipped_asset_count), 0)::int AS shipped,
+        COALESCE(sum(expected_asset_count) FILTER (
+          WHERE due_at >= date_trunc('month', now())
+            AND due_at < date_trunc('month', now()) + interval '1 month'
+        ), 0)::int AS due_this_month,
+        COALESCE(sum(GREATEST(expected_asset_count - completed_asset_count, 0)) FILTER (
+          WHERE due_at < now() AND status NOT IN ('launched', 'complete', 'cancelled')
+        ), 0)::int AS overdue,
+        count(*) FILTER (
+          WHERE due_at >= date_trunc('month', now())
+            AND due_at < date_trunc('month', now()) + interval '1 month'
+        )::int AS deliverables_this_month
+      FROM creator_deliverables
+      WHERE creator_id = ${creatorId}
+    `,
   ]);
-  return { outreach, engagements, agreements, briefs, deliverables, submission_links: submissionLinks };
+  return {
+    outreach, engagements, agreements, briefs, deliverables,
+    submission_links: submissionLinks,
+    production_summary: productionSummary[0] || {},
+  };
 }
 
 async function generateBrief(sql, creatorId, input) {
@@ -381,12 +406,22 @@ export default async function handler(req, res) {
         if (!title) return res.status(400).json({ error: 'Deliverable title required' });
         const dueAt = timestamp(body.due_at);
         if (dueAt === undefined) return res.status(400).json({ error: 'Deliverable due date is invalid' });
+        const engagementId = Number(body.engagement_id) || null;
+        if (engagementId) {
+          const [engagement] = await sql`
+            SELECT id FROM creator_engagements
+            WHERE id = ${engagementId} AND creator_id = ${creatorId}
+          `;
+          if (!engagement) return res.status(400).json({ error: 'Selected engagement does not belong to this creator' });
+        }
+        const expectedAssetCount = Math.max(1, Math.min(Number(body.expected_asset_count) || 1, 10000));
         const [deliverable] = await sql`
           INSERT INTO creator_deliverables (
-            creator_id, brief_id, title, status, source_url, drive_file_id,
-            ugc_session_id, due_at, created_by
+            creator_id, brief_id, engagement_id, title, status, expected_asset_count,
+            source_url, drive_file_id, ugc_session_id, due_at, created_by
           ) VALUES (
-            ${creatorId}, ${Number(body.brief_id) || null}, ${title}, ${clean(body.status, 50) || 'requested'},
+            ${creatorId}, ${Number(body.brief_id) || null}, ${engagementId}, ${title},
+            ${clean(body.status, 50) || 'requested'}, ${expectedAssetCount},
             ${clean(body.source_url, 3000)}, ${clean(body.drive_file_id, 300)},
             ${Number(body.ugc_session_id) || null}, ${dueAt}, ${access.userId}
           )
@@ -449,11 +484,11 @@ export default async function handler(req, res) {
             `,
             transaction`
               INSERT INTO creator_deliverables (
-                id, creator_id, brief_id, title, status, source_url, ugc_session_id,
-                due_at, created_by
+                id, creator_id, brief_id, title, status, expected_asset_count,
+                received_asset_count, source_url, ugc_session_id, due_at, received_at, created_by
               ) VALUES (
-                ${deliverableId}, ${creatorId}, ${briefId}, ${title}, 'received',
-                ${parsedUrl.toString()}, ${sessionId}, ${dueAt}, ${access.userId}
+                ${deliverableId}, ${creatorId}, ${briefId}, ${title}, 'received', 1, 1,
+                ${parsedUrl.toString()}, ${sessionId}, ${dueAt}, now(), ${access.userId}
               )
             `,
             transaction`
@@ -552,12 +587,41 @@ export default async function handler(req, res) {
         return brief ? res.json({ brief }) : res.status(404).json({ error: 'Brief not found' });
       }
       if (body.resource === 'deliverable') {
+        const status = clean(body.status, 50);
+        const count = value => value === undefined
+          ? null
+          : Math.max(0, Math.min(Number(value) || 0, 10000));
         const [deliverable] = await sql`
           UPDATE creator_deliverables SET
-            status = COALESCE(${clean(body.status, 50)}, status),
+            status = COALESCE(${status}, status),
             source_url = COALESCE(${clean(body.source_url, 3000)}, source_url),
             ugc_session_id = COALESCE(${Number(body.ugc_session_id) || null}, ugc_session_id),
             creative_asset_id = COALESCE(${Number(body.creative_asset_id) || null}, creative_asset_id),
+            expected_asset_count = COALESCE(${count(body.expected_asset_count)}, expected_asset_count),
+            received_asset_count = CASE
+              WHEN ${status} IN ('received', 'editing', 'edited', 'approved', 'complete', 'launched')
+                THEN GREATEST(COALESCE(${count(body.received_asset_count)}, received_asset_count), 1)
+              ELSE COALESCE(${count(body.received_asset_count)}, received_asset_count)
+            END,
+            approved_asset_count = CASE
+              WHEN ${status} IN ('approved', 'complete', 'launched')
+                THEN GREATEST(COALESCE(${count(body.approved_asset_count)}, approved_asset_count), expected_asset_count)
+              ELSE COALESCE(${count(body.approved_asset_count)}, approved_asset_count)
+            END,
+            completed_asset_count = CASE
+              WHEN ${status} IN ('complete', 'launched')
+                THEN GREATEST(COALESCE(${count(body.completed_asset_count)}, completed_asset_count), expected_asset_count)
+              ELSE COALESCE(${count(body.completed_asset_count)}, completed_asset_count)
+            END,
+            shipped_asset_count = CASE
+              WHEN ${status} = 'launched'
+                THEN GREATEST(COALESCE(${count(body.shipped_asset_count)}, shipped_asset_count), expected_asset_count)
+              ELSE COALESCE(${count(body.shipped_asset_count)}, shipped_asset_count)
+            END,
+            received_at = CASE WHEN ${status} IN ('received', 'editing', 'edited', 'approved', 'complete', 'launched') THEN COALESCE(received_at, now()) ELSE received_at END,
+            approved_at = CASE WHEN ${status} IN ('approved', 'complete', 'launched') THEN COALESCE(approved_at, now()) ELSE approved_at END,
+            completed_at = CASE WHEN ${status} IN ('complete', 'edited', 'launched') THEN COALESCE(completed_at, now()) ELSE completed_at END,
+            shipped_at = CASE WHEN ${status} = 'launched' THEN COALESCE(shipped_at, now()) ELSE shipped_at END,
             updated_at = now()
           WHERE id = ${Number(body.id)} AND creator_id = ${creatorId}
           RETURNING *

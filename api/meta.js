@@ -35,6 +35,10 @@ async function logLaunch(row) {
           SET status = 'launched',
               output_url = COALESCE(${row.source_video_url}, output_url),
               creative_asset_id = ${asset?.id || null},
+              completed_asset_count = GREATEST(completed_asset_count, 1),
+              shipped_asset_count = GREATEST(shipped_asset_count, 1),
+              completed_at = COALESCE(completed_at, now()),
+              shipped_at = COALESCE(shipped_at, now()),
               updated_at = now()
           WHERE id = ${row.deliverable_id}
             AND creator_id = ${row.creator_id || null}
