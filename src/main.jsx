@@ -5,10 +5,13 @@ import App from './App.jsx'
 import './styles.css'
 
 const CreatorSubmissionPage = React.lazy(() => import('./components/CreatorSubmissionPage.jsx'))
+const CreatorAgreementPage = React.lazy(() => import('./components/CreatorAgreementPage.jsx'))
 const PUB_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 const DEV_AUTH_BYPASS = import.meta.env.DEV && import.meta.env.VITE_AUTH_DISABLED === 'true'
 const isCreatorSubmission = /^\/submit\/?$/.test(window.location.pathname)
-if (!PUB_KEY && !isCreatorSubmission) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY')
+const isCreatorAgreement = /^\/agreement\/?$/.test(window.location.pathname)
+const isPublicCreatorPage = isCreatorSubmission || isCreatorAgreement
+if (!PUB_KEY && !isPublicCreatorPage) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY')
 
 // Patch window.fetch so every /api/* call carries the Clerk session JWT.
 function FetchInterceptor() {
@@ -46,6 +49,10 @@ const appearance = {
 const app = isCreatorSubmission ? (
   <React.Suspense fallback={<div className="creator-submit-page" />}>
     <CreatorSubmissionPage />
+  </React.Suspense>
+) : isCreatorAgreement ? (
+  <React.Suspense fallback={<div className="creator-submit-page" />}>
+    <CreatorAgreementPage />
   </React.Suspense>
 ) : DEV_AUTH_BYPASS ? (
   <ClerkProvider publishableKey={PUB_KEY} appearance={appearance}>

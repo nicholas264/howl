@@ -33,12 +33,22 @@ export default async function handler(req, res) {
     const to = validEmail(req.body?.to);
     const subject = (req.body?.subject || '').toString().trim().slice(0, 500);
     const body = (req.body?.body || '').toString().trim().slice(0, 50000);
+    const agreementId = Number(req.body?.agreement_id) || null;
     if (!creatorId || !to || !subject || !body) {
       return res.status(400).json({ error: 'creator_id, valid to, subject, and body are required' });
     }
 
     const [creator] = await sql`SELECT id, name, email FROM creators WHERE id = ${creatorId}`;
     if (!creator) return res.status(404).json({ error: 'Creator not found' });
+    if (agreementId) {
+      const [agreement] = await sql`
+        SELECT id, status FROM creator_agreements
+        WHERE id = ${agreementId} AND creator_id = ${creatorId}
+      `;
+      if (!agreement || agreement.status !== 'draft') {
+        return res.status(400).json({ error: 'A draft agreement for this creator is required' });
+      }
+    }
     const refreshToken = req.cookies?.drive_refresh
       ? decodeURIComponent(req.cookies.drive_refresh)
       : null;
@@ -103,6 +113,21 @@ export default async function handler(req, res) {
         ${access.userId}
       )
     `;
+    if (agreementId) {
+      await sql`
+        UPDATE creator_agreements
+        SET status = 'sent', sent_to = ${to}, sent_at = now(), updated_at = now()
+        WHERE id = ${agreementId} AND creator_id = ${creatorId} AND status = 'draft'
+      `;
+      await sql`
+        INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+        VALUES (
+          ${creatorId}, 'agreement_sent', 'Usage agreement sent',
+          ${JSON.stringify({ agreement_id: agreementId, gmail_message_id: gmailData.id, to })}::jsonb,
+          ${access.userId}
+        )
+      `;
+    }
     return res.status(201).json({ message });
   } catch (err) {
     return res.status(500).json({ error: err.message });

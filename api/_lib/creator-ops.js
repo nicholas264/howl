@@ -88,6 +88,71 @@ async function createCreatorOpsTables(sql) {
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_outreach_creator ON creator_outreach(creator_id, created_at DESC)`;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS creator_engagements (
+      id                    BIGSERIAL PRIMARY KEY,
+      creator_id            BIGINT NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+      engagement_type       TEXT NOT NULL DEFAULT 'one_off',
+      status                TEXT NOT NULL DEFAULT 'draft',
+      approval_date         DATE,
+      starts_on             DATE,
+      ends_on               DATE,
+      asset_commitment      INTEGER,
+      cadence               TEXT,
+      fee_amount            NUMERIC(12,2),
+      fee_currency          TEXT NOT NULL DEFAULT 'USD',
+      ugc_video_rate        NUMERIC(12,2),
+      raw_footage_rate      NUMERIC(12,2),
+      hook_rate             NUMERIC(12,2),
+      photo_rate            NUMERIC(12,2),
+      whitelisting_monthly_rate NUMERIC(12,2),
+      usage_term_months     INTEGER,
+      paid_media_included   BOOLEAN NOT NULL DEFAULT true,
+      raw_footage_included  BOOLEAN NOT NULL DEFAULT false,
+      exclusivity_notes     TEXT,
+      payment_terms         TEXT,
+      notes                 TEXT,
+      created_by            TEXT,
+      created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_engagements_creator ON creator_engagements(creator_id, created_at DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_engagements_dates ON creator_engagements(starts_on, ends_on)`;
+  await sql`ALTER TABLE creator_engagements ADD COLUMN IF NOT EXISTS ugc_video_rate NUMERIC(12,2)`;
+  await sql`ALTER TABLE creator_engagements ADD COLUMN IF NOT EXISTS raw_footage_rate NUMERIC(12,2)`;
+  await sql`ALTER TABLE creator_engagements ADD COLUMN IF NOT EXISTS hook_rate NUMERIC(12,2)`;
+  await sql`ALTER TABLE creator_engagements ADD COLUMN IF NOT EXISTS photo_rate NUMERIC(12,2)`;
+  await sql`ALTER TABLE creator_engagements ADD COLUMN IF NOT EXISTS whitelisting_monthly_rate NUMERIC(12,2)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS creator_agreements (
+      id                    BIGSERIAL PRIMARY KEY,
+      creator_id            BIGINT NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+      engagement_id         BIGINT REFERENCES creator_engagements(id) ON DELETE SET NULL,
+      title                 TEXT NOT NULL,
+      agreement_body        TEXT NOT NULL,
+      version               INTEGER NOT NULL DEFAULT 1,
+      status                TEXT NOT NULL DEFAULT 'draft',
+      token_hash            TEXT UNIQUE,
+      expires_at            TIMESTAMPTZ,
+      sent_to               TEXT,
+      sent_at               TIMESTAMPTZ,
+      viewed_at             TIMESTAMPTZ,
+      accepted_name         TEXT,
+      accepted_email        TEXT,
+      accepted_at           TIMESTAMPTZ,
+      accepted_ip           TEXT,
+      accepted_user_agent   TEXT,
+      revoked_at            TIMESTAMPTZ,
+      created_by            TEXT,
+      created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_agreements_creator ON creator_agreements(creator_id, created_at DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_agreements_status ON creator_agreements(status, expires_at)`;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS creator_briefs (
       id                BIGSERIAL PRIMARY KEY,
       creator_id        BIGINT NOT NULL REFERENCES creators(id) ON DELETE CASCADE,

@@ -3,6 +3,7 @@ import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import { del } from '@vercel/blob';
 import { randomBytes } from 'node:crypto';
 import { submissionTokenHash } from './_lib/creator-submissions.js';
+import { agreementTokenHash } from './_lib/creator-agreements.js';
 
 function clean(value, max = 10000) {
   const result = (value ?? '').toString().trim();
@@ -16,9 +17,24 @@ function timestamp(value) {
 }
 
 async function getWorkflow(sql, creatorId) {
-  const [outreach, briefs, deliverables, submissionLinks] = await Promise.all([
+  const [outreach, engagements, agreements, briefs, deliverables, submissionLinks] = await Promise.all([
     sql`
       SELECT * FROM creator_outreach
+      WHERE creator_id = ${creatorId}
+      ORDER BY created_at DESC
+      LIMIT 100
+    `,
+    sql`
+      SELECT * FROM creator_engagements
+      WHERE creator_id = ${creatorId}
+      ORDER BY created_at DESC
+      LIMIT 100
+    `,
+    sql`
+      SELECT id, creator_id, engagement_id, title, version, status, expires_at,
+        sent_to, sent_at, viewed_at, accepted_name, accepted_email, accepted_at,
+        revoked_at, created_at, updated_at
+      FROM creator_agreements
       WHERE creator_id = ${creatorId}
       ORDER BY created_at DESC
       LIMIT 100
@@ -46,7 +62,7 @@ async function getWorkflow(sql, creatorId) {
       LIMIT 100
     `,
   ]);
-  return { outreach, briefs, deliverables, submission_links: submissionLinks };
+  return { outreach, engagements, agreements, briefs, deliverables, submission_links: submissionLinks };
 }
 
 async function generateBrief(sql, creatorId, input) {
@@ -236,6 +252,128 @@ export default async function handler(req, res) {
           )
         `;
         return res.status(201).json({ message, workflow: await getWorkflow(sql, creatorId) });
+      }
+
+      if (body.action === 'engagement') {
+        const engagementType = body.engagement_type === 'retainer' ? 'retainer' : 'one_off';
+        const status = ['draft', 'approved', 'active', 'completed', 'cancelled'].includes(body.status)
+          ? body.status
+          : 'draft';
+        const date = value => {
+          if (!value) return null;
+          return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+        };
+        const approvalDate = date(body.approval_date);
+        const startsOn = date(body.starts_on);
+        const endsOn = date(body.ends_on);
+        if ([approvalDate, startsOn, endsOn].includes(undefined)) {
+          return res.status(400).json({ error: 'Engagement dates must use YYYY-MM-DD' });
+        }
+        const assetCommitment = body.asset_commitment === '' || body.asset_commitment == null
+          ? null
+          : Math.max(0, Math.min(Number(body.asset_commitment) || 0, 10000));
+        const feeAmount = body.fee_amount === '' || body.fee_amount == null
+          ? null
+          : Math.max(0, Number(body.fee_amount) || 0);
+        const rate = value => value === '' || value == null ? null : Math.max(0, Number(value) || 0);
+        const usageTermMonths = body.usage_term_months === '' || body.usage_term_months == null
+          ? null
+          : Math.max(0, Math.min(Number(body.usage_term_months) || 0, 1200));
+        const [engagement] = await sql`
+          INSERT INTO creator_engagements (
+            creator_id, engagement_type, status, approval_date, starts_on, ends_on,
+            asset_commitment, cadence, fee_amount, fee_currency, usage_term_months,
+            ugc_video_rate, raw_footage_rate, hook_rate, photo_rate, whitelisting_monthly_rate,
+            paid_media_included, raw_footage_included, exclusivity_notes,
+            payment_terms, notes, created_by
+          ) VALUES (
+            ${creatorId}, ${engagementType}, ${status}, ${approvalDate}, ${startsOn}, ${endsOn},
+            ${assetCommitment}, ${clean(body.cadence, 100)}, ${feeAmount},
+            ${clean(body.fee_currency, 10) || 'USD'}, ${usageTermMonths},
+            ${rate(body.ugc_video_rate)}, ${rate(body.raw_footage_rate)}, ${rate(body.hook_rate)},
+            ${rate(body.photo_rate)}, ${rate(body.whitelisting_monthly_rate)},
+            ${body.paid_media_included !== false}, ${body.raw_footage_included === true},
+            ${clean(body.exclusivity_notes, 3000)}, ${clean(body.payment_terms, 1000)},
+            ${clean(body.notes, 5000)}, ${access.userId}
+          )
+          RETURNING *
+        `;
+        await sql`
+          INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+          VALUES (
+            ${creatorId}, 'engagement_created',
+            ${`${engagementType === 'retainer' ? 'Retainer' : 'One-off'} engagement created`},
+            ${JSON.stringify({ engagement_id: Number(engagement.id), engagement_type: engagementType })}::jsonb,
+            ${access.userId}
+          )
+        `;
+        return res.status(201).json({ engagement, workflow: await getWorkflow(sql, creatorId) });
+      }
+
+      if (body.action === 'create_agreement') {
+        const engagementId = Number(body.engagement_id);
+        const title = clean(body.title, 300);
+        const agreementBody = clean(body.agreement_body, 50000);
+        if (!engagementId || !title || !agreementBody) {
+          return res.status(400).json({ error: 'Engagement, title, and approved agreement text are required' });
+        }
+        const [engagement] = await sql`
+          SELECT id FROM creator_engagements
+          WHERE id = ${engagementId} AND creator_id = ${creatorId}
+        `;
+        if (!engagement) return res.status(400).json({ error: 'Engagement does not belong to this creator' });
+        const expiresInDays = Math.min(Math.max(Number(body.expires_in_days) || 14, 1), 60);
+        const expiresAt = new Date(Date.now() + expiresInDays * 86400000).toISOString();
+        const token = randomBytes(32).toString('base64url');
+        const [versionRow] = await sql`
+          SELECT COALESCE(max(version), 0)::int + 1 AS version
+          FROM creator_agreements
+          WHERE creator_id = ${creatorId}
+        `;
+        const [agreement] = await sql`
+          INSERT INTO creator_agreements (
+            creator_id, engagement_id, title, agreement_body, version, status,
+            token_hash, expires_at, created_by
+          ) VALUES (
+            ${creatorId}, ${engagementId}, ${title}, ${agreementBody}, ${versionRow.version},
+            'draft', ${agreementTokenHash(token)}, ${expiresAt}, ${access.userId}
+          )
+          RETURNING id, creator_id, engagement_id, title, version, status, expires_at, created_at
+        `;
+        await sql`
+          INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+          VALUES (
+            ${creatorId}, 'agreement_created', ${`Agreement prepared: ${title}`},
+            ${JSON.stringify({ agreement_id: Number(agreement.id), engagement_id: engagementId, version: versionRow.version })}::jsonb,
+            ${access.userId}
+          )
+        `;
+        return res.status(201).json({
+          agreement,
+          agreement_path: `/agreement?token=${encodeURIComponent(token)}`,
+          workflow: await getWorkflow(sql, creatorId),
+        });
+      }
+
+      if (body.action === 'revoke_agreement') {
+        const agreementId = Number(body.id);
+        if (!agreementId) return res.status(400).json({ error: 'Agreement id required' });
+        const [agreement] = await sql`
+          UPDATE creator_agreements
+          SET status = 'revoked', revoked_at = now(), updated_at = now()
+          WHERE id = ${agreementId} AND creator_id = ${creatorId}
+            AND status IN ('draft', 'sent')
+          RETURNING id, title
+        `;
+        if (!agreement) return res.status(404).json({ error: 'Revocable agreement not found' });
+        await sql`
+          INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+          VALUES (
+            ${creatorId}, 'agreement_revoked', ${`Agreement revoked: ${agreement.title}`},
+            ${JSON.stringify({ agreement_id: agreementId })}::jsonb, ${access.userId}
+          )
+        `;
+        return res.json({ ok: true, workflow: await getWorkflow(sql, creatorId) });
       }
 
       if (body.action === 'deliverable') {

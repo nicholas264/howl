@@ -69,9 +69,21 @@ export default function CreatorWorkspace({
   const [note, setNote] = useState('');
   const [social, setSocial] = useState({ platform: 'instagram', handle: '', profile_url: '', followers: '', avg_views: '', engagement_rate: '' });
   const [detailTab, setDetailTab] = useState('profile');
-  const [workflow, setWorkflow] = useState({ briefs: [], outreach: [], deliverables: [], submission_links: [] });
+  const [workflow, setWorkflow] = useState({ briefs: [], outreach: [], engagements: [], agreements: [], deliverables: [], submission_links: [] });
   const [briefForm, setBriefForm] = useState({ product: '', objective: '', angle: '', direction: '', strategy_mode: 'past_performers' });
   const [outreach, setOutreach] = useState({ channel: 'email', subject: '', body: '', status: 'draft' });
+  const [engagement, setEngagement] = useState({
+    engagement_type: 'one_off', status: 'draft', approval_date: '', starts_on: '', ends_on: '',
+    asset_commitment: '', cadence: '', fee_amount: '', fee_currency: 'USD',
+    ugc_video_rate: '', raw_footage_rate: '', hook_rate: '', photo_rate: '', whitelisting_monthly_rate: '',
+    usage_term_months: '12', paid_media_included: true, raw_footage_included: false,
+    exclusivity_notes: '', payment_terms: 'Net 30', notes: '',
+  });
+  const [agreement, setAgreement] = useState({
+    engagement_id: '', title: 'HOWL Creator Content Usage Agreement',
+    agreement_body: '', expires_in_days: '14',
+  });
+  const [preparedAgreement, setPreparedAgreement] = useState(null);
   const [gmailConnected, setGmailConnected] = useState(() => document.cookie.split('; ').some(cookie => cookie.startsWith('gmail_connected=1')));
   const [deliverable, setDeliverable] = useState({ title: '', due_at: '', source_url: '', brief_id: '' });
   const [submissionLink, setSubmissionLink] = useState(null);
@@ -132,6 +144,7 @@ export default function CreatorWorkspace({
       if (!response.ok) throw new Error(data.error || 'Could not load creator');
       setSelected(data.creator);
       setDetailTab('profile');
+      setPreparedAgreement(null);
       const workflowResponse = await fetch(`/api/creator-workflow?creator_id=${creator.id}`);
       const workflowData = await workflowResponse.json();
       if (workflowResponse.ok) setWorkflow(workflowData);
@@ -222,6 +235,104 @@ export default function CreatorWorkspace({
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const addEngagement = async event => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      const response = await fetch('/api/creator-workflow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'engagement', creator_id: selected.id, ...engagement }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not save engagement');
+      setWorkflow(data.workflow);
+      setAgreement(current => ({ ...current, engagement_id: String(data.engagement.id) }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const prepareAgreement = async event => {
+    event.preventDefault();
+    if (!agreement.agreement_body.trim()) {
+      setError('Paste your approved agreement language before preparing it.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      const response = await fetch('/api/creator-workflow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create_agreement', creator_id: selected.id, ...agreement }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not prepare agreement');
+      const url = `${window.location.origin}${data.agreement_path}`;
+      setPreparedAgreement({ ...data.agreement, url });
+      setWorkflow(data.workflow);
+      await navigator.clipboard?.writeText(url).catch(() => {});
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendAgreement = async () => {
+    if (!preparedAgreement || !selected?.email) {
+      setError('Prepare the agreement and add a creator email before sending.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      const response = await fetch('/api/creator-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          creator_id: selected.id,
+          agreement_id: preparedAgreement.id,
+          to: selected.email,
+          subject: `${preparedAgreement.title} - review and accept`,
+          body: `Hi ${selected.name},\n\nPlease review and accept your HOWL creator agreement using the secure link below:\n\n${preparedAgreement.url}\n\nThis link expires on ${new Date(preparedAgreement.expires_at).toLocaleDateString()}.\n\nThank you,\nHOWL Campfires`,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        if (data.reconnect_required) setGmailConnected(false);
+        throw new Error(data.error || 'Could not send agreement');
+      }
+      setPreparedAgreement(null);
+      await refreshWorkflow(selected.id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const revokeAgreement = async id => {
+    setError('');
+    try {
+      const response = await fetch('/api/creator-workflow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'revoke_agreement', creator_id: selected.id, id }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not revoke agreement');
+      setWorkflow(data.workflow);
+      if (preparedAgreement?.id === id) setPreparedAgreement(null);
+    } catch (err) {
+      setError(err.message);
     }
   };
 
@@ -637,7 +748,7 @@ export default function CreatorWorkspace({
             </div>
 
             <div className="creator-detail-tabs">
-              {['profile', 'briefs', 'outreach', 'deliverables', 'performance'].map(tab => (
+              {['profile', 'agreements', 'briefs', 'outreach', 'deliverables', 'performance'].map(tab => (
                 <button key={tab} className={detailTab === tab ? 'active' : ''} onClick={() => setDetailTab(tab)}>
                   {tab}{tab === 'briefs' && workflow.briefs.length ? ` ${workflow.briefs.length}` : ''}
                 </button>
@@ -734,6 +845,105 @@ export default function CreatorWorkspace({
               </div>
             </section>
             </>}
+
+            {detailTab === 'agreements' && (
+              <section className="creator-detail-section workflow-section">
+                {canManageCreators && (
+                  <form className="workflow-form" onSubmit={addEngagement}>
+                    <div className="detail-section-head"><span>Commercial terms</span><small>Retainer or one-off engagement</small></div>
+                    <div className="workflow-two">
+                      <select value={engagement.engagement_type} onChange={event => setEngagement({ ...engagement, engagement_type: event.target.value })}>
+                        <option value="one_off">One-off creator</option>
+                        <option value="retainer">Retainer creator</option>
+                      </select>
+                      <select value={engagement.status} onChange={event => setEngagement({ ...engagement, status: event.target.value })}>
+                        <option value="draft">Draft</option>
+                        <option value="approved">Approved</option>
+                        <option value="active">Active</option>
+                      </select>
+                    </div>
+                    <div className="workflow-three">
+                      <label>Approval date<input type="date" value={engagement.approval_date} onChange={event => setEngagement({ ...engagement, approval_date: event.target.value })} /></label>
+                      <label>Starts<input type="date" value={engagement.starts_on} onChange={event => setEngagement({ ...engagement, starts_on: event.target.value })} /></label>
+                      <label>Ends<input type="date" value={engagement.ends_on} onChange={event => setEngagement({ ...engagement, ends_on: event.target.value })} /></label>
+                    </div>
+                    <div className="workflow-three">
+                      <input type="number" min="0" placeholder="Asset commitment" value={engagement.asset_commitment} onChange={event => setEngagement({ ...engagement, asset_commitment: event.target.value })} />
+                      <input placeholder="Cadence, e.g. per month" value={engagement.cadence} onChange={event => setEngagement({ ...engagement, cadence: event.target.value })} />
+                      <input type="number" min="0" step="0.01" placeholder="Total fee" value={engagement.fee_amount} onChange={event => setEngagement({ ...engagement, fee_amount: event.target.value })} />
+                    </div>
+                    <div className="workflow-two">
+                      <input type="number" min="0" placeholder="Usage term months" value={engagement.usage_term_months} onChange={event => setEngagement({ ...engagement, usage_term_months: event.target.value })} />
+                      <input placeholder="Payment terms" value={engagement.payment_terms} onChange={event => setEngagement({ ...engagement, payment_terms: event.target.value })} />
+                    </div>
+                    <div className="detail-section-head agreement-rate-head"><span>Rate card</span><small>Optional line-item pricing</small></div>
+                    <div className="workflow-rate-grid">
+                      <input type="number" min="0" step="0.01" placeholder="UGC video rate" value={engagement.ugc_video_rate} onChange={event => setEngagement({ ...engagement, ugc_video_rate: event.target.value })} />
+                      <input type="number" min="0" step="0.01" placeholder="Raw footage rate" value={engagement.raw_footage_rate} onChange={event => setEngagement({ ...engagement, raw_footage_rate: event.target.value })} />
+                      <input type="number" min="0" step="0.01" placeholder="Hook rate" value={engagement.hook_rate} onChange={event => setEngagement({ ...engagement, hook_rate: event.target.value })} />
+                      <input type="number" min="0" step="0.01" placeholder="Photo rate" value={engagement.photo_rate} onChange={event => setEngagement({ ...engagement, photo_rate: event.target.value })} />
+                      <input type="number" min="0" step="0.01" placeholder="Whitelisting / month" value={engagement.whitelisting_monthly_rate} onChange={event => setEngagement({ ...engagement, whitelisting_monthly_rate: event.target.value })} />
+                    </div>
+                    <div className="agreement-options">
+                      <label><input type="checkbox" checked={engagement.paid_media_included} onChange={event => setEngagement({ ...engagement, paid_media_included: event.target.checked })} /> Paid media usage</label>
+                      <label><input type="checkbox" checked={engagement.raw_footage_included} onChange={event => setEngagement({ ...engagement, raw_footage_included: event.target.checked })} /> Raw footage included</label>
+                    </div>
+                    <textarea rows="2" placeholder="Exclusivity notes" value={engagement.exclusivity_notes} onChange={event => setEngagement({ ...engagement, exclusivity_notes: event.target.value })} />
+                    <textarea rows="2" placeholder="Internal engagement notes" value={engagement.notes} onChange={event => setEngagement({ ...engagement, notes: event.target.value })} />
+                    <button className="primary-action" disabled={saving}>Save engagement</button>
+                  </form>
+                )}
+
+                {canManageCreators && workflow.engagements?.length > 0 && (
+                  <form className="workflow-form agreement-builder" onSubmit={prepareAgreement}>
+                    <div className="detail-section-head"><span>Prepare usage agreement</span><small>Use language approved for HOWL</small></div>
+                    <select value={agreement.engagement_id} onChange={event => setAgreement({ ...agreement, engagement_id: event.target.value })} required>
+                      <option value="">Choose engagement</option>
+                      {workflow.engagements.map(item => (
+                        <option key={item.id} value={item.id}>
+                          {item.engagement_type === 'retainer' ? 'Retainer' : 'One-off'} · {item.asset_commitment || '—'} assets · {item.fee_amount ? `$${Number(item.fee_amount).toLocaleString()}` : 'fee not set'}
+                        </option>
+                      ))}
+                    </select>
+                    <input required placeholder="Agreement title" value={agreement.title} onChange={event => setAgreement({ ...agreement, title: event.target.value })} />
+                    <textarea required rows="12" placeholder="Paste the approved creator usage agreement here. The exact text is versioned and locked when prepared." value={agreement.agreement_body} onChange={event => setAgreement({ ...agreement, agreement_body: event.target.value })} />
+                    <div className="workflow-two">
+                      <input type="number" min="1" max="60" value={agreement.expires_in_days} onChange={event => setAgreement({ ...agreement, expires_in_days: event.target.value })} />
+                      <button className="primary-action" disabled={saving}>Prepare secure link</button>
+                    </div>
+                    <small className="agreement-legal-note">Use an agreement template approved by your legal counsel. HOWL records workflow and acceptance; it does not provide legal advice.</small>
+                    {preparedAgreement && (
+                      <div className="agreement-ready">
+                        <input readOnly value={preparedAgreement.url} onFocus={event => event.target.select()} />
+                        {gmailConnected
+                          ? <button type="button" disabled={saving || !selected.email} onClick={sendAgreement}>Send with Gmail</button>
+                          : <a href="/api/auth/google?purpose=creator_email">Connect Gmail</a>}
+                      </div>
+                    )}
+                  </form>
+                )}
+
+                <div className="workflow-list">
+                  {workflow.agreements?.map(item => (
+                    <article className="workflow-card agreement-card" key={item.id}>
+                      <header>
+                        <span>
+                          <strong>{item.title}</strong>
+                          <small>Version {item.version}{item.sent_at ? ` · Sent ${new Date(item.sent_at).toLocaleDateString()}` : ''}</small>
+                        </span>
+                        <i>{item.status}</i>
+                      </header>
+                      <div className="agreement-card-meta">
+                        {item.viewed_at && <span>Viewed {new Date(item.viewed_at).toLocaleString()}</span>}
+                        {item.accepted_at && <span>Accepted by {item.accepted_name} on {new Date(item.accepted_at).toLocaleString()}</span>}
+                        {canManageCreators && ['draft', 'sent'].includes(item.status) && <button onClick={() => revokeAgreement(item.id)}>Revoke</button>}
+                      </div>
+                    </article>
+                  ))}
+                  {!workflow.agreements?.length && <div className="workflow-empty">No agreements prepared yet.</div>}
+                </div>
+              </section>
+            )}
 
             {detailTab === 'briefs' && (
               <section className="creator-detail-section workflow-section">
