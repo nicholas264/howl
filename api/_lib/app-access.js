@@ -6,7 +6,7 @@ export const ROLE_PERMISSIONS = {
   admin: [
     'creators.read', 'creators.write', 'briefs.read', 'briefs.write',
     'assets.read', 'assets.write', 'launch.read', 'launch.write',
-    'analytics.read', 'admin.users',
+    'analytics.read', 'admin.users', 'shopify.seed',
   ],
   strategist: [
     'creators.read', 'creators.write', 'briefs.read', 'briefs.write',

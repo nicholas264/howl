@@ -6,9 +6,8 @@ function clean(value, max = 1000) {
   return result ? result.slice(0, max) : null;
 }
 
-async function shopifyGraphql(query, variables) {
+async function shopifyGraphql(query, variables, token) {
   const store = process.env.SHOPIFY_STORE || 'howl-campfires.myshopify.com';
-  const token = process.env.SHOPIFY_ACCESS_TOKEN;
   if (!token) throw new Error('Shopify store is not connected');
   const response = await fetch(`https://${store}/admin/api/2026-04/graphql.json`, {
     method: 'POST',
@@ -23,7 +22,7 @@ async function shopifyGraphql(query, variables) {
 }
 
 export default async function handler(req, res) {
-  const access = await requirePermission(req, res, req.method === 'GET' ? 'creators.read' : 'creators.write');
+  const access = await requirePermission(req, res, req.method === 'GET' ? 'creators.read' : 'shopify.seed');
   if (!access) return;
   const { sql } = access;
   try {
@@ -42,11 +41,38 @@ export default async function handler(req, res) {
     }
 
     if (req.method !== 'POST') return res.status(405).end();
-    const quantity = Math.max(1, Math.min(Number(req.body?.quantity) || 1, 20));
+    if (process.env.SHOPIFY_SEEDING_ENABLED !== 'true') {
+      return res.status(503).json({ error: 'Shopify creator seeding is disabled by the safety switch.' });
+    }
+    const seedingToken = process.env.SHOPIFY_SEEDING_ACCESS_TOKEN;
+    if (!seedingToken) {
+      return res.status(503).json({ error: 'A separate least-privilege Shopify seeding token is required.' });
+    }
+    const maxQuantity = Math.max(1, Math.min(Number(process.env.SHOPIFY_SEEDING_MAX_QUANTITY) || 5, 20));
+    const quantity = Number(req.body?.quantity) || 1;
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > maxQuantity) {
+      return res.status(400).json({ error: `Seed quantity must be between 1 and ${maxQuantity}.` });
+    }
     const variantId = clean(req.body?.variant_id, 300);
-    const productTitle = clean(req.body?.product_title, 500);
-    if (!variantId || !productTitle || !variantId.startsWith('gid://shopify/ProductVariant/')) {
+    const requestKey = clean(req.body?.request_key, 100);
+    if (!variantId || !requestKey || !variantId.startsWith('gid://shopify/ProductVariant/')) {
       return res.status(400).json({ error: 'A valid Shopify product variant is required' });
+    }
+    const [existingSeed] = await sql`
+      SELECT * FROM creator_product_seeds WHERE request_key = ${requestKey} LIMIT 1
+    `;
+    if (existingSeed) return res.status(200).json({ seed: existingSeed, duplicate: true });
+    const dailyLimit = Math.max(1, Math.min(Number(process.env.SHOPIFY_SEEDING_DAILY_LIMIT) || 10, 100));
+    const [dailyUsage] = await sql`
+      SELECT count(*)::int AS orders
+      FROM creator_product_seeds
+      WHERE requested_at >= date_trunc('day', now())
+        AND status IN ('draft_created', 'ordered')
+    `;
+    if (Number(dailyUsage?.orders || 0) >= dailyLimit) {
+      return res.status(429).json({
+        error: `The Shopify creator-seeding daily safety limit of ${dailyLimit} orders has been reached.`,
+      });
     }
     const [creator] = await sql`
       SELECT id, name, email, phone, shipping_address1, shipping_address2,
@@ -62,6 +88,21 @@ export default async function handler(req, res) {
       ['country', creator.shipping_country_code],
     ].filter(([, value]) => !value).map(([label]) => label);
     if (missing.length) return res.status(400).json({ error: `Creator shipping ${missing.join(', ')} required` });
+
+    const { data: catalogData } = await shopifyGraphql(`query ValidateCreatorSeedVariant($id: ID!) {
+      productVariant(id: $id) {
+        id title sku availableForSale inventoryQuantity
+        product { id title status }
+      }
+    }`, { id: variantId }, process.env.SHOPIFY_ACCESS_TOKEN);
+    const catalogVariant = catalogData.productVariant;
+    if (!catalogVariant || catalogVariant.product?.status !== 'ACTIVE' || !catalogVariant.availableForSale) {
+      return res.status(400).json({ error: 'This Shopify variant is not active and available for sale.' });
+    }
+    if (Number.isFinite(catalogVariant.inventoryQuantity) && catalogVariant.inventoryQuantity < quantity) {
+      return res.status(400).json({ error: 'The requested quantity exceeds available Shopify inventory.' });
+    }
+    const productTitle = catalogVariant.product.title;
 
     const lineItem = {
       variantId,
@@ -95,22 +136,28 @@ export default async function handler(req, res) {
           phone: creator.phone || undefined,
         },
       },
-    });
+    }, seedingToken);
     const createResult = created.draftOrderCreate;
     if (createResult.userErrors?.length) {
       return res.status(400).json({ error: createResult.userErrors.map(error => error.message).join('; ') });
     }
     const draft = createResult.draftOrder;
+    const draftTotal = Number(draft.totalPriceSet?.shopMoney?.amount);
+    if (!Number.isFinite(draftTotal) || draftTotal !== 0) {
+      return res.status(409).json({
+        error: 'Shopify created a non-zero draft. It was not completed. Review the draft in Shopify.',
+      });
+    }
     const [seed] = await sql`
       INSERT INTO creator_product_seeds (
         creator_id, shop_domain, shopify_product_id, shopify_variant_id,
         product_title, variant_title, sku, quantity, status,
-        shopify_draft_order_id, shopify_order_name,
+        shopify_draft_order_id, shopify_order_name, request_key,
         notes, requested_by
       ) VALUES (
         ${creatorId}, ${store}, ${clean(req.body?.product_id, 300)}, ${variantId},
         ${productTitle}, ${clean(req.body?.variant_title, 500)}, ${clean(req.body?.sku, 200)},
-        ${quantity}, 'draft_created', ${draft.id}, ${draft.name},
+        ${quantity}, 'draft_created', ${draft.id}, ${draft.name}, ${requestKey},
         ${clean(req.body?.notes, 2000)}, ${access.userId}
       )
       RETURNING *
@@ -120,7 +167,7 @@ export default async function handler(req, res) {
         draftOrder { id name status order { id name displayFulfillmentStatus } }
         userErrors { field message }
       }
-    }`, { id: draft.id });
+    }`, { id: draft.id }, seedingToken);
     const completeResult = completed.draftOrderComplete;
     if (completeResult.userErrors?.length) {
       return res.status(202).json({
@@ -152,7 +199,7 @@ export default async function handler(req, res) {
   } catch (err) {
     return res.status(500).json({
       error: /access denied|scope/i.test(err.message)
-        ? 'Shopify needs write_draft_orders permission. Reconnect the store from Admin.'
+        ? 'The separate Shopify seeding token needs draft-order permission.'
         : err.message,
     });
   }

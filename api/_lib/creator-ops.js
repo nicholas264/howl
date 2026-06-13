@@ -242,6 +242,7 @@ async function createCreatorOpsTables(sql) {
       shopify_draft_order_id TEXT,
       shopify_order_id      TEXT,
       shopify_order_name    TEXT,
+      request_key           TEXT,
       tracking_url          TEXT,
       notes                 TEXT,
       requested_by          TEXT,
@@ -251,8 +252,10 @@ async function createCreatorOpsTables(sql) {
       updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+  await sql`ALTER TABLE creator_product_seeds ADD COLUMN IF NOT EXISTS request_key TEXT`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_product_seeds_creator ON creator_product_seeds(creator_id, requested_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_product_seeds_status ON creator_product_seeds(status, requested_at DESC)`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_creator_product_seeds_request_key ON creator_product_seeds(request_key) WHERE request_key IS NOT NULL`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS creator_deliverables (

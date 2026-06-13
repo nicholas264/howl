@@ -802,6 +802,7 @@ export default function CreatorWorkspace({
           sku: variant.sku,
           quantity: Number(seedForm.quantity) || 1,
           notes: seedForm.notes,
+          request_key: crypto.randomUUID(),
         }),
       });
       const data = await response.json();
