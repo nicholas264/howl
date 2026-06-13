@@ -1,9 +1,6 @@
 import React, { useState, useCallback, useEffect, Suspense, lazy } from "react";
 import { UserButton } from "@clerk/clerk-react";
-import { PRODUCTS, ANGLES, PLATFORMS } from "./data";
-import { buildSystemPrompt, buildUserPrompt } from "./prompts";
 // Always-visible shell components stay eagerly imported.
-import ConfigPanel from "./components/ConfigPanel";
 import ResultsPanel from "./components/ResultsPanel";
 import WelcomeScreen from "./components/WelcomeScreen";
 import FeedbackWidget from "./components/FeedbackWidget";
@@ -15,7 +12,6 @@ const CalloutAdTool = lazy(() => import("./components/CalloutAdTool"));
 const FounderAdTool = lazy(() => import("./components/FounderAdTool"));
 const MetaPublishTool = lazy(() => import("./components/MetaPublishTool"));
 const DashboardTool = lazy(() => import("./components/DashboardTool"));
-const InventoryTool = lazy(() => import("./components/InventoryTool"));
 const LaunchLogTool = lazy(() => import("./components/LaunchLogTool"));
 const UgcEditorTool = lazy(() => import("./components/UgcEditorTool"));
 const GalleryTab = lazy(() => import("./components/GalleryTab"));
@@ -37,15 +33,7 @@ const TabFallback = () => (
 
 export default function HowlAdEngine() {
   const driveAuth = useDriveAuth();
-  const [selectedProducts, setSelectedProducts] = useState(["r1", "r4mkii"]);
-  const [selectedAngles, setSelectedAngles] = useState(["burn_ban", "skeptic", "heat"]);
-  const platform = PLATFORMS[0];
-  const [selectedAvatar, setSelectedAvatar] = useState(null);
-  const [copyCount, setCopyCount] = useState(10);
-  const [customContext, setCustomContext] = useState("");
   const [variations, setVariations] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("welcome");
   const [filterAngle, setFilterAngle] = useState("all");
   const [filterProduct, setFilterProduct] = useState("all");
@@ -145,43 +133,6 @@ export default function HowlAdEngine() {
     setActiveTab('creators');
   }, []);
 
-  const toggleProduct = (id) => setSelectedProducts((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
-  const toggleAngle = (id) => setSelectedAngles((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
-
-  const generate = async () => {
-    if (selectedProducts.length === 0 || selectedAngles.length === 0) {
-      setError("Select at least one product and one angle.");
-      return;
-    }
-    setLoading(true);
-    setError("");
-    setVariations([]);
-    const products = PRODUCTS.filter((p) => selectedProducts.includes(p.id));
-    const angles = ANGLES.filter((a) => selectedAngles.includes(a.id));
-    try {
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 8000,
-          system: buildSystemPrompt(),
-          messages: [{ role: "user", content: buildUserPrompt(products, angles, platform, selectedAvatar, copyCount, customContext) }],
-        }),
-      });
-      const data = await response.json();
-      const text = data.content.filter((b) => b.type === "text").map((b) => b.text).join("");
-      const cleaned = text.replace(/```json|```/g, "").trim();
-      setVariations(JSON.parse(cleaned));
-      setActiveTab("results");
-    } catch (err) {
-      console.error(err);
-      setError("Generation failed. Try again or reduce variation count.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const exportCSV = () => {
     if (variations.length === 0) return;
     const keys = Object.keys(variations[0]);
@@ -250,7 +201,6 @@ export default function HowlAdEngine() {
       label: 'Creative',
       items: [
         { key: 'from-winners', label: 'Concept Studio', permission: 'briefs.write' },
-        { key: 'config', label: 'Copy Generator', permission: 'briefs.write', match: ['config', 'results'] },
         { key: 'ugc-editor', label: 'UGC Editor', permission: 'assets.write' },
         { key: 'image', label: 'Image Ads', permission: 'assets.write' },
         { key: 'callout', label: 'Callout Ads', permission: 'assets.write' },
@@ -279,7 +229,6 @@ export default function HowlAdEngine() {
         { key: 'dashboard-meta', label: 'Meta', permission: 'analytics.read' },
         { key: 'dashboard-shopify', label: 'Shopify', permission: 'analytics.read' },
         { key: 'creative-analytics', label: 'Creative Analytics', permission: 'analytics.read' },
-        { key: 'inventory', label: 'Inventory', permission: 'analytics.read' },
         { key: 'log', label: 'Launch Log', permission: 'launch.read' },
       ],
     },
@@ -333,24 +282,13 @@ export default function HowlAdEngine() {
         <main className="main-panel">
       {activeTab === "welcome" && <WelcomeScreen setActiveTab={setActiveTab} can={can} />}
 
-      {activeTab === "config" && (
-        <ConfigPanel
-          selectedProducts={selectedProducts} toggleProduct={toggleProduct}
-          selectedAngles={selectedAngles} toggleAngle={toggleAngle}
-          selectedAvatar={selectedAvatar} setSelectedAvatar={setSelectedAvatar}
-          copyCount={copyCount} setCopyCount={setCopyCount}
-          customContext={customContext} setCustomContext={setCustomContext}
-          loading={loading} error={error} generate={generate}
-        />
-      )}
-
       {activeTab === "results" && variations.length > 0 && (
         <ResultsPanel
-          variations={variations} filtered={filtered} platform={platform}
+          variations={variations} filtered={filtered}
           uniqueAngles={uniqueAngles} uniqueProducts={uniqueProducts}
           filterAngle={filterAngle} setFilterAngle={setFilterAngle}
           filterProduct={filterProduct} setFilterProduct={setFilterProduct}
-          exportCSV={exportCSV} setActiveTab={setActiveTab} generate={generate}
+          exportCSV={exportCSV} setActiveTab={setActiveTab}
           onUseInVideo={handleUseInVideo} onUseOnImage={handleUseOnImage}
           favorites={favorites} toggleFavorite={toggleFavorite}
         />
@@ -371,7 +309,7 @@ export default function HowlAdEngine() {
         {activeTab === "creative" && <WorkspaceHub type="creative" setActiveTab={setActiveTab} can={can} />}
         {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={setActiveTab} can={can} />}
         {activeTab === "admin" && can('admin.users') && <AdminWorkspace onOpenEditor={openEditorSession} />}
-        {activeTab === "from-winners" && <FromWinnersTool setActiveTab={setActiveTab} setVariations={setVariations} />}
+        {activeTab === "from-winners" && <FromWinnersTool setActiveTab={setActiveTab} setVariations={setVariations} onOpenCreator={openPlannedCreator} />}
         {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} driveAuth={driveAuth} onAddToCart={addToCart} />}
         {activeTab === "callout" && <CalloutAdTool onAddToCart={addToCart} />}
         {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} onAddToCart={addToCart} />}
@@ -384,7 +322,6 @@ export default function HowlAdEngine() {
         {activeTab === "dashboard-creative" && <DashboardTool setActiveTab={setActiveTab} view="creative" />}
         {activeTab === "creative-analytics" && <DashboardTool setActiveTab={setActiveTab} view="creative" />}
         {activeTab === "dashboard-forecast" && <DashboardTool setActiveTab={setActiveTab} view="forecast" />}
-        {activeTab === "inventory" && <InventoryTool />}
         {activeTab === "log" && <LaunchLogTool />}
         {activeTab === "ugc-editor" && (
           <UgcEditorTool

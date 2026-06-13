@@ -174,14 +174,22 @@ export default async function handler(req, res) {
       const [creator] = await sql`
         INSERT INTO creators (
           name, email, phone, status, stage, source, source_external_id,
-          location, timezone, bio, activities, tags, rate_notes, notes,
-          avatar_url, owner_user_id, created_by
+          location, timezone, bio, niche, strengths, audience_demographics,
+          audience_psychographics, activities, tags, rate_notes, notes,
+          avatar_url, owner_user_id, shipping_address1, shipping_address2,
+          shipping_city, shipping_region, shipping_postal_code, shipping_country_code,
+          created_by
         ) VALUES (
           ${name}, ${text(body.email, 320)}, ${text(body.phone, 100)}, ${status}, ${stage},
           ${text(body.source, 50) || 'manual'}, ${text(body.source_external_id, 200)},
           ${text(body.location, 200)}, ${text(body.timezone, 100)}, ${text(body.bio)},
+          ${text(body.niche)}, ${text(body.strengths)}, ${text(body.audience_demographics)},
+          ${text(body.audience_psychographics)},
           ${list(body.activities)}, ${list(body.tags)}, ${text(body.rate_notes)},
           ${text(body.notes)}, ${text(body.avatar_url, 2000)}, ${text(body.owner_user_id, 200)},
+          ${text(body.shipping_address1, 300)}, ${text(body.shipping_address2, 300)},
+          ${text(body.shipping_city, 200)}, ${text(body.shipping_region, 100)},
+          ${text(body.shipping_postal_code, 40)}, ${text(body.shipping_country_code, 2)?.toUpperCase() || 'US'},
           ${access.userId}
         )
         RETURNING *
@@ -232,12 +240,22 @@ export default async function handler(req, res) {
           location = ${body.location === undefined ? current.location : text(body.location, 200)},
           timezone = ${body.timezone === undefined ? current.timezone : text(body.timezone, 100)},
           bio = ${body.bio === undefined ? current.bio : text(body.bio)},
+          niche = ${body.niche === undefined ? current.niche : text(body.niche)},
+          strengths = ${body.strengths === undefined ? current.strengths : text(body.strengths)},
+          audience_demographics = ${body.audience_demographics === undefined ? current.audience_demographics : text(body.audience_demographics)},
+          audience_psychographics = ${body.audience_psychographics === undefined ? current.audience_psychographics : text(body.audience_psychographics)},
           activities = ${body.activities === undefined ? current.activities : list(body.activities)},
           tags = ${body.tags === undefined ? current.tags : list(body.tags)},
           rate_notes = ${body.rate_notes === undefined ? current.rate_notes : text(body.rate_notes)},
           notes = ${body.notes === undefined ? current.notes : text(body.notes)},
           avatar_url = ${body.avatar_url === undefined ? current.avatar_url : text(body.avatar_url, 2000)},
           owner_user_id = ${body.owner_user_id === undefined ? current.owner_user_id : text(body.owner_user_id, 200)},
+          shipping_address1 = ${body.shipping_address1 === undefined ? current.shipping_address1 : text(body.shipping_address1, 300)},
+          shipping_address2 = ${body.shipping_address2 === undefined ? current.shipping_address2 : text(body.shipping_address2, 300)},
+          shipping_city = ${body.shipping_city === undefined ? current.shipping_city : text(body.shipping_city, 200)},
+          shipping_region = ${body.shipping_region === undefined ? current.shipping_region : text(body.shipping_region, 100)},
+          shipping_postal_code = ${body.shipping_postal_code === undefined ? current.shipping_postal_code : text(body.shipping_postal_code, 40)},
+          shipping_country_code = ${body.shipping_country_code === undefined ? current.shipping_country_code : (text(body.shipping_country_code, 2)?.toUpperCase() || 'US')},
           updated_at = now()
         WHERE id = ${id}
         RETURNING *

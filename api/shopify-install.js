@@ -9,7 +9,7 @@ export default async function handler(req, res) {
     : process.env.SHOPIFY_CLIENT_ID;
   if (!clientId) return res.status(500).send(`${role === 'dealer' ? 'SHOPIFY_DEALER_CLIENT_ID' : 'SHOPIFY_CLIENT_ID'} not set in Vercel env.`);
 
-  const scopes = 'read_reports,read_products,read_orders,read_analytics,read_customers,read_inventory';
+  const scopes = 'read_reports,read_products,read_orders,read_analytics,read_customers,read_inventory,write_draft_orders';
   const redirectUri = `https://${req.headers.host}/api/shopify-callback`;
   // State carries the role through the round-trip so the callback knows which env var to instruct.
   const state = `${role}.${Math.random().toString(36).slice(2)}`;

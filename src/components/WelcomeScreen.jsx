@@ -1,7 +1,7 @@
 import { useUser } from "@clerk/clerk-react";
 
 const QUICK_ACTIONS = [
-  { tab: 'config', permission: 'briefs.write', eyebrow: 'Generate', title: 'Spark Copy', sub: 'Hooks, headlines, primary text — Claude-fired.' },
+  { tab: 'from-winners', permission: 'briefs.write', eyebrow: 'Create', title: 'Concept Studio', sub: 'Build creator-grounded concepts or iterate proven winners.' },
   { tab: 'launcher', permission: 'launch.write', eyebrow: 'Launch', title: 'UGC Inbox', sub: 'Whatever the team dropped in Drive, ready to ship.' },
   { tab: 'dashboard-cfo', permission: 'analytics.read', eyebrow: 'Insights', title: 'CFO View', sub: 'NCAC, CM3, OpEx coverage — real numbers.' },
   { tab: 'dashboard-meta', permission: 'analytics.read', eyebrow: 'Insights', title: 'Meta', sub: 'Live budget, format mix, monthly velocity.' },
@@ -65,7 +65,7 @@ export default function WelcomeScreen({ setActiveTab, can = () => true }) {
 
         <div style={{ marginTop: 36, display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
           <button
-            onClick={() => setActiveTab(can('briefs.write') ? 'config' : 'performance')}
+            onClick={() => setActiveTab(can('briefs.write') ? 'from-winners' : 'performance')}
             style={{
               padding: '12px 28px',
               background: '#DC440A',

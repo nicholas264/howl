@@ -130,6 +130,15 @@ export default function CreatorWorkspace({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [syncingSocial, setSyncingSocial] = useState(null);
   const [agreementTemplates, setAgreementTemplates] = useState([]);
+  const [shopifyProducts, setShopifyProducts] = useState([]);
+  const [shopifyConnected, setShopifyConnected] = useState(false);
+  const [seeds, setSeeds] = useState([]);
+  const [seedForm, setSeedForm] = useState({ product_variant: '', quantity: '1', notes: '' });
+  const [creatorIntel, setCreatorIntel] = useState({
+    niche: '', strengths: '', audience_demographics: '', audience_psychographics: '',
+    shipping_address1: '', shipping_address2: '', shipping_city: '', shipping_region: '',
+    shipping_postal_code: '', shipping_country_code: 'US',
+  });
 
   useEffect(() => {
     fetch('/api/creator-email')
@@ -204,6 +213,32 @@ export default function CreatorWorkspace({
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    fetch('/api/shopify-products')
+      .then(response => response.json())
+      .then(data => {
+        setShopifyConnected(Boolean(data.connected));
+        setShopifyProducts(data.products || []);
+      })
+      .catch(() => setShopifyConnected(false));
+  }, []);
+
+  useEffect(() => {
+    if (!selected) return;
+    setCreatorIntel({
+      niche: selected.niche || '',
+      strengths: selected.strengths || '',
+      audience_demographics: selected.audience_demographics || '',
+      audience_psychographics: selected.audience_psychographics || '',
+      shipping_address1: selected.shipping_address1 || '',
+      shipping_address2: selected.shipping_address2 || '',
+      shipping_city: selected.shipping_city || '',
+      shipping_region: selected.shipping_region || '',
+      shipping_postal_code: selected.shipping_postal_code || '',
+      shipping_country_code: selected.shipping_country_code || 'US',
+    });
+  }, [selected?.id]);
+
   const counts = useMemo(() => creators.reduce((result, creator) => {
     result[creator.stage] = (result[creator.stage] || 0) + 1;
     return result;
@@ -229,6 +264,9 @@ export default function CreatorWorkspace({
       const workflowResponse = await fetch(`/api/creator-workflow?creator_id=${creator.id}`);
       const workflowData = await workflowResponse.json();
       if (workflowResponse.ok) setWorkflow(workflowData);
+      const seedResponse = await fetch(`/api/creator-seeding?creator_id=${creator.id}`);
+      const seedData = await seedResponse.json();
+      if (seedResponse.ok) setSeeds(seedData.seeds || []);
     } catch (err) {
       setError(err.message);
     }
@@ -731,6 +769,93 @@ export default function CreatorWorkspace({
     }
   };
 
+  const saveCreatorIntel = async event => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      await updateCreator(creatorIntel);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const seedProduct = async event => {
+    event.preventDefault();
+    const [productId, variantId] = seedForm.product_variant.split('::');
+    const product = shopifyProducts.find(item => item.id === productId);
+    const variant = product?.variants?.find(item => item.id === variantId);
+    if (!product || !variant) return setError('Choose a Shopify product variant.');
+    if (!window.confirm(`Create a free Shopify order for ${seedForm.quantity} × ${product.title} and ship it to ${selected.name}?`)) return;
+    setSaving(true);
+    setError('');
+    try {
+      const response = await fetch('/api/creator-seeding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          creator_id: selected.id,
+          product_id: product.id,
+          variant_id: variant.id,
+          product_title: product.title,
+          variant_title: variant.title,
+          sku: variant.sku,
+          quantity: Number(seedForm.quantity) || 1,
+          notes: seedForm.notes,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not create Shopify seed order');
+      setSeeds(current => [data.seed, ...current]);
+      if (data.warning) setError(data.warning);
+      setSeedForm({ product_variant: '', quantity: '1', notes: '' });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendBriefAssignment = async brief => {
+    if (!selected?.email) return setError('Add the creator email before sending an assignment.');
+    if (!gmailConnected) return connectGmail();
+    setSaving(true);
+    setError('');
+    try {
+      const linkResponse = await fetch('/api/creator-workflow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_submission_link',
+          creator_id: selected.id,
+          brief_id: brief.id,
+          title: brief.title,
+          expires_in_days: 30,
+        }),
+      });
+      const linkData = await linkResponse.json();
+      if (!linkResponse.ok) throw new Error(linkData.error || 'Could not create assignment link');
+      const url = `${window.location.origin}${linkData.submission_path}`;
+      const emailResponse = await fetch('/api/creator-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          creator_id: selected.id,
+          to: selected.email,
+          subject: `${brief.title} - HOWL creator assignment`,
+          body: `Hi ${selected.name},\n\nYour next HOWL assignment is ready. The concept, script, deliverables, and footage upload are here:\n\n${url}\n\nPlease review the direction before filming and reply with any questions.\n\nThank you,\nHOWL Campfires`,
+        }),
+      });
+      const emailData = await emailResponse.json();
+      if (!emailResponse.ok) throw new Error(emailData.error || 'Could not send assignment');
+      setWorkflow(linkData.workflow);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const addNote = async (event) => {
     event.preventDefault();
     if (!note.trim()) return;
@@ -913,7 +1038,7 @@ export default function CreatorWorkspace({
             </div>
 
             <div className="creator-detail-tabs">
-              {['profile', 'agreements', 'briefs', 'outreach', 'deliverables', 'performance'].map(tab => (
+              {['profile', 'products', 'agreements', 'briefs', 'outreach', 'deliverables', 'performance'].map(tab => (
                 <button key={tab} className={detailTab === tab ? 'active' : ''} onClick={() => setDetailTab(tab)}>
                   {tab}{tab === 'briefs' && workflow.briefs.length ? ` ${workflow.briefs.length}` : ''}
                 </button>
@@ -970,12 +1095,34 @@ export default function CreatorWorkspace({
             <section className="creator-detail-section">
               <div className="detail-section-head"><span>Creator context</span></div>
               <dl className="creator-facts">
+                <div><dt>Niche</dt><dd>{selected.niche || 'Not set'}</dd></div>
+                <div><dt>Strengths</dt><dd>{selected.strengths || 'Not set'}</dd></div>
+                <div><dt>Audience</dt><dd>{selected.audience_demographics || 'Not set'}</dd></div>
+                <div><dt>Psychographics</dt><dd>{selected.audience_psychographics || 'Not set'}</dd></div>
                 <div><dt>Activities</dt><dd>{selected.activities?.join(', ') || 'Not set'}</dd></div>
                 <div><dt>Tags</dt><dd>{selected.tags?.join(', ') || 'Not set'}</dd></div>
                 <div><dt>Rates</dt><dd>{selected.rate_notes || 'Not set'}</dd></div>
                 <div><dt>Bio</dt><dd>{selected.bio || 'Not set'}</dd></div>
                 {selected.source_metadata?.clickup_status && <div><dt>ClickUp status</dt><dd>{selected.source_metadata.clickup_status}</dd></div>}
               </dl>
+              {canManageCreators && (
+                <details className="inline-editor creator-intel-editor">
+                  <summary>Edit creator intelligence and shipping</summary>
+                  <form onSubmit={saveCreatorIntel}>
+                    <input placeholder="Niche" value={creatorIntel.niche} onChange={event => setCreatorIntel({ ...creatorIntel, niche: event.target.value })} />
+                    <input placeholder="On-camera and production strengths" value={creatorIntel.strengths} onChange={event => setCreatorIntel({ ...creatorIntel, strengths: event.target.value })} />
+                    <textarea placeholder="Audience demographics" value={creatorIntel.audience_demographics} onChange={event => setCreatorIntel({ ...creatorIntel, audience_demographics: event.target.value })} />
+                    <textarea placeholder="Audience psychographics, motivations, objections" value={creatorIntel.audience_psychographics} onChange={event => setCreatorIntel({ ...creatorIntel, audience_psychographics: event.target.value })} />
+                    <input placeholder="Shipping address" value={creatorIntel.shipping_address1} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_address1: event.target.value })} />
+                    <input placeholder="Address line 2" value={creatorIntel.shipping_address2} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_address2: event.target.value })} />
+                    <input placeholder="City" value={creatorIntel.shipping_city} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_city: event.target.value })} />
+                    <input placeholder="State / region" value={creatorIntel.shipping_region} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_region: event.target.value })} />
+                    <input placeholder="Postal code" value={creatorIntel.shipping_postal_code} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_postal_code: event.target.value })} />
+                    <input maxLength="2" placeholder="Country code" value={creatorIntel.shipping_country_code} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_country_code: event.target.value.toUpperCase() })} />
+                    <button disabled={saving}>Save creator profile</button>
+                  </form>
+                </details>
+              )}
               {Object.keys(selected.source_metadata?.custom_fields || {}).length > 0 && (
                 <details className="inline-editor">
                   <summary>Application details</summary>
@@ -1010,6 +1157,47 @@ export default function CreatorWorkspace({
               </div>
             </section>
             </>}
+
+            {detailTab === 'products' && (
+              <section className="creator-detail-section workflow-section">
+                <div className="detail-section-head"><span>Product seeding</span><small>Shopify-backed fulfillment</small></div>
+                {canManageCreators && (
+                  <form className="workflow-form" onSubmit={seedProduct}>
+                    <select required disabled={!shopifyConnected} value={seedForm.product_variant} onChange={event => setSeedForm({ ...seedForm, product_variant: event.target.value })}>
+                      <option value="">{shopifyConnected ? 'Choose Shopify product' : 'Connect Shopify in Admin'}</option>
+                      {shopifyProducts.flatMap(product => product.variants.map(variant => (
+                        <option key={variant.id} value={`${product.id}::${variant.id}`} disabled={!variant.available_for_sale}>
+                          {product.title}{variant.title !== 'Default Title' ? ` · ${variant.title}` : ''} · {variant.sku || 'no SKU'} · {variant.inventory_quantity ?? '—'} available
+                        </option>
+                      )))}
+                    </select>
+                    <div className="workflow-two">
+                      <input type="number" min="1" max="20" value={seedForm.quantity} onChange={event => setSeedForm({ ...seedForm, quantity: event.target.value })} />
+                      <input placeholder="Internal note" value={seedForm.notes} onChange={event => setSeedForm({ ...seedForm, notes: event.target.value })} />
+                    </div>
+                    <div className="seed-address">
+                      <span>Ships to</span>
+                      <strong>{selected.shipping_address1
+                        ? `${selected.shipping_address1}, ${selected.shipping_city}, ${selected.shipping_region} ${selected.shipping_postal_code}`
+                        : 'Add a shipping address in Profile first'}</strong>
+                    </div>
+                    <button className="primary-action" disabled={saving || !shopifyConnected || !selected.shipping_address1}>Create free Shopify order</button>
+                  </form>
+                )}
+                <div className="workflow-list">
+                  {seeds.map(seed => (
+                    <article className="workflow-card seed-card" key={seed.id}>
+                      <header><span><strong>{seed.product_title}</strong><small>{seed.variant_title || seed.sku || 'Shopify product'} · Qty {seed.quantity}</small></span><i>{seed.status}</i></header>
+                      <div className="agreement-card-meta">
+                        <span>{seed.shopify_order_name || 'Order pending'}</span>
+                        <span>{new Date(seed.requested_at).toLocaleDateString()}</span>
+                      </div>
+                    </article>
+                  ))}
+                  {!seeds.length && <div className="workflow-empty">No products seeded yet.</div>}
+                </div>
+              </section>
+            )}
 
             {detailTab === 'agreements' && (
               <section className="creator-detail-section workflow-section">
@@ -1164,6 +1352,7 @@ export default function CreatorWorkspace({
                         <h4>Brief</h4><p className="prewrap">{brief.brief}</p>
                         <h4>Script</h4><p className="prewrap">{brief.script}</p>
                         {!!brief.deliverables?.length && <><h4>Deliverables</h4><ul>{brief.deliverables.map((item, index) => <li key={index}>{item}</li>)}</ul></>}
+                        {canWriteBriefs && <button className="brief-send" disabled={saving} onClick={() => sendBriefAssignment(brief)}>Send assignment to creator</button>}
                       </div>
                     </details>
                   ))}

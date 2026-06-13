@@ -161,6 +161,99 @@ The script should sound natural for this creator and be usable as a shot-by-shot
   return parsed;
 }
 
+async function generateConceptSet(sql, creatorId, input) {
+  const [creator] = await sql`
+    SELECT c.*,
+      COALESCE((SELECT json_agg(s) FROM creator_social_accounts s WHERE s.creator_id = c.id), '[]'::json) AS social_accounts,
+      COALESCE((SELECT json_agg(l) FROM (
+        SELECT
+          lh.ad_name, lh.product_id, lh.angle_id, lh.launched_at,
+          COALESCE(sum(i.spend), 0) AS spend,
+          COALESCE(sum(i.purchase_value), 0) AS revenue,
+          max(ca.hook_text_verbatim) AS hook,
+          max(ca.format) AS format,
+          max(ca.why_it_worked) AS why_it_worked
+        FROM launch_history lh
+        LEFT JOIN creative_insights_daily i ON i.ad_id = lh.ad_id
+          AND i.date >= current_date - interval '180 days'
+        LEFT JOIN creative_performance cp ON cp.ad_id = lh.ad_id
+        LEFT JOIN creative_analysis ca ON ca.group_key = cp.group_key
+        WHERE lh.creator_id = c.id OR lower(lh.creator) = lower(c.name)
+        GROUP BY lh.ad_name, lh.product_id, lh.angle_id, lh.launched_at
+        ORDER BY COALESCE(sum(i.purchase_value), 0) DESC
+        LIMIT 12
+      ) l), '[]'::json) AS past_launches
+    FROM creators c WHERE c.id = ${creatorId}
+  `;
+  if (!creator) throw new Error('Creator not found');
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
+  const count = Math.max(1, Math.min(Number(input.count) || 4, 8));
+  const product = input.product_context || { title: clean(input.product, 300) };
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 10000,
+      temperature: 0.65,
+      system: `You are HOWL Campfires' senior creator strategist. Build distinct, filmable direct-response UGC concepts grounded in the creator's real niche, strengths, audience demographics, audience psychographics, activities, social metrics, and performance history. Never invent personal facts or product claims. Return only a valid JSON array.`,
+      messages: [{
+        role: 'user',
+        content: `Create exactly ${count} net-new UGC video concepts for this creator.
+
+CREATOR
+${JSON.stringify(creator, null, 2)}
+
+SHOPIFY PRODUCT
+${JSON.stringify(product, null, 2)}
+
+ANGLE DIRECTION
+${clean(input.angle, 2000) || 'Choose distinct angles that fit the product and creator.'}
+
+OBJECTIVE
+${clean(input.objective, 2000) || 'Acquire new customers efficiently with credible product proof.'}
+
+ADDITIONAL DIRECTION
+${clean(input.direction, 4000) || 'None.'}
+
+Each concept must fit this creator specifically, use a distinct persuasion mechanism, show what happens in the first three seconds, contain filmable proof, and provide a natural spoken script.
+Return an array where each item has exactly:
+{
+  "concept_name": "short title",
+  "product": "product title",
+  "objective": "business objective",
+  "angle": "specific angle",
+  "format": "ugc-demo | comparison | problem-solution | customer-story | day-in-the-life | myth-bust",
+  "creator_fit": "why this fits this creator and audience",
+  "hypothesis": "falsifiable test hypothesis",
+  "opening_visual": "frame 0-3 seconds",
+  "hook": "spoken opening",
+  "proof_sequence": ["beat 1", "beat 2", "beat 3"],
+  "brief": "production-ready creative brief with premise, environment, product moments, proof, CTA, and guardrails",
+  "script": "complete natural 20-45 second spoken script",
+  "shot_list": ["shot 1", "shot 2", "shot 3", "shot 4"],
+  "deliverables": ["deliverable 1"],
+  "cta": "specific CTA"
+}`,
+      }],
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error?.message || 'Concept generation failed');
+  const raw = data.content?.filter(block => block.type === 'text').map(block => block.text).join('') || '';
+  const cleaned = raw.replace(/```json|```/gi, '').trim();
+  const start = cleaned.indexOf('[');
+  const end = cleaned.lastIndexOf(']');
+  if (start < 0 || end < start) throw new Error('Concept response was not a JSON array');
+  const concepts = JSON.parse(cleaned.slice(start, end + 1));
+  if (!Array.isArray(concepts)) throw new Error('Concept response was not an array');
+  return concepts.slice(0, count);
+}
+
 async function generateOutreach(sql, creatorId, input) {
   const [creator] = await sql`
     SELECT c.*,
@@ -240,6 +333,38 @@ export default async function handler(req, res) {
           VALUES (${creatorId}, 'brief_created', ${`Brief created: ${brief.title}`}, ${JSON.stringify({ brief_id: brief.id })}::jsonb, ${access.userId})
         `;
         return res.status(201).json({ brief, workflow: await getWorkflow(sql, creatorId) });
+      }
+
+      if (body.action === 'generate_concepts') {
+        const concepts = await generateConceptSet(sql, creatorId, body);
+        const briefs = [];
+        for (const concept of concepts) {
+          const [brief] = await sql`
+            INSERT INTO creator_briefs (
+              creator_id, title, product, objective, angle, deliverables,
+              brief, script, status, generation_source, created_by
+            ) VALUES (
+              ${creatorId}, ${clean(concept.concept_name, 300) || 'Creator concept'},
+              ${clean(concept.product, 300) || clean(body.product, 300)},
+              ${clean(concept.objective, 2000) || clean(body.objective, 2000)},
+              ${clean(concept.angle, 1000)},
+              ${JSON.stringify(Array.isArray(concept.deliverables) ? concept.deliverables : [])}::jsonb,
+              ${clean(concept.brief)}, ${clean(concept.script)}, 'draft',
+              'ai_net_new_creator_concept', ${access.userId}
+            )
+            RETURNING *
+          `;
+          briefs.push(brief);
+        }
+        await sql`
+          INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+          VALUES (
+            ${creatorId}, 'concepts_created', ${`${briefs.length} net-new creator concepts generated`},
+            ${JSON.stringify({ brief_ids: briefs.map(brief => Number(brief.id)), product: clean(body.product, 300) })}::jsonb,
+            ${access.userId}
+          )
+        `;
+        return res.status(201).json({ concepts, briefs, workflow: await getWorkflow(sql, creatorId) });
       }
 
       if (body.action === 'generate_outreach') {

@@ -6,9 +6,9 @@ function isFavorited(variation, favorites) {
 }
 
 export default function ResultsPanel({
-  variations, filtered, platform, uniqueAngles, uniqueProducts,
+  variations, filtered, uniqueAngles, uniqueProducts,
   filterAngle, setFilterAngle, filterProduct, setFilterProduct,
-  exportCSV, setActiveTab, generate, onUseInVideo, onUseOnImage,
+  exportCSV, setActiveTab, onUseInVideo, onUseOnImage,
   favorites, toggleFavorite,
 }) {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
@@ -114,8 +114,7 @@ export default function ResultsPanel({
 
       <div style={{ marginTop: 28, display: "flex", gap: 10 }}>
         <button className="xbtn" onClick={exportCSV}>Export CSV</button>
-        <button className="xbtn" onClick={() => setActiveTab("config")}>← Configure</button>
-        {!showFavoritesOnly && <button className="xbtn" onClick={generate}>↻ Regenerate</button>}
+        <button className="xbtn" onClick={() => setActiveTab("from-winners")}>← Concept Studio</button>
       </div>
     </div>
   );

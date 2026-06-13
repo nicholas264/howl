@@ -14,6 +14,10 @@ async function createCreatorOpsTables(sql) {
       location            TEXT,
       timezone            TEXT,
       bio                 TEXT,
+      niche               TEXT,
+      strengths           TEXT,
+      audience_demographics TEXT,
+      audience_psychographics TEXT,
       activities          TEXT[] NOT NULL DEFAULT '{}',
       tags                TEXT[] NOT NULL DEFAULT '{}',
       rate_notes          TEXT,
@@ -21,6 +25,12 @@ async function createCreatorOpsTables(sql) {
       source_metadata     JSONB NOT NULL DEFAULT '{}'::jsonb,
       avatar_url          TEXT,
       owner_user_id       TEXT,
+      shipping_address1   TEXT,
+      shipping_address2   TEXT,
+      shipping_city       TEXT,
+      shipping_region     TEXT,
+      shipping_postal_code TEXT,
+      shipping_country_code TEXT NOT NULL DEFAULT 'US',
       created_by          TEXT,
       created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -30,6 +40,16 @@ async function createCreatorOpsTables(sql) {
   await sql`CREATE INDEX IF NOT EXISTS idx_creators_status ON creators(status)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creators_name ON creators(lower(name))`;
   await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS source_metadata JSONB NOT NULL DEFAULT '{}'::jsonb`;
+  await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS niche TEXT`;
+  await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS strengths TEXT`;
+  await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS audience_demographics TEXT`;
+  await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS audience_psychographics TEXT`;
+  await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS shipping_address1 TEXT`;
+  await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS shipping_address2 TEXT`;
+  await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS shipping_city TEXT`;
+  await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS shipping_region TEXT`;
+  await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS shipping_postal_code TEXT`;
+  await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS shipping_country_code TEXT NOT NULL DEFAULT 'US'`;
   await sql`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_creators_source_external
     ON creators(source, source_external_id)
@@ -206,6 +226,33 @@ async function createCreatorOpsTables(sql) {
     )
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_briefs_creator ON creator_briefs(creator_id, created_at DESC)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS creator_product_seeds (
+      id                    BIGSERIAL PRIMARY KEY,
+      creator_id            BIGINT NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+      shop_domain           TEXT NOT NULL,
+      shopify_product_id    TEXT,
+      shopify_variant_id    TEXT NOT NULL,
+      product_title         TEXT NOT NULL,
+      variant_title         TEXT,
+      sku                   TEXT,
+      quantity              INTEGER NOT NULL DEFAULT 1,
+      status                TEXT NOT NULL DEFAULT 'planned',
+      shopify_draft_order_id TEXT,
+      shopify_order_id      TEXT,
+      shopify_order_name    TEXT,
+      tracking_url          TEXT,
+      notes                 TEXT,
+      requested_by          TEXT,
+      requested_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+      ordered_at            TIMESTAMPTZ,
+      delivered_at          TIMESTAMPTZ,
+      updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_product_seeds_creator ON creator_product_seeds(creator_id, requested_at DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_product_seeds_status ON creator_product_seeds(status, requested_at DESC)`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS creator_deliverables (

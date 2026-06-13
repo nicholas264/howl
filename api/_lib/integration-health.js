@@ -75,6 +75,18 @@ export function getIntegrationHealth() {
         : 'Meta token or Page ID is missing.',
       env: ['META_ACCESS_TOKEN', 'META_PAGE_ID'],
     },
+    shopify: {
+      ready: Boolean(process.env.SHOPIFY_ACCESS_TOKEN),
+      state: process.env.SHOPIFY_ACCESS_TOKEN ? 'ready' : 'setup',
+      label: 'Shopify creator seeding',
+      detail: process.env.SHOPIFY_ACCESS_TOKEN
+        ? 'Product catalog sync is connected. Creator seed orders require write_draft_orders permission.'
+        : 'Connect the primary Shopify store to sync products and create creator seed orders.',
+      action: process.env.SHOPIFY_ACCESS_TOKEN
+        ? 'If seeding returns a permissions error, reconnect Shopify once to grant write_draft_orders.'
+        : 'Install the HOWL Shopify app from /api/shopify-install.',
+      env: ['SHOPIFY_STORE', 'SHOPIFY_ACCESS_TOKEN'],
+    },
   };
 }
 

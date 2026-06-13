@@ -26,7 +26,8 @@ function parseJsonArray(text) {
   return parsed;
 }
 
-export default function FromWinnersTool({ setActiveTab, setVariations }) {
+export default function FromWinnersTool({ setActiveTab, setVariations, onOpenCreator }) {
+  const [studioMode, setStudioMode] = useState('net_new');
   const [windowDays, setWindowDays] = useState(30);
   const [winners, setWinners] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -41,6 +42,17 @@ export default function FromWinnersTool({ setActiveTab, setVariations }) {
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState('');
   const [concepts, setConcepts] = useState([]);
+  const [creators, setCreators] = useState([]);
+  const [creatorId, setCreatorId] = useState('');
+  const [shopifyProducts, setShopifyProducts] = useState([]);
+  const [shopifyConnected, setShopifyConnected] = useState(false);
+  const [netNewProduct, setNetNewProduct] = useState('');
+  const [netNewAngle, setNetNewAngle] = useState('');
+  const [netNewObjective, setNetNewObjective] = useState('Acquire new customers with credible product proof');
+  const [netNewDirection, setNetNewDirection] = useState('');
+  const [netNewCount, setNetNewCount] = useState(4);
+  const [netNewConcepts, setNetNewConcepts] = useState([]);
+  const [netNewBriefs, setNetNewBriefs] = useState([]);
 
   const load = useCallback(async (days) => {
     setLoading(true);
@@ -61,7 +73,24 @@ export default function FromWinnersTool({ setActiveTab, setVariations }) {
     }
   }, []);
 
-  useEffect(() => { load(windowDays); }, [load, windowDays]);
+  useEffect(() => {
+    if (studioMode === 'iterate') load(windowDays);
+  }, [load, studioMode, windowDays]);
+
+  useEffect(() => {
+    Promise.allSettled([
+      fetch('/api/creators').then(response => response.ok ? response.json() : Promise.reject()),
+      fetch('/api/shopify-products').then(response => response.json()),
+    ]).then(([creatorResult, productResult]) => {
+      if (creatorResult.status === 'fulfilled') {
+        setCreators(creatorResult.value.creators || []);
+      }
+      if (productResult.status === 'fulfilled') {
+        setShopifyProducts(productResult.value.products || []);
+        setShopifyConnected(Boolean(productResult.value.connected));
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (!winners?.length) return;
@@ -244,22 +273,160 @@ ${references}`;
     setConcepts(current => current.filter((_, index) => index !== indexToDelete));
   };
 
+  const generateNetNew = async () => {
+    if (!creatorId || !netNewProduct) {
+      setGenerateError('Choose a creator and Shopify product first.');
+      return;
+    }
+    const [productId, variantId] = netNewProduct.split('::');
+    const productRecord = shopifyProducts.find(item => item.id === productId);
+    const variant = productRecord?.variants?.find(item => item.id === variantId);
+    if (!productRecord || !variant) {
+      setGenerateError('The selected Shopify product is no longer available.');
+      return;
+    }
+    setGenerating(true);
+    setGenerateError('');
+    try {
+      const response = await fetch('/api/creator-workflow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'generate_concepts',
+          creator_id: Number(creatorId),
+          count: netNewCount,
+          product: productRecord.title,
+          product_context: {
+            id: productRecord.id,
+            title: productRecord.title,
+            description: productRecord.description,
+            handle: productRecord.handle,
+            variant: {
+              id: variant.id,
+              title: variant.title,
+              sku: variant.sku,
+              price: variant.price,
+            },
+          },
+          angle: netNewAngle,
+          objective: netNewObjective,
+          direction: netNewDirection,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not generate concepts');
+      setNetNewConcepts(data.concepts || []);
+      setNetNewBriefs(data.briefs || []);
+    } catch (err) {
+      setGenerateError(err.message);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const deleteNetNewConcept = indexToDelete => {
+    setNetNewConcepts(current => current.filter((_, index) => index !== indexToDelete));
+  };
+
   return (
     <div className="concept-studio">
       <header className="concept-head">
         <div>
           <div className="motion-kicker">Creative strategy</div>
           <h1>Concept studio</h1>
-          <p>Turn winning creative patterns into controlled tests, not cosmetic remixes.</p>
+          <p>Build creator-specific UGC from first principles, then feed performance learnings back into the next test.</p>
         </div>
-        <div className="concept-window">
-          {[7, 14, 30, 90].map(days => <button className={windowDays === days ? 'active' : ''} onClick={() => setWindowDays(days)} key={days}>{days}d</button>)}
+        <div className="concept-window concept-mode-switch">
+          <button className={studioMode === 'net_new' ? 'active' : ''} onClick={() => setStudioMode('net_new')}>Net new for creator</button>
+          <button className={studioMode === 'iterate' ? 'active' : ''} onClick={() => setStudioMode('iterate')}>Iterate winners</button>
         </div>
       </header>
 
       {error ? <div className="motion-error">{error}</div> : null}
-      {loading && !winners ? <div className="motion-loading">Loading analyzed winners…</div> : null}
+      {studioMode === 'iterate' && loading && !winners ? <div className="motion-loading">Loading analyzed winners…</div> : null}
 
+      {studioMode === 'net_new' ? (
+        <div className="concept-layout">
+          <aside className="concept-controls">
+            <section>
+              <label>1. Creator</label>
+              <select className="concept-select" value={creatorId} onChange={event => setCreatorId(event.target.value)}>
+                <option value="">Choose creator</option>
+                {creators.map(creator => <option key={creator.id} value={creator.id}>{creator.name}{creator.niche ? ` · ${creator.niche}` : ''}</option>)}
+              </select>
+            </section>
+            <section>
+              <label>2. Shopify product</label>
+              <select className="concept-select" value={netNewProduct} onChange={event => setNetNewProduct(event.target.value)}>
+                <option value="">{shopifyConnected ? 'Choose product' : 'Shopify connection required'}</option>
+                {shopifyProducts.flatMap(productRecord => productRecord.variants.map(variant => (
+                  <option key={variant.id} value={`${productRecord.id}::${variant.id}`}>
+                    {productRecord.title}{variant.title !== 'Default Title' ? ` · ${variant.title}` : ''} · ${money(variant.price)}
+                  </option>
+                )))}
+              </select>
+            </section>
+            <section>
+              <label>3. Product angle</label>
+              <textarea value={netNewAngle} onChange={event => setNetNewAngle(event.target.value)} rows={3} placeholder="Burn bans, cold-weather heat, portability, truck camping..." />
+            </section>
+            <section>
+              <label>Objective</label>
+              <textarea value={netNewObjective} onChange={event => setNetNewObjective(event.target.value)} rows={3} />
+            </section>
+            <section>
+              <label>Additional direction</label>
+              <textarea value={netNewDirection} onChange={event => setNetNewDirection(event.target.value)} rows={3} placeholder="Offer, season, proof requirement, guardrails..." />
+            </section>
+          </aside>
+          <main className="concept-main">
+            <div className="concept-section-title">
+              <div><span>Creator-first development</span><strong>Strategy → concept → script → assignment</strong></div>
+              <label>Concepts <input type="number" min="1" max="8" value={netNewCount} onChange={event => setNetNewCount(Math.max(1, Math.min(8, Number(event.target.value) || 4)))} /></label>
+            </div>
+            <div className="concept-context-note">
+              <strong>Grounded in the creator record</strong>
+              <p>Niche, strengths, audience demographics, psychographics, activities, social metrics, and prior ad performance shape every concept.</p>
+            </div>
+            <div className="concept-generate-row">
+              <p>{creatorId ? 'Creator context selected.' : 'Choose the person who will actually film the ad.'}</p>
+              <button onClick={generateNetNew} disabled={!creatorId || !netNewProduct || generating}>{generating ? 'Building creator concepts…' : `Generate ${netNewCount} concepts`}</button>
+            </div>
+            {generateError ? <div className="motion-error">{generateError}</div> : null}
+            {netNewConcepts.length > 0 && (
+              <>
+                <div className="concept-output-head">
+                  <div><span>Saved to creator</span><strong>{netNewConcepts.length} concept briefs + scripts</strong></div>
+                  <button onClick={() => onOpenCreator?.(Number(creatorId))}>Open creator workflow</button>
+                </div>
+                <div className="concept-output-grid">
+                  {netNewConcepts.map((concept, index) => (
+                    <article className="concept-output" key={`${concept.concept_name || 'concept'}-${index}`}>
+                      <div className="concept-number">{String(index + 1).padStart(2, '0')}</div>
+                      <button className="concept-delete" type="button" onClick={() => deleteNetNewConcept(index)}>Hide</button>
+                      <div className="concept-tags">{[concept.product, concept.format, concept.angle].filter(Boolean).map((tag, tagIndex) => <span key={`${tag}-${tagIndex}`}>{tag}</span>)}</div>
+                      <h2>{concept.concept_name}</h2>
+                      <blockquote>{concept.hook}</blockquote>
+                      <dl>
+                        <div><dt>Creator fit</dt><dd>{concept.creator_fit || '—'}</dd></div>
+                        <div><dt>Hypothesis</dt><dd>{concept.hypothesis || '—'}</dd></div>
+                        <div><dt>Opening frame</dt><dd>{concept.opening_visual || '—'}</dd></div>
+                      </dl>
+                      <details><summary>Brief and shot plan</summary><p className="concept-script">{concept.brief}</p><h4>Shots</h4><ol>{(concept.shot_list || []).map(item => <li key={item}>{item}</li>)}</ol></details>
+                      <details><summary>Full script</summary><p className="concept-script">{concept.script}</p></details>
+                      <footer><span>Brief #{netNewBriefs[index]?.id || 'saved'} · Ready for assignment</span><span>CTA: {concept.cta}</span></footer>
+                    </article>
+                  ))}
+                </div>
+              </>
+            )}
+          </main>
+        </div>
+      ) : (
+      <>
+      <div className="concept-window concept-performance-window">
+        {[7, 14, 30, 90].map(days => <button className={windowDays === days ? 'active' : ''} onClick={() => setWindowDays(days)} key={days}>{days}d</button>)}
+      </div>
       <div className="concept-layout">
         <aside className="concept-controls">
           <section>
@@ -378,6 +545,8 @@ ${references}`;
           ) : null}
         </main>
       </div>
+      </>
+      )}
     </div>
   );
 }

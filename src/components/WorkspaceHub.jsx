@@ -1,6 +1,5 @@
 const CREATIVE_TOOLS = [
   { tab: 'from-winners', permission: 'briefs.write', label: 'Concept Studio', description: 'Turn proven creative patterns into grounded concepts and scripts.' },
-  { tab: 'config', permission: 'briefs.write', label: 'Copy Generator', description: 'Generate hooks, headlines, and primary text from a clear strategy.' },
   { tab: 'ugc-editor', permission: 'assets.write', label: 'UGC Editor', description: 'Edit creator footage, captions, pacing, and exports.' },
   { tab: 'image', permission: 'assets.write', label: 'Image Ads', description: 'Build static creative from product and lifestyle assets.' },
   { tab: 'callout', permission: 'assets.write', label: 'Callout Ads', description: 'Create product feature callouts with precise visual anchors.' },
@@ -12,7 +11,6 @@ const CREATIVE_TOOLS = [
 const PERFORMANCE_TOOLS = [
   { tab: 'creative-analytics', permission: 'analytics.read', label: 'Creative Analytics', description: 'See winners, performance signals, transcripts, and Creative DNA.' },
   { tab: 'dashboard-cfo', permission: 'analytics.read', label: 'Business Dashboard', description: 'Revenue pace, contribution margin, forecasts, and operating context.' },
-  { tab: 'inventory', permission: 'analytics.read', label: 'Inventory', description: 'Monitor product availability and operational constraints.' },
   { tab: 'log', permission: 'launch.read', label: 'Launch Log', description: 'Audit what launched, when, by whom, and with which source asset.' },
 ];
 
@@ -29,7 +27,7 @@ export default function WorkspaceHub({ type, setActiveTab, can = () => true }) {
           <p>
             {isCreative
               ? 'Start from performance, build with intent, and keep every asset connected to its source.'
-              : 'A focused view of creative, revenue, inventory, and launch activity.'}
+              : 'A focused view of creative, revenue, and launch activity.'}
           </p>
         </div>
       </header>
