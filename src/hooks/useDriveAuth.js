@@ -1,13 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 const LEGACY_LS_KEY = 'howl_drive_token';
 
-function readConnectedCookie() {
-  return document.cookie.split('; ').some(c => c.startsWith('drive_connected=1'));
-}
-
 export function useDriveAuth() {
-  const [connected, setConnected] = useState(() => readConnectedCookie());
+  const [connected, setConnected] = useState(false);
+  const [connecting, setConnecting] = useState(false);
 
   useEffect(() => {
     // Clean up post-OAuth URL params (still set by callback for UX, plus legacy errors)
@@ -17,12 +14,27 @@ export function useDriveAuth() {
     }
     // One-time cleanup: legacy token used to live in localStorage. Drop it.
     try { localStorage.removeItem(LEGACY_LS_KEY); } catch {}
-    setConnected(readConnectedCookie());
+    fetch('/api/auth/google')
+      .then(response => response.json())
+      .then(data => setConnected(Boolean(data.connected)))
+      .catch(() => setConnected(false));
   }, []);
 
-  const connect = () => {
-    window.location.href = '/api/auth/google';
-  };
+  const connect = useCallback(async () => {
+    setConnecting(true);
+    try {
+      const response = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purpose: 'drive' }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.url) throw new Error(data.error || 'Could not start Google connection');
+      window.location.href = data.url;
+    } finally {
+      setConnecting(false);
+    }
+  }, []);
 
   const disconnect = async () => {
     try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {}
@@ -43,5 +55,5 @@ export function useDriveAuth() {
     return data;
   };
 
-  return { connected, connect, disconnect, uploadFile };
+  return { connected, connecting, connect, disconnect, uploadFile };
 }

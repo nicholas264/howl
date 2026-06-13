@@ -52,12 +52,19 @@ export function getIntegrationHealth() {
     },
     gmail: {
       ready: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
-      state: process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET ? 'ready' : 'setup',
+      state: process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+        ? process.env.GOOGLE_TOKEN_ENCRYPTION_KEY ? 'ready' : 'warning'
+        : 'setup',
       label: 'Gmail outreach',
       detail: process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
-        ? 'Users can connect Gmail from a creator record.'
+        ? process.env.GOOGLE_TOKEN_ENCRYPTION_KEY
+          ? 'Per-user Google credentials are encrypted with a dedicated key.'
+          : 'Per-user credentials are encrypted using existing application secrets. Add a dedicated encryption key before rotating Clerk or Google secrets.'
         : 'Google OAuth credentials are missing.',
-      env: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
+      action: process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && !process.env.GOOGLE_TOKEN_ENCRYPTION_KEY
+        ? 'Add GOOGLE_TOKEN_ENCRYPTION_KEY to Vercel Production, then have connected users reconnect once.'
+        : null,
+      env: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_TOKEN_ENCRYPTION_KEY'],
     },
     instagram: {
       ready: Boolean(process.env.META_ACCESS_TOKEN && process.env.META_PAGE_ID),

@@ -1,43 +1,23 @@
 // Uploads a base64-encoded file to Google Drive
-import { requireAuth } from './_lib/auth.js';
+import { requirePermission } from './_lib/app-access.js';
+import { getUserGoogleAccessToken } from './_lib/google-user-oauth.js';
 
 export const config = {
   api: { bodyParser: { sizeLimit: '12mb' } },
 };
 
 export default async function handler(req, res) {
-  if (!(await requireAuth(req, res))) return;
+  const access = await requirePermission(req, res, 'assets.write');
+  if (!access) return;
   if (req.method !== 'POST') return res.status(405).end();
 
   const { fileName, fileData, mimeType } = req.body;
-  const refreshToken = req.cookies?.drive_refresh
-    ? decodeURIComponent(req.cookies.drive_refresh)
-    : null;
-
-  if (!refreshToken) {
-    return res.status(401).json({ error: 'Drive not connected' });
-  }
   if (!fileName || !fileData) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
   try {
-    // Exchange refresh token for access token
-    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        refresh_token: refreshToken,
-        client_id: process.env.GOOGLE_CLIENT_ID,
-        client_secret: process.env.GOOGLE_CLIENT_SECRET,
-        grant_type: 'refresh_token',
-      }),
-    });
-
-    const { access_token, error: tokenError } = await tokenRes.json();
-    if (tokenError || !access_token) {
-      return res.status(401).json({ error: 'Failed to refresh token', detail: tokenError });
-    }
+    const access_token = await getUserGoogleAccessToken(access.sql, access.userId);
 
     // Strip base64 data URL prefix if present
     const base64Data = fileData.includes(',') ? fileData.split(',')[1] : fileData;
@@ -79,6 +59,9 @@ export default async function handler(req, res) {
 
     res.status(200).json({ id: file.id, name: file.name, url: file.webViewLink });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.reconnectRequired ? 401 : 500).json({
+      error: err.message,
+      reconnect_required: Boolean(err.reconnectRequired),
+    });
   }
 }

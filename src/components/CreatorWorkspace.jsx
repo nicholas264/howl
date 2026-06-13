@@ -98,13 +98,38 @@ export default function CreatorWorkspace({
     agreement_body: '', expires_in_days: '14',
   });
   const [preparedAgreement, setPreparedAgreement] = useState(null);
-  const [gmailConnected, setGmailConnected] = useState(() => document.cookie.split('; ').some(cookie => cookie.startsWith('gmail_connected=1')));
+  const [gmailConnected, setGmailConnected] = useState(false);
   const [deliverable, setDeliverable] = useState({
     title: '', due_at: '', source_url: '', brief_id: '', engagement_id: '', expected_asset_count: '1',
   });
   const [submissionLink, setSubmissionLink] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [syncingSocial, setSyncingSocial] = useState(null);
+
+  useEffect(() => {
+    fetch('/api/creator-email')
+      .then(response => response.json())
+      .then(data => setGmailConnected(Boolean(data.connected)))
+      .catch(() => setGmailConnected(false));
+  }, []);
+
+  const connectGmail = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      const response = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purpose: 'creator_email' }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.url) throw new Error(data.error || 'Could not start Gmail connection');
+      window.location.href = data.url;
+    } catch (err) {
+      setError(err.message);
+      setSaving(false);
+    }
+  };
 
   const loadCreators = useCallback(async () => {
     setLoading(true);
@@ -1017,7 +1042,7 @@ export default function CreatorWorkspace({
                         <input readOnly value={preparedAgreement.url} onFocus={event => event.target.select()} />
                         {gmailConnected
                           ? <button type="button" disabled={saving || !selected.email} onClick={sendAgreement}>Send with Gmail</button>
-                          : <a href="/api/auth/google?purpose=creator_email">Connect Gmail</a>}
+                          : <button type="button" disabled={saving} onClick={connectGmail}>Connect Gmail</button>}
                       </div>
                     )}
                   </form>
@@ -1097,7 +1122,7 @@ export default function CreatorWorkspace({
                           <button type="button" disabled={saving || outreach.channel !== 'email'} onClick={sendEmail}>Send with Gmail</button>
                           <button type="button" disabled={saving} onClick={syncOutreachReplies}>Sync replies</button>
                         </>
-                        : <a href="/api/auth/google?purpose=creator_email">Connect Gmail</a>}
+                        : <button type="button" disabled={saving} onClick={connectGmail}>Connect Gmail</button>}
                     </div>
                   </form>
                 )}

@@ -1,5 +1,6 @@
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+import { getGoogleConnection, getUserGoogleAccessToken } from './_lib/google-user-oauth.js';
 
 function validEmail(value) {
   const email = (value || '').toString().trim();
@@ -22,34 +23,6 @@ function timestamp(value) {
   if (!value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
-}
-
-async function gmailAccessToken(req) {
-  const refreshToken = req.cookies?.drive_refresh
-    ? decodeURIComponent(req.cookies.drive_refresh)
-    : null;
-  if (!refreshToken) {
-    const error = new Error('Gmail is not connected');
-    error.reconnectRequired = true;
-    throw error;
-  }
-  const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      refresh_token: refreshToken,
-      client_id: process.env.GOOGLE_CLIENT_ID,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET,
-      grant_type: 'refresh_token',
-    }),
-  });
-  const tokens = await tokenResponse.json();
-  if (!tokenResponse.ok || !tokens.access_token) {
-    const error = new Error('Google connection expired');
-    error.reconnectRequired = true;
-    throw error;
-  }
-  return tokens.access_token;
 }
 
 function header(message, name) {
@@ -157,7 +130,8 @@ export default async function handler(req, res) {
   const access = await requirePermission(req, res, req.method === 'GET' ? 'creators.read' : 'briefs.write');
   if (!access) return;
   if (req.method === 'GET') {
-    return res.json({ connected: Boolean(req.cookies?.gmail_connected && req.cookies?.drive_refresh) });
+    const connection = await getGoogleConnection(access.sql, access.userId);
+    return res.json({ connected: Boolean(connection), connection });
   }
   if (req.method !== 'POST') return res.status(405).end();
   const { sql } = access;
@@ -171,7 +145,7 @@ export default async function handler(req, res) {
 
     if (req.body?.action === 'sync') {
       if (!validEmail(creator.email)) return res.status(400).json({ error: 'Creator needs a valid email before Gmail sync' });
-      const accessToken = await gmailAccessToken(req);
+      const accessToken = await getUserGoogleAccessToken(sql, access.userId);
       const result = await syncReplies({ sql, access, accessToken, creator });
       return res.json(result);
     }
@@ -193,7 +167,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'A draft agreement for this creator is required' });
       }
     }
-    const accessToken = await gmailAccessToken(req);
+    const accessToken = await getUserGoogleAccessToken(sql, access.userId);
     const followUpAt = timestamp(req.body?.next_follow_up_at);
     if (followUpAt === undefined) return res.status(400).json({ error: 'Follow-up date is invalid' });
 

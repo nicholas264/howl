@@ -3,6 +3,7 @@ import { ensureAppTables, isValidRole, ROLE_LABELS, ROLE_PERMISSIONS, requirePer
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import { ensureCreativeAnalysisQueue } from './_lib/creative-analysis-queue.js';
 import { getIntegrationHealth, testIntegrationHealth } from './_lib/integration-health.js';
+import { ensureGoogleOAuthTables } from './_lib/google-user-oauth.js';
 
 function cleanEmail(value) {
   const email = (value || '').toString().trim().toLowerCase();
@@ -28,6 +29,7 @@ export default async function handler(req, res) {
       await Promise.all([
         ensureCreatorOpsTables(sql),
         ensureCreativeAnalysisQueue(sql),
+        ensureGoogleOAuthTables(sql),
       ]);
       const users = await sql`
         SELECT user_id, email, display_name, role, status, last_seen_at, created_at, updated_at
@@ -110,6 +112,13 @@ export default async function handler(req, res) {
           max(last_synced_at) AS last_synced_at
         FROM creator_outreach
       `;
+      const [googleHealth] = await sql`
+        SELECT
+          count(*)::int AS connected_users,
+          max(last_used_at) AS last_used_at,
+          max(connected_at) AS last_connected_at
+        FROM app_google_connections
+      `;
       return res.json({
         users,
         invitations,
@@ -120,6 +129,7 @@ export default async function handler(req, res) {
           ugc: ugcHealth,
           overdue_deliverables: Number(deliverableHealth?.overdue || 0),
           outreach: outreachHealth,
+          google_credentials: googleHealth,
           ugc_failures: ugcFailures,
         },
         roles: ROLE_LABELS,
