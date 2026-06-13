@@ -135,6 +135,11 @@ export default async function handler(req, res) {
     const form = new FormData();
     form.append('file', new Blob([audioBuf], { type: 'audio/mpeg' }), 'audio.mp3');
     form.append('model', 'whisper-1');
+    form.append(
+      'prompt',
+      'HOWL Campfires. HOWL R4 Campfire. HOWL R4. HOWL fire pit. HOWL products and outdoor camping terminology.',
+    );
+    form.append('language', 'en');
     form.append('response_format', 'verbose_json');
     form.append('timestamp_granularities[]', 'word');
     form.append('timestamp_granularities[]', 'segment');
