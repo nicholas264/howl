@@ -124,6 +124,28 @@ async function createCreatorOpsTables(sql) {
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_deliverables_creator ON creator_deliverables(creator_id, created_at DESC)`;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS creator_submission_links (
+      id            BIGSERIAL PRIMARY KEY,
+      token_hash    TEXT NOT NULL UNIQUE,
+      creator_id    BIGINT NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+      brief_id      BIGINT REFERENCES creator_briefs(id) ON DELETE SET NULL,
+      title         TEXT NOT NULL,
+      due_at        TIMESTAMPTZ,
+      status        TEXT NOT NULL DEFAULT 'active',
+      upload_count  INTEGER NOT NULL DEFAULT 0,
+      token_issue_count INTEGER NOT NULL DEFAULT 0,
+      expires_at    TIMESTAMPTZ NOT NULL,
+      last_used_at  TIMESTAMPTZ,
+      created_by    TEXT,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_submission_links_creator ON creator_submission_links(creator_id, created_at DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_submission_links_status ON creator_submission_links(status, expires_at)`;
+  await sql`ALTER TABLE creator_submission_links ADD COLUMN IF NOT EXISTS token_issue_count INTEGER NOT NULL DEFAULT 0`;
+
   await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS creator_id BIGINT`;
   await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS brief_id BIGINT`;
   await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS deliverable_id BIGINT`;

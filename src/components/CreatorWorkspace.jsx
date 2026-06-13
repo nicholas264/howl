@@ -57,11 +57,12 @@ export default function CreatorWorkspace({
   const [note, setNote] = useState('');
   const [social, setSocial] = useState({ platform: 'instagram', handle: '', profile_url: '', followers: '', avg_views: '', engagement_rate: '' });
   const [detailTab, setDetailTab] = useState('profile');
-  const [workflow, setWorkflow] = useState({ briefs: [], outreach: [], deliverables: [] });
+  const [workflow, setWorkflow] = useState({ briefs: [], outreach: [], deliverables: [], submission_links: [] });
   const [briefForm, setBriefForm] = useState({ product: '', objective: '', angle: '', direction: '', strategy_mode: 'past_performers' });
   const [outreach, setOutreach] = useState({ channel: 'email', subject: '', body: '', status: 'draft' });
   const [gmailConnected, setGmailConnected] = useState(() => document.cookie.split('; ').some(cookie => cookie.startsWith('gmail_connected=1')));
   const [deliverable, setDeliverable] = useState({ title: '', due_at: '', source_url: '', brief_id: '' });
+  const [submissionLink, setSubmissionLink] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [syncingSocial, setSyncingSocial] = useState(null);
 
@@ -253,6 +254,58 @@ export default function CreatorWorkspace({
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const createSubmissionLink = async () => {
+    if (!deliverable.title.trim()) {
+      setError('Add a deliverable title before creating an upload link.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      const response = await fetch('/api/creator-workflow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_submission_link',
+          creator_id: selected.id,
+          title: deliverable.title,
+          brief_id: deliverable.brief_id || null,
+          due_at: deliverable.due_at || null,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not create upload link');
+      const url = `${window.location.origin}${data.submission_path}`;
+      setSubmissionLink(url);
+      setWorkflow(data.workflow);
+      await navigator.clipboard?.writeText(url).catch(() => {});
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const revokeSubmissionLink = async id => {
+    setError('');
+    try {
+      const response = await fetch('/api/creator-workflow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'revoke_submission_link',
+          creator_id: selected.id,
+          id,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not revoke upload link');
+      setWorkflow(data.workflow);
+    } catch (err) {
+      setError(err.message);
     }
   };
 
@@ -712,7 +765,16 @@ export default function CreatorWorkspace({
                     </select>
                     <input type="datetime-local" value={deliverable.due_at} onChange={event => setDeliverable({ ...deliverable, due_at: event.target.value })} />
                     <input placeholder="Drive or asset URL" value={deliverable.source_url} onChange={event => setDeliverable({ ...deliverable, source_url: event.target.value })} />
-                    <button className="primary-action" disabled={saving}>Add deliverable</button>
+                    <div className="deliverable-actions">
+                      <button className="primary-action" disabled={saving}>Add deliverable</button>
+                      <button type="button" disabled={saving} onClick={createSubmissionLink}>Create creator upload link</button>
+                    </div>
+                    {submissionLink && (
+                      <div className="submission-link-created">
+                        <span>Copied to clipboard</span>
+                        <input readOnly value={submissionLink} onFocus={event => event.target.select()} />
+                      </div>
+                    )}
                   </form>
                 )}
                 {canWriteAssets && (
@@ -723,6 +785,20 @@ export default function CreatorWorkspace({
                   </label>
                 )}
                 <div className="workflow-list">
+                  {workflow.submission_links?.map(link => (
+                    <article className="workflow-card submission-link-card" key={`submission-${link.id}`}>
+                      <header>
+                        <span>
+                          <strong>{link.title}</strong>
+                          <small>Expires {new Date(link.expires_at).toLocaleDateString()}</small>
+                        </span>
+                        <i>{link.status}</i>
+                      </header>
+                      {canWriteAssets && link.status === 'active' && (
+                        <button onClick={() => revokeSubmissionLink(link.id)}>Revoke upload link</button>
+                      )}
+                    </article>
+                  ))}
                   {workflow.deliverables.map(item => (
                     <article className="workflow-card deliverable-card" key={item.id}>
                       <header><span><strong>{item.title}</strong><small>{item.due_at ? `Due ${new Date(item.due_at).toLocaleDateString()}` : 'No due date'}</small></span><i>{item.status}</i></header>

@@ -1,6 +1,8 @@
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import { del } from '@vercel/blob';
+import { randomBytes } from 'node:crypto';
+import { submissionTokenHash } from './_lib/creator-submissions.js';
 
 function clean(value, max = 10000) {
   const result = (value ?? '').toString().trim();
@@ -14,7 +16,7 @@ function timestamp(value) {
 }
 
 async function getWorkflow(sql, creatorId) {
-  const [outreach, briefs, deliverables] = await Promise.all([
+  const [outreach, briefs, deliverables, submissionLinks] = await Promise.all([
     sql`
       SELECT * FROM creator_outreach
       WHERE creator_id = ${creatorId}
@@ -33,8 +35,18 @@ async function getWorkflow(sql, creatorId) {
       ORDER BY created_at DESC
       LIMIT 100
     `,
+    sql`
+      SELECT id, creator_id, brief_id, title, due_at,
+        CASE WHEN status = 'active' AND expires_at <= now() THEN 'expired' ELSE status END AS status,
+        upload_count,
+        expires_at, last_used_at, created_at
+      FROM creator_submission_links
+      WHERE creator_id = ${creatorId}
+      ORDER BY created_at DESC
+      LIMIT 100
+    `,
   ]);
-  return { outreach, briefs, deliverables };
+  return { outreach, briefs, deliverables, submission_links: submissionLinks };
 }
 
 async function generateBrief(sql, creatorId, input) {
@@ -149,7 +161,11 @@ export default async function handler(req, res) {
   const body = req.body || {};
   const permission = req.method === 'GET'
     ? 'briefs.read'
-    : ((body.action === 'deliverable' || body.action === 'ingest_footage' || body.resource === 'deliverable')
+    : ((body.action === 'deliverable'
+      || body.action === 'ingest_footage'
+      || body.action === 'create_submission_link'
+      || body.action === 'revoke_submission_link'
+      || body.resource === 'deliverable')
       ? 'assets.write'
       : 'briefs.write');
   const access = await requirePermission(req, res, permission);
@@ -320,6 +336,65 @@ export default async function handler(req, res) {
           WHERE id = ${deliverableId} AND creator_id = ${creatorId}
         `;
         return res.status(201).json({ deliverable: linked, workflow: await getWorkflow(sql, creatorId) });
+      }
+      if (body.action === 'create_submission_link') {
+        const title = clean(body.title, 300);
+        if (!title) return res.status(400).json({ error: 'Submission title required' });
+        const briefId = Number(body.brief_id) || null;
+        if (briefId) {
+          const [brief] = await sql`
+            SELECT id FROM creator_briefs
+            WHERE id = ${briefId} AND creator_id = ${creatorId}
+          `;
+          if (!brief) return res.status(400).json({ error: 'Selected brief does not belong to this creator' });
+        }
+        const dueAt = timestamp(body.due_at);
+        if (dueAt === undefined) return res.status(400).json({ error: 'Submission due date is invalid' });
+        const expiresInDays = Math.min(Math.max(Number(body.expires_in_days) || 14, 1), 60);
+        const expiresAt = new Date(Date.now() + expiresInDays * 86400000).toISOString();
+        const token = randomBytes(32).toString('base64url');
+        const [link] = await sql`
+          INSERT INTO creator_submission_links (
+            token_hash, creator_id, brief_id, title, due_at, expires_at, created_by
+          ) VALUES (
+            ${submissionTokenHash(token)}, ${creatorId}, ${briefId}, ${title},
+            ${dueAt}, ${expiresAt}, ${access.userId}
+          )
+          RETURNING id, creator_id, brief_id, title, due_at, status, upload_count,
+            expires_at, last_used_at, created_at
+        `;
+        await sql`
+          INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+          VALUES (
+            ${creatorId}, 'submission_link_created', ${`Upload link created: ${title}`},
+            ${JSON.stringify({ submission_link_id: link.id, brief_id: briefId, expires_at: expiresAt })}::jsonb,
+            ${access.userId}
+          )
+        `;
+        return res.status(201).json({
+          link,
+          submission_path: `/submit?token=${encodeURIComponent(token)}`,
+          workflow: await getWorkflow(sql, creatorId),
+        });
+      }
+      if (body.action === 'revoke_submission_link') {
+        const linkId = Number(body.id);
+        if (!linkId) return res.status(400).json({ error: 'Submission link id required' });
+        const [link] = await sql`
+          UPDATE creator_submission_links
+          SET status = 'revoked', updated_at = now()
+          WHERE id = ${linkId} AND creator_id = ${creatorId} AND status = 'active'
+          RETURNING id, title
+        `;
+        if (!link) return res.status(404).json({ error: 'Active submission link not found' });
+        await sql`
+          INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+          VALUES (
+            ${creatorId}, 'submission_link_revoked', ${`Upload link revoked: ${link.title}`},
+            ${JSON.stringify({ submission_link_id: link.id })}::jsonb, ${access.userId}
+          )
+        `;
+        return res.json({ ok: true, workflow: await getWorkflow(sql, creatorId) });
       }
       return res.status(400).json({ error: 'Unknown action' });
     }
