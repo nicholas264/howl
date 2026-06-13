@@ -3,7 +3,7 @@ import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import { del } from '@vercel/blob';
 import { randomBytes } from 'node:crypto';
 import { submissionTokenHash } from './_lib/creator-submissions.js';
-import { agreementTokenHash } from './_lib/creator-agreements.js';
+import { agreementTokenHash, renderAgreementTemplate } from './_lib/creator-agreements.js';
 
 function clean(value, max = 10000) {
   const result = (value ?? '').toString().trim();
@@ -31,7 +31,7 @@ async function getWorkflow(sql, creatorId) {
       LIMIT 100
     `,
     sql`
-      SELECT id, creator_id, engagement_id, title, version, status, expires_at,
+      SELECT id, creator_id, engagement_id, template_id, template_version, title, version, status, expires_at,
         sent_to, sent_at, viewed_at, accepted_name, accepted_email, accepted_at,
         revoked_at, created_at, updated_at
       FROM creator_agreements
@@ -342,16 +342,32 @@ export default async function handler(req, res) {
 
       if (body.action === 'create_agreement') {
         const engagementId = Number(body.engagement_id);
-        const title = clean(body.title, 300);
-        const agreementBody = clean(body.agreement_body, 50000);
-        if (!engagementId || !title || !agreementBody) {
-          return res.status(400).json({ error: 'Engagement, title, and approved agreement text are required' });
-        }
+        const templateId = Number(body.template_id) || null;
+        if (!engagementId) return res.status(400).json({ error: 'Engagement is required' });
         const [engagement] = await sql`
-          SELECT id FROM creator_engagements
+          SELECT * FROM creator_engagements
           WHERE id = ${engagementId} AND creator_id = ${creatorId}
         `;
         if (!engagement) return res.status(400).json({ error: 'Engagement does not belong to this creator' });
+        const [creator] = await sql`SELECT id, name, email FROM creators WHERE id = ${creatorId}`;
+        let title = clean(body.title, 300);
+        let agreementBody = clean(body.agreement_body, 50000);
+        let templateVersion = null;
+        if (templateId) {
+          const [template] = await sql`
+            SELECT id, title, agreement_body, version
+            FROM creator_agreement_templates
+            WHERE id = ${templateId} AND status = 'active'
+          `;
+          if (!template) return res.status(400).json({ error: 'Approved agreement template not found' });
+          const rendered = renderAgreementTemplate(template, creator, engagement);
+          title = clean(rendered.title, 300);
+          agreementBody = clean(rendered.agreement_body, 50000);
+          templateVersion = template.version;
+        }
+        if (!title || !agreementBody) {
+          return res.status(400).json({ error: 'Agreement title and approved agreement text are required' });
+        }
         const expiresInDays = Math.min(Math.max(Number(body.expires_in_days) || 14, 1), 60);
         const expiresAt = new Date(Date.now() + expiresInDays * 86400000).toISOString();
         const token = randomBytes(32).toString('base64url');
@@ -362,13 +378,13 @@ export default async function handler(req, res) {
         `;
         const [agreement] = await sql`
           INSERT INTO creator_agreements (
-            creator_id, engagement_id, title, agreement_body, version, status,
+            creator_id, engagement_id, template_id, template_version, title, agreement_body, version, status,
             token_hash, expires_at, created_by
           ) VALUES (
-            ${creatorId}, ${engagementId}, ${title}, ${agreementBody}, ${versionRow.version},
+            ${creatorId}, ${engagementId}, ${templateId}, ${templateVersion}, ${title}, ${agreementBody}, ${versionRow.version},
             'draft', ${agreementTokenHash(token)}, ${expiresAt}, ${access.userId}
           )
-          RETURNING id, creator_id, engagement_id, title, version, status, expires_at, created_at
+          RETURNING id, creator_id, engagement_id, template_id, template_version, title, version, status, expires_at, created_at
         `;
         await sql`
           INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)

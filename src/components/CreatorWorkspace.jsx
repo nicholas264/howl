@@ -48,6 +48,30 @@ function defaultFollowUpDate(days = 5) {
   return local.toISOString().slice(0, 16);
 }
 
+function agreementPreview(value, creator, engagement) {
+  const currency = engagement?.fee_currency || 'USD';
+  const values = {
+    creator_name: creator?.name || '',
+    creator_email: creator?.email || '',
+    engagement_type: engagement?.engagement_type === 'retainer' ? 'Retainer' : 'One-off',
+    approval_date: engagement?.approval_date || '',
+    start_date: engagement?.starts_on || '',
+    end_date: engagement?.ends_on || '',
+    asset_commitment: engagement?.asset_commitment ?? '',
+    commitment_period: engagement?.commitment_period || '',
+    cadence: engagement?.cadence || '',
+    total_fee: engagement?.fee_amount
+      ? new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(Number(engagement.fee_amount))
+      : '',
+    usage_term_months: engagement?.usage_term_months ?? '',
+    payment_terms: engagement?.payment_terms || '',
+    exclusivity_notes: engagement?.exclusivity_notes || 'None',
+  };
+  return (value || '').replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (match, key) => (
+    Object.prototype.hasOwnProperty.call(values, key.toLowerCase()) ? String(values[key.toLowerCase()]) : match
+  ));
+}
+
 function CreatorAvatar({ creator, large = false }) {
   return creator.avatar_url
     ? <img className={`creator-avatar ${large ? 'large' : ''}`} src={creator.avatar_url} alt="" />
@@ -94,7 +118,7 @@ export default function CreatorWorkspace({
     exclusivity_notes: '', payment_terms: 'Net 30', notes: '',
   });
   const [agreement, setAgreement] = useState({
-    engagement_id: '', title: 'HOWL Creator Content Usage Agreement',
+    engagement_id: '', template_id: '', title: 'HOWL Creator Content Usage Agreement',
     agreement_body: '', expires_in_days: '14',
   });
   const [preparedAgreement, setPreparedAgreement] = useState(null);
@@ -105,6 +129,7 @@ export default function CreatorWorkspace({
   const [submissionLink, setSubmissionLink] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [syncingSocial, setSyncingSocial] = useState(null);
+  const [agreementTemplates, setAgreementTemplates] = useState([]);
 
   useEffect(() => {
     fetch('/api/creator-email')
@@ -172,10 +197,25 @@ export default function CreatorWorkspace({
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    fetch('/api/agreement-templates')
+      .then(response => response.ok ? response.json() : Promise.reject())
+      .then(data => setAgreementTemplates(data.templates || []))
+      .catch(() => {});
+  }, []);
+
   const counts = useMemo(() => creators.reduce((result, creator) => {
     result[creator.stage] = (result[creator.stage] || 0) + 1;
     return result;
   }, {}), [creators]);
+  const selectedEngagement = useMemo(
+    () => workflow.engagements?.find(item => String(item.id) === String(agreement.engagement_id)),
+    [agreement.engagement_id, workflow.engagements],
+  );
+  const renderedAgreement = useMemo(() => ({
+    title: agreementPreview(agreement.title, selected, selectedEngagement),
+    body: agreementPreview(agreement.agreement_body, selected, selectedEngagement),
+  }), [agreement.title, agreement.agreement_body, selected, selectedEngagement]);
 
   const openCreator = async (creator) => {
     setError('');
@@ -375,6 +415,17 @@ export default function CreatorWorkspace({
     } finally {
       setSaving(false);
     }
+  };
+
+  const chooseAgreementTemplate = templateId => {
+    const template = agreementTemplates.find(item => String(item.id) === String(templateId));
+    setPreparedAgreement(null);
+    setAgreement(current => ({
+      ...current,
+      template_id: templateId,
+      title: template?.title || 'HOWL Creator Content Usage Agreement',
+      agreement_body: template?.agreement_body || '',
+    }));
   };
 
   const sendAgreement = async () => {
@@ -1030,8 +1081,27 @@ export default function CreatorWorkspace({
                         </option>
                       ))}
                     </select>
-                    <input required placeholder="Agreement title" value={agreement.title} onChange={event => setAgreement({ ...agreement, title: event.target.value })} />
-                    <textarea required rows="12" placeholder="Paste the approved creator usage agreement here. The exact text is versioned and locked when prepared." value={agreement.agreement_body} onChange={event => setAgreement({ ...agreement, agreement_body: event.target.value })} />
+                    <select value={agreement.template_id} onChange={event => chooseAgreementTemplate(event.target.value)}>
+                      <option value="">Custom approved language</option>
+                      {agreementTemplates.map(item => (
+                        <option key={item.id} value={item.id}>{item.name} · v{item.version}</option>
+                      ))}
+                    </select>
+                    <input
+                      required
+                      readOnly={Boolean(agreement.template_id)}
+                      placeholder="Agreement title"
+                      value={agreement.template_id ? renderedAgreement.title : agreement.title}
+                      onChange={event => setAgreement({ ...agreement, title: event.target.value })}
+                    />
+                    <textarea
+                      required
+                      readOnly={Boolean(agreement.template_id)}
+                      rows="12"
+                      placeholder="Choose an approved template or paste approved agreement language. The exact text is locked when prepared."
+                      value={agreement.template_id ? renderedAgreement.body : agreement.agreement_body}
+                      onChange={event => setAgreement({ ...agreement, agreement_body: event.target.value })}
+                    />
                     <div className="workflow-two">
                       <input type="number" min="1" max="60" value={agreement.expires_in_days} onChange={event => setAgreement({ ...agreement, expires_in_days: event.target.value })} />
                       <button className="primary-action" disabled={saving}>Prepare secure link</button>

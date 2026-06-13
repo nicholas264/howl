@@ -15,6 +15,12 @@ const DEFAULT_PERMISSIONS = {
   viewer: ['creators read', 'briefs read', 'assets read', 'launch read', 'analytics read'],
 };
 
+const EMPTY_TEMPLATE = {
+  name: '',
+  title: 'HOWL Creator Content Usage Agreement',
+  agreement_body: '',
+};
+
 export default function AdminWorkspace({ onOpenEditor }) {
   const [data, setData] = useState({
     users: [], invitations: [], feedback: [], audit_log: [],
@@ -28,14 +34,22 @@ export default function AdminWorkspace({ onOpenEditor }) {
   const [checkingIntegrations, setCheckingIntegrations] = useState(false);
   const [integrationsCheckedAt, setIntegrationsCheckedAt] = useState(null);
   const [error, setError] = useState('');
+  const [templates, setTemplates] = useState([]);
+  const [templateForm, setTemplateForm] = useState(EMPTY_TEMPLATE);
+  const [editingTemplateId, setEditingTemplateId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/admin');
-      const result = await response.json();
+      const [response, templatesResponse] = await Promise.all([
+        fetch('/api/admin'),
+        fetch('/api/agreement-templates?include_inactive=true'),
+      ]);
+      const [result, templateResult] = await Promise.all([response.json(), templatesResponse.json()]);
       if (!response.ok) throw new Error(result.error || 'Could not load team');
+      if (!templatesResponse.ok) throw new Error(templateResult.error || 'Could not load agreement templates');
       setData(result);
+      setTemplates(templateResult.templates || []);
     } catch (err) {
       if (!(import.meta.env.DEV && import.meta.env.VITE_AUTH_DISABLED === 'true')) setError(err.message);
     } finally {
@@ -134,6 +148,59 @@ export default function AdminWorkspace({ onOpenEditor }) {
     }
   };
 
+  const saveTemplate = async event => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      const response = await fetch('/api/agreement-templates', {
+        method: editingTemplateId ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(editingTemplateId ? { id: editingTemplateId } : {}),
+          ...templateForm,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not save agreement template');
+      setTemplateForm(EMPTY_TEMPLATE);
+      setEditingTemplateId(null);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const editTemplate = template => {
+    setEditingTemplateId(template.id);
+    setTemplateForm({
+      name: template.name,
+      title: template.title,
+      agreement_body: template.agreement_body,
+    });
+  };
+
+  const setTemplateStatus = async template => {
+    setError('');
+    try {
+      const response = await fetch('/api/agreement-templates', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: template.id,
+          status: template.status === 'active' ? 'archived' : 'active',
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not update agreement template');
+      setTemplates(current => current.map(item => item.id === template.id ? result.template : item));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   return (
     <div className="admin-workspace">
       <header className="creator-head">
@@ -188,6 +255,43 @@ export default function AdminWorkspace({ onOpenEditor }) {
           </section>
         </aside>
       </div>
+
+      <section className="admin-panel agreement-template-panel">
+        <div className="admin-panel-head">
+          <div><span>Agreement templates</span><strong>{templates.filter(item => item.status === 'active').length}</strong></div>
+          <small>Approved language available inside every creator record.</small>
+        </div>
+        <div className="agreement-template-layout">
+          <form className="agreement-template-form" onSubmit={saveTemplate}>
+            <input required placeholder="Internal template name" value={templateForm.name} onChange={event => setTemplateForm({ ...templateForm, name: event.target.value })} />
+            <input required placeholder="Agreement title" value={templateForm.title} onChange={event => setTemplateForm({ ...templateForm, title: event.target.value })} />
+            <textarea required rows="12" placeholder="Paste counsel-approved agreement language" value={templateForm.agreement_body} onChange={event => setTemplateForm({ ...templateForm, agreement_body: event.target.value })} />
+            <small>
+              Optional fields: {'{{creator_name}}'}, {'{{creator_email}}'}, {'{{engagement_type}}'}, {'{{start_date}}'}, {'{{end_date}}'}, {'{{asset_commitment}}'}, {'{{total_fee}}'}, {'{{usage_term_months}}'}, {'{{payment_terms}}'}, {'{{exclusivity_notes}}'}.
+            </small>
+            <div>
+              <button className="primary-action" disabled={saving}>{editingTemplateId ? 'Save new version' : 'Create template'}</button>
+              {editingTemplateId && <button type="button" onClick={() => { setEditingTemplateId(null); setTemplateForm(EMPTY_TEMPLATE); }}>Cancel</button>}
+            </div>
+          </form>
+          <div className="agreement-template-list">
+            {templates.map(template => (
+              <article key={template.id} className={template.status}>
+                <div>
+                  <span>{template.status}</span>
+                  <strong>{template.name}</strong>
+                  <small>{template.title} · Version {template.version}</small>
+                </div>
+                <div>
+                  <button onClick={() => editTemplate(template)}>Edit</button>
+                  <button onClick={() => setTemplateStatus(template)}>{template.status === 'active' ? 'Archive' : 'Reactivate'}</button>
+                </div>
+              </article>
+            ))}
+            {!loading && !templates.length && <div className="workflow-empty">No approved templates yet.</div>}
+          </div>
+        </div>
+      </section>
 
       <section className="admin-panel role-matrix">
         <div className="admin-panel-head"><div><span>Role scope</span></div><small>Roles stay opinionated so permissions remain understandable.</small></div>
