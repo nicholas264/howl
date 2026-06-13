@@ -52,6 +52,8 @@ export default function CreatorWorkspace({
   canWriteBriefs = false,
   canWriteAssets = false,
   onOpenEditor,
+  initialCreatorId,
+  onInitialCreatorLoaded,
 }) {
   const { getToken } = useAuth();
   const [creators, setCreators] = useState([]);
@@ -77,7 +79,7 @@ export default function CreatorWorkspace({
   const [outreach, setOutreach] = useState({ channel: 'email', subject: '', body: '', status: 'draft' });
   const [engagement, setEngagement] = useState({
     engagement_type: 'one_off', status: 'draft', approval_date: '', starts_on: '', ends_on: '',
-    asset_commitment: '', cadence: '', fee_amount: '', fee_currency: 'USD',
+    asset_commitment: '', commitment_period: 'total', cadence: '', fee_amount: '', fee_currency: 'USD',
     ugc_video_rate: '', raw_footage_rate: '', hook_rate: '', photo_rate: '', whitelisting_monthly_rate: '',
     usage_term_months: '12', paid_media_included: true, raw_footage_included: false,
     exclusivity_notes: '', payment_terms: 'Net 30', notes: '',
@@ -157,6 +159,11 @@ export default function CreatorWorkspace({
       setError(err.message);
     }
   };
+
+  useEffect(() => {
+    if (!initialCreatorId) return;
+    openCreator({ id: initialCreatorId }).finally(() => onInitialCreatorLoaded?.());
+  }, [initialCreatorId]);
 
   const refreshWorkflow = async (creatorId = selected?.id) => {
     if (!creatorId) return;
@@ -876,7 +883,14 @@ export default function CreatorWorkspace({
                   <form className="workflow-form" onSubmit={addEngagement}>
                     <div className="detail-section-head"><span>Commercial terms</span><small>Retainer or one-off engagement</small></div>
                     <div className="workflow-two">
-                      <select value={engagement.engagement_type} onChange={event => setEngagement({ ...engagement, engagement_type: event.target.value })}>
+                      <select value={engagement.engagement_type} onChange={event => {
+                        const engagementType = event.target.value;
+                        setEngagement({
+                          ...engagement,
+                          engagement_type: engagementType,
+                          commitment_period: engagementType === 'retainer' ? 'monthly' : 'total',
+                        });
+                      }}>
                         <option value="one_off">One-off creator</option>
                         <option value="retainer">Retainer creator</option>
                       </select>
@@ -893,9 +907,13 @@ export default function CreatorWorkspace({
                     </div>
                     <div className="workflow-three">
                       <input type="number" min="0" placeholder="Asset commitment" value={engagement.asset_commitment} onChange={event => setEngagement({ ...engagement, asset_commitment: event.target.value })} />
-                      <input placeholder="Cadence, e.g. per month" value={engagement.cadence} onChange={event => setEngagement({ ...engagement, cadence: event.target.value })} />
+                      <select value={engagement.commitment_period} onChange={event => setEngagement({ ...engagement, commitment_period: event.target.value })}>
+                        <option value="total">Assets for full engagement</option>
+                        <option value="monthly">Assets per month</option>
+                      </select>
                       <input type="number" min="0" step="0.01" placeholder="Total fee" value={engagement.fee_amount} onChange={event => setEngagement({ ...engagement, fee_amount: event.target.value })} />
                     </div>
+                    <input placeholder="Cadence notes, e.g. 2 videos every other week" value={engagement.cadence} onChange={event => setEngagement({ ...engagement, cadence: event.target.value })} />
                     <div className="workflow-two">
                       <input type="number" min="0" placeholder="Usage term months" value={engagement.usage_term_months} onChange={event => setEngagement({ ...engagement, usage_term_months: event.target.value })} />
                       <input placeholder="Payment terms" value={engagement.payment_terms} onChange={event => setEngagement({ ...engagement, payment_terms: event.target.value })} />

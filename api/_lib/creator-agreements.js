@@ -13,7 +13,7 @@ export async function getAgreementByToken(sql, token) {
       a.accepted_name, a.accepted_email, a.accepted_at, a.created_at,
       c.name AS creator_name, c.email AS creator_email,
       e.engagement_type, e.approval_date, e.starts_on, e.ends_on,
-      e.asset_commitment, e.cadence, e.fee_amount, e.fee_currency,
+      e.asset_commitment, e.commitment_period, e.cadence, e.fee_amount, e.fee_currency,
       e.usage_term_months, e.paid_media_included, e.raw_footage_included,
       e.exclusivity_notes, e.payment_terms
     FROM creator_agreements a

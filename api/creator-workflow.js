@@ -297,6 +297,7 @@ export default async function handler(req, res) {
         const assetCommitment = body.asset_commitment === '' || body.asset_commitment == null
           ? null
           : Math.max(0, Math.min(Number(body.asset_commitment) || 0, 10000));
+        const commitmentPeriod = body.commitment_period === 'monthly' ? 'monthly' : 'total';
         const feeAmount = body.fee_amount === '' || body.fee_amount == null
           ? null
           : Math.max(0, Number(body.fee_amount) || 0);
@@ -307,13 +308,13 @@ export default async function handler(req, res) {
         const [engagement] = await sql`
           INSERT INTO creator_engagements (
             creator_id, engagement_type, status, approval_date, starts_on, ends_on,
-            asset_commitment, cadence, fee_amount, fee_currency, usage_term_months,
+            asset_commitment, commitment_period, cadence, fee_amount, fee_currency, usage_term_months,
             ugc_video_rate, raw_footage_rate, hook_rate, photo_rate, whitelisting_monthly_rate,
             paid_media_included, raw_footage_included, exclusivity_notes,
             payment_terms, notes, created_by
           ) VALUES (
             ${creatorId}, ${engagementType}, ${status}, ${approvalDate}, ${startsOn}, ${endsOn},
-            ${assetCommitment}, ${clean(body.cadence, 100)}, ${feeAmount},
+            ${assetCommitment}, ${commitmentPeriod}, ${clean(body.cadence, 100)}, ${feeAmount},
             ${clean(body.fee_currency, 10) || 'USD'}, ${usageTermMonths},
             ${rate(body.ugc_video_rate)}, ${rate(body.raw_footage_rate)}, ${rate(body.hook_rate)},
             ${rate(body.photo_rate)}, ${rate(body.whitelisting_monthly_rate)},

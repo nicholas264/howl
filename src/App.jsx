@@ -22,6 +22,7 @@ const GalleryTab = lazy(() => import("./components/GalleryTab"));
 const FromWinnersTool = lazy(() => import("./components/FromWinnersTool"));
 const LauncherTool = lazy(() => import("./components/LauncherTool"));
 const CreatorWorkspace = lazy(() => import("./components/CreatorWorkspace"));
+const CreativePlanningWorkspace = lazy(() => import("./components/CreativePlanningWorkspace"));
 const AdminWorkspace = lazy(() => import("./components/AdminWorkspace"));
 const WorkspaceHub = lazy(() => import("./components/WorkspaceHub"));
 import { useDriveAuth } from "./hooks/useDriveAuth";
@@ -51,6 +52,7 @@ export default function HowlAdEngine() {
   const [videoText, setVideoText] = useState(null);
   const [imageText, setImageText] = useState(null);
   const [editorSessionId, setEditorSessionId] = useState(null);
+  const [plannedCreatorId, setPlannedCreatorId] = useState(null);
   const [favorites, setFavorites] = useState(() => {
     try { return JSON.parse(localStorage.getItem('howl_favorites') || '[]'); }
     catch { return []; }
@@ -138,6 +140,10 @@ export default function HowlAdEngine() {
     setActiveTab('ugc-editor');
   }, []);
   const clearInitialEditorSession = useCallback(() => setEditorSessionId(null), []);
+  const openPlannedCreator = useCallback((creatorId) => {
+    setPlannedCreatorId(Number(creatorId) || null);
+    setActiveTab('creators');
+  }, []);
 
   const toggleProduct = (id) => setSelectedProducts((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
   const toggleAngle = (id) => setSelectedAngles((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
@@ -237,6 +243,7 @@ export default function HowlAdEngine() {
       items: [
         { key: 'welcome', label: 'Home' },
         { key: 'creators', label: 'Creators', permission: 'creators.read' },
+        { key: 'creative-plan', label: 'Creative Plan', permission: 'creators.read' },
       ],
     },
     {
@@ -356,8 +363,11 @@ export default function HowlAdEngine() {
             canWriteBriefs={can('briefs.write')}
             canWriteAssets={can('assets.write')}
             onOpenEditor={openEditorSession}
+            initialCreatorId={plannedCreatorId}
+            onInitialCreatorLoaded={() => setPlannedCreatorId(null)}
           />
         )}
+        {activeTab === "creative-plan" && <CreativePlanningWorkspace onOpenCreator={openPlannedCreator} />}
         {activeTab === "creative" && <WorkspaceHub type="creative" setActiveTab={setActiveTab} can={can} />}
         {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={setActiveTab} can={can} />}
         {activeTab === "admin" && can('admin.users') && <AdminWorkspace onOpenEditor={openEditorSession} />}

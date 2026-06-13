@@ -21,6 +21,7 @@ function publicAgreement(agreement) {
       starts_on: agreement.starts_on,
       ends_on: agreement.ends_on,
       asset_commitment: agreement.asset_commitment,
+      commitment_period: agreement.commitment_period,
       cadence: agreement.cadence,
       fee_amount: agreement.fee_amount,
       fee_currency: agreement.fee_currency,

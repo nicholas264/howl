@@ -97,6 +97,7 @@ async function createCreatorOpsTables(sql) {
       starts_on             DATE,
       ends_on               DATE,
       asset_commitment      INTEGER,
+      commitment_period     TEXT NOT NULL DEFAULT 'total',
       cadence               TEXT,
       fee_amount            NUMERIC(12,2),
       fee_currency          TEXT NOT NULL DEFAULT 'USD',
@@ -123,6 +124,7 @@ async function createCreatorOpsTables(sql) {
   await sql`ALTER TABLE creator_engagements ADD COLUMN IF NOT EXISTS hook_rate NUMERIC(12,2)`;
   await sql`ALTER TABLE creator_engagements ADD COLUMN IF NOT EXISTS photo_rate NUMERIC(12,2)`;
   await sql`ALTER TABLE creator_engagements ADD COLUMN IF NOT EXISTS whitelisting_monthly_rate NUMERIC(12,2)`;
+  await sql`ALTER TABLE creator_engagements ADD COLUMN IF NOT EXISTS commitment_period TEXT NOT NULL DEFAULT 'total'`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS creator_agreements (

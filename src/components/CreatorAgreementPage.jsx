@@ -79,7 +79,7 @@ export default function CreatorAgreementPage() {
             {terms && (
               <dl className="agreement-terms">
                 <div><dt>Engagement</dt><dd>{terms.type === 'retainer' ? 'Retainer' : 'One-off'}</dd></div>
-                {terms.asset_commitment != null && <div><dt>Assets</dt><dd>{terms.asset_commitment} {terms.cadence || ''}</dd></div>}
+                {terms.asset_commitment != null && <div><dt>Assets</dt><dd>{terms.asset_commitment} {terms.commitment_period === 'monthly' ? 'per month' : 'total'} {terms.cadence || ''}</dd></div>}
                 {terms.fee_amount != null && <div><dt>Compensation</dt><dd>{money(terms.fee_amount, terms.fee_currency)}</dd></div>}
                 {terms.usage_term_months != null && <div><dt>Usage term</dt><dd>{terms.usage_term_months} months</dd></div>}
                 <div><dt>Paid media</dt><dd>{terms.paid_media_included ? 'Included' : 'Not included'}</dd></div>
