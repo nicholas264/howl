@@ -61,6 +61,16 @@ Create one focused monthly view showing:
 - Deadlines and creators creating forecast risk.
 - Forecast versus actual output and performance.
 
+## Implementation Status
+
+- Monthly creator supply, retainer versus one-off contribution, weekly deadlines,
+  unscheduled commitments, and delivery risk are live in Creative Plan.
+- Creator, deliverable, asset, ad, and Meta performance attribution is live.
+- Historical average and median asset productivity, editable spend and CPA
+  scenarios, required new assets, and supply surplus or shortfall are live.
+- Historical defaults remain disabled until at least 10 spending assets are
+  available; manual assumptions stay authoritative while the sample is small.
+
 ## Data Foundations
 
 Likely additions:
