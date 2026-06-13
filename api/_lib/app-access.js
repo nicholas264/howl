@@ -201,13 +201,23 @@ export async function getAppAccess(auth, sql = neon(process.env.DATABASE_URL)) {
 }
 
 export async function requirePermission(req, res, permission) {
+  const access = await requireWorkspaceAccess(req, res);
+  if (!access) return null;
+  if (!hasPermission(access, permission)) {
+    res.status(403).json({ error: `Forbidden - ${permission} required` });
+    return null;
+  }
+  return access;
+}
+
+export async function requireWorkspaceAccess(req, res) {
   const auth = await requireAuth(req, res);
   if (!auth) return null;
   try {
     const sql = neon(process.env.DATABASE_URL);
     const access = await getAppAccess(auth, sql);
-    if (!access.user || access.user.status !== 'active' || !hasPermission(access, permission)) {
-      res.status(403).json({ error: `Forbidden - ${permission} required` });
+    if (!access.user || access.user.status !== 'active') {
+      res.status(403).json({ error: 'Forbidden - active workspace invitation required' });
       return null;
     }
     return { ...auth, ...access, sql };

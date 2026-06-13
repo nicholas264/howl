@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-import { requireAuth } from '../_lib/auth.js';
+import { requirePermission } from '../_lib/app-access.js';
 
 const DEFAULTS = {
   grossMarginPct: 60,        // % of net revenue retained after COGS — fallback when Shopify unitCost is missing
@@ -46,7 +46,7 @@ async function ensureTable(sql) {
 }
 
 export default async function handler(req, res) {
-  if (!(await requireAuth(req, res))) return;
+  if (!(await requirePermission(req, res, req.method === 'GET' ? 'analytics.read' : 'admin.users'))) return;
   const sql = neon(process.env.DATABASE_URL);
   try {
     if (req.method === 'GET') {

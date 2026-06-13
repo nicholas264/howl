@@ -2,12 +2,12 @@
 // both write here. All operations are gated on the owning callout_images row
 // belonging to the authenticated user.
 import { neon } from '@neondatabase/serverless';
-import { requireAuth } from '../_lib/auth.js';
+import { requirePermission } from '../_lib/app-access.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
 export default async function handler(req, res) {
-  const auth = await requireAuth(req, res);
+  const auth = await requirePermission(req, res, req.method === 'GET' ? 'assets.read' : 'assets.write');
   if (!auth) return;
   const sql = neon(process.env.DATABASE_URL);
   const userId = auth.userId;

@@ -1,12 +1,12 @@
 // Lists Facebook Pages the system-user token can manage. Used by the UGC
 // inbox to show a profile-picker dropdown instead of asking the user to
 // paste a numeric Page ID.
-import { requireAuth } from './_lib/auth.js';
+import { requirePermission } from './_lib/app-access.js';
 
 const BASE = 'https://graph.facebook.com/v21.0';
 
 export default async function handler(req, res) {
-  if (!(await requireAuth(req, res))) return;
+  if (!(await requirePermission(req, res, 'launch.read'))) return;
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   const accessToken = process.env.META_ACCESS_TOKEN;

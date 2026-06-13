@@ -7,7 +7,7 @@
 // Input  (POST JSON): { imageUrl, productId?, productName?, features: string[] }
 // Output (200 JSON):  { placements: [{ feature, anchorX, anchorY, side }] }
 import { neon } from '@neondatabase/serverless';
-import { requireAuth } from './_lib/auth.js';
+import { requirePermission } from './_lib/app-access.js';
 
 const MODEL = 'claude-sonnet-4-6';
 
@@ -28,7 +28,7 @@ Respond with ONLY a JSON object matching this schema, no prose:
 { "placements": [{ "feature": string, "anchorX": number, "anchorY": number, "side": "left"|"right" }] }`;
 
 export default async function handler(req, res) {
-  if (!(await requireAuth(req, res))) return;
+  if (!(await requirePermission(req, res, 'assets.write'))) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;

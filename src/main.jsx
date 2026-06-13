@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { ClerkProvider, SignedIn, SignedOut, SignIn, useAuth } from '@clerk/clerk-react'
+import { ClerkProvider, SignedIn, SignedOut, SignIn, UserButton, useAuth } from '@clerk/clerk-react'
 import App from './App.jsx'
 import './styles.css'
 
@@ -13,13 +13,18 @@ const isCreatorAgreement = /^\/agreement\/?$/.test(window.location.pathname)
 const isPublicCreatorPage = isCreatorSubmission || isCreatorAgreement
 if (!PUB_KEY && !isPublicCreatorPage) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY')
 
-// Patch window.fetch so every /api/* call carries the Clerk session JWT.
-function FetchInterceptor() {
+// Install authenticated API access and verify workspace membership before any
+// private application component is mounted.
+function AuthenticatedApp() {
   const { getToken, isSignedIn } = useAuth()
+  const [access, setAccess] = React.useState(null)
+  const [error, setError] = React.useState('')
+
   React.useEffect(() => {
     if (!isSignedIn) return
     const orig = window.fetch
-    window.fetch = async (input, init = {}) => {
+    let active = true
+    const authenticatedFetch = async (input, init = {}) => {
       const url = typeof input === 'string' ? input : input.url
       if (url && (url.startsWith('/api/') || url.includes('/api/'))) {
         try {
@@ -29,9 +34,53 @@ function FetchInterceptor() {
       }
       return orig(input, init)
     }
-    return () => { window.fetch = orig }
+    window.fetch = authenticatedFetch
+
+    authenticatedFetch('/api/app-context')
+      .then(async response => {
+        const data = await response.json()
+        if (!response.ok) throw new Error(data.error || 'Could not verify workspace access')
+        if (active) setAccess(data)
+      })
+      .catch(err => {
+        if (active) setError(err.message)
+      })
+
+    return () => {
+      active = false
+      window.fetch = orig
+    }
   }, [isSignedIn, getToken])
-  return null
+
+  if (error) {
+    return (
+      <div className="access-denied">
+        <img src="/logos/howl-horizontal-wht.png" alt="HOWL Campfires" />
+        <span className="workspace-kicker">Access check failed</span>
+        <h1>We could not verify this account.</h1>
+        <p>{error}</p>
+        <UserButton afterSignOutUrl="/" />
+      </div>
+    )
+  }
+
+  if (!access) {
+    return <div className="access-loading">Verifying workspace access…</div>
+  }
+
+  if (!access.user || access.user.status !== 'active') {
+    return (
+      <div className="access-denied">
+        <img src="/logos/howl-horizontal-wht.png" alt="HOWL Campfires" />
+        <span className="workspace-kicker">Access required</span>
+        <h1>This HOWL workspace is invite-only.</h1>
+        <p>Ask a workspace owner to invite this email address from Admin.</p>
+        <UserButton afterSignOutUrl="/" />
+      </div>
+    )
+  }
+
+  return <App appAccess={access} />
 }
 
 const appearance = {
@@ -43,6 +92,9 @@ const appearance = {
     colorText: '#f0f4f8',
     colorTextSecondary: '#8b949e',
     fontFamily: 'JetBrains Mono, monospace',
+  },
+  elements: {
+    footerAction: { display: 'none' },
   },
 }
 
@@ -56,13 +108,12 @@ const app = isCreatorSubmission ? (
   </React.Suspense>
 ) : DEV_AUTH_BYPASS ? (
   <ClerkProvider publishableKey={PUB_KEY} appearance={appearance}>
-    <App />
+    <App appAccess={{ user: { status: 'active' }, role: 'owner', permissions: ['*'] }} />
   </ClerkProvider>
 ) : (
   <ClerkProvider publishableKey={PUB_KEY} appearance={appearance}>
     <SignedIn>
-      <FetchInterceptor />
-      <App />
+      <AuthenticatedApp />
     </SignedIn>
     <SignedOut>
       <div style={{ minHeight: '100vh', background: '#0d1117', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>

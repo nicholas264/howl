@@ -2,8 +2,7 @@
 // Vercel OIDC → GCP STS → service account impersonation → Drive API.
 // Actions: list, download, mark_launched, ensure_subfolders, launch_meta_ad
 import { neon } from '@neondatabase/serverless';
-import { requireAuth } from '../_lib/auth.js';
-import { getAppAccess, hasPermission } from '../_lib/app-access.js';
+import { hasPermission, requireWorkspaceAccess } from '../_lib/app-access.js';
 import { getGoogleAccessToken } from '../_lib/gcp-auth.js';
 import { mirrorAssetToBlob } from '../_lib/blob/mirror.js';
 import { ensureCreativeAssetTables, markCreativeAssetLaunched, upsertDriveAsset } from '../_lib/creative-assets.js';
@@ -42,9 +41,8 @@ async function ensureFolder(token, parentId, name) {
 }
 
 export default async function handler(req, res) {
-  const auth = await requireAuth(req, res);
-  if (!auth) return;
-  const appAccess = await getAppAccess(auth);
+  const appAccess = await requireWorkspaceAccess(req, res);
+  if (!appAccess) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const rootId = process.env.UGC_INBOX_FOLDER_ID;
@@ -564,7 +562,7 @@ export default async function handler(req, res) {
                 INSERT INTO launch_history
                   (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
                 VALUES
-                  (${adData.id}, ${adsetId}, ${campaignId || null}, ${pair.feedFileId}, ${feed.fileMeta.name + ' + ' + story.fileMeta.name}, ${creator || null}, ${creatorId || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${feed.mimeType + ' (paired)'}, ${auth.userId}, ${auth.email || null}, ${feed.blobUrl || null})
+                  (${adData.id}, ${adsetId}, ${campaignId || null}, ${pair.feedFileId}, ${feed.fileMeta.name + ' + ' + story.fileMeta.name}, ${creator || null}, ${creatorId || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${feed.mimeType + ' (paired)'}, ${appAccess.userId}, ${appAccess.email || null}, ${feed.blobUrl || null})
               `;
               await Promise.all([
                 markCreativeAssetLaunched(sql, {
@@ -799,7 +797,7 @@ export default async function handler(req, res) {
             INSERT INTO launch_history
               (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
             VALUES
-              (${adData.id}, ${adsetId}, ${campaignId || null}, ${fileId}, ${fileMeta.name}, ${creator || null}, ${creatorId || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${mimeType}, ${auth.userId}, ${auth.email || null}, ${sourceVideoUrl})
+              (${adData.id}, ${adsetId}, ${campaignId || null}, ${fileId}, ${fileMeta.name}, ${creator || null}, ${creatorId || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${mimeType}, ${appAccess.userId}, ${appAccess.email || null}, ${sourceVideoUrl})
           `;
           await markCreativeAssetLaunched(sql, {
             driveFileId: fileId,

@@ -1,13 +1,13 @@
 // Same-origin proxy for Drive file thumbnails. Needed because the site sets
 // Cross-Origin-Embedder-Policy: require-corp, which blocks lh3.googleusercontent.com
 // thumbnails (no CORP / unreliable CORS). Returns the thumbnail bytes inline.
-import { requireAuth } from '../_lib/auth.js';
+import { requirePermission } from '../_lib/app-access.js';
 import { getGoogleAccessToken } from '../_lib/gcp-auth.js';
 
 const DRIVE = 'https://www.googleapis.com/drive/v3';
 
 export default async function handler(req, res) {
-  const auth = await requireAuth(req, res);
+  const auth = await requirePermission(req, res, 'assets.read');
   if (!auth) return;
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 

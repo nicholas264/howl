@@ -1,11 +1,11 @@
 import { neon } from '@neondatabase/serverless';
 import { del } from '@vercel/blob';
-import { requireAuth } from '../_lib/auth.js';
+import { requirePermission } from '../_lib/app-access.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '5mb' } } };
 
 export default async function handler(req, res) {
-  const auth = await requireAuth(req, res);
+  const auth = await requirePermission(req, res, req.method === 'GET' ? 'assets.read' : 'assets.write');
   if (!auth) return;
   const sql = neon(process.env.DATABASE_URL);
   const userId = auth.userId;

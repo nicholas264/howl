@@ -127,8 +127,7 @@ export const config = {
   },
 };
 
-import { requireAuth } from './_lib/auth.js';
-import { getAppAccess, hasPermission } from './_lib/app-access.js';
+import { hasPermission, requireWorkspaceAccess } from './_lib/app-access.js';
 import {
   analyzeCreativeGroup,
   dismissAnalyzedWinner,
@@ -140,10 +139,9 @@ import {
 } from './_lib/meta/creative-analysis.js';
 
 export default async function handler(req, res) {
-  const auth = await requireAuth(req, res);
-  if (!auth) return;
-  const appAccess = await getAppAccess(auth);
-  const actor = { launched_by_user_id: auth.userId, launched_by_email: auth.email };
+  const appAccess = await requireWorkspaceAccess(req, res);
+  if (!appAccess) return;
+  const actor = { launched_by_user_id: appAccess.userId, launched_by_email: appAccess.email };
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

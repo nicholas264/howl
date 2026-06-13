@@ -1,6 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-import { requireAuth } from './_lib/auth.js';
-import { ensureAppTables, requirePermission } from './_lib/app-access.js';
+import { ensureAppTables, requirePermission, requireWorkspaceAccess } from './_lib/app-access.js';
 
 const KINDS = new Set(['bug', 'feature', 'edge_case']);
 const STATUSES = new Set(['open', 'planned', 'resolved', 'dismissed']);
@@ -9,7 +8,7 @@ export default async function handler(req, res) {
   const sql = neon(process.env.DATABASE_URL);
 
   if (req.method === 'POST') {
-    const auth = await requireAuth(req, res);
+    const auth = await requireWorkspaceAccess(req, res);
     if (!auth) return;
     const { kind, message, page_url } = req.body || {};
     if (!KINDS.has(kind)) return res.status(400).json({ error: 'kind must be bug | feature | edge_case' });

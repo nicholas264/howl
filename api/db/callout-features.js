@@ -1,13 +1,13 @@
 // Per-product callout feature specs. Used to ground vision auto-placement
 // and to store body copy so it persists between sessions.
 import { neon } from '@neondatabase/serverless';
-import { requireAuth } from '../_lib/auth.js';
+import { requirePermission } from '../_lib/app-access.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
 export default async function handler(req, res) {
-  const auth = await requireAuth(req, res);
-  if (!auth) return;
+  const access = await requirePermission(req, res, req.method === 'GET' ? 'assets.read' : 'assets.write');
+  if (!access) return;
   const sql = neon(process.env.DATABASE_URL);
 
   try {
