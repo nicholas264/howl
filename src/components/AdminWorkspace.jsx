@@ -25,6 +25,8 @@ export default function AdminWorkspace({ onOpenEditor }) {
   const [role, setRole] = useState('viewer');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [checkingIntegrations, setCheckingIntegrations] = useState(false);
+  const [integrationsCheckedAt, setIntegrationsCheckedAt] = useState(null);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -109,6 +111,26 @@ export default function AdminWorkspace({ onOpenEditor }) {
       }));
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const testIntegrations = async () => {
+    setCheckingIntegrations(true);
+    setError('');
+    try {
+      const response = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'test_integrations' }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not test integrations');
+      setData(current => ({ ...current, integrations: result.integrations }));
+      setIntegrationsCheckedAt(result.checked_at);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCheckingIntegrations(false);
     }
   };
 
@@ -256,13 +278,25 @@ export default function AdminWorkspace({ onOpenEditor }) {
       </section>
 
       <section className="admin-panel integration-panel">
-        <div className="admin-panel-head"><div><span>System connections</span></div><small>Only dependencies that affect live workflows are shown.</small></div>
+        <div className="admin-panel-head integration-panel-head">
+          <div><span>System connections</span></div>
+          <div className="integration-head-action">
+            {integrationsCheckedAt && <small>Checked {new Date(integrationsCheckedAt).toLocaleTimeString()}</small>}
+            <button onClick={testIntegrations} disabled={checkingIntegrations}>
+              {checkingIntegrations ? 'Checking...' : 'Run checks'}
+            </button>
+          </div>
+        </div>
         <div className="integration-grid">
           {Object.entries(data.integrations || {}).map(([key, item]) => (
-            <div key={key}>
-              <span className={item.ready ? 'ready' : 'setup'}>{item.ready ? 'Ready' : 'Setup'}</span>
+            <div key={key} className={`integration-card ${item.state || (item.ready ? 'ready' : 'setup')}`}>
+              <span className={item.state || (item.ready ? 'ready' : 'setup')}>
+                {item.state === 'warning' ? 'Action' : item.state === 'error' ? 'Error' : item.ready ? 'Ready' : 'Setup'}
+              </span>
               <strong>{item.label}</strong>
               <p>{item.detail}</p>
+              {item.action && <small>{item.action}</small>}
+              {!!item.env?.length && !item.ready && <code>{item.env.join(' + ')}</code>}
             </div>
           ))}
         </div>

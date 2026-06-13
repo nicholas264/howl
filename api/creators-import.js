@@ -1,5 +1,6 @@
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+import { getIntegrationHealth } from './_lib/integration-health.js';
 
 function value(row, names) {
   const keys = Object.keys(row || {});
@@ -14,8 +15,11 @@ export default async function handler(req, res) {
   const access = await requirePermission(req, res, 'creators.write');
   if (!access) return;
   if (req.method === 'GET') {
+    const clickup = getIntegrationHealth().clickup;
     return res.json({
-      clickup_configured: Boolean(process.env.CLICKUP_API_TOKEN && process.env.CLICKUP_CREATOR_LIST_ID),
+      clickup_configured: clickup.ready,
+      clickup_state: clickup.state,
+      clickup_detail: clickup.detail,
     });
   }
   if (req.method !== 'POST') return res.status(405).end();
