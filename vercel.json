@@ -1,5 +1,8 @@
 {
   "framework": "vite",
+  "env": {
+    "CLICKUP_CREATOR_LIST_ID": "901111110302"
+  },
   "functions": {
     "api/drive/ugc.js": {
       "maxDuration": 300
