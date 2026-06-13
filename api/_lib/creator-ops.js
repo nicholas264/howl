@@ -18,6 +18,7 @@ async function createCreatorOpsTables(sql) {
       tags                TEXT[] NOT NULL DEFAULT '{}',
       rate_notes          TEXT,
       notes               TEXT,
+      source_metadata     JSONB NOT NULL DEFAULT '{}'::jsonb,
       avatar_url          TEXT,
       owner_user_id       TEXT,
       created_by          TEXT,
@@ -28,6 +29,7 @@ async function createCreatorOpsTables(sql) {
   await sql`CREATE INDEX IF NOT EXISTS idx_creators_stage ON creators(stage)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creators_status ON creators(status)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creators_name ON creators(lower(name))`;
+  await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS source_metadata JSONB NOT NULL DEFAULT '{}'::jsonb`;
   await sql`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_creators_source_external
     ON creators(source, source_external_id)

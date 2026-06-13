@@ -663,7 +663,18 @@ export default function CreatorWorkspace({
                 <div><dt>Tags</dt><dd>{selected.tags?.join(', ') || 'Not set'}</dd></div>
                 <div><dt>Rates</dt><dd>{selected.rate_notes || 'Not set'}</dd></div>
                 <div><dt>Bio</dt><dd>{selected.bio || 'Not set'}</dd></div>
+                {selected.source_metadata?.clickup_status && <div><dt>ClickUp status</dt><dd>{selected.source_metadata.clickup_status}</dd></div>}
               </dl>
+              {Object.keys(selected.source_metadata?.custom_fields || {}).length > 0 && (
+                <details className="inline-editor">
+                  <summary>Application details</summary>
+                  <dl className="creator-facts">
+                    {Object.entries(selected.source_metadata.custom_fields)
+                      .filter(([, value]) => value !== null && value !== undefined && String(value).trim())
+                      .map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{String(value)}</dd></div>)}
+                  </dl>
+                </details>
+              )}
             </section>
 
             <section className="creator-detail-section">

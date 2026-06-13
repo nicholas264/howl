@@ -1,5 +1,6 @@
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+import { mapClickupCreator } from './_lib/clickup-creators.js';
 import { CLICKUP_CREATOR_LIST_ID, getIntegrationHealth } from './_lib/integration-health.js';
 
 function value(row, names) {
@@ -9,6 +10,16 @@ function value(row, names) {
     if (key && row[key] !== undefined && row[key] !== null) return String(row[key]).trim();
   }
   return '';
+}
+
+function metric(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const text = String(value).trim().toLowerCase().replace(/,/g, '');
+  const parsed = Number.parseFloat(text.replace(/[^0-9.-]/g, ''));
+  if (!Number.isFinite(parsed)) return null;
+  if (text.includes('m')) return Math.round(parsed * 1_000_000);
+  if (text.includes('k')) return Math.round(parsed * 1_000);
+  return parsed;
 }
 
 export default async function handler(req, res) {
@@ -40,26 +51,7 @@ export default async function handler(req, res) {
         const data = await response.json();
         if (!response.ok) throw new Error(data.err || data.error || `ClickUp request failed (${response.status})`);
         const tasks = data.tasks || [];
-        for (const task of tasks) {
-          const custom = Object.fromEntries((task.custom_fields || []).map(field => {
-            const raw = field.value;
-            const display = Array.isArray(raw)
-              ? raw.map(item => item?.name || item?.label || item).join(', ')
-              : raw && typeof raw === 'object'
-                ? raw.name || raw.label || JSON.stringify(raw)
-                : raw;
-            return [field.name, display ?? ''];
-          }));
-          rows.push({
-            Name: task.name,
-            ID: task.id,
-            Source: 'clickup',
-            Notes: task.markdown_description || task.description || '',
-            Tags: (task.tags || []).map(tag => tag.name).join(', '),
-            Status: task.status?.status || '',
-            ...custom,
-          });
-        }
+        for (const task of tasks) rows.push({ ...mapClickupCreator(task), external_id: task.id, source: 'clickup' });
         if (tasks.length < 100 || rows.length >= 2000) break;
       }
       rows = rows.slice(0, 2000);
@@ -71,47 +63,116 @@ export default async function handler(req, res) {
     const skipped = [];
     for (let index = 0; index < rows.length; index++) {
       const row = rows[index];
-      const name = value(row, ['name', 'creatorname', 'fullname', 'applicant']);
-      const email = value(row, ['email', 'emailaddress']);
+      const mapped = row.source_metadata ? row : {
+        name: value(row, ['name', 'creatorname', 'fullname', 'applicant']),
+        email: value(row, ['email', 'emailaddress']),
+        phone: value(row, ['phone', 'phonenumber']),
+        location: value(row, ['location', 'city', 'state']),
+        timezone: value(row, ['timezone']),
+        bio: value(row, ['bio', 'about', 'creatorinfo']),
+        activities: value(row, ['activities', 'activity', 'interests']),
+        tags: value(row, ['tags', 'labels', 'creatorcategory']),
+        rate_notes: value(row, ['rates', 'rate', 'ratenotes', 'pricing']),
+        notes: value(row, ['notes', 'applicationnotes', 'description']),
+        avatar_url: value(row, ['avatarurl', 'photo', 'headshot']),
+        external_id: value(row, ['id', 'taskid', 'clickupid']),
+        source: value(row, ['source']) || 'clickup_import',
+        stage: 'sourced',
+        status: 'prospect',
+        source_metadata: {},
+        socials: [],
+      };
+      const name = mapped.name;
+      const email = mapped.email;
       if (!name) {
         skipped.push({ row: index + 1, reason: 'Missing name' });
         continue;
       }
-      const externalId = value(row, ['id', 'taskid', 'clickupid']) || null;
-      const activities = value(row, ['activities', 'activity', 'interests']).split(',').map(item => item.trim()).filter(Boolean);
-      const tags = value(row, ['tags', 'labels', 'creatorcategory']).split(',').map(item => item.trim()).filter(Boolean);
-      const source = value(row, ['source']) || 'clickup_import';
-      const existing = externalId
-        ? await sql`SELECT id FROM creators WHERE source = ${source} AND source_external_id = ${externalId} LIMIT 1`
-        : email
-          ? await sql`SELECT id FROM creators WHERE lower(email) = ${email.toLowerCase()} LIMIT 1`
-          : [];
+      const externalId = mapped.external_id || null;
+      const activities = String(mapped.activities || '').split(',').map(item => item.trim()).filter(Boolean);
+      const tags = String(mapped.tags || '').split(',').map(item => item.trim()).filter(Boolean);
+      const source = mapped.source || 'clickup_import';
+      const existing = externalId || email
+        ? await sql`
+            SELECT id FROM creators
+            WHERE (
+              ${externalId}::text IS NOT NULL
+              AND source = ${source}
+              AND source_external_id = ${externalId}
+            ) OR (
+              ${email || null}::text IS NOT NULL
+              AND lower(email) = ${email ? email.toLowerCase() : null}
+            )
+            ORDER BY CASE WHEN source = ${source} AND source_external_id = ${externalId} THEN 0 ELSE 1 END
+            LIMIT 1
+          `
+        : [];
       if (existing[0]) {
         await sql`
           UPDATE creators SET
             name = ${name},
-            email = ${email || null},
-            phone = ${value(row, ['phone', 'phonenumber']) || null},
-            location = ${value(row, ['location', 'city', 'state']) || null},
-            activities = ${activities},
-            tags = ${tags},
-            notes = COALESCE(${value(row, ['notes', 'applicationnotes', 'description']) || null}, notes),
+            email = COALESCE(${email || null}, email),
+            phone = COALESCE(${mapped.phone || null}, phone),
+            location = COALESCE(${mapped.location || null}, location),
+            timezone = COALESCE(${mapped.timezone || null}, timezone),
+            bio = COALESCE(${mapped.bio || null}, bio),
+            activities = CASE WHEN cardinality(${activities}::text[]) > 0 THEN ${activities}::text[] ELSE activities END,
+            tags = CASE WHEN cardinality(${tags}::text[]) > 0 THEN ${tags}::text[] ELSE tags END,
+            rate_notes = COALESCE(${mapped.rate_notes || null}, rate_notes),
+            notes = COALESCE(${mapped.notes || null}, notes),
+            avatar_url = COALESCE(${mapped.avatar_url || null}, avatar_url),
+            stage = ${mapped.stage || 'sourced'},
+            status = ${mapped.status || 'prospect'},
+            source_metadata = source_metadata || ${JSON.stringify(mapped.source_metadata || {})}::jsonb,
             updated_at = now()
           WHERE id = ${existing[0].id}
         `;
+        for (const account of mapped.socials || []) {
+          await sql`
+            INSERT INTO creator_social_accounts (
+              creator_id, platform, handle, profile_url, followers, avg_views, engagement_rate, metrics, updated_at
+            ) VALUES (
+              ${existing[0].id}, ${account.platform}, ${account.handle || null}, ${account.profile_url || null},
+              ${metric(account.followers)}, ${metric(account.avg_views)},
+              ${metric(account.engagement_rate)}, ${JSON.stringify({ source: 'clickup' })}::jsonb, now()
+            )
+            ON CONFLICT (creator_id, platform) DO UPDATE SET
+              handle = COALESCE(EXCLUDED.handle, creator_social_accounts.handle),
+              profile_url = COALESCE(EXCLUDED.profile_url, creator_social_accounts.profile_url),
+              followers = COALESCE(EXCLUDED.followers, creator_social_accounts.followers),
+              avg_views = COALESCE(EXCLUDED.avg_views, creator_social_accounts.avg_views),
+              engagement_rate = COALESCE(EXCLUDED.engagement_rate, creator_social_accounts.engagement_rate),
+              metrics = creator_social_accounts.metrics || EXCLUDED.metrics,
+              updated_at = now()
+          `;
+        }
         updated++;
       } else {
-        await sql`
+        const [creator] = await sql`
           INSERT INTO creators (
-            name, email, phone, location, activities, tags, notes,
+            name, email, phone, location, timezone, bio, activities, tags, rate_notes, notes, avatar_url,
+            source_metadata,
             source, source_external_id, stage, status, created_by
           ) VALUES (
-            ${name}, ${email || null}, ${value(row, ['phone', 'phonenumber']) || null},
-            ${value(row, ['location', 'city', 'state']) || null}, ${activities}, ${tags},
-            ${value(row, ['notes', 'applicationnotes', 'description']) || null},
-            ${source}, ${externalId}, 'sourced', 'prospect', ${access.userId}
+            ${name}, ${email || null}, ${mapped.phone || null}, ${mapped.location || null},
+            ${mapped.timezone || null}, ${mapped.bio || null}, ${activities}, ${tags},
+            ${mapped.rate_notes || null}, ${mapped.notes || null}, ${mapped.avatar_url || null},
+            ${JSON.stringify(mapped.source_metadata || {})}::jsonb,
+            ${source}, ${externalId}, ${mapped.stage || 'sourced'}, ${mapped.status || 'prospect'}, ${access.userId}
           )
+          RETURNING id
         `;
+        for (const account of mapped.socials || []) {
+          await sql`
+            INSERT INTO creator_social_accounts (
+              creator_id, platform, handle, profile_url, followers, avg_views, engagement_rate, metrics
+            ) VALUES (
+              ${creator.id}, ${account.platform}, ${account.handle || null}, ${account.profile_url || null},
+              ${metric(account.followers)}, ${metric(account.avg_views)},
+              ${metric(account.engagement_rate)}, ${JSON.stringify({ source: 'clickup' })}::jsonb
+            )
+          `;
+        }
         created++;
       }
     }
