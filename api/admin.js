@@ -93,6 +93,23 @@ export default async function handler(req, res) {
         WHERE due_at < now()
           AND status NOT IN ('launched', 'complete', 'cancelled')
       `;
+      const [outreachHealth] = await sql`
+        SELECT
+          count(*) FILTER (
+            WHERE next_follow_up_at <= now()
+              AND replied_at IS NULL
+              AND outcome IS NULL
+              AND status IN ('sent', 'follow_up')
+          )::int AS due,
+          count(*) FILTER (
+            WHERE next_follow_up_at < now() - interval '7 days'
+              AND replied_at IS NULL
+              AND outcome IS NULL
+              AND status IN ('sent', 'follow_up')
+          )::int AS stale,
+          max(last_synced_at) AS last_synced_at
+        FROM creator_outreach
+      `;
       return res.json({
         users,
         invitations,
@@ -102,6 +119,7 @@ export default async function handler(req, res) {
           creative_analysis: creativeHealth,
           ugc: ugcHealth,
           overdue_deliverables: Number(deliverableHealth?.overdue || 0),
+          outreach: outreachHealth,
           ugc_failures: ugcFailures,
         },
         roles: ROLE_LABELS,

@@ -79,13 +79,26 @@ async function createCreatorOpsTables(sql) {
       body          TEXT NOT NULL,
       status        TEXT NOT NULL DEFAULT 'draft',
       external_id   TEXT,
+      external_thread_id TEXT,
+      recipient     TEXT,
       sent_at       TIMESTAMPTZ,
+      replied_at    TIMESTAMPTZ,
+      next_follow_up_at TIMESTAMPTZ,
+      outcome       TEXT,
+      last_synced_at TIMESTAMPTZ,
       created_by    TEXT,
       created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_outreach_creator ON creator_outreach(creator_id, created_at DESC)`;
+  await sql`ALTER TABLE creator_outreach ADD COLUMN IF NOT EXISTS external_thread_id TEXT`;
+  await sql`ALTER TABLE creator_outreach ADD COLUMN IF NOT EXISTS recipient TEXT`;
+  await sql`ALTER TABLE creator_outreach ADD COLUMN IF NOT EXISTS replied_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE creator_outreach ADD COLUMN IF NOT EXISTS next_follow_up_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE creator_outreach ADD COLUMN IF NOT EXISTS outcome TEXT`;
+  await sql`ALTER TABLE creator_outreach ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMPTZ`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_outreach_follow_up ON creator_outreach(next_follow_up_at) WHERE next_follow_up_at IS NOT NULL`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS creator_engagements (

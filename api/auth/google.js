@@ -8,6 +8,7 @@ export default function handler(req, res) {
     scope: [
       'https://www.googleapis.com/auth/drive.file',
       'https://www.googleapis.com/auth/gmail.send',
+      'https://www.googleapis.com/auth/gmail.readonly',
     ].join(' '),
     access_type: 'offline',
     prompt: 'consent',

@@ -129,12 +129,22 @@ export default async function handler(req, res) {
             FROM creator_social_accounts s
             WHERE s.creator_id = c.id
           ), '[]'::json) AS social_accounts,
+          (
+            SELECT min(o.next_follow_up_at)
+            FROM creator_outreach o
+            WHERE o.creator_id = c.id
+              AND o.next_follow_up_at IS NOT NULL
+              AND o.replied_at IS NULL
+              AND o.outcome IS NULL
+              AND o.status IN ('sent', 'follow_up')
+          ) AS next_follow_up_at,
           (SELECT count(*)::int FROM launch_history l WHERE l.creator_id = c.id OR lower(l.creator) = lower(c.name)) AS launch_count,
           (SELECT max(l.launched_at) FROM launch_history l WHERE l.creator_id = c.id OR lower(l.creator) = lower(c.name)) AS last_launch_at
         FROM creators c
         WHERE (${search}::text IS NULL OR c.name ILIKE ${search ? `%${search}%` : null} OR c.email ILIKE ${search ? `%${search}%` : null})
           AND (${stage}::text IS NULL OR c.stage = ${stage})
         ORDER BY
+          next_follow_up_at ASC NULLS LAST,
           CASE c.stage
             WHEN 'active' THEN 1 WHEN 'producing' THEN 2 WHEN 'briefing' THEN 3
             WHEN 'interested' THEN 4 WHEN 'contacted' THEN 5 WHEN 'sourced' THEN 6 ELSE 7

@@ -19,7 +19,7 @@ export default function AdminWorkspace({ onOpenEditor }) {
   const [data, setData] = useState({
     users: [], invitations: [], feedback: [], audit_log: [],
     roles: DEFAULT_ROLES, permissions: DEFAULT_PERMISSIONS, integrations: {},
-    health: { creative_analysis: {}, ugc: {}, overdue_deliverables: 0, ugc_failures: [] },
+    health: { creative_analysis: {}, ugc: {}, outreach: {}, overdue_deliverables: 0, ugc_failures: [] },
   });
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('viewer');
@@ -258,6 +258,11 @@ export default function AdminWorkspace({ onOpenEditor }) {
             <span>UGC processing</span>
             <strong>{data.health.ugc.failed || 0} failed</strong>
             <small>{data.health.ugc.processing || 0} running · {data.health.ugc.stale || 0} stalled</small>
+          </div>
+          <div className={(data.health.outreach?.due || data.health.outreach?.stale) ? 'attention' : ''}>
+            <span>Creator follow-ups</span>
+            <strong>{data.health.outreach?.due || 0} due</strong>
+            <small>{data.health.outreach?.stale || 0} more than 7 days late</small>
           </div>
           <div className={data.health.overdue_deliverables ? 'attention' : ''}>
             <span>Deliverables</span>

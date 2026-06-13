@@ -41,6 +41,13 @@ function initials(name = '') {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || '?';
 }
 
+function defaultFollowUpDate(days = 5) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
 function CreatorAvatar({ creator, large = false }) {
   return creator.avatar_url
     ? <img className={`creator-avatar ${large ? 'large' : ''}`} src={creator.avatar_url} alt="" />
@@ -76,7 +83,9 @@ export default function CreatorWorkspace({
     submission_links: [], production_summary: {},
   });
   const [briefForm, setBriefForm] = useState({ product: '', objective: '', angle: '', direction: '', strategy_mode: 'past_performers' });
-  const [outreach, setOutreach] = useState({ channel: 'email', subject: '', body: '', status: 'draft' });
+  const [outreach, setOutreach] = useState({
+    channel: 'email', subject: '', body: '', status: 'draft', next_follow_up_at: defaultFollowUpDate(),
+  });
   const [engagement, setEngagement] = useState({
     engagement_type: 'one_off', status: 'draft', approval_date: '', starts_on: '', ends_on: '',
     asset_commitment: '', commitment_period: 'total', cadence: '', fee_amount: '', fee_currency: 'USD',
@@ -206,7 +215,7 @@ export default function CreatorWorkspace({
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not save outreach');
       setWorkflow(data.workflow);
-      setOutreach({ channel: 'email', subject: '', body: '', status: 'draft' });
+      setOutreach({ channel: 'email', subject: '', body: '', status: 'draft', next_follow_up_at: defaultFollowUpDate() });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -234,6 +243,7 @@ export default function CreatorWorkspace({
           to: selected.email,
           subject: outreach.subject,
           body: outreach.body,
+          next_follow_up_at: outreach.next_follow_up_at,
         }),
       });
       const data = await response.json();
@@ -241,8 +251,52 @@ export default function CreatorWorkspace({
         if (data.reconnect_required) setGmailConnected(false);
         throw new Error(data.error || 'Could not send email');
       }
-      setOutreach({ channel: 'email', subject: '', body: '', status: 'draft' });
+      setOutreach({ channel: 'email', subject: '', body: '', status: 'draft', next_follow_up_at: defaultFollowUpDate() });
       await refreshWorkflow(selected.id);
+      await loadCreators();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const syncOutreachReplies = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      const response = await fetch('/api/creator-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync', creator_id: selected.id }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        if (data.reconnect_required) setGmailConnected(false);
+        throw new Error(data.error || 'Could not sync Gmail replies');
+      }
+      await refreshWorkflow(selected.id);
+      await loadCreators();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateOutreach = async (id, patch) => {
+    setSaving(true);
+    setError('');
+    try {
+      const response = await fetch('/api/creator-workflow', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resource: 'outreach', creator_id: selected.id, id, ...patch }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not update outreach');
+      setWorkflow(data.workflow);
+      await loadCreators();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -717,7 +771,11 @@ export default function CreatorWorkspace({
                 </span>
                 <span className="creator-pipeline">
                   <span className={`creator-stage stage-${creator.stage}`}>{creator.stage}</span>
-                  <small>{creator.status}</small>
+                  <small className={creator.next_follow_up_at && new Date(creator.next_follow_up_at) <= new Date() ? 'follow-up-due' : ''}>
+                    {creator.next_follow_up_at
+                      ? `${new Date(creator.next_follow_up_at) <= new Date() ? 'Follow up due' : 'Follow up'} ${new Date(creator.next_follow_up_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+                      : creator.status}
+                  </small>
                 </span>
                 <span className="creator-reach">
                   <strong>{displayMetric(primarySocial?.followers)}</strong>
@@ -1030,11 +1088,15 @@ export default function CreatorWorkspace({
                     </div>
                     <input placeholder="Subject" value={outreach.subject} onChange={event => setOutreach({ ...outreach, subject: event.target.value })} />
                     <textarea required rows="5" placeholder="Write the message" value={outreach.body} onChange={event => setOutreach({ ...outreach, body: event.target.value })} />
+                    <label className="outreach-follow-up">Next follow-up<input type="datetime-local" value={outreach.next_follow_up_at} onChange={event => setOutreach({ ...outreach, next_follow_up_at: event.target.value })} /></label>
                     <div className="outreach-actions">
                       <button className="primary-action" disabled={saving}>Save outreach</button>
                       <button type="button" disabled={saving} onClick={draftOutreach}>Draft with AI</button>
                       {gmailConnected
-                        ? <button type="button" disabled={saving || outreach.channel !== 'email'} onClick={sendEmail}>Send with Gmail</button>
+                        ? <>
+                          <button type="button" disabled={saving || outreach.channel !== 'email'} onClick={sendEmail}>Send with Gmail</button>
+                          <button type="button" disabled={saving} onClick={syncOutreachReplies}>Sync replies</button>
+                        </>
                         : <a href="/api/auth/google?purpose=creator_email">Connect Gmail</a>}
                     </div>
                   </form>
@@ -1042,8 +1104,43 @@ export default function CreatorWorkspace({
                 <div className="workflow-list">
                   {workflow.outreach.map(message => (
                     <article className="workflow-card outreach-card" key={message.id}>
-                      <header><span><strong>{message.subject || `${message.channel} outreach`}</strong><small>{new Date(message.created_at).toLocaleString()}</small></span><i>{message.status}</i></header>
+                      <header>
+                        <span>
+                          <strong>{message.direction === 'inbound' ? `Reply: ${message.subject || message.channel}` : message.subject || `${message.channel} outreach`}</strong>
+                          <small>
+                            {new Date(message.sent_at || message.created_at).toLocaleString()}
+                            {message.next_follow_up_at ? ` · follow up ${new Date(message.next_follow_up_at).toLocaleString()}` : ''}
+                          </small>
+                        </span>
+                        <i>{message.outcome || message.status}</i>
+                      </header>
                       <p>{message.body}</p>
+                      {canWriteBriefs && message.direction === 'outbound' && (
+                        <div className="outreach-card-actions">
+                          <select value={message.status} disabled={saving} onChange={event => updateOutreach(message.id, {
+                            status: event.target.value,
+                            next_follow_up_at: event.target.value === 'replied' || event.target.value === 'closed' ? null : undefined,
+                          })}>
+                            <option value="draft">Draft</option>
+                            <option value="sent">Sent</option>
+                            <option value="follow_up">Follow up</option>
+                            <option value="replied">Replied</option>
+                            <option value="closed">Closed</option>
+                          </select>
+                          <select value={message.outcome || ''} disabled={saving} onChange={event => updateOutreach(message.id, {
+                            outcome: event.target.value || null,
+                            status: event.target.value ? 'closed' : message.status,
+                            next_follow_up_at: event.target.value ? null : undefined,
+                          })}>
+                            <option value="">No outcome</option>
+                            <option value="interested">Interested</option>
+                            <option value="contracted">Contracted</option>
+                            <option value="not_interested">Not interested</option>
+                            <option value="no_response">No response</option>
+                          </select>
+                          <label>Next action<input type="datetime-local" defaultValue={message.next_follow_up_at ? new Date(new Date(message.next_follow_up_at).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''} onBlur={event => updateOutreach(message.id, { next_follow_up_at: event.target.value || null, status: event.target.value ? 'follow_up' : message.status })} /></label>
+                        </div>
+                      )}
                     </article>
                   ))}
                   {!workflow.outreach.length && <div className="workflow-empty">No outreach recorded.</div>}

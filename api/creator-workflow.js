@@ -259,13 +259,17 @@ export default async function handler(req, res) {
       if (body.action === 'outreach') {
         const messageBody = clean(body.body);
         if (!messageBody) return res.status(400).json({ error: 'Message body required' });
+        const followUpAt = timestamp(body.next_follow_up_at);
+        if (followUpAt === undefined) return res.status(400).json({ error: 'Follow-up date is invalid' });
         const [message] = await sql`
           INSERT INTO creator_outreach (
-            creator_id, channel, direction, subject, body, status, sent_at, created_by
+            creator_id, channel, direction, subject, body, status, sent_at,
+            next_follow_up_at, recipient, created_by
           ) VALUES (
             ${creatorId}, ${clean(body.channel, 30) || 'email'}, 'outbound',
             ${clean(body.subject, 500)}, ${messageBody}, ${body.status === 'sent' ? 'sent' : 'draft'},
-            ${body.status === 'sent' ? new Date().toISOString() : null}, ${access.userId}
+            ${body.status === 'sent' ? new Date().toISOString() : null},
+            ${body.status === 'sent' ? followUpAt : null}, ${clean(body.recipient, 500)}, ${access.userId}
           )
           RETURNING *
         `;
@@ -586,6 +590,45 @@ export default async function handler(req, res) {
           RETURNING *
         `;
         return brief ? res.json({ brief }) : res.status(404).json({ error: 'Brief not found' });
+      }
+      if (body.resource === 'outreach') {
+        const status = ['draft', 'sent', 'follow_up', 'replied', 'closed'].includes(body.status)
+          ? body.status
+          : null;
+        const outcome = ['interested', 'not_interested', 'no_response', 'contracted'].includes(body.outcome)
+          ? body.outcome
+          : null;
+        const followUpAt = body.next_follow_up_at === null ? null : timestamp(body.next_follow_up_at);
+        if (followUpAt === undefined) return res.status(400).json({ error: 'Follow-up date is invalid' });
+        const [message] = await sql`
+          UPDATE creator_outreach SET
+            status = COALESCE(${status}, status),
+            outcome = CASE
+              WHEN ${body.outcome === null} THEN NULL
+              ELSE COALESCE(${outcome}, outcome)
+            END,
+            next_follow_up_at = CASE
+              WHEN ${body.next_follow_up_at === null} THEN NULL
+              ELSE COALESCE(${followUpAt}, next_follow_up_at)
+            END,
+            replied_at = CASE
+              WHEN ${status} = 'replied' THEN COALESCE(replied_at, now())
+              ELSE replied_at
+            END,
+            updated_at = now()
+          WHERE id = ${Number(body.id)} AND creator_id = ${creatorId}
+          RETURNING *
+        `;
+        if (!message) return res.status(404).json({ error: 'Outreach not found' });
+        await sql`
+          INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+          VALUES (
+            ${creatorId}, 'outreach_updated', 'Outreach next action updated',
+            ${JSON.stringify({ outreach_id: Number(body.id), status, outcome, next_follow_up_at: followUpAt })}::jsonb,
+            ${access.userId}
+          )
+        `;
+        return res.json({ message, workflow: await getWorkflow(sql, creatorId) });
       }
       if (body.resource === 'deliverable') {
         const status = clean(body.status, 50);
