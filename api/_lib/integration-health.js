@@ -1,5 +1,7 @@
 import { createClerkClient } from '@clerk/backend';
 
+export const CLICKUP_CREATOR_LIST_ID = process.env.CLICKUP_CREATOR_LIST_ID || '901111110302';
+
 function keyMode(value, livePrefix, testPrefix) {
   if ((value || '').startsWith(livePrefix)) return 'live';
   if ((value || '').startsWith(testPrefix)) return 'test';
@@ -16,7 +18,7 @@ export function getIntegrationHealth() {
   const clerkConfigured = publishableMode === secretMode && ['live', 'test'].includes(secretMode);
   const clerkReady = clerkConfigured && secretMode === 'live';
   const clickupToken = Boolean(process.env.CLICKUP_API_TOKEN);
-  const clickupList = Boolean(process.env.CLICKUP_CREATOR_LIST_ID);
+  const clickupList = Boolean(CLICKUP_CREATOR_LIST_ID);
 
   return {
     clerk: {
@@ -88,11 +90,11 @@ export async function testIntegrationHealth() {
     }
   }
 
-  if (process.env.CLICKUP_API_TOKEN && process.env.CLICKUP_CREATOR_LIST_ID) {
+  if (process.env.CLICKUP_API_TOKEN && CLICKUP_CREATOR_LIST_ID) {
     try {
       const response = await fetch(
-        `https://api.clickup.com/api/v2/list/${encodeURIComponent(process.env.CLICKUP_CREATOR_LIST_ID)}`,
-        { headers: { Authorization: process.env.CLICKUP_API_TOKEN } },
+        `https://api.clickup.com/api/v2/list/${encodeURIComponent(CLICKUP_CREATOR_LIST_ID)}`,
+        { headers: { Authorization: process.env.CLICKUP_API_TOKEN.trim() } },
       );
       const data = await response.json();
       if (!response.ok) throw new Error(data.err || data.error || `ClickUp returned ${response.status}`);

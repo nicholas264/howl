@@ -1,6 +1,6 @@
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
-import { getIntegrationHealth } from './_lib/integration-health.js';
+import { CLICKUP_CREATOR_LIST_ID, getIntegrationHealth } from './_lib/integration-health.js';
 
 function value(row, names) {
   const keys = Object.keys(row || {});
@@ -29,8 +29,8 @@ export default async function handler(req, res) {
     await ensureCreatorOpsTables(sql);
     let rows = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 2000) : [];
     if (req.body?.action === 'clickup_sync') {
-      const token = process.env.CLICKUP_API_TOKEN;
-      const listId = process.env.CLICKUP_CREATOR_LIST_ID;
+      const token = process.env.CLICKUP_API_TOKEN?.trim();
+      const listId = CLICKUP_CREATOR_LIST_ID;
       if (!token || !listId) return res.status(409).json({ error: 'ClickUp sync is not configured' });
       rows = [];
       for (let page = 0; page < 20; page++) {
