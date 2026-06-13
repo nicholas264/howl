@@ -25,6 +25,18 @@ function displayMetric(value) {
   return value === null || value === undefined ? '—' : compact.format(Number(value));
 }
 
+function strongestSocial(accounts = []) {
+  return accounts.reduce((best, account) => {
+    if (!best) return account;
+    return Number(account.followers || 0) > Number(best.followers || 0) ? account : best;
+  }, null);
+}
+
+function compactText(value, fallback = '—') {
+  const text = Array.isArray(value) ? value.filter(Boolean).join(', ') : String(value || '').trim();
+  return text || fallback;
+}
+
 function initials(name = '') {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || '?';
 }
@@ -535,8 +547,13 @@ export default function CreatorWorkspace({
       <div className={`creator-layout ${selected ? 'detail-open' : ''}`}>
         <section className="creator-list-panel">
           <div className="creator-list-head">
-            <span>{loading ? 'Loading' : `${creators.length} creators`}</span>
-            <span>Relationship / Reach</span>
+            <span>Creator</span>
+            <span>Pipeline</span>
+            <span>Audience</span>
+            <span>Focus</span>
+            <span>Rates</span>
+            <span>Location</span>
+            <span>Output</span>
           </div>
           {!loading && creators.length === 0 && (
             <div className="creator-empty">
@@ -545,22 +562,40 @@ export default function CreatorWorkspace({
             </div>
           )}
           {creators.map(creator => {
-            const primarySocial = creator.social_accounts?.[0];
+            const primarySocial = strongestSocial(creator.social_accounts);
+            const focus = creator.activities?.length ? creator.activities : creator.tags;
             return (
               <button key={creator.id} className={`creator-row ${selected?.id === creator.id ? 'active' : ''}`} onClick={() => openCreator(creator)}>
-                <CreatorAvatar creator={creator} />
-                <span className="creator-row-name">
-                  <strong>{creator.name}</strong>
-                  <small>{creator.location || creator.email || 'Profile incomplete'}</small>
+                <span className="creator-row-identity">
+                  <CreatorAvatar creator={creator} />
+                  <span className="creator-row-name">
+                    <strong>{creator.name}</strong>
+                    <small>{creator.email || creator.phone || 'No contact info'}</small>
+                  </span>
                 </span>
-                <span className={`creator-stage stage-${creator.stage}`}>{creator.stage}</span>
+                <span className="creator-pipeline">
+                  <span className={`creator-stage stage-${creator.stage}`}>{creator.stage}</span>
+                  <small>{creator.status}</small>
+                </span>
                 <span className="creator-reach">
                   <strong>{displayMetric(primarySocial?.followers)}</strong>
-                  <small>{primarySocial?.platform || 'no social'}</small>
+                  <small>{primarySocial?.handle ? `@${primarySocial.handle.replace(/^@/, '')}` : primarySocial?.platform || 'No social'}</small>
+                </span>
+                <span className="creator-focus" title={compactText(focus, 'Not set')}>
+                  <strong>{compactText(focus, 'Not set')}</strong>
+                  <small>{creator.tags?.length ? compactText(creator.tags) : 'No tags'}</small>
+                </span>
+                <span className="creator-rates" title={creator.rate_notes || 'No rates recorded'}>
+                  <strong>{creator.rate_notes || 'Not set'}</strong>
+                  <small>rate notes</small>
+                </span>
+                <span className="creator-location" title={creator.location || 'No location'}>
+                  <strong>{creator.location || 'Not set'}</strong>
+                  <small>{creator.timezone || 'location'}</small>
                 </span>
                 <span className="creator-launches">
                   <strong>{creator.launch_count || 0}</strong>
-                  <small>launches</small>
+                  <small>{creator.last_launch_at ? `Last ${new Date(creator.last_launch_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : 'launches'}</small>
                 </span>
               </button>
             );
