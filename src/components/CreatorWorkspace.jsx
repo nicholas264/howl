@@ -3,6 +3,7 @@ import Papa from 'papaparse';
 import { upload } from '@vercel/blob/client';
 import { useAuth } from '@clerk/clerk-react';
 import CreatorAcquisitionWorkspace from './CreatorAcquisitionWorkspace';
+import CreatorOperationsWorkspace from './CreatorOperationsWorkspace';
 
 const STAGES = [
   ['all', 'All'],
@@ -254,14 +255,14 @@ export default function CreatorWorkspace({
     body: agreementPreview(agreement.agreement_body, selected, selectedEngagement),
   }), [agreement.title, agreement.agreement_body, selected, selectedEngagement]);
 
-  const openCreator = async (creator) => {
+  const openCreator = async (creator, targetTab = 'profile') => {
     setError('');
     try {
       const response = await fetch(`/api/creators?id=${creator.id}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not load creator');
       setSelected(data.creator);
-      setDetailTab('profile');
+      setDetailTab(targetTab);
       setPreparedAgreement(null);
       const workflowResponse = await fetch(`/api/creator-workflow?creator_id=${creator.id}`);
       const workflowData = await workflowResponse.json();
@@ -933,6 +934,7 @@ export default function CreatorWorkspace({
 
       <div className="creator-view-tabs">
         <button className={workspaceView === 'database' ? 'active' : ''} onClick={() => setWorkspaceView('database')}>Database</button>
+        <button className={workspaceView === 'operations' ? 'active' : ''} onClick={() => setWorkspaceView('operations')}>Operations</button>
         <button className={workspaceView === 'talent' ? 'active' : ''} onClick={() => setWorkspaceView('talent')}>Talent inbox</button>
       </div>
 
@@ -1631,6 +1633,13 @@ export default function CreatorWorkspace({
         )}
       </div>
       </>
+      ) : workspaceView === 'operations' ? (
+        <CreatorOperationsWorkspace
+          onOpenCreator={(creator, targetTab) => {
+            setWorkspaceView('database');
+            openCreator(creator, targetTab);
+          }}
+        />
       ) : (
         <CreatorAcquisitionWorkspace
           canManage={canManageCreators}

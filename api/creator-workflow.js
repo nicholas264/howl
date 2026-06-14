@@ -36,6 +36,14 @@ function buildWorkflowGuidance({
   const acceptedAgreement = agreements.find(item => item.status === 'accepted');
   const openAgreement = agreements.find(item => ['draft', 'sent'].includes(item.status));
   const activeSubmission = submissionLinks.find(item => item.status === 'active');
+  const overdueDeliverable = deliverables
+    .filter(item => (
+      item.due_at
+      && new Date(item.due_at).getTime() < Date.now()
+      && !['complete', 'launched', 'cancelled'].includes(item.status)
+      && Number(item.completed_asset_count || 0) < Number(item.expected_asset_count || 1)
+    ))
+    .sort((a, b) => new Date(a.due_at) - new Date(b.due_at))[0];
   const received = deliverables.some(item => (
     Number(item.received_asset_count || 0) > 0
     || ['received', 'editing', 'edited', 'approved', 'complete', 'launched'].includes(item.status)
@@ -115,6 +123,12 @@ function buildWorkflowGuidance({
       key: 'send_assignment', label: 'Send creator assignment',
       description: 'Send the brief and a secure footage upload link to the creator.',
       tab: 'briefs', recommended_stage: 'briefing',
+    };
+  } else if (overdueDeliverable) {
+    nextAction = {
+      key: 'production_overdue', label: 'Resolve overdue deliverable',
+      description: `${overdueDeliverable.title} was due ${new Date(overdueDeliverable.due_at).toLocaleDateString('en-US')}.`,
+      tab: 'deliverables', urgent: true, recommended_stage: 'producing',
     };
   } else if (!received) {
     nextAction = {
