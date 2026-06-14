@@ -16,8 +16,155 @@ function timestamp(value) {
   return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
 }
 
+function buildWorkflowGuidance({
+  creator, outreach, engagements, agreements, briefs, deliverables, submissionLinks,
+}) {
+  const outbound = outreach.filter(item => item.direction === 'outbound');
+  const hasSentOutreach = outbound.some(item => ['sent', 'follow_up', 'replied', 'closed'].includes(item.status));
+  const hasReply = outreach.some(item => item.direction === 'inbound' || item.replied_at || item.status === 'replied');
+  const hasInterest = outbound.some(item => ['interested', 'contracted'].includes(item.outcome))
+    || ['interested', 'briefing', 'producing', 'active'].includes(creator.stage);
+  const openFollowUp = outbound.find(item => (
+    item.next_follow_up_at
+    && !item.outcome
+    && !item.replied_at
+    && ['sent', 'follow_up'].includes(item.status)
+  ));
+  const followUpDue = openFollowUp && new Date(openFollowUp.next_follow_up_at).getTime() <= Date.now();
+  const liveEngagement = engagements.find(item => ['approved', 'active'].includes(item.status));
+  const anyEngagement = liveEngagement || engagements.find(item => item.status === 'draft');
+  const acceptedAgreement = agreements.find(item => item.status === 'accepted');
+  const openAgreement = agreements.find(item => ['draft', 'sent'].includes(item.status));
+  const activeSubmission = submissionLinks.find(item => item.status === 'active');
+  const received = deliverables.some(item => (
+    Number(item.received_asset_count || 0) > 0
+    || ['received', 'editing', 'edited', 'approved', 'complete', 'launched'].includes(item.status)
+  ));
+  const completed = deliverables.some(item => (
+    Number(item.completed_asset_count || 0) > 0
+    || ['complete', 'launched'].includes(item.status)
+  ));
+  const launched = Number(creator.launch_count || 0) > 0
+    || deliverables.some(item => item.status === 'launched' || Number(item.shipped_asset_count || 0) > 0);
+
+  const milestones = [
+    { key: 'relationship', label: 'Relationship', complete: hasReply || hasInterest },
+    { key: 'terms', label: 'Terms', complete: Boolean(liveEngagement) },
+    { key: 'agreement', label: 'Agreement', complete: Boolean(acceptedAgreement) },
+    { key: 'creative', label: 'Creative', complete: briefs.length > 0 },
+    { key: 'production', label: 'Production', complete: completed },
+    { key: 'launch', label: 'Launch', complete: launched },
+  ];
+
+  let nextAction;
+  if (!creator.email) {
+    nextAction = {
+      key: 'add_contact', label: 'Add creator email',
+      description: 'A valid email unlocks outreach, agreements, and assignment delivery.',
+      tab: 'profile', blocker: true, recommended_stage: 'sourced',
+    };
+  } else if (!hasSentOutreach && !hasInterest) {
+    nextAction = {
+      key: 'start_outreach', label: 'Start creator outreach',
+      description: 'Draft a specific introduction grounded in this creator profile.',
+      tab: 'outreach', recommended_stage: 'sourced',
+    };
+  } else if (followUpDue) {
+    nextAction = {
+      key: 'follow_up', label: 'Follow up now',
+      description: `The next action was due ${new Date(openFollowUp.next_follow_up_at).toLocaleDateString('en-US')}.`,
+      tab: 'outreach', urgent: true, recommended_stage: 'contacted',
+    };
+  } else if (!hasReply && !hasInterest) {
+    nextAction = {
+      key: 'await_reply', label: 'Await creator reply',
+      description: openFollowUp
+        ? `Follow-up is scheduled for ${new Date(openFollowUp.next_follow_up_at).toLocaleDateString('en-US')}.`
+        : 'Outreach is sent. Add a follow-up date so this relationship stays visible.',
+      tab: 'outreach', waiting: true, recommended_stage: 'contacted',
+    };
+  } else if (!anyEngagement) {
+    nextAction = {
+      key: 'define_terms', label: 'Define commercial terms',
+      description: 'Capture rates, asset commitment, usage rights, and payment terms.',
+      tab: 'agreements', recommended_stage: 'interested',
+    };
+  } else if (!liveEngagement) {
+    nextAction = {
+      key: 'approve_terms', label: 'Approve commercial terms',
+      description: 'The engagement is still a draft. Confirm the relationship before contracting.',
+      tab: 'agreements', recommended_stage: 'interested',
+    };
+  } else if (!acceptedAgreement) {
+    nextAction = {
+      key: openAgreement?.status === 'sent' ? 'await_agreement' : 'send_agreement',
+      label: openAgreement?.status === 'sent' ? 'Await agreement acceptance' : 'Prepare and send agreement',
+      description: openAgreement?.status === 'sent'
+        ? 'The usage agreement is with the creator. Its view and acceptance status will update here.'
+        : 'Send the approved usage agreement tied to these commercial terms.',
+      tab: 'agreements', waiting: openAgreement?.status === 'sent', recommended_stage: 'interested',
+    };
+  } else if (!briefs.length) {
+    nextAction = {
+      key: 'build_brief', label: 'Build creator brief',
+      description: 'Generate a product-grounded concept and script from this creator’s actual strengths.',
+      tab: 'briefs', recommended_stage: 'briefing',
+    };
+  } else if (!deliverables.length && !activeSubmission) {
+    nextAction = {
+      key: 'send_assignment', label: 'Send creator assignment',
+      description: 'Send the brief and a secure footage upload link to the creator.',
+      tab: 'briefs', recommended_stage: 'briefing',
+    };
+  } else if (!received) {
+    nextAction = {
+      key: 'await_footage', label: 'Await creator footage',
+      description: activeSubmission
+        ? `The upload link is active until ${new Date(activeSubmission.expires_at).toLocaleDateString('en-US')}.`
+        : 'A deliverable is requested, but no footage has been received yet.',
+      tab: 'deliverables', waiting: true, recommended_stage: 'producing',
+    };
+  } else if (!completed) {
+    nextAction = {
+      key: 'finish_edit', label: 'Edit and approve footage',
+      description: 'Footage is in. Move it through editing, approval, and completion.',
+      tab: 'deliverables', recommended_stage: 'producing',
+    };
+  } else if (!launched) {
+    nextAction = {
+      key: 'launch_asset', label: 'Ready for launch',
+      description: 'Approved creative is complete and ready to move into the ad launcher.',
+      tab: 'deliverables', recommended_stage: 'active',
+    };
+  } else {
+    nextAction = {
+      key: 'review_performance', label: 'Review creator performance',
+      description: 'Use attributed spend and revenue to shape the next brief.',
+      tab: 'performance', recommended_stage: 'active',
+    };
+  }
+
+  const activeIndex = Math.min(
+    milestones.findIndex(item => !item.complete),
+    milestones.length - 1,
+  );
+  return {
+    next_action: nextAction,
+    milestones: milestones.map((item, index) => ({
+      ...item,
+      status: item.complete ? 'complete' : index === activeIndex ? 'active' : 'pending',
+    })),
+  };
+}
+
 async function getWorkflow(sql, creatorId) {
-  const [outreach, engagements, agreements, briefs, deliverables, submissionLinks, productionSummary] = await Promise.all([
+  const [creatorRows, outreach, engagements, agreements, briefs, deliverables, submissionLinks, productionSummary] = await Promise.all([
+    sql`
+      SELECT c.id, c.email, c.stage,
+        (SELECT count(*)::int FROM launch_history l WHERE l.creator_id = c.id OR lower(l.creator) = lower(c.name)) AS launch_count
+      FROM creators c
+      WHERE c.id = ${creatorId}
+    `,
     sql`
       SELECT * FROM creator_outreach
       WHERE creator_id = ${creatorId}
@@ -83,10 +230,15 @@ async function getWorkflow(sql, creatorId) {
       WHERE creator_id = ${creatorId}
     `,
   ]);
+  const creator = creatorRows[0];
+  const guidance = creator
+    ? buildWorkflowGuidance({ creator, outreach, engagements, agreements, briefs, deliverables, submissionLinks })
+    : { next_action: null, milestones: [] };
   return {
     outreach, engagements, agreements, briefs, deliverables,
     submission_links: submissionLinks,
     production_summary: productionSummary[0] || {},
+    guidance,
   };
 }
 

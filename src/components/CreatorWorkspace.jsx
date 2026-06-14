@@ -106,7 +106,7 @@ export default function CreatorWorkspace({
   const [detailTab, setDetailTab] = useState('profile');
   const [workflow, setWorkflow] = useState({
     briefs: [], outreach: [], engagements: [], agreements: [], deliverables: [],
-    submission_links: [], production_summary: {},
+    submission_links: [], production_summary: {}, guidance: { milestones: [], next_action: null },
   });
   const [briefForm, setBriefForm] = useState({ product: '', objective: '', angle: '', direction: '', strategy_mode: 'past_performers' });
   const [outreach, setOutreach] = useState({
@@ -1041,6 +1041,38 @@ export default function CreatorWorkspace({
                 </select>
               </label>
             </div>
+            {workflow.guidance?.next_action && (
+              <section className={`creator-next-action ${workflow.guidance.next_action.urgent ? 'urgent' : ''} ${workflow.guidance.next_action.waiting ? 'waiting' : ''}`}>
+                <div className="creator-lifecycle">
+                  {workflow.guidance.milestones.map(item => (
+                    <div key={item.key} className={item.status}>
+                      <i>{item.status === 'complete' ? '✓' : ''}</i>
+                      <span>{item.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="next-action-copy">
+                  <span>{workflow.guidance.next_action.waiting ? 'Waiting state' : workflow.guidance.next_action.blocker ? 'Needs attention' : 'Next best action'}</span>
+                  <strong>{workflow.guidance.next_action.label}</strong>
+                  <p>{workflow.guidance.next_action.description}</p>
+                </div>
+                <div className="next-action-buttons">
+                  <button className="primary-action" onClick={() => setDetailTab(workflow.guidance.next_action.tab)}>
+                    Open {workflow.guidance.next_action.tab}
+                  </button>
+                  {canManageCreators
+                    && workflow.guidance.next_action.recommended_stage
+                    && selected.stage !== workflow.guidance.next_action.recommended_stage && (
+                      <button
+                        disabled={saving}
+                        onClick={() => updateCreator({ stage: workflow.guidance.next_action.recommended_stage })}
+                      >
+                        Align stage to {workflow.guidance.next_action.recommended_stage}
+                      </button>
+                    )}
+                </div>
+              </section>
+            )}
             <div className="creator-performance">
               <div><span>Spend · 90d</span><strong>${Number(selected.performance?.spend || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong></div>
               <div><span>Revenue · 90d</span><strong>${Number(selected.performance?.revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong></div>
