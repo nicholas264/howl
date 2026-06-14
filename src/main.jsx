@@ -6,11 +6,13 @@ import './styles.css'
 
 const CreatorSubmissionPage = React.lazy(() => import('./components/CreatorSubmissionPage.jsx'))
 const CreatorAgreementPage = React.lazy(() => import('./components/CreatorAgreementPage.jsx'))
+const CreatorApplicationPage = React.lazy(() => import('./components/CreatorApplicationPage.jsx'))
 const PUB_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 const DEV_AUTH_BYPASS = import.meta.env.DEV && import.meta.env.VITE_AUTH_DISABLED === 'true'
 const isCreatorSubmission = /^\/submit\/?$/.test(window.location.pathname)
 const isCreatorAgreement = /^\/agreement\/?$/.test(window.location.pathname)
-const isPublicCreatorPage = isCreatorSubmission || isCreatorAgreement
+const isCreatorApplication = /^\/apply\/?$/.test(window.location.pathname)
+const isPublicCreatorPage = isCreatorSubmission || isCreatorAgreement || isCreatorApplication
 if (!PUB_KEY && !isPublicCreatorPage) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY')
 
 // Install authenticated API access and verify workspace membership before any
@@ -105,6 +107,10 @@ const app = isCreatorSubmission ? (
 ) : isCreatorAgreement ? (
   <React.Suspense fallback={<div className="creator-submit-page" />}>
     <CreatorAgreementPage />
+  </React.Suspense>
+) : isCreatorApplication ? (
+  <React.Suspense fallback={<div className="creator-apply-page" />}>
+    <CreatorApplicationPage />
   </React.Suspense>
 ) : DEV_AUTH_BYPASS ? (
   <ClerkProvider publishableKey={PUB_KEY} appearance={appearance}>

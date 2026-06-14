@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Papa from 'papaparse';
 import { upload } from '@vercel/blob/client';
 import { useAuth } from '@clerk/clerk-react';
+import CreatorAcquisitionWorkspace from './CreatorAcquisitionWorkspace';
 
 const STAGES = [
   ['all', 'All'],
@@ -88,6 +89,7 @@ export default function CreatorWorkspace({
 }) {
   const { getToken } = useAuth();
   const [creators, setCreators] = useState([]);
+  const [workspaceView, setWorkspaceView] = useState('database');
   const [selected, setSelected] = useState(null);
   const [stage, setStage] = useState('all');
   const [search, setSearch] = useState('');
@@ -926,9 +928,16 @@ export default function CreatorWorkspace({
           <h1>Creators</h1>
           <p>Source, qualify, brief, produce, and measure creator relationships in one record.</p>
         </div>
-        {canManageCreators && <div className="creator-head-actions"><button onClick={() => setShowImport(true)}>Import</button><button className="primary-action" onClick={() => setShowCreate(true)}>Add creator</button></div>}
+        {workspaceView === 'database' && canManageCreators && <div className="creator-head-actions"><button onClick={() => setShowImport(true)}>Import</button><button className="primary-action" onClick={() => setShowCreate(true)}>Add creator</button></div>}
       </header>
 
+      <div className="creator-view-tabs">
+        <button className={workspaceView === 'database' ? 'active' : ''} onClick={() => setWorkspaceView('database')}>Database</button>
+        <button className={workspaceView === 'talent' ? 'active' : ''} onClick={() => setWorkspaceView('talent')}>Talent inbox</button>
+      </div>
+
+      {workspaceView === 'database' ? (
+      <>
       <div className="creator-toolbar">
         <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search name or email" />
         <div className="creator-stage-tabs">
@@ -1589,6 +1598,16 @@ export default function CreatorWorkspace({
           </aside>
         )}
       </div>
+      </>
+      ) : (
+        <CreatorAcquisitionWorkspace
+          canManage={canManageCreators}
+          onPromoted={creator => {
+            setWorkspaceView('database');
+            loadCreators().then(() => openCreator(creator));
+          }}
+        />
+      )}
 
       {showCreate && (
         <div className="app-modal-backdrop" onMouseDown={() => setShowCreate(false)}>

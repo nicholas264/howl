@@ -77,6 +77,67 @@ async function createCreatorOpsTables(sql) {
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_social_creator ON creator_social_accounts(creator_id)`;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS creator_applications (
+      id                  BIGSERIAL PRIMARY KEY,
+      application_code    TEXT NOT NULL UNIQUE,
+      status              TEXT NOT NULL DEFAULT 'new',
+      name                TEXT NOT NULL,
+      email               TEXT NOT NULL,
+      phone               TEXT,
+      location            TEXT,
+      timezone            TEXT,
+      niche               TEXT,
+      strengths           TEXT,
+      activities          TEXT[] NOT NULL DEFAULT '{}',
+      audience_description TEXT,
+      creator_experience  TEXT,
+      why_howl            TEXT,
+      rate_expectations   TEXT,
+      availability        TEXT,
+      referral_source     TEXT,
+      socials             JSONB NOT NULL DEFAULT '[]'::jsonb,
+      sample_urls         TEXT[] NOT NULL DEFAULT '{}',
+      age_confirmed       BOOLEAN NOT NULL DEFAULT false,
+      consent_confirmed   BOOLEAN NOT NULL DEFAULT false,
+      review_notes        TEXT,
+      reviewed_by         TEXT,
+      reviewed_at         TIMESTAMPTZ,
+      promoted_creator_id BIGINT REFERENCES creators(id) ON DELETE SET NULL,
+      ip_hash             TEXT,
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_applications_status ON creator_applications(status, created_at DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_applications_email ON creator_applications(lower(email))`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS creator_candidates (
+      id                  BIGSERIAL PRIMARY KEY,
+      status              TEXT NOT NULL DEFAULT 'new',
+      source              TEXT NOT NULL DEFAULT 'manual',
+      name                TEXT,
+      email               TEXT,
+      location            TEXT,
+      niche               TEXT,
+      strengths           TEXT,
+      fit_notes           TEXT,
+      avatar_url          TEXT,
+      socials             JSONB NOT NULL DEFAULT '[]'::jsonb,
+      enrichment          JSONB NOT NULL DEFAULT '{}'::jsonb,
+      review_notes        TEXT,
+      reviewed_by         TEXT,
+      reviewed_at         TIMESTAMPTZ,
+      promoted_creator_id BIGINT REFERENCES creators(id) ON DELETE SET NULL,
+      created_by          TEXT,
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_candidates_status ON creator_candidates(status, created_at DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_candidates_source ON creator_candidates(source, created_at DESC)`;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS creator_activity (
       id          BIGSERIAL PRIMARY KEY,
       creator_id  BIGINT NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
