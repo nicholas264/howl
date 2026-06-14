@@ -268,6 +268,7 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "creators" && (
           <CreatorWorkspace
             canManageCreators={can('creators.write')}
+            canMergeCreators={can('admin.users')}
             canWriteBriefs={can('briefs.write')}
             canWriteAssets={can('assets.write')}
             onOpenEditor={openEditorSession}

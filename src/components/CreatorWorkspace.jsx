@@ -3,6 +3,7 @@ import Papa from 'papaparse';
 import { upload } from '@vercel/blob/client';
 import { useAuth } from '@clerk/clerk-react';
 import CreatorAcquisitionWorkspace from './CreatorAcquisitionWorkspace';
+import CreatorDataHealthWorkspace from './CreatorDataHealthWorkspace';
 import CreatorOperationsWorkspace from './CreatorOperationsWorkspace';
 
 const STAGES = [
@@ -82,6 +83,7 @@ function CreatorAvatar({ creator, large = false }) {
 
 export default function CreatorWorkspace({
   canManageCreators = false,
+  canMergeCreators = false,
   canWriteBriefs = false,
   canWriteAssets = false,
   onOpenEditor,
@@ -936,6 +938,7 @@ export default function CreatorWorkspace({
         <button className={workspaceView === 'database' ? 'active' : ''} onClick={() => setWorkspaceView('database')}>Database</button>
         <button className={workspaceView === 'operations' ? 'active' : ''} onClick={() => setWorkspaceView('operations')}>Operations</button>
         <button className={workspaceView === 'talent' ? 'active' : ''} onClick={() => setWorkspaceView('talent')}>Talent inbox</button>
+        <button className={workspaceView === 'health' ? 'active' : ''} onClick={() => setWorkspaceView('health')}>Data health</button>
       </div>
 
       {workspaceView === 'database' ? (
@@ -1640,12 +1643,20 @@ export default function CreatorWorkspace({
             openCreator(creator, targetTab);
           }}
         />
-      ) : (
+      ) : workspaceView === 'talent' ? (
         <CreatorAcquisitionWorkspace
           canManage={canManageCreators}
           onPromoted={creator => {
             setWorkspaceView('database');
             loadCreators().then(() => openCreator(creator));
+          }}
+        />
+      ) : (
+        <CreatorDataHealthWorkspace
+          canMerge={canMergeCreators}
+          onOpenCreator={creator => {
+            setWorkspaceView('database');
+            openCreator(creator, 'profile');
           }}
         />
       )}
