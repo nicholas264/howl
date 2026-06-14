@@ -19,6 +19,56 @@ function mergeInstagramSocial(socials, profile) {
   return [...accounts.filter(account => account.platform !== 'instagram'), profile];
 }
 
+function withQualification(record, body) {
+  return {
+    ...record,
+    name: text(body?.name, 200) || record.name,
+    email: text(body?.email, 320)?.toLowerCase() || record.email,
+    location: text(body?.location, 300) || record.location,
+    niche: text(body?.niche, 1000) || record.niche,
+    strengths: text(body?.strengths, 2000) || record.strengths,
+    audience_description: text(body?.audience_description, 2000) || record.audience_description,
+    rate_expectations: text(body?.rate_expectations, 1000) || record.rate_expectations,
+    activities: body?.activities !== undefined ? list(body.activities) : record.activities,
+    fit_notes: text(body?.fit_notes, 3000) || record.fit_notes,
+    review_notes: text(body?.review_notes, 5000) || record.review_notes,
+  };
+}
+
+async function enrichRecord(sql, type, record) {
+  const instagram = (Array.isArray(record.socials) ? record.socials : [])
+    .find(account => account.platform === 'instagram');
+  const handle = normalizeInstagramHandle(instagram?.handle);
+  if (!handle) throw new Error('No valid Instagram handle');
+  const profile = await discoverInstagramProfile(handle);
+  const socials = mergeInstagramSocial(record.socials, profile);
+  const enrichment = {
+    ...(record.enrichment || {}),
+    biography: profile.biography,
+    website: profile.website,
+    instagram_metrics: profile.metrics,
+    instagram_enriched_at: new Date().toISOString(),
+  };
+  const [updated] = type === 'application'
+    ? await sql`
+        UPDATE creator_applications SET
+          socials = ${JSON.stringify(socials)}::jsonb,
+          enrichment = ${JSON.stringify(enrichment)}::jsonb,
+          updated_at = now()
+        WHERE id = ${record.id} RETURNING *
+      `
+    : await sql`
+        UPDATE creator_candidates SET
+          name = COALESCE(name, ${profile.name}),
+          avatar_url = COALESCE(${profile.avatar_url}, avatar_url),
+          socials = ${JSON.stringify(socials)}::jsonb,
+          enrichment = ${JSON.stringify(enrichment)}::jsonb,
+          updated_at = now()
+        WHERE id = ${record.id} RETURNING *
+      `;
+  return updated;
+}
+
 async function promote(sql, access, sourceType, record) {
   if (record.promoted_creator_id) {
     const [creator] = await sql`SELECT id, name FROM creators WHERE id = ${record.promoted_creator_id}`;
@@ -101,9 +151,45 @@ export default async function handler(req, res) {
           created_at DESC LIMIT 500`,
         sql`SELECT
           (SELECT count(*) FROM creator_applications WHERE status = 'new')::int AS new_applications,
-          (SELECT count(*) FROM creator_candidates WHERE status = 'new')::int AS new_candidates`,
+          (SELECT count(*) FROM creator_candidates WHERE status = 'new')::int AS new_candidates,
+          (SELECT count(*) FROM creator_applications
+            WHERE status IN ('new', 'reviewing')
+              AND enrichment->>'instagram_enriched_at' IS NULL
+              AND EXISTS (
+                SELECT 1 FROM jsonb_array_elements(socials) account
+                WHERE account->>'platform' = 'instagram'
+              )
+          )::int AS applications_needing_enrichment`,
       ]);
       return res.json({ applications, candidates, counts: counts[0] || {} });
+    }
+
+    if (req.method === 'POST' && req.body?.action === 'enrich_inbox') {
+      const applications = await sql`
+        SELECT * FROM creator_applications
+        WHERE status IN ('new', 'reviewing')
+          AND enrichment->>'instagram_enriched_at' IS NULL
+          AND EXISTS (
+            SELECT 1 FROM jsonb_array_elements(socials) account
+            WHERE account->>'platform' = 'instagram'
+          )
+        ORDER BY created_at ASC
+        LIMIT 5
+      `;
+      const results = await Promise.all(applications.map(async application => {
+        try {
+          const updated = await enrichRecord(sql, 'application', application);
+          return { id: updated.id, name: updated.name, ok: true };
+        } catch (err) {
+          return { id: application.id, name: application.name, ok: false, error: err.message };
+        }
+      }));
+      return res.json({
+        processed: results.length,
+        enriched: results.filter(result => result.ok).length,
+        failed: results.filter(result => !result.ok).length,
+        results,
+      });
     }
 
     if (req.method === 'POST' && req.body?.action === 'discover_instagram') {
@@ -149,50 +235,39 @@ export default async function handler(req, res) {
     if (!record) return res.status(404).json({ error: 'Acquisition record not found.' });
 
     if (req.body?.action === 'enrich_instagram') {
-      const instagram = (Array.isArray(record.socials) ? record.socials : [])
-        .find(account => account.platform === 'instagram');
-      const handle = normalizeInstagramHandle(instagram?.handle || req.body?.handle);
-      if (!handle) return res.status(400).json({ error: 'Add a valid Instagram handle before enriching.' });
-      const profile = await discoverInstagramProfile(handle);
-      const socials = mergeInstagramSocial(record.socials, profile);
-      const enrichment = {
-        ...(record.enrichment || {}),
-        biography: profile.biography,
-        website: profile.website,
-        instagram_metrics: profile.metrics,
-        instagram_enriched_at: new Date().toISOString(),
-      };
-      const [updated] = type === 'application'
-        ? await sql`
-            UPDATE creator_applications SET
-              socials = ${JSON.stringify(socials)}::jsonb,
-              enrichment = ${JSON.stringify(enrichment)}::jsonb,
-              updated_at = now()
-            WHERE id = ${id} RETURNING *
-          `
-        : await sql`
-            UPDATE creator_candidates SET
-              name = COALESCE(name, ${profile.name}),
-              avatar_url = COALESCE(${profile.avatar_url}, avatar_url),
-              socials = ${JSON.stringify(socials)}::jsonb,
-              enrichment = ${JSON.stringify(enrichment)}::jsonb,
-              updated_at = now()
-            WHERE id = ${id} RETURNING *
-          `;
+      const updated = await enrichRecord(sql, type, record);
       return res.json({ record: updated });
     }
 
     if (req.body?.action === 'promote') {
-      const creator = await promote(sql, access, type === 'application' ? 'application' : 'discovery', record);
+      const reviewedRecord = withQualification(record, req.body);
+      const creator = await promote(sql, access, type === 'application' ? 'application' : 'discovery', reviewedRecord);
       if (type === 'application') {
         await sql`
-          UPDATE creator_applications SET status = 'approved', promoted_creator_id = ${creator.id},
+          UPDATE creator_applications SET
+            status = 'approved', promoted_creator_id = ${creator.id},
+            name = ${reviewedRecord.name}, email = ${reviewedRecord.email},
+            location = ${reviewedRecord.location}, niche = ${reviewedRecord.niche},
+            strengths = ${reviewedRecord.strengths},
+            audience_description = ${reviewedRecord.audience_description},
+            rate_expectations = ${reviewedRecord.rate_expectations},
+            activities = ${reviewedRecord.activities || []},
+            review_notes = ${reviewedRecord.review_notes},
             reviewed_by = ${access.userId}, reviewed_at = now(), updated_at = now()
           WHERE id = ${id}
         `;
       } else {
         await sql`
-          UPDATE creator_candidates SET status = 'approved', promoted_creator_id = ${creator.id},
+          UPDATE creator_candidates SET
+            status = 'approved', promoted_creator_id = ${creator.id},
+            name = ${reviewedRecord.name}, email = ${reviewedRecord.email},
+            location = ${reviewedRecord.location}, niche = ${reviewedRecord.niche},
+            strengths = ${reviewedRecord.strengths},
+            audience_description = ${reviewedRecord.audience_description},
+            rate_expectations = ${reviewedRecord.rate_expectations},
+            activities = ${reviewedRecord.activities || []},
+            fit_notes = ${reviewedRecord.fit_notes},
+            review_notes = ${reviewedRecord.review_notes},
             reviewed_by = ${access.userId}, reviewed_at = now(), updated_at = now()
           WHERE id = ${id}
         `;

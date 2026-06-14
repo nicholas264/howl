@@ -64,12 +64,16 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
   const [mode, setMode] = useState('applications');
   const [data, setData] = useState({ applications: [], candidates: [], counts: {} });
   const [selected, setSelected] = useState(null);
+  const [search, setSearch] = useState('');
+  const [queueFilter, setQueueFilter] = useState('active');
   const [discover, setDiscover] = useState({ handle: '', niche: '', fit_notes: '' });
   const [notes, setNotes] = useState('');
   const [qualification, setQualification] = useState(EMPTY_QUALIFICATION);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [batchEnriching, setBatchEnriching] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,7 +94,13 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
   }, [mode, selected?.id]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setSelected(null); setNotes(''); setQualification(EMPTY_QUALIFICATION); }, [mode]);
+  useEffect(() => {
+    setSelected(null);
+    setNotes('');
+    setQualification(EMPTY_QUALIFICATION);
+    setSearch('');
+    setQueueFilter('active');
+  }, [mode]);
   useEffect(() => {
     if (!selected) return;
     setQualification({
@@ -107,10 +117,34 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
   }, [selected?.id]);
 
   const records = mode === 'applications' ? data.applications : data.candidates;
-  const visible = useMemo(
-    () => records.filter(item => !['declined', 'archived'].includes(item.status)),
-    [records],
-  );
+  const visible = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return records.filter(item => {
+      const quality = readiness(item);
+      const active = !['approved', 'declined', 'archived'].includes(item.status);
+      const filterMatch = queueFilter === 'all'
+        || (queueFilter === 'active' && active)
+        || item.status === queueFilter
+        || (queueFilter === 'ready' && active && quality.score >= 75);
+      if (!filterMatch) return false;
+      if (!needle) return true;
+      const social = socialLine(item);
+      return [item.name, item.email, item.location, item.niche, social?.handle]
+        .some(value => value?.toLowerCase().includes(needle));
+    });
+  }, [records, queueFilter, search]);
+
+  const queueSummary = useMemo(() => {
+    const active = records.filter(item => !['declined', 'archived', 'approved'].includes(item.status));
+    return {
+      active: active.length,
+      new: active.filter(item => item.status === 'new').length,
+      ready: active.filter(item => readiness(item).score >= 75).length,
+      needsEnrichment: mode === 'applications'
+        ? Number(data.counts?.applications_needing_enrichment || 0)
+        : active.filter(item => !item.enrichment?.instagram_enriched_at && socialLine(item)?.platform === 'instagram').length,
+    };
+  }, [data.counts, mode, records]);
 
   const discoverInstagram = async event => {
     event.preventDefault();
@@ -131,6 +165,29 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const enrichInbox = async () => {
+    setBatchEnriching(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch('/api/creator-acquisition', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'enrich_inbox' }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not enrich application inbox');
+      setNotice(result.processed
+        ? `Enriched ${result.enriched} of ${result.processed} applications${result.failed ? ` · ${result.failed} need manual review` : ''}.`
+        : 'No new Instagram applications need enrichment.');
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBatchEnriching(false);
     }
   };
 
@@ -197,6 +254,8 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
           action: 'promote',
           type: mode === 'applications' ? 'application' : 'candidate',
           id: selected.id,
+          review_notes: notes || selected.review_notes,
+          ...qualification,
         }),
       });
       const result = await response.json();
@@ -223,6 +282,33 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
         <a href="/apply" target="_blank" rel="noreferrer">Open application form ↗</a>
       </div>
 
+      <div className="talent-queue-summary">
+        <div><span>In review</span><strong>{queueSummary.active}</strong><small>new and reviewing</small></div>
+        <div><span>New</span><strong>{queueSummary.new}</strong><small>untouched records</small></div>
+        <div className={queueSummary.needsEnrichment ? 'attention' : ''}><span>Needs enrichment</span><strong>{queueSummary.needsEnrichment}</strong><small>Instagram data missing</small></div>
+        <div className={queueSummary.ready ? 'ready' : ''}><span>Ready to decide</span><strong>{queueSummary.ready}</strong><small>75%+ profile readiness</small></div>
+      </div>
+
+      <div className="talent-queue-tools">
+        <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search talent, niche, location, or handle" />
+        <nav>
+          {[
+            ['active', 'Active'],
+            ['new', 'New'],
+            ['reviewing', 'Reviewing'],
+            ['ready', 'Ready'],
+            ['all', 'All'],
+          ].map(([key, label]) => (
+            <button key={key} className={queueFilter === key ? 'active' : ''} onClick={() => setQueueFilter(key)}>{label}</button>
+          ))}
+        </nav>
+        {mode === 'applications' && canManage && (
+          <button className="talent-batch-enrich" onClick={enrichInbox} disabled={saving || batchEnriching || !queueSummary.needsEnrichment}>
+            {batchEnriching ? 'Enriching...' : 'Enrich next 5'}
+          </button>
+        )}
+      </div>
+
       {mode === 'discovery' && canManage && (
         <form className="talent-discovery" onSubmit={discoverInstagram}>
           <div><span>Find a creator</span><strong>Start with an Instagram handle</strong></div>
@@ -234,6 +320,7 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
       )}
 
       {error && <div className="app-error">{error}</div>}
+      {notice && <div className="app-notice">{notice}</div>}
       <div className={`talent-layout ${selected ? 'detail-open' : ''}`}>
         <div className="talent-list">
           <header><span>{mode === 'applications' ? 'Inbound talent' : 'Sourced prospects'}</span><strong>{visible.length}</strong></header>
