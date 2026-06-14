@@ -9,6 +9,16 @@ function text(value, max = 5000) {
   return result ? result.slice(0, max) : null;
 }
 
+function list(value, max = 20) {
+  const values = Array.isArray(value) ? value : String(value || '').split(',');
+  return values.map(item => text(item, 200)).filter(Boolean).slice(0, max);
+}
+
+function mergeInstagramSocial(socials, profile) {
+  const accounts = Array.isArray(socials) ? socials : [];
+  return [...accounts.filter(account => account.platform !== 'instagram'), profile];
+}
+
 async function promote(sql, access, sourceType, record) {
   if (record.promoted_creator_id) {
     const [creator] = await sql`SELECT id, name FROM creators WHERE id = ${record.promoted_creator_id}`;
@@ -44,7 +54,7 @@ async function promote(sql, access, sourceType, record) {
       ${record.creator_experience || record.biography || record.enrichment?.biography || null},
       ${record.niche || null}, ${record.strengths || null}, ${record.audience_description || null},
       ${activities}, ${record.rate_expectations || null}, ${record.review_notes || record.fit_notes || null},
-      ${record.avatar_url || null}, ${sourceType}, ${String(record.id)},
+      ${record.avatar_url || instagram?.avatar_url || null}, ${sourceType}, ${String(record.id)},
       ${JSON.stringify({ acquisition_source: sourceType, application_code: record.application_code || null })}::jsonb,
       'sourced', 'qualified', ${access.userId}
     )
@@ -138,6 +148,40 @@ export default async function handler(req, res) {
     const record = records[0];
     if (!record) return res.status(404).json({ error: 'Acquisition record not found.' });
 
+    if (req.body?.action === 'enrich_instagram') {
+      const instagram = (Array.isArray(record.socials) ? record.socials : [])
+        .find(account => account.platform === 'instagram');
+      const handle = normalizeInstagramHandle(instagram?.handle || req.body?.handle);
+      if (!handle) return res.status(400).json({ error: 'Add a valid Instagram handle before enriching.' });
+      const profile = await discoverInstagramProfile(handle);
+      const socials = mergeInstagramSocial(record.socials, profile);
+      const enrichment = {
+        ...(record.enrichment || {}),
+        biography: profile.biography,
+        website: profile.website,
+        instagram_metrics: profile.metrics,
+        instagram_enriched_at: new Date().toISOString(),
+      };
+      const [updated] = type === 'application'
+        ? await sql`
+            UPDATE creator_applications SET
+              socials = ${JSON.stringify(socials)}::jsonb,
+              enrichment = ${JSON.stringify(enrichment)}::jsonb,
+              updated_at = now()
+            WHERE id = ${id} RETURNING *
+          `
+        : await sql`
+            UPDATE creator_candidates SET
+              name = COALESCE(name, ${profile.name}),
+              avatar_url = COALESCE(${profile.avatar_url}, avatar_url),
+              socials = ${JSON.stringify(socials)}::jsonb,
+              enrichment = ${JSON.stringify(enrichment)}::jsonb,
+              updated_at = now()
+            WHERE id = ${id} RETURNING *
+          `;
+      return res.json({ record: updated });
+    }
+
     if (req.body?.action === 'promote') {
       const creator = await promote(sql, access, type === 'application' ? 'application' : 'discovery', record);
       if (type === 'application') {
@@ -160,14 +204,29 @@ export default async function handler(req, res) {
     const reviewNotes = req.body?.review_notes === undefined ? record.review_notes : text(req.body.review_notes, 5000);
     const [updated] = type === 'application'
       ? await sql`
-          UPDATE creator_applications SET status = ${status}, review_notes = ${reviewNotes},
+          UPDATE creator_applications SET
+            status = ${status}, review_notes = ${reviewNotes},
+            name = COALESCE(${text(req.body?.name, 200)}, name),
+            email = COALESCE(${text(req.body?.email, 320)?.toLowerCase()}, email),
+            location = COALESCE(${text(req.body?.location, 300)}, location),
+            niche = COALESCE(${text(req.body?.niche, 1000)}, niche),
+            strengths = COALESCE(${text(req.body?.strengths, 2000)}, strengths),
+            audience_description = COALESCE(${text(req.body?.audience_description, 2000)}, audience_description),
+            rate_expectations = COALESCE(${text(req.body?.rate_expectations, 1000)}, rate_expectations),
+            activities = CASE WHEN ${req.body?.activities !== undefined} THEN ${list(req.body?.activities)} ELSE activities END,
             reviewed_by = ${access.userId}, reviewed_at = now(), updated_at = now()
           WHERE id = ${id} RETURNING *
         `
       : await sql`
           UPDATE creator_candidates SET status = ${status}, review_notes = ${reviewNotes},
+            name = COALESCE(${text(req.body?.name, 200)}, name),
+            email = COALESCE(${text(req.body?.email, 320)?.toLowerCase()}, email),
+            location = COALESCE(${text(req.body?.location, 300)}, location),
             niche = COALESCE(${text(req.body?.niche, 1000)}, niche),
             strengths = COALESCE(${text(req.body?.strengths, 2000)}, strengths),
+            audience_description = COALESCE(${text(req.body?.audience_description, 2000)}, audience_description),
+            rate_expectations = COALESCE(${text(req.body?.rate_expectations, 1000)}, rate_expectations),
+            activities = CASE WHEN ${req.body?.activities !== undefined} THEN ${list(req.body?.activities)} ELSE activities END,
             fit_notes = COALESCE(${text(req.body?.fit_notes, 3000)}, fit_notes),
             reviewed_by = ${access.userId}, reviewed_at = now(), updated_at = now()
           WHERE id = ${id} RETURNING *

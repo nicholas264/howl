@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+const EMPTY_QUALIFICATION = {
+  name: '', email: '', location: '', niche: '', strengths: '',
+  audience_description: '', rate_expectations: '', activities: '', fit_notes: '',
+};
 
 function socialLine(record) {
   const accounts = Array.isArray(record.socials) ? record.socials : [];
@@ -19,16 +23,36 @@ function socialUrl(account) {
   return null;
 }
 
+function readiness(record) {
+  const social = socialLine(record);
+  const checks = [
+    ['Identity', record.name],
+    ['Contact', record.email],
+    ['Social profile', social?.handle],
+    ['Niche', record.niche],
+    ['Strengths', record.strengths],
+    ['Audience', record.audience_description],
+    ['Rates', record.rate_expectations],
+    ['Proof of work', record.sample_urls?.length || record.creator_experience || record.enrichment?.biography],
+  ];
+  const complete = checks.filter(([, value]) => Boolean(value)).length;
+  return {
+    score: Math.round((complete / checks.length) * 100),
+    missing: checks.filter(([, value]) => !value).map(([label]) => label),
+  };
+}
+
 function CandidateCard({ record, type, selected, onSelect }) {
   const social = socialLine(record);
+  const quality = readiness(record);
   return (
     <button className={`talent-card ${selected ? 'selected' : ''}`} onClick={() => onSelect(record)}>
       <span className="talent-avatar">
-        {record.avatar_url ? <img src={record.avatar_url} alt="" /> : (record.name || '?').slice(0, 1)}
+        {(record.avatar_url || social?.avatar_url) ? <img src={record.avatar_url || social.avatar_url} alt="" /> : (record.name || '?').slice(0, 1)}
       </span>
       <span>
         <strong>{record.name || social?.handle || 'Unnamed prospect'}</strong>
-        <small>{type === 'application' ? record.application_code : record.source?.replaceAll('_', ' ')}</small>
+        <small>{type === 'application' ? record.application_code : record.source?.replaceAll('_', ' ')} · {quality.score}% ready</small>
       </span>
       <span className={`talent-status status-${record.status}`}>{record.status}</span>
       <span className="talent-reach">{social?.followers ? compact.format(Number(social.followers)) : '—'}<small>{social?.handle ? `@${social.handle.replace(/^@/, '')}` : 'followers'}</small></span>
@@ -42,6 +66,7 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
   const [selected, setSelected] = useState(null);
   const [discover, setDiscover] = useState({ handle: '', niche: '', fit_notes: '' });
   const [notes, setNotes] = useState('');
+  const [qualification, setQualification] = useState(EMPTY_QUALIFICATION);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -58,14 +83,28 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
         setSelected(records.find(item => item.id === selected.id) || null);
       }
     } catch (err) {
-      setError(err.message);
+      if (!(import.meta.env.DEV && import.meta.env.VITE_AUTH_DISABLED === 'true')) setError(err.message);
     } finally {
       setLoading(false);
     }
   }, [mode, selected?.id]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setSelected(null); setNotes(''); }, [mode]);
+  useEffect(() => { setSelected(null); setNotes(''); setQualification(EMPTY_QUALIFICATION); }, [mode]);
+  useEffect(() => {
+    if (!selected) return;
+    setQualification({
+      name: selected.name || '',
+      email: selected.email || '',
+      location: selected.location || '',
+      niche: selected.niche || '',
+      strengths: selected.strengths || '',
+      audience_description: selected.audience_description || '',
+      rate_expectations: selected.rate_expectations || '',
+      activities: Array.isArray(selected.activities) ? selected.activities.join(', ') : '',
+      fit_notes: selected.fit_notes || '',
+    });
+  }, [selected?.id]);
 
   const records = mode === 'applications' ? data.applications : data.candidates;
   const visible = useMemo(
@@ -108,10 +147,36 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
           id: selected.id,
           status,
           review_notes: notes || selected.review_notes,
+          ...qualification,
         }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Could not update review');
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const enrichInstagram = async () => {
+    if (!selected) return;
+    setSaving(true);
+    setError('');
+    try {
+      const response = await fetch('/api/creator-acquisition', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'enrich_instagram',
+          type: mode === 'applications' ? 'application' : 'candidate',
+          id: selected.id,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not enrich Instagram profile');
+      setSelected(result.record);
       await load();
     } catch (err) {
       setError(err.message);
@@ -195,6 +260,19 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
             <span className="workspace-kicker">{mode === 'applications' ? 'Creator application' : 'Discovery profile'}</span>
             <h2>{selected.name || socialLine(selected)?.handle}</h2>
             <p>{selected.location || selected.email || selected.source?.replaceAll('_', ' ')}</p>
+            {(() => {
+              const quality = readiness(selected);
+              return (
+                <div className="talent-readiness">
+                  <div>
+                    <span>Profile readiness</span>
+                    <strong>{quality.score}%</strong>
+                  </div>
+                  <i><b style={{ width: `${quality.score}%` }} /></i>
+                  <small>{quality.missing.length ? `Missing: ${quality.missing.join(', ')}` : 'Ready for a grounded brief and outreach.'}</small>
+                </div>
+              );
+            })()}
             <div className="talent-detail-stats">
               <div><span>Audience</span><strong>{socialLine(selected)?.followers ? compact.format(Number(socialLine(selected).followers)) : '—'}</strong></div>
               <div><span>Engagement</span><strong>{socialLine(selected)?.engagement_rate ? `${Number(socialLine(selected).engagement_rate).toFixed(1)}%` : '—'}</strong></div>
@@ -227,6 +305,27 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
             )}
             {canManage && (
               <>
+                <details className="talent-qualification" defaultOpen={readiness(selected).score < 75}>
+                  <summary>Qualification details</summary>
+                  <div>
+                    <label>Name<input value={qualification.name} onChange={event => setQualification({ ...qualification, name: event.target.value })} /></label>
+                    <label>Email<input type="email" value={qualification.email} onChange={event => setQualification({ ...qualification, email: event.target.value })} /></label>
+                    <label>Location<input value={qualification.location} onChange={event => setQualification({ ...qualification, location: event.target.value })} /></label>
+                    <label>Niche<input value={qualification.niche} onChange={event => setQualification({ ...qualification, niche: event.target.value })} /></label>
+                    <label className="wide">Activities<input placeholder="Camping, cooking, overlanding" value={qualification.activities} onChange={event => setQualification({ ...qualification, activities: event.target.value })} /></label>
+                    <label className="wide">Strengths<textarea rows="2" value={qualification.strengths} onChange={event => setQualification({ ...qualification, strengths: event.target.value })} /></label>
+                    <label className="wide">Audience<textarea rows="2" value={qualification.audience_description} onChange={event => setQualification({ ...qualification, audience_description: event.target.value })} /></label>
+                    <label className="wide">Rate expectations<input value={qualification.rate_expectations} onChange={event => setQualification({ ...qualification, rate_expectations: event.target.value })} /></label>
+                    {mode === 'discovery' && <label className="wide">Scout note<textarea rows="2" value={qualification.fit_notes} onChange={event => setQualification({ ...qualification, fit_notes: event.target.value })} /></label>}
+                  </div>
+                  <button onClick={() => update('reviewing')} disabled={saving}>Save qualification</button>
+                </details>
+                {socialLine(selected)?.platform === 'instagram' && (
+                  <button className="talent-enrich" onClick={enrichInstagram} disabled={saving}>
+                    <span>{selected.enrichment?.instagram_enriched_at ? 'Refresh Instagram intelligence' : 'Enrich Instagram profile'}</span>
+                    <small>Followers, engagement, bio, recent media</small>
+                  </button>
+                )}
                 <label className="talent-notes">Internal review note<textarea rows="4" value={notes} onChange={event => setNotes(event.target.value)} /></label>
                 <div className="talent-actions">
                   <button onClick={() => update('declined')} disabled={saving}>Decline</button>

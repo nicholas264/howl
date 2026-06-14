@@ -96,6 +96,7 @@ async function createCreatorOpsTables(sql) {
       availability        TEXT,
       referral_source     TEXT,
       socials             JSONB NOT NULL DEFAULT '[]'::jsonb,
+      enrichment          JSONB NOT NULL DEFAULT '{}'::jsonb,
       sample_urls         TEXT[] NOT NULL DEFAULT '{}',
       age_confirmed       BOOLEAN NOT NULL DEFAULT false,
       consent_confirmed   BOOLEAN NOT NULL DEFAULT false,
@@ -110,6 +111,7 @@ async function createCreatorOpsTables(sql) {
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_applications_status ON creator_applications(status, created_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_applications_email ON creator_applications(lower(email))`;
+  await sql`ALTER TABLE creator_applications ADD COLUMN IF NOT EXISTS enrichment JSONB NOT NULL DEFAULT '{}'::jsonb`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS creator_candidates (
@@ -121,6 +123,9 @@ async function createCreatorOpsTables(sql) {
       location            TEXT,
       niche               TEXT,
       strengths           TEXT,
+      audience_description TEXT,
+      rate_expectations   TEXT,
+      activities          TEXT[] NOT NULL DEFAULT '{}',
       fit_notes           TEXT,
       avatar_url          TEXT,
       socials             JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -136,6 +141,9 @@ async function createCreatorOpsTables(sql) {
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_candidates_status ON creator_candidates(status, created_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_candidates_source ON creator_candidates(source, created_at DESC)`;
+  await sql`ALTER TABLE creator_candidates ADD COLUMN IF NOT EXISTS audience_description TEXT`;
+  await sql`ALTER TABLE creator_candidates ADD COLUMN IF NOT EXISTS rate_expectations TEXT`;
+  await sql`ALTER TABLE creator_candidates ADD COLUMN IF NOT EXISTS activities TEXT[] NOT NULL DEFAULT '{}'`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS creator_activity (
