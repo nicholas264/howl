@@ -178,7 +178,7 @@ export default async function handler(req, res) {
           audience_psychographics, activities, tags, rate_notes, notes,
           avatar_url, owner_user_id, shipping_address1, shipping_address2,
           shipping_city, shipping_region, shipping_postal_code, shipping_country_code,
-          created_by
+          product_seeding_required, created_by
         ) VALUES (
           ${name}, ${text(body.email, 320)}, ${text(body.phone, 100)}, ${status}, ${stage},
           ${text(body.source, 50) || 'manual'}, ${text(body.source_external_id, 200)},
@@ -190,7 +190,7 @@ export default async function handler(req, res) {
           ${text(body.shipping_address1, 300)}, ${text(body.shipping_address2, 300)},
           ${text(body.shipping_city, 200)}, ${text(body.shipping_region, 100)},
           ${text(body.shipping_postal_code, 40)}, ${text(body.shipping_country_code, 2)?.toUpperCase() || 'US'},
-          ${access.userId}
+          ${body.product_seeding_required !== false}, ${access.userId}
         )
         RETURNING *
       `;
@@ -256,6 +256,7 @@ export default async function handler(req, res) {
           shipping_region = ${body.shipping_region === undefined ? current.shipping_region : text(body.shipping_region, 100)},
           shipping_postal_code = ${body.shipping_postal_code === undefined ? current.shipping_postal_code : text(body.shipping_postal_code, 40)},
           shipping_country_code = ${body.shipping_country_code === undefined ? current.shipping_country_code : (text(body.shipping_country_code, 2)?.toUpperCase() || 'US')},
+          product_seeding_required = ${body.product_seeding_required === undefined ? current.product_seeding_required : body.product_seeding_required !== false},
           updated_at = now()
         WHERE id = ${id}
         RETURNING *

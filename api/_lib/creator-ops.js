@@ -31,6 +31,7 @@ async function createCreatorOpsTables(sql) {
       shipping_region     TEXT,
       shipping_postal_code TEXT,
       shipping_country_code TEXT NOT NULL DEFAULT 'US',
+      product_seeding_required BOOLEAN NOT NULL DEFAULT true,
       created_by          TEXT,
       created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -50,6 +51,7 @@ async function createCreatorOpsTables(sql) {
   await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS shipping_region TEXT`;
   await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS shipping_postal_code TEXT`;
   await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS shipping_country_code TEXT NOT NULL DEFAULT 'US'`;
+  await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS product_seeding_required BOOLEAN NOT NULL DEFAULT true`;
   await sql`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_creators_source_external
     ON creators(source, source_external_id)

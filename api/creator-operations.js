@@ -13,6 +13,14 @@ export default async function handler(req, res) {
       WITH creator_state AS (
         SELECT
           c.id, c.name, c.email, c.avatar_url, c.stage, c.status, c.updated_at,
+          c.product_seeding_required,
+          (
+            c.shipping_address1 IS NOT NULL
+            AND c.shipping_city IS NOT NULL
+            AND c.shipping_region IS NOT NULL
+            AND c.shipping_postal_code IS NOT NULL
+            AND c.shipping_country_code IS NOT NULL
+          ) AS shipping_ready,
           follow_up.next_follow_up_at,
           overdue.due_at AS overdue_due_at,
           overdue.title AS overdue_title,
@@ -52,6 +60,22 @@ export default async function handler(req, res) {
           EXISTS (
             SELECT 1 FROM creator_briefs b WHERE b.creator_id = c.id
           ) AS has_brief,
+          (
+            c.product_seeding_required = false
+            OR EXISTS (
+              SELECT 1 FROM creator_product_seeds s
+              WHERE s.creator_id = c.id
+                AND s.status IN ('ordered', 'shipped', 'delivered')
+            )
+            OR EXISTS (
+              SELECT 1 FROM creator_deliverables d
+              WHERE d.creator_id = c.id AND d.status <> 'cancelled'
+            )
+            OR EXISTS (
+              SELECT 1 FROM launch_history l
+              WHERE l.creator_id = c.id OR lower(l.creator) = lower(c.name)
+            )
+          ) AS product_ready,
           EXISTS (
             SELECT 1 FROM creator_deliverables d
             WHERE d.creator_id = c.id AND d.status <> 'cancelled'
@@ -125,6 +149,8 @@ export default async function handler(req, res) {
             WHEN has_live_engagement AND NOT has_accepted_agreement AND has_sent_agreement THEN 'await_agreement'
             WHEN has_live_engagement AND NOT has_accepted_agreement THEN 'send_agreement'
             WHEN has_accepted_agreement AND NOT has_brief THEN 'build_brief'
+            WHEN has_brief AND NOT product_ready AND NOT shipping_ready THEN 'add_shipping'
+            WHEN has_brief AND NOT product_ready THEN 'seed_product'
             WHEN has_brief AND NOT has_deliverable AND NOT has_active_submission THEN 'send_assignment'
             WHEN overdue_due_at IS NOT NULL THEN 'production_overdue'
             WHEN NOT has_received THEN 'await_footage'
@@ -145,6 +171,8 @@ export default async function handler(req, res) {
           WHEN 'await_agreement' THEN 'Await agreement acceptance'
           WHEN 'send_agreement' THEN 'Prepare and send agreement'
           WHEN 'build_brief' THEN 'Build creator brief'
+          WHEN 'add_shipping' THEN 'Add shipping address'
+          WHEN 'seed_product' THEN 'Seed creator product'
           WHEN 'send_assignment' THEN 'Send creator assignment'
           WHEN 'production_overdue' THEN 'Resolve overdue deliverable'
           WHEN 'await_footage' THEN 'Await creator footage'
@@ -155,11 +183,12 @@ export default async function handler(req, res) {
         CASE
           WHEN action_key IN ('follow_up', 'production_overdue') THEN 'urgent'
           WHEN action_key IN ('await_reply', 'await_agreement', 'await_footage') THEN 'waiting'
-          WHEN action_key IN ('add_contact') THEN 'blocked'
+          WHEN action_key IN ('add_contact', 'add_shipping') THEN 'blocked'
           ELSE 'action'
         END AS action_state,
         CASE
-          WHEN action_key IN ('add_contact') THEN 'profile'
+          WHEN action_key IN ('add_contact', 'add_shipping') THEN 'profile'
+          WHEN action_key = 'seed_product' THEN 'products'
           WHEN action_key IN ('start_outreach', 'follow_up', 'await_reply') THEN 'outreach'
           WHEN action_key IN ('define_terms', 'approve_terms', 'await_agreement', 'send_agreement') THEN 'agreements'
           WHEN action_key IN ('build_brief', 'send_assignment') THEN 'briefs'
@@ -170,6 +199,7 @@ export default async function handler(req, res) {
           WHEN action_key IN ('start_outreach', 'follow_up', 'await_reply') THEN 'outreach'
           WHEN action_key IN ('define_terms', 'approve_terms', 'await_agreement', 'send_agreement') THEN 'contracts'
           WHEN action_key IN ('build_brief', 'send_assignment') THEN 'creative'
+          WHEN action_key = 'seed_product' THEN 'product'
           WHEN action_key IN ('production_overdue', 'await_footage', 'finish_edit', 'launch_asset') THEN 'production'
           WHEN action_key = 'review_performance' THEN 'performance'
           ELSE 'data'
@@ -186,8 +216,8 @@ export default async function handler(req, res) {
         CASE
           WHEN action_key = 'production_overdue' THEN 0
           WHEN action_key = 'follow_up' THEN 1
-          WHEN action_key = 'add_contact' THEN 2
-          WHEN action_key IN ('define_terms', 'approve_terms', 'send_agreement', 'build_brief', 'send_assignment', 'finish_edit', 'launch_asset') THEN 3
+          WHEN action_key IN ('add_contact', 'add_shipping') THEN 2
+          WHEN action_key IN ('define_terms', 'approve_terms', 'send_agreement', 'build_brief', 'seed_product', 'send_assignment', 'finish_edit', 'launch_asset') THEN 3
           WHEN action_key IN ('await_reply', 'await_agreement', 'await_footage') THEN 4
           ELSE 5
         END,

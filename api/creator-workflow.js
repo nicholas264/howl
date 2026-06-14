@@ -17,7 +17,7 @@ function timestamp(value) {
 }
 
 function buildWorkflowGuidance({
-  creator, outreach, engagements, agreements, briefs, deliverables, submissionLinks,
+  creator, outreach, engagements, agreements, briefs, seeds, deliverables, submissionLinks,
 }) {
   const outbound = outreach.filter(item => item.direction === 'outbound');
   const hasSentOutreach = outbound.some(item => ['sent', 'follow_up', 'replied', 'closed'].includes(item.status));
@@ -36,6 +36,17 @@ function buildWorkflowGuidance({
   const acceptedAgreement = agreements.find(item => item.status === 'accepted');
   const openAgreement = agreements.find(item => ['draft', 'sent'].includes(item.status));
   const activeSubmission = submissionLinks.find(item => item.status === 'active');
+  const productSeeded = creator.product_seeding_required === false
+    || seeds.some(item => ['ordered', 'shipped', 'delivered'].includes(item.status))
+    || deliverables.length > 0
+    || Number(creator.launch_count || 0) > 0;
+  const shippingReady = Boolean(
+    creator.shipping_address1
+    && creator.shipping_city
+    && creator.shipping_region
+    && creator.shipping_postal_code
+    && creator.shipping_country_code
+  );
   const overdueDeliverable = deliverables
     .filter(item => (
       item.due_at
@@ -60,6 +71,7 @@ function buildWorkflowGuidance({
     { key: 'terms', label: 'Terms', complete: Boolean(liveEngagement) },
     { key: 'agreement', label: 'Agreement', complete: Boolean(acceptedAgreement) },
     { key: 'creative', label: 'Creative', complete: briefs.length > 0 },
+    { key: 'product', label: 'Product', complete: productSeeded },
     { key: 'production', label: 'Production', complete: completed },
     { key: 'launch', label: 'Launch', complete: launched },
   ];
@@ -118,6 +130,18 @@ function buildWorkflowGuidance({
       description: 'Generate a product-grounded concept and script from this creator’s actual strengths.',
       tab: 'briefs', recommended_stage: 'briefing',
     };
+  } else if (!productSeeded && !shippingReady) {
+    nextAction = {
+      key: 'add_shipping', label: 'Add shipping address',
+      description: 'A complete shipping address is required before the creator product can be ordered.',
+      tab: 'profile', blocker: true, recommended_stage: 'briefing',
+    };
+  } else if (!productSeeded) {
+    nextAction = {
+      key: 'seed_product', label: 'Seed the creator product',
+      description: 'Order the briefed product through Shopify before sending the creator into production.',
+      tab: 'products', recommended_stage: 'briefing',
+    };
   } else if (!deliverables.length && !activeSubmission) {
     nextAction = {
       key: 'send_assignment', label: 'Send creator assignment',
@@ -172,9 +196,11 @@ function buildWorkflowGuidance({
 }
 
 async function getWorkflow(sql, creatorId) {
-  const [creatorRows, outreach, engagements, agreements, briefs, deliverables, submissionLinks, productionSummary] = await Promise.all([
+  const [creatorRows, outreach, engagements, agreements, briefs, seeds, deliverables, submissionLinks, productionSummary] = await Promise.all([
     sql`
-      SELECT c.id, c.email, c.stage,
+      SELECT c.id, c.email, c.stage, c.product_seeding_required,
+        c.shipping_address1, c.shipping_city, c.shipping_region,
+        c.shipping_postal_code, c.shipping_country_code,
         (SELECT count(*)::int FROM launch_history l WHERE l.creator_id = c.id OR lower(l.creator) = lower(c.name)) AS launch_count
       FROM creators c
       WHERE c.id = ${creatorId}
@@ -204,6 +230,13 @@ async function getWorkflow(sql, creatorId) {
       SELECT * FROM creator_briefs
       WHERE creator_id = ${creatorId}
       ORDER BY created_at DESC
+      LIMIT 100
+    `,
+    sql`
+      SELECT id, status, product_title, requested_at, ordered_at, delivered_at
+      FROM creator_product_seeds
+      WHERE creator_id = ${creatorId}
+      ORDER BY requested_at DESC
       LIMIT 100
     `,
     sql`
@@ -246,10 +279,10 @@ async function getWorkflow(sql, creatorId) {
   ]);
   const creator = creatorRows[0];
   const guidance = creator
-    ? buildWorkflowGuidance({ creator, outreach, engagements, agreements, briefs, deliverables, submissionLinks })
+    ? buildWorkflowGuidance({ creator, outreach, engagements, agreements, briefs, seeds, deliverables, submissionLinks })
     : { next_action: null, milestones: [] };
   return {
-    outreach, engagements, agreements, briefs, deliverables,
+    outreach, engagements, agreements, briefs, seeds, deliverables,
     submission_links: submissionLinks,
     production_summary: productionSummary[0] || {},
     guidance,

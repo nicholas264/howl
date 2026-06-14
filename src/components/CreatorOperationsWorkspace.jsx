@@ -6,6 +6,7 @@ const FILTERS = [
   ['outreach', 'Outreach'],
   ['contracts', 'Contracts'],
   ['creative', 'Creative'],
+  ['product', 'Product'],
   ['production', 'Production'],
 ];
 
@@ -23,6 +24,8 @@ function actionDetail(item) {
   if (item.action_key === 'await_agreement') return 'Agreement sent; acceptance is still outstanding.';
   if (item.action_key === 'await_footage') return 'Assignment is live; footage has not arrived yet.';
   if (item.action_key === 'add_contact') return 'Contact information is blocking the relationship.';
+  if (item.action_key === 'add_shipping') return 'Shipping details are blocking product fulfillment.';
+  if (item.action_key === 'seed_product') return 'The creative is defined; the creator still needs the product.';
   return `${item.stage} creator · ${item.category}`;
 }
 

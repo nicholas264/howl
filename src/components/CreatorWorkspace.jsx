@@ -813,10 +813,22 @@ export default function CreatorWorkspace({
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not create Shopify seed order');
       setSeeds(current => [data.seed, ...current]);
+      await refreshWorkflow(selected.id);
       if (data.warning) setError(data.warning);
       setSeedForm({ product_variant: '', quantity: '1', notes: '' });
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const setProductSeedingRequired = async required => {
+    setSaving(true);
+    setError('');
+    try {
+      await updateCreator({ product_seeding_required: required });
+      await refreshWorkflow(selected.id);
     } finally {
       setSaving(false);
     }
@@ -1208,6 +1220,19 @@ export default function CreatorWorkspace({
             {detailTab === 'products' && (
               <section className="creator-detail-section workflow-section">
                 <div className="detail-section-head"><span>Product seeding</span><small>Shopify-backed fulfillment</small></div>
+                <div className="seed-requirement">
+                  <span>
+                    <strong>{selected.product_seeding_required === false ? 'Product not required' : 'Product required before production'}</strong>
+                    <small>{selected.product_seeding_required === false
+                      ? 'This creator already has what they need or the assignment does not require a shipment.'
+                      : 'The action queue holds assignment delivery until a Shopify seed order is created.'}</small>
+                  </span>
+                  {canManageCreators && (
+                    <button type="button" disabled={saving} onClick={() => setProductSeedingRequired(selected.product_seeding_required === false)}>
+                      {selected.product_seeding_required === false ? 'Require product' : 'Mark not required'}
+                    </button>
+                  )}
+                </div>
                 {canManageCreators && (
                   <form className="workflow-form" onSubmit={seedProduct}>
                     <select required disabled={!shopifyConnected} value={seedForm.product_variant} onChange={event => setSeedForm({ ...seedForm, product_variant: event.target.value })}>
