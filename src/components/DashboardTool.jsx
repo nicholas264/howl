@@ -250,6 +250,26 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
     finally { setCreativeSyncing(false); }
   }, [creativeWindowDays, loadAnalysisQueue, loadCreativeTable]);
 
+  const assignCreativeCreator = useCallback(async (groupKey, creatorId) => {
+    const r = await fetch('/api/meta', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'assign_creative_creator', groupKey, creatorId: creatorId || null }),
+    });
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || 'Could not assign creator');
+    setCreativeTable(prev => prev ? {
+      ...prev,
+      groups: prev.groups.map(group => group.groupKey === groupKey ? {
+        ...group,
+        creatorId: d.creator?.id ? Number(d.creator.id) : null,
+        creatorName: d.creator?.name || null,
+        creatorConflict: false,
+      } : group),
+    } : prev);
+    return d;
+  }, []);
+
   const processAnalysisBatch = useCallback(async () => {
     setAnalysisBatchRunning(true);
     setAnalysisQueueMessage('');
@@ -822,6 +842,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           onRefreshAnalysisQueue={loadAnalysisQueue}
           onAnalyze={runAnalysis}
           onOpenAnalysis={openAnalysis}
+          onAssignCreator={assignCreativeCreator}
           setActiveTab={setActiveTab}
         />
       )}

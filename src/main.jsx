@@ -13,7 +13,7 @@ const isCreatorSubmission = /^\/submit\/?$/.test(window.location.pathname)
 const isCreatorAgreement = /^\/agreement\/?$/.test(window.location.pathname)
 const isCreatorApplication = /^\/apply\/?$/.test(window.location.pathname)
 const isPublicCreatorPage = isCreatorSubmission || isCreatorAgreement || isCreatorApplication
-if (!PUB_KEY && !isPublicCreatorPage) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY')
+if (!PUB_KEY && !isPublicCreatorPage && !DEV_AUTH_BYPASS) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY')
 
 // Install authenticated API access and verify workspace membership before any
 // private application component is mounted.
@@ -113,9 +113,7 @@ const app = isCreatorSubmission ? (
     <CreatorApplicationPage />
   </React.Suspense>
 ) : DEV_AUTH_BYPASS ? (
-  <ClerkProvider publishableKey={PUB_KEY} appearance={appearance}>
-    <App appAccess={{ user: { status: 'active' }, role: 'owner', permissions: ['*'] }} />
-  </ClerkProvider>
+  <App appAccess={{ user: { status: 'active' }, role: 'owner', permissions: ['*'] }} />
 ) : (
   <ClerkProvider publishableKey={PUB_KEY} appearance={appearance}>
     <SignedIn>

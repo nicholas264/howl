@@ -174,6 +174,9 @@ export default async function handler(req, res) {
       && !hasPermission(appAccess, 'briefs.write')) {
     return res.status(403).json({ error: 'Forbidden - analytics access required' });
   }
+  if (action === 'assign_creative_creator' && !hasPermission(appAccess, 'creators.write')) {
+    return res.status(403).json({ error: 'Forbidden - creators.write required' });
+  }
 
   try {
     if (launchActions.has(action)) {
@@ -1314,6 +1317,7 @@ export default async function handler(req, res) {
         const { neon } = await import('@neondatabase/serverless');
         const sql = neon(process.env.DATABASE_URL);
         await ensureCreativeAnalysisQueue(sql);
+        await ensureCreatorOpsTables(sql);
 
         const sinceDays = Math.max(1, Math.min(365, parseInt(req.body.sinceDays || 14, 10)));
         const fmtYmd = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -1359,10 +1363,34 @@ export default async function handler(req, res) {
             COALESCE(a.unique_link_clicks, 0) AS unique_link_clicks,
             COALESCE(a.video_3s_views, 0)     AS video_3s_views,
             COALESCE(a.video_thruplays, 0)    AS video_thruplays,
+            attribution.creator_id,
+            attribution.creator_name,
+            COALESCE(attribution.creator_count, 0)::int AS creator_count,
             EXISTS (SELECT 1 FROM creative_analysis ca WHERE ca.group_key = m.group_key) AS is_analyzed,
             (SELECT q.status FROM creative_analysis_queue q WHERE q.group_key = m.group_key) AS analysis_queue_status
           FROM meta m
           LEFT JOIN agg a USING (group_key)
+          LEFT JOIN LATERAL (
+            SELECT
+              min(linked.creator_id) AS creator_id,
+              min(c.name) AS creator_name,
+              count(DISTINCT linked.creator_id) FILTER (WHERE linked.creator_id IS NOT NULL) AS creator_count
+            FROM (
+              SELECT assignment.creator_id
+              FROM creative_creator_assignments assignment
+              WHERE assignment.group_key = m.group_key
+              UNION ALL
+              SELECT asset.creator_id
+              FROM creative_assets asset
+              WHERE asset.group_key = m.group_key
+              UNION ALL
+              SELECT launch.creator_id
+              FROM launch_history launch
+              JOIN creative_performance linked_cp ON linked_cp.ad_id = launch.ad_id
+              WHERE linked_cp.group_key = m.group_key
+            ) linked
+            LEFT JOIN creators c ON c.id = linked.creator_id
+          ) attribution ON true
           WHERE COALESCE(a.spend, 0) > 0 OR COALESCE(a.impressions, 0) > 0
           ORDER BY spend DESC NULLS LAST
           LIMIT 500
@@ -1393,12 +1421,69 @@ export default async function handler(req, res) {
             holdRate: v3s > 0 ? vThru / v3s : 0,
             impressions,
             clicks,
+            creatorId: r.creator_id ? Number(r.creator_id) : null,
+            creatorName: r.creator_name || null,
+            creatorConflict: Number(r.creator_count || 0) > 1,
             isAnalyzed: !!r.is_analyzed,
             analysisQueueStatus: r.analysis_queue_status || null,
           };
         });
 
         return res.json({ groups, sinceDays, since, until });
+      }
+
+      case 'assign_creative_creator': {
+        const groupKey = (req.body.groupKey || '').toString().trim();
+        const creatorId = req.body.creatorId ? Number(req.body.creatorId) : null;
+        if (!groupKey) return res.status(400).json({ error: 'groupKey required' });
+        const sql = appAccess.sql;
+        await ensureCreatorOpsTables(sql);
+        let creator = null;
+        if (creatorId) {
+          [creator] = await sql`SELECT id, name FROM creators WHERE id = ${creatorId}`;
+          if (!creator) return res.status(404).json({ error: 'Creator not found' });
+          await sql`
+            INSERT INTO creative_creator_assignments (group_key, creator_id, assigned_by)
+            VALUES (${groupKey}, ${creatorId}, ${appAccess.userId})
+            ON CONFLICT (group_key) DO UPDATE SET
+              creator_id = EXCLUDED.creator_id,
+              assigned_by = EXCLUDED.assigned_by,
+              updated_at = now()
+          `;
+        } else {
+          await sql`DELETE FROM creative_creator_assignments WHERE group_key = ${groupKey}`;
+        }
+        const assets = await sql`
+          UPDATE creative_assets
+          SET creator_id = ${creatorId}, creator = ${creator?.name || null}, updated_at = now()
+          WHERE group_key = ${groupKey}
+          RETURNING id
+        `;
+        const launches = await sql`
+          UPDATE launch_history launch
+          SET creator_id = ${creatorId}, creator = ${creator?.name || null}
+          WHERE launch.ad_id IN (
+            SELECT ad_id FROM creative_performance WHERE group_key = ${groupKey}
+          )
+          RETURNING id
+        `;
+        if (creatorId) {
+          await sql`
+            INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+            VALUES (
+              ${creatorId}, 'creative_performance_linked',
+              ${`Linked creative analytics group "${groupKey}"`},
+              ${JSON.stringify({ group_key: groupKey, assets: assets.length, launches: launches.length })}::jsonb,
+              ${appAccess.userId}
+            )
+          `;
+        }
+        return res.json({
+          creator: creator || null,
+          groupKey,
+          assetsUpdated: assets.length,
+          launchesUpdated: launches.length,
+        });
       }
 
       case 'get_creative_group_ads': {

@@ -172,6 +172,7 @@ export default function HowlAdEngine({ appAccess }) {
     {
       label: 'Creative',
       items: [
+        { key: 'creative-analytics', label: 'Creative Analytics', permission: 'analytics.read' },
         { key: 'from-winners', label: 'Concept Studio', permission: 'briefs.write' },
         { key: 'ugc-editor', label: 'UGC Editor', permission: 'assets.write' },
         { key: 'image', label: 'Image Ads', permission: 'assets.write' },
@@ -200,7 +201,6 @@ export default function HowlAdEngine({ appAccess }) {
         { key: 'dashboard-forecast', label: 'Forecast', permission: 'analytics.read' },
         { key: 'dashboard-meta', label: 'Meta', permission: 'analytics.read' },
         { key: 'dashboard-shopify', label: 'Shopify', permission: 'analytics.read' },
-        { key: 'creative-analytics', label: 'Creative Analytics', permission: 'analytics.read' },
         { key: 'log', label: 'Launch Log', permission: 'launch.read' },
       ],
     },

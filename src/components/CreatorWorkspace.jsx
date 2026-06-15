@@ -936,7 +936,7 @@ export default function CreatorWorkspace({
   };
 
   return (
-    <div className="creator-workspace">
+    <div className="creator-workspace creator-motion-workspace">
       <header className="creator-head">
         <div>
           <span className="workspace-kicker">Creator operations</span>

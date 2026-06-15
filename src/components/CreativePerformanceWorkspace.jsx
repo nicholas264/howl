@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 const METRICS = {
   cpa: { label: 'CPA', format: v => v == null ? '—' : `$${v.toFixed(0)}`, better: 'low' },
@@ -42,22 +42,37 @@ export default function CreativePerformanceWorkspace({
   onRefreshAnalysisQueue,
   onAnalyze,
   onOpenAnalysis,
+  onAssignCreator,
   setActiveTab,
 }) {
   const [viewMode, setViewMode] = useState('cards');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('All');
+  const [creatorFilter, setCreatorFilter] = useState('All');
   const [sortKey, setSortKey] = useState('purchaseValue');
   const [selectedMetrics, setSelectedMetrics] = useState(['cpa', 'roas', 'purchases', 'spend', 'purchaseValue']);
   const [selected, setSelected] = useState(() => new Set());
+  const [creators, setCreators] = useState([]);
+  const [assigning, setAssigning] = useState('');
+  const [assignmentMessage, setAssignmentMessage] = useState('');
+  const [assignmentError, setAssignmentError] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/creators')
+      .then(response => response.ok ? response.json() : Promise.reject())
+      .then(data => setCreators(data.creators || []))
+      .catch(() => {});
+  }, []);
 
   const groups = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return [...(creativeTable?.groups || [])]
       .filter(g => !needle || (g.name || '').toLowerCase().includes(needle))
       .filter(g => status === 'All' || statusFor(g) === status)
+      .filter(g => creatorFilter === 'All'
+        || (creatorFilter === 'Unassigned' ? !g.creatorId : String(g.creatorId) === creatorFilter))
       .sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
-  }, [creativeTable, query, status, sortKey]);
+  }, [creativeTable, creatorFilter, query, status, sortKey]);
 
   const topGroups = groups.slice(0, 12);
   const metricRanges = useMemo(
@@ -90,6 +105,22 @@ export default function CreativePerformanceWorkspace({
     sessionStorage.setItem('howl:selected-winners', JSON.stringify(keys));
     setActiveTab('from-winners');
   };
+  const assignCreator = async (group, creatorId) => {
+    setAssigning(group.groupKey);
+    setAssignmentMessage('');
+    setAssignmentError(false);
+    try {
+      const result = await onAssignCreator(group.groupKey, creatorId || null);
+      setAssignmentMessage(result.creator
+        ? `Assigned ${group.name || 'creative'} to ${result.creator.name}.`
+        : `Removed creator assignment from ${group.name || 'creative'}.`);
+    } catch (err) {
+      setAssignmentMessage(err.message);
+      setAssignmentError(true);
+    } finally {
+      setAssigning('');
+    }
+  };
 
   const totalSpend = groups.reduce((sum, g) => sum + (g.spend || 0), 0);
   const totalRevenue = groups.reduce((sum, g) => sum + (g.purchaseValue || 0), 0);
@@ -118,6 +149,11 @@ export default function CreativePerformanceWorkspace({
           <input aria-label="Search creatives" placeholder="Search creatives" value={query} onChange={e => setQuery(e.target.value)} />
           <select aria-label="Filter by status" value={status} onChange={e => setStatus(e.target.value)}>
             {['All', 'Winner', 'Watch', 'Learning', 'Hook weak', 'Fix offer', 'Stop'].map(item => <option key={item}>{item}</option>)}
+          </select>
+          <select aria-label="Filter by creator" value={creatorFilter} onChange={e => setCreatorFilter(e.target.value)}>
+            <option>All</option>
+            <option>Unassigned</option>
+            {creators.map(creator => <option key={creator.id} value={creator.id}>{creator.name}</option>)}
           </select>
         </div>
         <div className="motion-toolbar-group">
@@ -183,6 +219,7 @@ export default function CreativePerformanceWorkspace({
 
       {syncMessage ? <div className="motion-notice">{syncMessage}</div> : null}
       {analysisQueueMessage ? <div className="motion-notice">{analysisQueueMessage}</div> : null}
+      {assignmentMessage ? <div className={assignmentError ? 'motion-error' : 'motion-notice'}>{assignmentMessage}</div> : null}
       {error ? <div className="motion-error">{error}</div> : null}
       {loading && !creativeTable ? <div className="motion-loading">Loading creative performance…</div> : null}
 
@@ -200,6 +237,18 @@ export default function CreativePerformanceWorkspace({
               <div className="motion-card-body">
                 <h3>{g.name || 'Untitled creative'}</h3>
                 <p>{g.adCount} ad{g.adCount === 1 ? '' : 's'} · {g.firstLaunchDate ? new Date(g.firstLaunchDate).toLocaleDateString() : 'No launch date'}</p>
+                <div className={`motion-creator-assignment ${g.creatorConflict ? 'conflict' : ''}`}>
+                  <span>{g.creatorConflict ? 'Creator conflict' : 'Creator'}</span>
+                  <select
+                    aria-label={`Assign creator to ${g.name || 'creative'}`}
+                    value={g.creatorId || ''}
+                    disabled={assigning === g.groupKey}
+                    onChange={event => assignCreator(g, event.target.value ? Number(event.target.value) : null)}
+                  >
+                    <option value="">Unassigned</option>
+                    {creators.map(creator => <option key={creator.id} value={creator.id}>{creator.name}</option>)}
+                  </select>
+                </div>
                 <dl>
                   {selectedMetrics.slice(0, 5).map(key => (
                     <div key={key}><dt>{METRICS[key].label}</dt><dd>{METRICS[key].format(g[key])}</dd></div>
@@ -248,7 +297,7 @@ export default function CreativePerformanceWorkspace({
         <div className="motion-table-wrap">
           <table className="motion-table">
             <thead><tr>
-              <th>Creative</th><th>Launch date</th><th>Status</th>
+              <th>Creative</th><th>Creator</th><th>Launch date</th><th>Status</th>
               {selectedMetrics.map(key => <th key={key}><button onClick={() => setSortKey(key)}>{METRICS[key].label}</button></th>)}
             </tr></thead>
             <tbody>
@@ -256,6 +305,18 @@ export default function CreativePerformanceWorkspace({
                 <td><button className="motion-name" onClick={() => onOpenAnalysis(g.groupKey, g.name)}>
                   {g.thumbnailUrl ? <img src={g.thumbnailUrl} alt="" /> : null}<span><strong>{g.name}</strong><small>{g.adCount} ads</small></span>
                 </button></td>
+                <td>
+                  <select
+                    className="motion-table-creator"
+                    aria-label={`Assign creator to ${g.name || 'creative'}`}
+                    value={g.creatorId || ''}
+                    disabled={assigning === g.groupKey}
+                    onChange={event => assignCreator(g, event.target.value ? Number(event.target.value) : null)}
+                  >
+                    <option value="">Unassigned</option>
+                    {creators.map(creator => <option key={creator.id} value={creator.id}>{creator.name}</option>)}
+                  </select>
+                </td>
                 <td>{g.firstLaunchDate ? new Date(g.firstLaunchDate).toLocaleDateString() : '—'}</td>
                 <td><span className={`motion-status status-${statusFor(g).toLowerCase().replace(' ', '-')}`}>{statusFor(g)}</span></td>
                 {selectedMetrics.map(key => {
