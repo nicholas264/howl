@@ -23,8 +23,11 @@ async function loadSetup(sql) {
             AND (
               email IS NULL OR niche IS NULL OR strengths IS NULL
               OR audience_demographics IS NULL OR rate_notes IS NULL
-            )
+          )
         )::int AS priority_profile_gaps,
+        count(*) FILTER (
+          WHERE source = 'clickup' AND email IS NULL
+        )::int AS clickup_missing_email,
         (
           SELECT count(*)::int FROM (
             SELECT lower(email)
@@ -114,6 +117,7 @@ async function loadSetup(sql) {
     review_status_count: reviewCount,
     duplicate_groups: Number(health.duplicate_groups || 0),
     priority_profile_gaps: Number(health.priority_profile_gaps || 0),
+    clickup_missing_email: Number(health.clickup_missing_email || 0),
     creative_unassigned_groups: unassignedGroups,
     steps: [
       verifiedMismatchCount > 0 && {
@@ -129,6 +133,13 @@ async function loadSetup(sql) {
         detail: 'These statuses need an explicit decision before HOWL should move the creators.',
         count: reviewCount,
         action: 'Review mappings',
+      },
+      Number(health.clickup_missing_email || 0) > 0 && {
+        key: 'clickup_email',
+        title: 'Repair creator emails from ClickUp',
+        detail: 'Read the visible ClickUp view and full task records to restore application emails automatically.',
+        count: Number(health.clickup_missing_email || 0),
+        action: 'Repair emails',
       },
       Number(health.duplicate_groups || 0) > 0 && {
         key: 'duplicates',
