@@ -135,7 +135,7 @@ const DASH_TABS = [
   { key: 'dashboard-forecast', view: 'forecast', label: 'Forecast' },
 ];
 
-export default function DashboardTool({ view = 'cfo', setActiveTab }) {
+export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCreators = false }) {
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
@@ -266,6 +266,34 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
         creatorName: d.creator?.name || null,
         creatorConflict: false,
       } : group),
+    } : prev);
+    return d;
+  }, []);
+
+  const assignCreativeCreators = useCallback(async (assignments) => {
+    const r = await fetch('/api/meta', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'assign_creative_creators', assignments }),
+    });
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || 'Could not assign creators');
+    const updates = new Map((d.assignments || []).map(item => [item.groupKey, item]));
+    setCreativeTable(prev => prev ? {
+      ...prev,
+      groups: prev.groups.map(group => {
+        const update = updates.get(group.groupKey);
+        return update ? {
+          ...group,
+          creatorId: Number(update.creatorId),
+          creatorName: update.creatorName,
+          creatorConflict: false,
+          suggestedCreatorId: null,
+          suggestedCreatorName: null,
+          suggestionConfidence: null,
+          suggestionReason: null,
+        } : group;
+      }),
     } : prev);
     return d;
   }, []);
@@ -843,6 +871,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab }) {
           onAnalyze={runAnalysis}
           onOpenAnalysis={openAnalysis}
           onAssignCreator={assignCreativeCreator}
+          onAssignCreators={assignCreativeCreators}
+          canManageCreators={canManageCreators}
           setActiveTab={setActiveTab}
         />
       )}

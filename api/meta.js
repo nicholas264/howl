@@ -140,6 +140,60 @@ import {
   retryCreativeAnalysisQueue,
 } from './_lib/meta/creative-analysis.js';
 
+function normalizedWords(value) {
+  return (value || '')
+    .toString()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function creatorMatchIndex(creators) {
+  const aliases = [];
+  const frequency = new Map();
+  creators.forEach(creator => {
+    const fullName = normalizedWords(creator.name);
+    const firstName = fullName.split(' ')[0];
+    const handles = Array.isArray(creator.handles) ? creator.handles : [];
+    const creatorAliases = [
+      fullName && { value: fullName, kind: fullName.includes(' ') ? 'full_name' : 'name' },
+      firstName?.length >= 4 && fullName.includes(' ') && { value: firstName, kind: 'first_name' },
+      ...handles.map(handle => ({ value: normalizedWords(handle?.replace(/^@/, '')), kind: 'handle' })),
+    ].filter(alias => alias?.value?.length >= 4);
+    creatorAliases.forEach(alias => frequency.set(alias.value, (frequency.get(alias.value) || 0) + 1));
+    aliases.push({ creator, aliases: creatorAliases });
+  });
+  return aliases.map(entry => ({
+    ...entry,
+    aliases: entry.aliases.filter(alias => frequency.get(alias.value) === 1),
+  }));
+}
+
+function suggestCreator(name, index) {
+  const haystack = ` ${normalizedWords(name)} `;
+  const matches = [];
+  index.forEach(({ creator, aliases }) => {
+    aliases.forEach(alias => {
+      if (!haystack.includes(` ${alias.value} `)) return;
+      const score = alias.kind === 'full_name' || alias.kind === 'name' ? 100 : alias.kind === 'handle' ? 90 : 75;
+      matches.push({ creator, alias, score });
+    });
+  });
+  matches.sort((a, b) => b.score - a.score || a.creator.name.localeCompare(b.creator.name));
+  if (!matches.length || (matches[1] && matches[1].score === matches[0].score && matches[1].creator.id !== matches[0].creator.id)) return null;
+  const best = matches[0];
+  return {
+    creatorId: Number(best.creator.id),
+    creatorName: best.creator.name,
+    confidence: best.score >= 90 ? 'high' : 'review',
+    reason: best.alias.kind === 'handle'
+      ? `Social handle appears in "${name}"`
+      : `${best.alias.kind === 'first_name' ? 'First name' : 'Creator name'} appears in "${name}"`,
+  };
+}
+
 export default async function handler(req, res) {
   const appAccess = await requireWorkspaceAccess(req, res);
   if (!appAccess) return;
@@ -174,7 +228,7 @@ export default async function handler(req, res) {
       && !hasPermission(appAccess, 'briefs.write')) {
     return res.status(403).json({ error: 'Forbidden - analytics access required' });
   }
-  if (action === 'assign_creative_creator' && !hasPermission(appAccess, 'creators.write')) {
+  if (['assign_creative_creator', 'assign_creative_creators'].includes(action) && !hasPermission(appAccess, 'creators.write')) {
     return res.status(403).json({ error: 'Forbidden - creators.write required' });
   }
 
@@ -1396,6 +1450,14 @@ export default async function handler(req, res) {
           LIMIT 500
         `;
 
+        const creatorRows = await sql`
+          SELECT c.id, c.name,
+            COALESCE(array_agg(s.handle) FILTER (WHERE s.handle IS NOT NULL), '{}') AS handles
+          FROM creators c
+          LEFT JOIN creator_social_accounts s ON s.creator_id = c.id
+          GROUP BY c.id, c.name
+        `;
+        const matchIndex = creatorMatchIndex(creatorRows);
         const groups = rows.map(r => {
           const spend = Number(r.spend) || 0;
           const purchaseValue = Number(r.purchase_value) || 0;
@@ -1404,6 +1466,7 @@ export default async function handler(req, res) {
           const impressions = Number(r.impressions) || 0;
           const v3s = Number(r.video_3s_views) || 0;
           const vThru = Number(r.video_thruplays) || 0;
+          const suggestion = !r.creator_id ? suggestCreator(r.name, matchIndex) : null;
           return {
             groupKey: r.group_key,
             name: r.name,
@@ -1424,6 +1487,10 @@ export default async function handler(req, res) {
             creatorId: r.creator_id ? Number(r.creator_id) : null,
             creatorName: r.creator_name || null,
             creatorConflict: Number(r.creator_count || 0) > 1,
+            suggestedCreatorId: suggestion?.creatorId || null,
+            suggestedCreatorName: suggestion?.creatorName || null,
+            suggestionConfidence: suggestion?.confidence || null,
+            suggestionReason: suggestion?.reason || null,
             isAnalyzed: !!r.is_analyzed,
             analysisQueueStatus: r.analysis_queue_status || null,
           };
@@ -1484,6 +1551,67 @@ export default async function handler(req, res) {
           assetsUpdated: assets.length,
           launchesUpdated: launches.length,
         });
+      }
+
+      case 'assign_creative_creators': {
+        const assignments = Array.isArray(req.body.assignments)
+          ? req.body.assignments.slice(0, 100).map(item => ({
+              groupKey: (item.groupKey || '').toString().trim(),
+              creatorId: Number(item.creatorId),
+            })).filter(item => item.groupKey && item.creatorId)
+          : [];
+        if (!assignments.length) return res.status(400).json({ error: 'assignments required' });
+        const sql = appAccess.sql;
+        await ensureCreatorOpsTables(sql);
+        const creatorIds = [...new Set(assignments.map(item => item.creatorId))];
+        const creatorRows = await sql`
+          SELECT id, name FROM creators WHERE id = ANY(${creatorIds}::bigint[])
+        `;
+        const creatorsById = new Map(creatorRows.map(creator => [Number(creator.id), creator]));
+        if (creatorsById.size !== creatorIds.length) return res.status(404).json({ error: 'One or more creators were not found' });
+
+        const completed = [];
+        for (const assignment of assignments) {
+          const creator = creatorsById.get(assignment.creatorId);
+          await sql`
+            INSERT INTO creative_creator_assignments (group_key, creator_id, assigned_by)
+            VALUES (${assignment.groupKey}, ${assignment.creatorId}, ${appAccess.userId})
+            ON CONFLICT (group_key) DO UPDATE SET
+              creator_id = EXCLUDED.creator_id,
+              assigned_by = EXCLUDED.assigned_by,
+              updated_at = now()
+          `;
+          await sql`
+            UPDATE creative_assets
+            SET creator_id = ${assignment.creatorId}, creator = ${creator.name}, updated_at = now()
+            WHERE group_key = ${assignment.groupKey}
+          `;
+          await sql`
+            UPDATE launch_history launch
+            SET creator_id = ${assignment.creatorId}, creator = ${creator.name}
+            WHERE launch.ad_id IN (
+              SELECT ad_id FROM creative_performance WHERE group_key = ${assignment.groupKey}
+            )
+          `;
+          completed.push({
+            groupKey: assignment.groupKey,
+            creatorId: assignment.creatorId,
+            creatorName: creator.name,
+          });
+        }
+        for (const creatorId of creatorIds) {
+          const count = completed.filter(item => item.creatorId === creatorId).length;
+          await sql`
+            INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+            VALUES (
+              ${creatorId}, 'creative_performance_linked',
+              ${`${count} creative analytics group${count === 1 ? '' : 's'} attributed`},
+              ${JSON.stringify({ group_keys: completed.filter(item => item.creatorId === creatorId).map(item => item.groupKey) })}::jsonb,
+              ${appAccess.userId}
+            )
+          `;
+        }
+        return res.json({ assignments: completed });
       }
 
       case 'get_creative_group_ads': {

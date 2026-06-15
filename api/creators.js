@@ -39,8 +39,32 @@ async function creatorDetail(sql, id) {
           LIMIT 30
         ) a
       ), '[]'::json) AS activity,
-      (SELECT count(*)::int FROM launch_history l WHERE l.creator_id = c.id OR lower(l.creator) = lower(c.name)) AS launch_count,
-      (SELECT max(l.launched_at) FROM launch_history l WHERE l.creator_id = c.id OR lower(l.creator) = lower(c.name)) AS last_launch_at,
+      (
+        SELECT count(DISTINCT cp.group_key)::int
+        FROM creative_performance cp
+        WHERE EXISTS (
+          SELECT 1 FROM creative_creator_assignments a
+          WHERE a.group_key = cp.group_key AND a.creator_id = c.id
+        ) OR EXISTS (
+          SELECT 1 FROM creative_assets ca
+          WHERE ca.group_key = cp.group_key AND ca.creator_id = c.id
+        ) OR EXISTS (
+          SELECT 1 FROM launch_history l
+          WHERE l.ad_id = cp.ad_id AND (l.creator_id = c.id OR lower(l.creator) = lower(c.name))
+        )
+      ) AS launch_count,
+      (
+        SELECT max(COALESCE(cp.created_time, l.launched_at))
+        FROM creative_performance cp
+        LEFT JOIN launch_history l ON l.ad_id = cp.ad_id
+        WHERE EXISTS (
+          SELECT 1 FROM creative_creator_assignments a
+          WHERE a.group_key = cp.group_key AND a.creator_id = c.id
+        ) OR EXISTS (
+          SELECT 1 FROM creative_assets ca
+          WHERE ca.group_key = cp.group_key AND ca.creator_id = c.id
+        ) OR (l.creator_id = c.id OR lower(l.creator) = lower(c.name))
+      ) AS last_launch_at,
       COALESCE((
         SELECT json_build_object(
           'spend', COALESCE(sum(i.spend), 0),
@@ -48,54 +72,90 @@ async function creatorDetail(sql, id) {
           'purchases', COALESCE(sum(i.purchases), 0),
           'impressions', COALESCE(sum(i.impressions), 0)
         )
-        FROM launch_history l
-        JOIN creative_insights_daily i ON i.ad_id = l.ad_id
-        WHERE (l.creator_id = c.id OR lower(l.creator) = lower(c.name))
-          AND i.date >= current_date - interval '90 days'
+        FROM creative_performance cp
+        JOIN creative_insights_daily i ON i.ad_id = cp.ad_id
+        WHERE i.date >= current_date - interval '90 days'
+          AND (
+            EXISTS (
+              SELECT 1 FROM creative_creator_assignments a
+              WHERE a.group_key = cp.group_key AND a.creator_id = c.id
+            ) OR EXISTS (
+              SELECT 1 FROM creative_assets ca
+              WHERE ca.group_key = cp.group_key AND ca.creator_id = c.id
+            ) OR EXISTS (
+              SELECT 1 FROM launch_history l
+              WHERE l.ad_id = cp.ad_id AND (l.creator_id = c.id OR lower(l.creator) = lower(c.name))
+            )
+          )
       ), '{}'::json) AS performance,
       COALESCE((
         SELECT json_agg(asset ORDER BY asset.revenue DESC, asset.launched_at DESC)
         FROM (
           SELECT
-            l.ad_id,
-            l.ad_name,
-            l.mime_type,
-            l.launched_at,
-            l.brief_id,
-            l.deliverable_id,
-            b.title AS brief_title,
-            d.title AS deliverable_title,
-            COALESCE(ca.durable_url, l.source_video_url, cp.asset_url) AS asset_url,
-            cp.thumbnail_url,
-            COALESCE(metrics.spend, 0) AS spend,
-            COALESCE(metrics.revenue, 0) AS revenue,
-            COALESCE(metrics.purchases, 0) AS purchases,
-            COALESCE(metrics.impressions, 0) AS impressions,
-            COALESCE(metrics.clicks, 0) AS clicks
-          FROM launch_history l
-          LEFT JOIN creator_briefs b ON b.id = l.brief_id
-          LEFT JOIN creator_deliverables d ON d.id = l.deliverable_id
-          LEFT JOIN creative_performance cp ON cp.ad_id = l.ad_id
+            grouped.ad_id,
+            grouped.ad_name,
+            launch.mime_type,
+            COALESCE(launch.launched_at, grouped.launched_at) AS launched_at,
+            launch.brief_id,
+            launch.deliverable_id,
+            launch.brief_title,
+            launch.deliverable_title,
+            COALESCE(ca.durable_url, launch.source_video_url, grouped.asset_url) AS asset_url,
+            grouped.thumbnail_url,
+            grouped.spend,
+            grouped.revenue,
+            grouped.purchases,
+            grouped.impressions,
+            grouped.clicks
+          FROM (
+            SELECT
+              cp.group_key,
+              min(cp.ad_id) AS ad_id,
+              min(cp.ad_name) AS ad_name,
+              min(cp.created_time) AS launched_at,
+              min(cp.asset_url) AS asset_url,
+              min(cp.thumbnail_url) AS thumbnail_url,
+              COALESCE(sum(i.spend), 0) AS spend,
+              COALESCE(sum(i.purchase_value), 0) AS revenue,
+              COALESCE(sum(i.purchases), 0) AS purchases,
+              COALESCE(sum(i.impressions), 0) AS impressions,
+              COALESCE(sum(i.clicks), 0) AS clicks
+            FROM creative_performance cp
+            LEFT JOIN creative_insights_daily i
+              ON i.ad_id = cp.ad_id AND i.date >= current_date - interval '90 days'
+            WHERE EXISTS (
+              SELECT 1 FROM creative_creator_assignments a
+              WHERE a.group_key = cp.group_key AND a.creator_id = c.id
+            ) OR EXISTS (
+              SELECT 1 FROM creative_assets linked_asset
+              WHERE linked_asset.group_key = cp.group_key AND linked_asset.creator_id = c.id
+            ) OR EXISTS (
+              SELECT 1 FROM launch_history linked_launch
+              WHERE linked_launch.ad_id = cp.ad_id
+                AND (linked_launch.creator_id = c.id OR lower(linked_launch.creator) = lower(c.name))
+            )
+            GROUP BY cp.group_key
+          ) grouped
+          LEFT JOIN LATERAL (
+            SELECT
+              l.mime_type, l.launched_at, l.brief_id, l.deliverable_id, l.source_video_url,
+              b.title AS brief_title, d.title AS deliverable_title
+            FROM launch_history l
+            JOIN creative_performance linked_cp ON linked_cp.ad_id = l.ad_id
+            LEFT JOIN creator_briefs b ON b.id = l.brief_id
+            LEFT JOIN creator_deliverables d ON d.id = l.deliverable_id
+            WHERE linked_cp.group_key = grouped.group_key
+            ORDER BY l.launched_at DESC
+            LIMIT 1
+          ) launch ON true
           LEFT JOIN LATERAL (
             SELECT durable_url
             FROM creative_assets
-            WHERE ad_id = l.ad_id
+            WHERE group_key = grouped.group_key
             ORDER BY updated_at DESC
             LIMIT 1
           ) ca ON true
-          LEFT JOIN LATERAL (
-            SELECT
-              sum(i.spend) AS spend,
-              sum(i.purchase_value) AS revenue,
-              sum(i.purchases) AS purchases,
-              sum(i.impressions) AS impressions,
-              sum(i.clicks) AS clicks
-            FROM creative_insights_daily i
-            WHERE i.ad_id = l.ad_id
-              AND i.date >= current_date - interval '90 days'
-          ) metrics ON true
-          WHERE l.creator_id = c.id OR lower(l.creator) = lower(c.name)
-          ORDER BY COALESCE(metrics.revenue, 0) DESC, l.launched_at DESC
+          ORDER BY grouped.revenue DESC, COALESCE(launch.launched_at, grouped.launched_at) DESC
           LIMIT 50
         ) asset
       ), '[]'::json) AS performance_assets
@@ -123,6 +183,29 @@ export default async function handler(req, res) {
       const search = text(req.query.search, 200);
       const stage = STAGES.has(req.query.stage) ? req.query.stage : null;
       const rows = await sql`
+        WITH attributed_groups AS (
+          SELECT a.creator_id, cp.group_key, max(cp.created_time) AS last_launch_at
+          FROM creative_creator_assignments a
+          JOIN creative_performance cp ON cp.group_key = a.group_key
+          GROUP BY a.creator_id, cp.group_key
+          UNION ALL
+          SELECT ca.creator_id, cp.group_key, max(cp.created_time) AS last_launch_at
+          FROM creative_assets ca
+          JOIN creative_performance cp ON cp.group_key = ca.group_key
+          WHERE ca.creator_id IS NOT NULL
+          GROUP BY ca.creator_id, cp.group_key
+          UNION ALL
+          SELECT c.id AS creator_id, cp.group_key, max(COALESCE(cp.created_time, l.launched_at)) AS last_launch_at
+          FROM creators c
+          JOIN launch_history l ON l.creator_id = c.id OR lower(l.creator) = lower(c.name)
+          JOIN creative_performance cp ON cp.ad_id = l.ad_id
+          GROUP BY c.id, cp.group_key
+        ),
+        creator_rollups AS (
+          SELECT creator_id, count(DISTINCT group_key)::int AS launch_count, max(last_launch_at) AS last_launch_at
+          FROM attributed_groups
+          GROUP BY creator_id
+        )
         SELECT c.*,
           COALESCE((
             SELECT json_agg(s ORDER BY s.platform)
@@ -138,9 +221,10 @@ export default async function handler(req, res) {
               AND o.outcome IS NULL
               AND o.status IN ('sent', 'follow_up')
           ) AS next_follow_up_at,
-          (SELECT count(*)::int FROM launch_history l WHERE l.creator_id = c.id OR lower(l.creator) = lower(c.name)) AS launch_count,
-          (SELECT max(l.launched_at) FROM launch_history l WHERE l.creator_id = c.id OR lower(l.creator) = lower(c.name)) AS last_launch_at
+          COALESCE(rollup.launch_count, 0)::int AS launch_count,
+          rollup.last_launch_at
         FROM creators c
+        LEFT JOIN creator_rollups rollup ON rollup.creator_id = c.id
         WHERE (${search}::text IS NULL OR c.name ILIKE ${search ? `%${search}%` : null} OR c.email ILIKE ${search ? `%${search}%` : null})
           AND (${stage}::text IS NULL OR c.stage = ${stage})
         ORDER BY

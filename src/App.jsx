@@ -293,8 +293,8 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "dashboard-cfo" && <DashboardTool setActiveTab={setActiveTab} view="cfo" />}
         {activeTab === "dashboard-meta" && <DashboardTool setActiveTab={setActiveTab} view="meta" />}
         {activeTab === "dashboard-shopify" && <DashboardTool setActiveTab={setActiveTab} view="shopify" />}
-        {activeTab === "dashboard-creative" && <DashboardTool setActiveTab={setActiveTab} view="creative" />}
-        {activeTab === "creative-analytics" && <DashboardTool setActiveTab={setActiveTab} view="creative" />}
+        {activeTab === "dashboard-creative" && <DashboardTool setActiveTab={setActiveTab} view="creative" canManageCreators={can('creators.write')} />}
+        {activeTab === "creative-analytics" && <DashboardTool setActiveTab={setActiveTab} view="creative" canManageCreators={can('creators.write')} />}
         {activeTab === "dashboard-forecast" && <DashboardTool setActiveTab={setActiveTab} view="forecast" />}
         {activeTab === "log" && <LaunchLogTool />}
         {activeTab === "ugc-editor" && (

@@ -43,6 +43,8 @@ export default function CreativePerformanceWorkspace({
   onAnalyze,
   onOpenAnalysis,
   onAssignCreator,
+  onAssignCreators,
+  canManageCreators,
   setActiveTab,
 }) {
   const [viewMode, setViewMode] = useState('cards');
@@ -56,6 +58,7 @@ export default function CreativePerformanceWorkspace({
   const [assigning, setAssigning] = useState('');
   const [assignmentMessage, setAssignmentMessage] = useState('');
   const [assignmentError, setAssignmentError] = useState(false);
+  const [batchAssigning, setBatchAssigning] = useState(false);
 
   useEffect(() => {
     fetch('/api/creators')
@@ -70,7 +73,9 @@ export default function CreativePerformanceWorkspace({
       .filter(g => !needle || (g.name || '').toLowerCase().includes(needle))
       .filter(g => status === 'All' || statusFor(g) === status)
       .filter(g => creatorFilter === 'All'
-        || (creatorFilter === 'Unassigned' ? !g.creatorId : String(g.creatorId) === creatorFilter))
+        || (creatorFilter === 'Unassigned' ? !g.creatorId
+          : creatorFilter === 'Suggested' ? !g.creatorId && !!g.suggestedCreatorId
+            : String(g.creatorId) === creatorFilter))
       .sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
   }, [creativeTable, creatorFilter, query, status, sortKey]);
 
@@ -121,10 +126,33 @@ export default function CreativePerformanceWorkspace({
       setAssigning('');
     }
   };
+  const applyHighConfidenceSuggestions = async () => {
+    const assignments = (creativeTable?.groups || [])
+      .filter(group => !group.creatorId && group.suggestedCreatorId && group.suggestionConfidence === 'high')
+      .slice(0, 100)
+      .map(group => ({ groupKey: group.groupKey, creatorId: group.suggestedCreatorId }));
+    if (!assignments.length) return;
+    setBatchAssigning(true);
+    setAssignmentMessage('');
+    setAssignmentError(false);
+    try {
+      const result = await onAssignCreators(assignments);
+      setAssignmentMessage(`Attributed ${result.assignments?.length || assignments.length} high-confidence creative groups.`);
+    } catch (err) {
+      setAssignmentMessage(err.message);
+      setAssignmentError(true);
+    } finally {
+      setBatchAssigning(false);
+    }
+  };
 
   const totalSpend = groups.reduce((sum, g) => sum + (g.spend || 0), 0);
   const totalRevenue = groups.reduce((sum, g) => sum + (g.purchaseValue || 0), 0);
   const winners = groups.filter(g => statusFor(g) === 'Winner').length;
+  const allGroups = creativeTable?.groups || [];
+  const assignedCount = allGroups.filter(group => group.creatorId).length;
+  const suggestedCount = allGroups.filter(group => !group.creatorId && group.suggestedCreatorId).length;
+  const highConfidenceCount = allGroups.filter(group => !group.creatorId && group.suggestionConfidence === 'high').length;
 
   return (
     <section className="motion-workspace">
@@ -153,6 +181,7 @@ export default function CreativePerformanceWorkspace({
           <select aria-label="Filter by creator" value={creatorFilter} onChange={e => setCreatorFilter(e.target.value)}>
             <option>All</option>
             <option>Unassigned</option>
+            <option>Suggested</option>
             {creators.map(creator => <option key={creator.id} value={creator.id}>{creator.name}</option>)}
           </select>
         </div>
@@ -160,6 +189,24 @@ export default function CreativePerformanceWorkspace({
           <button onClick={onSync} disabled={syncing}>{syncing ? 'Syncing…' : 'Sync Meta'}</button>
           <button className="motion-primary" onClick={sendToConcepts}>
             Generate from {selected.size || 'winners'}
+          </button>
+        </div>
+      </div>
+
+      <div className="motion-attribution">
+        <div className="motion-attribution-copy">
+          <span>Creator attribution</span>
+          <strong>{assignedCount} assigned · {allGroups.length - assignedCount} need review</strong>
+          <p>HOWL matches unique creator names and social handles found in Meta creative names. Review uncertain matches individually; only high-confidence matches can be applied in bulk.</p>
+        </div>
+        <div className="motion-attribution-stats">
+          <div><span>Suggested</span><strong>{suggestedCount}</strong></div>
+          <div><span>High confidence</span><strong>{highConfidenceCount}</strong></div>
+        </div>
+        <div className="motion-attribution-actions">
+          <button onClick={() => { setCreatorFilter('Suggested'); setViewMode('table'); }}>Review matches</button>
+          <button className="motion-primary" onClick={applyHighConfidenceSuggestions} disabled={!canManageCreators || batchAssigning || !highConfidenceCount}>
+            {batchAssigning ? 'Applying…' : `Apply high confidence (${Math.min(100, highConfidenceCount)})`}
           </button>
         </div>
       </div>
@@ -242,13 +289,19 @@ export default function CreativePerformanceWorkspace({
                   <select
                     aria-label={`Assign creator to ${g.name || 'creative'}`}
                     value={g.creatorId || ''}
-                    disabled={assigning === g.groupKey}
+                    disabled={!canManageCreators || assigning === g.groupKey}
                     onChange={event => assignCreator(g, event.target.value ? Number(event.target.value) : null)}
                   >
                     <option value="">Unassigned</option>
                     {creators.map(creator => <option key={creator.id} value={creator.id}>{creator.name}</option>)}
                   </select>
                 </div>
+                {canManageCreators && !g.creatorId && g.suggestedCreatorId ? (
+                  <button className="motion-creator-suggestion" title={g.suggestionReason} onClick={() => assignCreator(g, g.suggestedCreatorId)}>
+                    <span>{g.suggestionConfidence === 'high' ? 'High confidence' : 'Review match'}</span>
+                    Use {g.suggestedCreatorName}
+                  </button>
+                ) : null}
                 <dl>
                   {selectedMetrics.slice(0, 5).map(key => (
                     <div key={key}><dt>{METRICS[key].label}</dt><dd>{METRICS[key].format(g[key])}</dd></div>
@@ -310,12 +363,17 @@ export default function CreativePerformanceWorkspace({
                     className="motion-table-creator"
                     aria-label={`Assign creator to ${g.name || 'creative'}`}
                     value={g.creatorId || ''}
-                    disabled={assigning === g.groupKey}
+                    disabled={!canManageCreators || assigning === g.groupKey}
                     onChange={event => assignCreator(g, event.target.value ? Number(event.target.value) : null)}
                   >
                     <option value="">Unassigned</option>
                     {creators.map(creator => <option key={creator.id} value={creator.id}>{creator.name}</option>)}
                   </select>
+                  {canManageCreators && !g.creatorId && g.suggestedCreatorId ? (
+                    <button className="motion-table-suggestion" title={g.suggestionReason} onClick={() => assignCreator(g, g.suggestedCreatorId)}>
+                      Use {g.suggestedCreatorName}
+                    </button>
+                  ) : null}
                 </td>
                 <td>{g.firstLaunchDate ? new Date(g.firstLaunchDate).toLocaleDateString() : '—'}</td>
                 <td><span className={`motion-status status-${statusFor(g).toLowerCase().replace(' ', '-')}`}>{statusFor(g)}</span></td>
