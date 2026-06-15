@@ -310,6 +310,7 @@ async function createCreatorOpsTables(sql) {
       objective           TEXT,
       asset_count         INTEGER NOT NULL,
       proven_percent      INTEGER NOT NULL,
+      total_budget        NUMERIC(14,2),
       evidence_window_days INTEGER NOT NULL DEFAULT 90,
       status              TEXT NOT NULL DEFAULT 'draft',
       strategy_summary    TEXT,
@@ -320,7 +321,23 @@ async function createCreatorOpsTables(sql) {
       updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+  await sql`ALTER TABLE creator_campaign_plans ADD COLUMN IF NOT EXISTS total_budget NUMERIC(14,2)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_campaign_plans_created ON creator_campaign_plans(created_at DESC)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS brand_guidelines (
+      id                    BIGSERIAL PRIMARY KEY,
+      brand_name            TEXT NOT NULL DEFAULT 'HOWL Campfires',
+      voice_guidance        TEXT,
+      approved_claims       TEXT[] NOT NULL DEFAULT '{}',
+      prohibited_phrases    TEXT[] NOT NULL DEFAULT '{}',
+      prohibited_claims     TEXT[] NOT NULL DEFAULT '{}',
+      required_disclosures  TEXT[] NOT NULL DEFAULT '{}',
+      updated_by            TEXT,
+      created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
 
   await sql`
     CREATE TABLE IF NOT EXISTS creator_product_seeds (

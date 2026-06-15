@@ -1,4 +1,5 @@
 import { requirePermission } from './_lib/app-access.js';
+import { validateBrandCopy } from './_lib/brand-guardrails.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 
 const FORMATS = new Set([
@@ -13,6 +14,11 @@ function clean(value, max = 5000) {
 
 function integer(value, fallback, min, max) {
   const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? Math.max(min, Math.min(max, parsed)) : fallback;
+}
+
+function decimal(value, fallback, min, max) {
+  const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(min, Math.min(max, parsed)) : fallback;
 }
 
@@ -176,7 +182,51 @@ function sanitizeAssignments(assignments, creators, count) {
   });
 }
 
-function validateAssignments(assignments, { assetCount, provenSlots, netNewSlots }) {
+function allocateBudget(assignments, totalBudget, provenPercent) {
+  if (!totalBudget) return assignments.map(item => ({ ...item, allocated_budget: null }));
+  const cohorts = {
+    proven: assignments.filter(item => item.cohort === 'proven'),
+    net_new: assignments.filter(item => item.cohort === 'net_new'),
+  };
+  const bothAvailable = cohorts.proven.length && cohorts.net_new.length;
+  const cohortBudgets = {
+    proven: cohorts.proven.length
+      ? (bothAvailable ? totalBudget * (provenPercent / 100) : totalBudget)
+      : 0,
+    net_new: cohorts.net_new.length
+      ? (bothAvailable ? totalBudget * ((100 - provenPercent) / 100) : totalBudget)
+      : 0,
+  };
+  const allocation = new Map();
+  for (const cohort of ['proven', 'net_new']) {
+    let distributed = 0;
+    cohorts[cohort].forEach((item, index) => {
+      const amount = index === cohorts[cohort].length - 1
+        ? Math.round((cohortBudgets[cohort] - distributed) * 100) / 100
+        : Math.round((cohortBudgets[cohort] / cohorts[cohort].length) * 100) / 100;
+      distributed += amount;
+      allocation.set(item, amount);
+    });
+  }
+  return assignments.map(item => ({ ...item, allocated_budget: allocation.get(item) || 0 }));
+}
+
+function guidelineViolations(assignments, guidelines) {
+  const violations = [];
+  for (const assignment of assignments) {
+    const content = [
+      assignment.concept_name, assignment.angle, assignment.hypothesis,
+      assignment.opening_visual, assignment.full_script,
+      ...(assignment.hooks || []), ...(assignment.ctas || []),
+    ].filter(Boolean).join('\n');
+    for (const violation of validateBrandCopy(content, guidelines)) {
+      violations.push(`${assignment.creator_name}: ${violation}`);
+    }
+  }
+  return [...new Set(violations)];
+}
+
+function validateAssignments(assignments, { assetCount, provenSlots, netNewSlots, totalBudget, guidelines }) {
   const proven = assignments.filter(item => item.cohort === 'proven').length;
   const netNew = assignments.filter(item => item.cohort === 'net_new').length;
   if (assignments.length !== assetCount) {
@@ -199,17 +249,37 @@ function validateAssignments(assignments, { assetCount, provenSlots, netNewSlots
   if (distinctFormats < Math.min(3, assetCount)) {
     throw new Error('Planner did not create enough format diversity');
   }
+  const violations = guidelineViolations(assignments, guidelines);
+  if (violations.length) {
+    throw new Error(`Brand guardrails blocked generated language: ${violations.slice(0, 5).join(', ')}`);
+  }
+  if (totalBudget) {
+    const allocated = assignments.reduce((sum, item) => sum + Number(item.allocated_budget || 0), 0);
+    if (Math.abs(allocated - totalBudget) > 0.02) throw new Error('Planner budget allocation did not reconcile');
+  }
 }
 
 async function generatePlan(sql, access, input) {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
   const assetCount = integer(input.asset_count, 6, 2, 16);
   const provenPercent = integer(input.proven_percent, 60, 0, 100);
+  const totalBudget = decimal(input.total_budget, 0, 0, 100000000);
   const windowDays = integer(input.window_days, 90, 30, 365);
   const product = input.product_context || {};
   const productTitle = clean(product.title, 300);
   if (!productTitle) throw new Error('Choose a product first');
-  const evidence = await loadEvidence(sql, windowDays, productTitle);
+  const [evidence, guidelinesRows] = await Promise.all([
+    loadEvidence(sql, windowDays, productTitle),
+    sql`SELECT * FROM brand_guidelines ORDER BY updated_at DESC LIMIT 1`,
+  ]);
+  const guidelines = guidelinesRows[0] || {
+    brand_name: 'HOWL Campfires',
+    voice_guidance: 'Direct, practical, specific, outdoor-literate, and confident.',
+    approved_claims: [],
+    prohibited_phrases: ['game changer', 'you need this', 'must-have', 'obsessed'],
+    prohibited_claims: [],
+    required_disclosures: [],
+  };
   if (!evidence.creators.length) throw new Error('No qualified creators are available for planning');
 
   const provenCreators = evidence.creators.filter(creator => creator.proven);
@@ -242,6 +312,7 @@ Creative quality rules:
 - Hooks, body, and CTA must work as one argument. Do not write interchangeable hook lists.
 - Explain every creator and concept choice with concrete supplied metrics. State limitations when evidence is thin.
 - Preserve proven mechanisms while allocating net-new slots to genuinely informative tests.
+- Treat the supplied brand guidelines as hard constraints. Never use prohibited language or unsupported claims.
 - Return only valid JSON.`;
 
   const prompt = `Build a ${assetCount}-asset creator campaign plan.
@@ -252,9 +323,13 @@ ${JSON.stringify(product, null, 2)}
 OBJECTIVE
 ${clean(input.objective, 2000) || 'Acquire new customers efficiently with credible product proof.'}
 
+BRAND GUIDELINES
+${JSON.stringify(guidelines, null, 2)}
+
 PORTFOLIO ALLOCATION
 Requested: ${provenPercent}% proven creators / ${100 - provenPercent}% net new creators.
 Available allocation: ${provenSlots} proven slots / ${netNewSlots} net-new slots.
+Paid media budget: ${totalBudget ? `$${totalBudget.toFixed(2)}` : 'Not supplied; allocate assets only.'}
 
 CREATOR CANDIDATES
 ${JSON.stringify(creatorCandidates, null, 2)}
@@ -306,20 +381,25 @@ Use each creator at most twice. Return exactly ${assetCount} assignments and hon
   if (!response.ok) throw new Error(data.error?.message || 'Campaign planning failed');
   const raw = data.content?.filter(block => block.type === 'text').map(block => block.text).join('') || '';
   const generated = parseJsonObject(raw);
-  const assignments = sanitizeAssignments(generated.assignments, evidence.creators, assetCount);
-  validateAssignments(assignments, { assetCount, provenSlots, netNewSlots });
+  const assignments = allocateBudget(
+    sanitizeAssignments(generated.assignments, evidence.creators, assetCount),
+    totalBudget,
+    provenPercent,
+  );
+  validateAssignments(assignments, { assetCount, provenSlots, netNewSlots, totalBudget, guidelines });
 
   const [plan] = await sql`
     INSERT INTO creator_campaign_plans (
-      product_id, product_title, objective, asset_count, proven_percent,
+      product_id, product_title, objective, asset_count, proven_percent, total_budget,
       evidence_window_days, strategy_summary, evidence, assignments, created_by
     ) VALUES (
       ${clean(product.id, 500)}, ${productTitle}, ${clean(input.objective, 2000)},
-      ${assetCount}, ${provenPercent}, ${windowDays},
+      ${assetCount}, ${provenPercent}, ${totalBudget || null}, ${windowDays},
       ${clean(generated.strategy_summary, 3000)},
       ${JSON.stringify({
         allocation_logic: clean(generated.allocation_logic, 3000),
         patterns: evidence.patterns.slice(0, 20),
+        brand_guidelines_version: guidelines.updated_at || null,
       })}::jsonb,
       ${JSON.stringify(assignments)}::jsonb, ${access.userId}
     )
@@ -335,6 +415,7 @@ async function saveBriefs(sql, access, planId) {
     return sql`SELECT * FROM creator_briefs WHERE generation_source = ${`campaign_plan:${planId}`} ORDER BY id`;
   }
   const briefs = [];
+  const updatedAssignments = [];
   for (const assignment of plan.assignments || []) {
     const briefText = [
       `FORMAT\n${assignment.format?.replaceAll('_', ' ')}`,
@@ -361,6 +442,7 @@ async function saveBriefs(sql, access, planId) {
       RETURNING *
     `;
     briefs.push(brief);
+    updatedAssignments.push({ ...assignment, brief_id: Number(brief.id) });
     await sql`
       INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
       VALUES (
@@ -371,7 +453,11 @@ async function saveBriefs(sql, access, planId) {
       )
     `;
   }
-  await sql`UPDATE creator_campaign_plans SET status = 'briefed', updated_at = now() WHERE id = ${planId}`;
+  await sql`
+    UPDATE creator_campaign_plans
+    SET status = 'briefed', assignments = ${JSON.stringify(updatedAssignments)}::jsonb, updated_at = now()
+    WHERE id = ${planId}
+  `;
   return briefs;
 }
 
@@ -382,13 +468,46 @@ export default async function handler(req, res) {
   try {
     await ensureCreatorOpsTables(sql);
     if (req.method === 'GET') {
-      const [plans, creators, coverage, unlinkedLabels] = await Promise.all([
+      const [plans, assignmentOutcomes, creators, coverage, unlinkedLabels] = await Promise.all([
         sql`
-          SELECT id, product_title, objective, asset_count, proven_percent, status,
-            strategy_summary, assignments, created_at
-          FROM creator_campaign_plans
-          ORDER BY created_at DESC
+          SELECT p.id, p.product_title, p.objective, p.asset_count, p.proven_percent,
+            p.total_budget::float, p.status, p.strategy_summary, p.evidence_window_days,
+            p.assignments, p.created_at,
+            COALESCE(outcomes.spend, 0)::float AS outcome_spend,
+            COALESCE(outcomes.revenue, 0)::float AS outcome_revenue,
+            COALESCE(outcomes.purchases, 0)::int AS outcome_purchases,
+            COALESCE(outcomes.attributed_assignments, 0)::int AS attributed_assignments
+          FROM creator_campaign_plans p
+          LEFT JOIN LATERAL (
+            SELECT
+              sum(i.spend) AS spend,
+              sum(i.purchase_value) AS revenue,
+              sum(i.purchases) AS purchases,
+              count(DISTINCT l.brief_id) AS attributed_assignments
+            FROM launch_history l
+            JOIN creative_insights_daily i ON i.ad_id = l.ad_id
+            WHERE l.brief_id IN (
+              SELECT (assignment->>'brief_id')::bigint
+              FROM jsonb_array_elements(p.assignments) assignment
+              WHERE assignment->>'brief_id' IS NOT NULL
+            )
+          ) outcomes ON true
+          ORDER BY p.created_at DESC
           LIMIT 20
+        `,
+        sql`
+          SELECT
+            split_part(b.generation_source, ':', 2)::bigint AS plan_id,
+            b.id AS brief_id,
+            COALESCE(sum(i.spend), 0)::float AS spend,
+            COALESCE(sum(i.purchase_value), 0)::float AS revenue,
+            COALESCE(sum(i.purchases), 0)::int AS purchases,
+            count(DISTINCT l.ad_id)::int AS ads
+          FROM creator_briefs b
+          JOIN launch_history l ON l.brief_id = b.id
+          JOIN creative_insights_daily i ON i.ad_id = l.ad_id
+          WHERE b.generation_source LIKE 'campaign_plan:%'
+          GROUP BY b.generation_source, b.id
         `,
         sql`
           SELECT id, name, stage
@@ -412,8 +531,16 @@ export default async function handler(req, res) {
           ORDER BY launches DESC, creator
         `,
       ]);
+      const outcomesByBrief = new Map(assignmentOutcomes.map(item => [Number(item.brief_id), item]));
+      const plansWithOutcomes = plans.map(plan => ({
+        ...plan,
+        assignments: (plan.assignments || []).map(assignment => ({
+          ...assignment,
+          outcome: outcomesByBrief.get(Number(assignment.brief_id)) || null,
+        })),
+      }));
       return res.json({
-        plans,
+        plans: plansWithOutcomes,
         creators,
         attribution: {
           ...(coverage[0] || {}),

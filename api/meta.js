@@ -128,6 +128,8 @@ export const config = {
 };
 
 import { hasPermission, requireWorkspaceAccess } from './_lib/app-access.js';
+import { assertBrandSafe } from './_lib/brand-guardrails.js';
+import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import {
   analyzeCreativeGroup,
   dismissAnalyzedWinner,
@@ -174,6 +176,14 @@ export default async function handler(req, res) {
   }
 
   try {
+    if (launchActions.has(action)) {
+      await ensureCreatorOpsTables(appAccess.sql);
+      const launchCopy = [
+        req.body?.adName, req.body?.headline, req.body?.primaryText,
+        ...(req.body?.items || []).flatMap(item => [item.name, item.hook, item.body]),
+      ].filter(Boolean).join('\n');
+      if (launchCopy) await assertBrandSafe(appAccess.sql, launchCopy);
+    }
     switch (action) {
 
       case 'get_tool_roi': {

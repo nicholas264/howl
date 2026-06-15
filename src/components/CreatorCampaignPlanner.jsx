@@ -19,11 +19,16 @@ function money(value) {
   return `$${Math.round(Number(value) || 0).toLocaleString()}`;
 }
 
+function lines(value) {
+  return Array.isArray(value) ? value.join('\n') : '';
+}
+
 export default function CreatorCampaignPlanner({ onOpenCreator }) {
   const [products, setProducts] = useState([]);
   const [connected, setConnected] = useState(false);
   const [productId, setProductId] = useState('');
   const [assetCount, setAssetCount] = useState(6);
+  const [totalBudget, setTotalBudget] = useState(10000);
   const [provenPercent, setProvenPercent] = useState(60);
   const [windowDays, setWindowDays] = useState(90);
   const [objective, setObjective] = useState('Acquire new customers efficiently with product proof that feels native to each creator.');
@@ -32,11 +37,22 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
   const [attribution, setAttribution] = useState({ total_launches: 0, attributed_launches: 0, attributed_creators: 0, unlinked_labels: [] });
   const [creatorOptions, setCreatorOptions] = useState([]);
   const [showAttribution, setShowAttribution] = useState(false);
+  const [showGuidelines, setShowGuidelines] = useState(false);
+  const [guidelines, setGuidelines] = useState({
+    brand_name: 'HOWL Campfires',
+    voice_guidance: '',
+    approved_claims: [],
+    prohibited_phrases: [],
+    prohibited_claims: [],
+    required_disclosures: [],
+  });
+  const [guidelineDraft, setGuidelineDraft] = useState(null);
   const [linkSelections, setLinkSelections] = useState({});
   const [linking, setLinking] = useState('');
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingGuidelines, setSavingGuidelines] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [expanded, setExpanded] = useState(null);
@@ -45,7 +61,8 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
     Promise.allSettled([
       fetch('/api/shopify-products').then(response => response.json()),
       fetch('/api/creator-campaign-planner').then(response => response.ok ? response.json() : Promise.reject()),
-    ]).then(([productResult, planResult]) => {
+      fetch('/api/brand-guidelines').then(response => response.ok ? response.json() : Promise.reject()),
+    ]).then(([productResult, planResult, guidelineResult]) => {
       if (productResult.status === 'fulfilled') {
         setProducts(productResult.value.products || []);
         setConnected(Boolean(productResult.value.connected));
@@ -54,6 +71,10 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
         setRecentPlans(planResult.value.plans || []);
         setAttribution(planResult.value.attribution || {});
         setCreatorOptions(planResult.value.creators || []);
+      }
+      if (guidelineResult.status === 'fulfilled') {
+        setGuidelines(guidelineResult.value.guidelines || {});
+        setGuidelineDraft(guidelineResult.value.guidelines || {});
       }
       setLoading(false);
     });
@@ -97,6 +118,7 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
             })),
           },
           asset_count: assetCount,
+          total_budget: totalBudget,
           proven_percent: provenPercent,
           window_days: windowDays,
           objective,
@@ -135,10 +157,41 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
     }
   };
 
+  const saveGuidelines = async () => {
+    if (!guidelineDraft) return;
+    setSavingGuidelines(true);
+    setError('');
+    try {
+      const payload = {
+        ...guidelineDraft,
+        approved_claims: lines(guidelineDraft.approved_claims),
+        prohibited_phrases: lines(guidelineDraft.prohibited_phrases),
+        prohibited_claims: lines(guidelineDraft.prohibited_claims),
+        required_disclosures: lines(guidelineDraft.required_disclosures),
+      };
+      const response = await fetch('/api/brand-guidelines', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not save brand guidelines');
+      setGuidelines(data.guidelines);
+      setGuidelineDraft(data.guidelines);
+      setShowGuidelines(false);
+      setNotice('Brand guardrails saved. New plans will be validated against them.');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingGuidelines(false);
+    }
+  };
+
   const openRecent = item => {
     setPlan(item);
     setProductId(productKey(products.find(product => product.title === item.product_title)));
     setAssetCount(Number(item.asset_count) || 6);
+    setTotalBudget(Number(item.total_budget) || 0);
     setProvenPercent(Number(item.proven_percent) || 60);
     setObjective(item.objective || '');
     setExpanded(0);
@@ -181,6 +234,13 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
   const attributionRate = Number(attribution.total_launches || 0)
     ? Math.round((Number(attribution.attributed_launches || 0) / Number(attribution.total_launches)) * 100)
     : 100;
+  const blockedRuleCount = (guidelines.prohibited_phrases?.length || 0) + (guidelines.prohibited_claims?.length || 0);
+  const outcomeRoas = Number(plan?.outcome_spend) > 0
+    ? Number(plan.outcome_revenue || 0) / Number(plan.outcome_spend)
+    : null;
+  const outcomeCpa = Number(plan?.outcome_purchases) > 0
+    ? Number(plan.outcome_spend || 0) / Number(plan.outcome_purchases)
+    : null;
 
   return (
     <section className="campaign-planner">
@@ -195,6 +255,29 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
           <strong>Evidence first. Taste second. AI last.</strong>
         </div>
       </header>
+
+      <section className="campaign-guardrail">
+        <div>
+          <span>Brand guardrail</span>
+          <strong>{blockedRuleCount} blocked phrases or claims enforced</strong>
+          <p>{guidelines.voice_guidance || 'Add voice, claims, and prohibited language before generating.'}</p>
+        </div>
+        <button onClick={() => setShowGuidelines(current => !current)}>
+          {showGuidelines ? 'Close guidelines' : 'Edit guidelines'}
+        </button>
+        {showGuidelines && guidelineDraft ? (
+          <div className="campaign-guideline-editor">
+            <label>Voice and tone<textarea rows="4" value={guidelineDraft.voice_guidance || ''} onChange={event => setGuidelineDraft(current => ({ ...current, voice_guidance: event.target.value }))} /></label>
+            <label>Approved claims<textarea rows="5" value={lines(guidelineDraft.approved_claims)} onChange={event => setGuidelineDraft(current => ({ ...current, approved_claims: event.target.value.split('\n') }))} placeholder="One approved claim per line" /></label>
+            <label>Blocked language<textarea rows="5" value={lines(guidelineDraft.prohibited_phrases)} onChange={event => setGuidelineDraft(current => ({ ...current, prohibited_phrases: event.target.value.split('\n') }))} placeholder="Words or phrases that must never appear" /></label>
+            <label>Blocked claims<textarea rows="5" value={lines(guidelineDraft.prohibited_claims)} onChange={event => setGuidelineDraft(current => ({ ...current, prohibited_claims: event.target.value.split('\n') }))} placeholder="Claims that must never appear" /></label>
+            <label className="campaign-guideline-wide">Required disclosures<textarea rows="3" value={lines(guidelineDraft.required_disclosures)} onChange={event => setGuidelineDraft(current => ({ ...current, required_disclosures: event.target.value.split('\n') }))} placeholder="One disclosure per line" /></label>
+            <button className="campaign-generate campaign-guideline-save" onClick={saveGuidelines} disabled={savingGuidelines}>
+              {savingGuidelines ? 'Saving guardrails…' : 'Save brand guardrails'}
+            </button>
+          </div>
+        ) : null}
+      </section>
 
       {attributionRate < 100 ? (
         <section className="campaign-attribution">
@@ -227,7 +310,7 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
 
       <div className="campaign-builder">
         <section className="campaign-inputs">
-          <header><span>Campaign setup</span><small>Four inputs</small></header>
+          <header><span>Campaign setup</span><small>Five inputs</small></header>
           <label>
             Product
             <select value={productId} onChange={event => setProductId(event.target.value)}>
@@ -258,6 +341,10 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
               </select>
             </label>
           </div>
+          <label>
+            Paid media budget
+            <input type="number" min="0" step="500" value={totalBudget} onChange={event => setTotalBudget(Math.max(0, Number(event.target.value) || 0))} />
+          </label>
           <label className="campaign-allocation">
             <span><b>Proven creators</b><strong>{provenPercent}%</strong></span>
             <input type="range" min="0" max="100" step="10" value={provenPercent} onChange={event => setProvenPercent(Number(event.target.value))} />
@@ -303,8 +390,19 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
                   <div><strong>{assignments.length}</strong><span>assets</span></div>
                   <div><strong>{allocation.proven || 0}</strong><span>proven</span></div>
                   <div><strong>{allocation.net_new || 0}</strong><span>net new</span></div>
+                  {plan.total_budget ? <div><strong>{money(plan.total_budget)}</strong><span>budget</span></div> : null}
                 </div>
               </header>
+
+              {Number(plan.outcome_spend || 0) > 0 ? (
+                <section className="campaign-outcomes">
+                  <div><span>Spend</span><strong>{money(plan.outcome_spend)}</strong></div>
+                  <div><span>Revenue</span><strong>{money(plan.outcome_revenue)}</strong></div>
+                  <div><span>ROAS</span><strong>{outcomeRoas?.toFixed(2)}x</strong></div>
+                  <div><span>CPA</span><strong>{outcomeCpa ? money(outcomeCpa) : '—'}</strong></div>
+                  <p>{plan.attributed_assignments} of {assignments.length} assignments have launched performance attached.</p>
+                </section>
+              ) : null}
 
               <div className="campaign-assignment-list">
                 {assignments.map((assignment, index) => (
@@ -318,6 +416,12 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
                       <span className="campaign-concept">
                         <i>{FORMAT_LABELS[assignment.format] || assignment.format}</i>
                         <strong>{assignment.concept_name}</strong>
+                        {assignment.allocated_budget ? <small>{money(assignment.allocated_budget)} recommended spend</small> : null}
+                        {Number(assignment.outcome?.spend || 0) > 0 ? (
+                          <small>
+                            {money(assignment.outcome.spend)} spent · {(Number(assignment.outcome.revenue || 0) / Number(assignment.outcome.spend)).toFixed(2)}x ROAS
+                          </small>
+                        ) : null}
                       </span>
                       <span className="campaign-expand">{expanded === index ? '−' : '+'}</span>
                     </button>
@@ -371,7 +475,7 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
               <button key={item.id} onClick={() => openRecent(item)}>
                 <span><strong>{item.product_title}</strong><small>{new Date(item.created_at).toLocaleDateString()}</small></span>
                 <span>{item.asset_count} assets</span>
-                <i>{item.status}</i>
+                <i>{Number(item.outcome_spend || 0) > 0 ? `${(Number(item.outcome_revenue || 0) / Number(item.outcome_spend)).toFixed(2)}x` : item.status}</i>
               </button>
             ))}
           </div>
