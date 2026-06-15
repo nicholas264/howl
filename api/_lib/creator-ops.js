@@ -303,6 +303,26 @@ async function createCreatorOpsTables(sql) {
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_briefs_creator ON creator_briefs(creator_id, created_at DESC)`;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS creator_campaign_plans (
+      id                  BIGSERIAL PRIMARY KEY,
+      product_id          TEXT,
+      product_title       TEXT NOT NULL,
+      objective           TEXT,
+      asset_count         INTEGER NOT NULL,
+      proven_percent      INTEGER NOT NULL,
+      evidence_window_days INTEGER NOT NULL DEFAULT 90,
+      status              TEXT NOT NULL DEFAULT 'draft',
+      strategy_summary    TEXT,
+      evidence            JSONB NOT NULL DEFAULT '[]'::jsonb,
+      assignments         JSONB NOT NULL DEFAULT '[]'::jsonb,
+      created_by          TEXT,
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_campaign_plans_created ON creator_campaign_plans(created_at DESC)`;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS creator_product_seeds (
       id                    BIGSERIAL PRIMARY KEY,
       creator_id            BIGINT NOT NULL REFERENCES creators(id) ON DELETE CASCADE,

@@ -19,6 +19,7 @@ const FromWinnersTool = lazy(() => import("./components/FromWinnersTool"));
 const LauncherTool = lazy(() => import("./components/LauncherTool"));
 const CreatorWorkspace = lazy(() => import("./components/CreatorWorkspace"));
 const CreativePlanningWorkspace = lazy(() => import("./components/CreativePlanningWorkspace"));
+const CreatorCampaignPlanner = lazy(() => import("./components/CreatorCampaignPlanner"));
 const AdminWorkspace = lazy(() => import("./components/AdminWorkspace"));
 const WorkspaceHub = lazy(() => import("./components/WorkspaceHub"));
 import { useDriveAuth } from "./hooks/useDriveAuth";
@@ -164,7 +165,8 @@ export default function HowlAdEngine({ appAccess }) {
       items: [
         { key: 'welcome', label: 'Home' },
         { key: 'creators', label: 'Creators', permission: 'creators.read' },
-        { key: 'creative-plan', label: 'Creative Plan', permission: 'creators.read' },
+        { key: 'campaign-planner', label: 'Campaign Planner', permission: 'briefs.write' },
+        { key: 'creative-plan', label: 'Creative Forecast', permission: 'creators.read' },
       ],
     },
     {
@@ -277,6 +279,7 @@ export default function HowlAdEngine({ appAccess }) {
           />
         )}
         {activeTab === "creative-plan" && <CreativePlanningWorkspace onOpenCreator={openPlannedCreator} />}
+        {activeTab === "campaign-planner" && <CreatorCampaignPlanner onOpenCreator={openPlannedCreator} />}
         {activeTab === "creative" && <WorkspaceHub type="creative" setActiveTab={setActiveTab} can={can} />}
         {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={setActiveTab} can={can} />}
         {activeTab === "admin" && can('admin.users') && <AdminWorkspace onOpenEditor={openEditorSession} />}
