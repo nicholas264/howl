@@ -276,6 +276,7 @@ export default function HowlAdEngine({ appAccess }) {
             onOpenEditor={openEditorSession}
             initialCreatorId={plannedCreatorId}
             onInitialCreatorLoaded={() => setPlannedCreatorId(null)}
+            setActiveTab={setActiveTab}
           />
         )}
         {activeTab === "creative-plan" && <CreativePlanningWorkspace onOpenCreator={openPlannedCreator} />}

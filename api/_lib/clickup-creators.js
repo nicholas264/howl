@@ -62,29 +62,45 @@ export function fieldValue(fields, aliases) {
 export function mapClickupStatus(rawStatus) {
   const status = normalize(rawStatus);
   const includes = (...terms) => terms.some(term => status.includes(normalize(term)));
+  const mapped = (stage, creatorStatus, mappingKey, confidence = 'high') => ({
+    stage,
+    status: creatorStatus,
+    mapping_key: mappingKey,
+    confidence,
+  });
 
-  if (includes('reject', 'declin', 'disqualif', 'not fit', 'not interested', 'archive', 'cancel')) {
-    return { stage: 'alumni', status: 'inactive' };
+  if (includes(
+    'reject', 'denied', 'declin', 'disqualif', 'not fit', 'not interested',
+    'dont reach out', 'do not reach out', 'ghosted', 'archive', 'cancel',
+  )) {
+    return mapped('alumni', 'inactive', 'closed_not_moving_forward');
   }
-  if (includes('alumni', 'past creator', 'offboard', 'completed', 'closed complete')) {
-    return { stage: 'alumni', status: 'contracted' };
+  if (status === 'complete' || includes('alumni', 'past creator', 'offboard', 'completed', 'closed complete')) {
+    return mapped('alumni', 'contracted', 'completed_relationship');
   }
-  if (includes('active', 'live', 'launched', 'posted', 'approved creator', 'roster')) {
-    return { stage: 'active', status: 'contracted' };
+  if (includes('active', 'live', 'launched', 'posted', 'approved creator', 'proven creator', 'roster')) {
+    return mapped('active', 'contracted', 'active_creator');
   }
   if (includes('produc', 'filming', 'editing', 'creating', 'content in progress', 'awaiting content', 'working')) {
-    return { stage: 'producing', status: 'contracted' };
+    return mapped('producing', 'contracted', 'in_production');
   }
   if (includes('brief', 'onboard', 'contract', 'negotiat', 'offer sent', 'send product')) {
-    return { stage: 'briefing', status: includes('contract', 'onboard') ? 'contracted' : 'qualified' };
+    return mapped(
+      'briefing',
+      includes('contract', 'onboard') ? 'contracted' : 'qualified',
+      'briefing_and_terms',
+    );
   }
   if (includes('interest', 'replied', 'responded', 'qualified', 'approved', 'shortlist', 'interview', 'accepted')) {
-    return { stage: 'interested', status: 'qualified' };
+    return mapped('interested', 'qualified', 'qualified_creator');
   }
   if (includes('contact', 'outreach', 'reached out', 'follow up', 'emailed', 'messaged')) {
-    return { stage: 'contacted', status: 'prospect' };
+    return mapped('contacted', 'prospect', 'outreach_started');
   }
-  return { stage: 'sourced', status: 'prospect' };
+  if (includes('application submitted', 'submitted', 'teds list', 'ted list', 'new applicant', 'sourced')) {
+    return mapped('sourced', 'prospect', 'new_candidate');
+  }
+  return mapped('sourced', 'prospect', 'needs_review', 'review');
 }
 
 function socialProfile(fields, platform) {
@@ -157,6 +173,10 @@ export function mapClickupCreator(task) {
     source_metadata: {
       clickup_status: task.status?.status || null,
       clickup_url: task.url || null,
+      clickup_mapping_key: pipeline.mapping_key,
+      clickup_mapping_confidence: pipeline.confidence,
+      clickup_mapped_stage: pipeline.stage,
+      clickup_mapped_status: pipeline.status,
       custom_fields: customFields,
     },
     socials,

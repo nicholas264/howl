@@ -229,6 +229,7 @@ async function mergeCreators(sql, access, primaryId, duplicateId) {
     transaction`UPDATE creator_submission_links SET creator_id = ${primaryId} WHERE creator_id = ${duplicateId}`,
     transaction`UPDATE launch_history SET creator_id = ${primaryId}, creator = ${primary.name} WHERE creator_id = ${duplicateId}`,
     transaction`UPDATE creative_assets SET creator_id = ${primaryId}, creator = ${primary.name} WHERE creator_id = ${duplicateId}`,
+    transaction`UPDATE creative_creator_assignments SET creator_id = ${primaryId} WHERE creator_id = ${duplicateId}`,
     transaction`UPDATE ugc_sessions SET creator_id = ${primaryId} WHERE creator_id = ${duplicateId}`,
     transaction`UPDATE creator_applications SET promoted_creator_id = ${primaryId} WHERE promoted_creator_id = ${duplicateId}`,
     transaction`UPDATE creator_candidates SET promoted_creator_id = ${primaryId} WHERE promoted_creator_id = ${duplicateId}`,

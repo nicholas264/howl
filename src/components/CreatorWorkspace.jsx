@@ -89,6 +89,7 @@ export default function CreatorWorkspace({
   onOpenEditor,
   initialCreatorId,
   onInitialCreatorLoaded,
+  setActiveTab,
 }) {
   const { getToken } = useAuth();
   const [creators, setCreators] = useState([]);
@@ -1663,9 +1664,14 @@ export default function CreatorWorkspace({
       </>
       ) : workspaceView === 'operations' ? (
         <CreatorOperationsWorkspace
+          canManage={canManageCreators}
           onOpenCreator={(creator, targetTab) => {
             setWorkspaceView('database');
             openCreator(creator, targetTab);
+          }}
+          onNavigate={target => {
+            if (target === 'creative-analytics') setActiveTab?.('creative-analytics');
+            else setWorkspaceView(target);
           }}
         />
       ) : workspaceView === 'talent' ? (

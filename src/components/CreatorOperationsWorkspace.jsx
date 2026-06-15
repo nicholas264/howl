@@ -29,27 +29,58 @@ function actionDetail(item) {
   return `${item.stage} creator · ${item.category}`;
 }
 
-export default function CreatorOperationsWorkspace({ onOpenCreator }) {
+export default function CreatorOperationsWorkspace({ canManage = false, onOpenCreator, onNavigate }) {
   const [data, setData] = useState({ items: [], summary: { categories: {} } });
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [applying, setApplying] = useState(false);
+  const [showMappings, setShowMappings] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    let active = true;
+  const load = async () => {
     setLoading(true);
-    fetch('/api/creator-operations')
-      .then(async response => {
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Could not load creator operations');
-        if (active) setData(result);
-      })
-      .catch(err => {
-        if (active && !(import.meta.env.DEV && import.meta.env.VITE_AUTH_DISABLED === 'true')) setError(err.message);
-      })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    setError('');
+    try {
+      const response = await fetch('/api/creator-operations');
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not load creator operations');
+      setData(result);
+    } catch (err) {
+      if (!(import.meta.env.DEV && import.meta.env.VITE_AUTH_DISABLED === 'true')) setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
   }, []);
+
+  const applyMappings = async () => {
+    setApplying(true);
+    setError('');
+    try {
+      const response = await fetch('/api/creator-operations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'apply_clickup_status_mapping' }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not apply ClickUp mappings');
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const handleSetupAction = step => {
+    if (step.key === 'clickup_mapping') return applyMappings();
+    if (step.key === 'clickup_review') return setShowMappings(true);
+    if (step.key === 'duplicates' || step.key === 'profiles') return onNavigate?.('health');
+    if (step.key === 'attribution') return onNavigate?.('creative-analytics');
+  };
 
   const visible = useMemo(() => data.items.filter(item => {
     if (filter === 'all') return true;
@@ -58,8 +89,67 @@ export default function CreatorOperationsWorkspace({ onOpenCreator }) {
   }), [data.items, filter]);
 
   const summary = data.summary || {};
+  const setup = data.setup || {};
   return (
     <section className="creator-operations">
+      <div className="operations-setup">
+        <header>
+          <div>
+            <span>Do this next</span>
+            <h2>Get the creator system operational</h2>
+            <p>HOWL has ordered the cleanup by what unlocks the most useful workflow first.</p>
+          </div>
+          <strong>{setup.steps?.length || 0}<small>setup steps</small></strong>
+        </header>
+        <div className="operations-setup-steps">
+          {(setup.steps || []).map((step, index) => (
+            <article key={step.key} className={index === 0 ? 'primary' : ''}>
+              <i>{index + 1}</i>
+              <div>
+                <span>{step.count} records</span>
+                <h3>{step.title}</h3>
+                <p>{step.detail}</p>
+              </div>
+              <button
+                disabled={applying || (step.key === 'clickup_mapping' && !canManage)}
+                onClick={() => handleSetupAction(step)}
+              >
+                {step.key === 'clickup_mapping' && applying ? 'Applying…' : step.action}
+              </button>
+            </article>
+          ))}
+          {!loading && !setup.steps?.length && (
+            <div className="operations-setup-complete">
+              <strong>Core setup is clear.</strong>
+              <p>The queue below now reflects actual creator work rather than import cleanup.</p>
+            </div>
+          )}
+        </div>
+        {!!setup.status_mappings?.length && (
+          <div className="operations-mapping-review">
+            <button onClick={() => setShowMappings(value => !value)}>
+              <span>ClickUp status map</span>
+              <small>
+                {setup.review_status_count || 0} creators need review · {showMappings ? 'Hide' : 'View'} mappings
+              </small>
+            </button>
+            {showMappings && (
+              <div className="operations-mapping-table">
+                <header><span>ClickUp status</span><span>Creators</span><span>HOWL stage</span><span>Confidence</span></header>
+                {setup.status_mappings.map(mapping => (
+                  <div key={mapping.raw_status} className={mapping.confidence}>
+                    <strong>{mapping.raw_status}</strong>
+                    <span>{mapping.count}</span>
+                    <span>{mapping.stage} / {mapping.status}</span>
+                    <i>{mapping.confidence === 'high' ? 'Verified' : 'Needs review'}</i>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="operations-scorecard">
         <div className="urgent"><span>Urgent</span><strong>{summary.urgent || 0}</strong><small>overdue work and follow-ups</small></div>
         <div><span>Needs action</span><strong>{summary.action || 0}</strong><small>team-owned next steps</small></div>
