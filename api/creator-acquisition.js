@@ -3,6 +3,8 @@ import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import { discoverInstagramProfile, normalizeInstagramHandle } from './_lib/instagram-discovery.js';
 
 const REVIEW_STATUSES = new Set(['new', 'reviewing', 'approved', 'declined', 'archived']);
+const RECOMMENDATIONS = new Set(['strong_fit', 'potential', 'pass']);
+const SCORE_FIELDS = ['brand_fit', 'creative_quality', 'audience_fit', 'reliability', 'economics'];
 
 function text(value, max = 5000) {
   const result = (value ?? '').toString().trim();
@@ -12,6 +14,30 @@ function text(value, max = 5000) {
 function list(value, max = 20) {
   const values = Array.isArray(value) ? value : String(value || '').split(',');
   return values.map(item => text(item, 200)).filter(Boolean).slice(0, max);
+}
+
+function reviewScorecard(value, previous = {}) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return previous || {};
+  const result = {};
+  for (const field of SCORE_FIELDS) {
+    const score = Number(value[field]);
+    if (Number.isInteger(score) && score >= 1 && score <= 5) result[field] = score;
+  }
+  const scored = SCORE_FIELDS.map(field => result[field]).filter(Boolean);
+  if (scored.length) {
+    result.overall = Math.round((scored.reduce((sum, score) => sum + score, 0) / (scored.length * 5)) * 100);
+  }
+  const recommendation = text(value.recommendation, 40);
+  if (RECOMMENDATIONS.has(recommendation)) result.recommendation = recommendation;
+  const rationale = text(value.rationale, 2000);
+  if (rationale) result.rationale = rationale;
+  result.updated_at = new Date().toISOString();
+  return result;
+}
+
+function promotableScorecard(scorecard = {}) {
+  return SCORE_FIELDS.every(field => Number(scorecard[field]) >= 1 && Number(scorecard[field]) <= 5)
+    && ['strong_fit', 'potential'].includes(scorecard.recommendation);
 }
 
 function mergeInstagramSocial(socials, profile) {
@@ -32,6 +58,7 @@ function withQualification(record, body) {
     activities: body?.activities !== undefined ? list(body.activities) : record.activities,
     fit_notes: text(body?.fit_notes, 3000) || record.fit_notes,
     review_notes: text(body?.review_notes, 5000) || record.review_notes,
+    review_scorecard: reviewScorecard(body?.review_scorecard, record.review_scorecard),
   };
 }
 
@@ -105,7 +132,11 @@ async function promote(sql, access, sourceType, record) {
       ${record.niche || null}, ${record.strengths || null}, ${record.audience_description || null},
       ${activities}, ${record.rate_expectations || null}, ${record.review_notes || record.fit_notes || null},
       ${record.avatar_url || instagram?.avatar_url || null}, ${sourceType}, ${String(record.id)},
-      ${JSON.stringify({ acquisition_source: sourceType, application_code: record.application_code || null })}::jsonb,
+      ${JSON.stringify({
+        acquisition_source: sourceType,
+        application_code: record.application_code || null,
+        acquisition_review: record.review_scorecard || {},
+      })}::jsonb,
       'sourced', 'qualified', ${access.userId}
     )
     RETURNING *
@@ -129,7 +160,10 @@ async function promote(sql, access, sourceType, record) {
     INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
     VALUES (
       ${creator.id}, 'acquisition_promoted', ${`Promoted from ${sourceType}`},
-      ${JSON.stringify({ source_id: Number(record.id) })}::jsonb, ${access.userId}
+      ${JSON.stringify({
+        source_id: Number(record.id),
+        review_scorecard: record.review_scorecard || {},
+      })}::jsonb, ${access.userId}
     )
   `;
   return creator;
@@ -241,6 +275,9 @@ export default async function handler(req, res) {
 
     if (req.body?.action === 'promote') {
       const reviewedRecord = withQualification(record, req.body);
+      if (!promotableScorecard(reviewedRecord.review_scorecard)) {
+        return res.status(400).json({ error: 'Complete the fit scorecard with a Strong fit or Potential recommendation before promotion.' });
+      }
       const creator = await promote(sql, access, type === 'application' ? 'application' : 'discovery', reviewedRecord);
       if (type === 'application') {
         await sql`
@@ -252,6 +289,7 @@ export default async function handler(req, res) {
             audience_description = ${reviewedRecord.audience_description},
             rate_expectations = ${reviewedRecord.rate_expectations},
             activities = ${reviewedRecord.activities || []},
+            review_scorecard = ${JSON.stringify(reviewedRecord.review_scorecard || {})}::jsonb,
             review_notes = ${reviewedRecord.review_notes},
             reviewed_by = ${access.userId}, reviewed_at = now(), updated_at = now()
           WHERE id = ${id}
@@ -266,6 +304,7 @@ export default async function handler(req, res) {
             audience_description = ${reviewedRecord.audience_description},
             rate_expectations = ${reviewedRecord.rate_expectations},
             activities = ${reviewedRecord.activities || []},
+            review_scorecard = ${JSON.stringify(reviewedRecord.review_scorecard || {})}::jsonb,
             fit_notes = ${reviewedRecord.fit_notes},
             review_notes = ${reviewedRecord.review_notes},
             reviewed_by = ${access.userId}, reviewed_at = now(), updated_at = now()
@@ -289,6 +328,7 @@ export default async function handler(req, res) {
             audience_description = COALESCE(${text(req.body?.audience_description, 2000)}, audience_description),
             rate_expectations = COALESCE(${text(req.body?.rate_expectations, 1000)}, rate_expectations),
             activities = CASE WHEN ${req.body?.activities !== undefined} THEN ${list(req.body?.activities)} ELSE activities END,
+            review_scorecard = ${JSON.stringify(reviewScorecard(req.body?.review_scorecard, record.review_scorecard))}::jsonb,
             reviewed_by = ${access.userId}, reviewed_at = now(), updated_at = now()
           WHERE id = ${id} RETURNING *
         `
@@ -302,6 +342,7 @@ export default async function handler(req, res) {
             audience_description = COALESCE(${text(req.body?.audience_description, 2000)}, audience_description),
             rate_expectations = COALESCE(${text(req.body?.rate_expectations, 1000)}, rate_expectations),
             activities = CASE WHEN ${req.body?.activities !== undefined} THEN ${list(req.body?.activities)} ELSE activities END,
+            review_scorecard = ${JSON.stringify(reviewScorecard(req.body?.review_scorecard, record.review_scorecard))}::jsonb,
             fit_notes = COALESCE(${text(req.body?.fit_notes, 3000)}, fit_notes),
             reviewed_by = ${access.userId}, reviewed_at = now(), updated_at = now()
           WHERE id = ${id} RETURNING *
