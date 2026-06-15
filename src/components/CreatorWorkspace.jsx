@@ -723,7 +723,31 @@ export default function CreatorWorkspace({
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'ClickUp sync failed');
-      setImportResult(result);
+      let emailChecked = 0;
+      let emailFound = 0;
+      let emailRemaining = 0;
+      let throttled = false;
+      for (let pass = 0; pass < 10; pass++) {
+        const emailResponse = await fetch('/api/creators-import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'clickup_email_backfill', batch_size: 50 }),
+        });
+        const emailResult = await emailResponse.json();
+        if (!emailResponse.ok) throw new Error(emailResult.error || 'ClickUp email repair failed');
+        emailChecked += emailResult.checked || 0;
+        emailFound += emailResult.found || 0;
+        emailRemaining = emailResult.remaining || 0;
+        throttled = Boolean(emailResult.throttled);
+        if (!emailRemaining || throttled || !emailResult.checked) break;
+      }
+      setImportResult({
+        ...result,
+        email_checked: emailChecked,
+        email_found: emailFound,
+        email_remaining: emailRemaining,
+        email_throttled: throttled,
+      });
       await loadCreators();
     } catch (err) {
       setError(err.message);
@@ -1724,9 +1748,19 @@ export default function CreatorWorkspace({
               </label>
               <div className="clickup-sync-row">
                 <span>{clickupConfigured ? 'Direct ClickUp sync is connected.' : 'Direct sync needs CLICKUP_API_TOKEN and CLICKUP_CREATOR_LIST_ID.'}</span>
-                <button disabled={!clickupConfigured || saving} onClick={syncClickup}>Sync ClickUp</button>
+                <button disabled={!clickupConfigured || saving} onClick={syncClickup}>
+                  {saving ? 'Syncing & repairing…' : 'Sync & repair ClickUp'}
+                </button>
               </div>
-              {importResult && <div className="import-result"><strong>{importResult.created} created</strong><strong>{importResult.updated} updated</strong><span>{importResult.skipped?.length || 0} skipped</span></div>}
+              {importResult && (
+                <div className="import-result">
+                  <strong>{importResult.created} created</strong>
+                  <strong>{importResult.updated} updated</strong>
+                  <strong>{importResult.email_found || 0} emails repaired</strong>
+                  <span>{importResult.email_remaining || 0} email records remaining</span>
+                  <span>{importResult.skipped?.length || 0} skipped</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { createClerkClient } from '@clerk/backend';
 
 export const CLICKUP_CREATOR_LIST_ID = process.env.CLICKUP_CREATOR_LIST_ID || '901111110302';
+export const CLICKUP_CREATOR_VIEW_ID = process.env.CLICKUP_CREATOR_VIEW_ID || '6-901111110302-1';
 
 function keyMode(value, livePrefix, testPrefix) {
   if ((value || '').startsWith(livePrefix)) return 'live';
@@ -48,7 +49,7 @@ export function getIntegrationHealth() {
       action: clickupToken && clickupList
         ? null
         : 'Add the ClickUp personal API token and applicant list ID to Vercel Production.',
-      env: ['CLICKUP_API_TOKEN', 'CLICKUP_CREATOR_LIST_ID'],
+      env: ['CLICKUP_API_TOKEN', 'CLICKUP_CREATOR_LIST_ID', 'CLICKUP_CREATOR_VIEW_ID'],
     },
     gmail: {
       ready: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),

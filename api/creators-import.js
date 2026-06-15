@@ -1,7 +1,11 @@
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import { mapClickupCreator } from './_lib/clickup-creators.js';
-import { CLICKUP_CREATOR_LIST_ID, getIntegrationHealth } from './_lib/integration-health.js';
+import {
+  CLICKUP_CREATOR_LIST_ID,
+  CLICKUP_CREATOR_VIEW_ID,
+  getIntegrationHealth,
+} from './_lib/integration-health.js';
 
 function value(row, names) {
   const keys = Object.keys(row || {});
@@ -22,6 +26,137 @@ function metric(value) {
   return parsed;
 }
 
+async function clickupRequest(path, token) {
+  const response = await fetch(`https://api.clickup.com/api/v2${path}`, {
+    headers: { Authorization: token },
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error(data.err || data.error || `ClickUp request failed (${response.status})`);
+    error.status = response.status;
+    error.retryAfter = response.headers.get('retry-after');
+    throw error;
+  }
+  return data;
+}
+
+function mergeClickupTask(base, enriched) {
+  const fields = new Map((base.custom_fields || []).map(field => [field.id, field]));
+  for (const field of enriched.custom_fields || []) {
+    const current = fields.get(field.id);
+    const hasValue = field.value !== null && field.value !== undefined && field.value !== '';
+    if (!current || hasValue) fields.set(field.id, field);
+  }
+  return {
+    ...base,
+    ...enriched,
+    custom_fields: Array.from(fields.values()),
+    markdown_description: enriched.markdown_description || base.markdown_description,
+    description: enriched.description || base.description,
+  };
+}
+
+async function loadClickupTasks(token, listId, viewId = CLICKUP_CREATOR_VIEW_ID) {
+  const rows = [];
+  for (let page = 0; page < 20; page++) {
+    const data = await clickupRequest(
+      `/list/${encodeURIComponent(listId)}/task?page=${page}&include_closed=true&include_timl=true&include_markdown_description=true`,
+      token,
+    );
+    const tasks = data.tasks || [];
+    rows.push(...tasks);
+    if (tasks.length < 100 || rows.length >= 2000) break;
+  }
+
+  if (!viewId) return rows.slice(0, 2000);
+  const byId = new Map(rows.map(task => [String(task.id), task]));
+  for (let page = 0; page < 50; page++) {
+    let data;
+    try {
+      data = await clickupRequest(`/view/${encodeURIComponent(viewId)}/task?page=${page}`, token);
+    } catch {
+      break;
+    }
+    const tasks = data.tasks || [];
+    for (const task of tasks) {
+      const id = String(task.id);
+      byId.set(id, byId.has(id) ? mergeClickupTask(byId.get(id), task) : task);
+    }
+    if (!tasks.length || data.last_page === true || byId.size >= 2000) break;
+  }
+  return Array.from(byId.values()).slice(0, 2000);
+}
+
+async function backfillClickupEmails(sql, token, listId, batchSize = 50) {
+  const tasks = await loadClickupTasks(token, listId);
+  const existing = await sql`
+    SELECT source_external_id
+    FROM creators
+    WHERE source = 'clickup'
+      AND email IS NULL
+      AND source_external_id IS NOT NULL
+      AND source_metadata->>'clickup_email_checked_at' IS NULL
+  `;
+  const missingIds = new Set(existing.map(row => String(row.source_external_id)));
+  const candidates = tasks.filter(task => missingIds.has(String(task.id))).slice(0, batchSize);
+  let checked = 0;
+  let found = 0;
+  let throttled = false;
+
+  for (let offset = 0; offset < candidates.length; offset += 10) {
+    const batch = candidates.slice(offset, offset + 10);
+    const results = await Promise.all(batch.map(async task => {
+      try {
+        const detail = await clickupRequest(
+          `/task/${encodeURIComponent(task.id)}?include_subtasks=true&include_markdown_description=true`,
+          token,
+        );
+        return { task, detail };
+      } catch (error) {
+        return { task, error };
+      }
+    }));
+    for (const result of results) {
+      if (result.error?.status === 429) {
+        throttled = true;
+        continue;
+      }
+      if (result.error) continue;
+      const mapped = mapClickupCreator(result.detail);
+      const metadata = {
+        clickup_email_checked_at: new Date().toISOString(),
+        clickup_email_source: mapped.email ? 'task_detail' : 'not_returned',
+      };
+      const changed = await sql`
+        UPDATE creators SET
+          email = COALESCE(${mapped.email || null}, email),
+          source_metadata = source_metadata || ${JSON.stringify(metadata)}::jsonb,
+          updated_at = now()
+        WHERE source = 'clickup' AND source_external_id = ${String(result.task.id)}
+        RETURNING email
+      `;
+      checked++;
+      if (mapped.email && changed[0]?.email) found++;
+    }
+    if (throttled) break;
+  }
+
+  const [remaining] = await sql`
+    SELECT count(*)::int AS count
+    FROM creators
+    WHERE source = 'clickup'
+      AND email IS NULL
+      AND source_external_id IS NOT NULL
+      AND source_metadata->>'clickup_email_checked_at' IS NULL
+  `;
+  return {
+    checked,
+    found,
+    remaining: Number(remaining?.count || 0),
+    throttled,
+  };
+}
+
 export default async function handler(req, res) {
   const access = await requirePermission(req, res, 'creators.write');
   if (!access) return;
@@ -38,23 +173,25 @@ export default async function handler(req, res) {
 
   try {
     await ensureCreatorOpsTables(sql);
+    if (req.body?.action === 'clickup_email_backfill') {
+      const token = process.env.CLICKUP_API_TOKEN?.trim();
+      const listId = CLICKUP_CREATOR_LIST_ID;
+      if (!token || !listId) return res.status(409).json({ error: 'ClickUp sync is not configured' });
+      const result = await backfillClickupEmails(
+        sql,
+        token,
+        listId,
+        Math.max(1, Math.min(75, Number(req.body?.batch_size) || 50)),
+      );
+      return res.json({ ok: true, ...result });
+    }
     let rows = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 2000) : [];
     if (req.body?.action === 'clickup_sync') {
       const token = process.env.CLICKUP_API_TOKEN?.trim();
       const listId = CLICKUP_CREATOR_LIST_ID;
       if (!token || !listId) return res.status(409).json({ error: 'ClickUp sync is not configured' });
-      rows = [];
-      for (let page = 0; page < 20; page++) {
-        const response = await fetch(`https://api.clickup.com/api/v2/list/${encodeURIComponent(listId)}/task?page=${page}&include_closed=true&include_markdown_description=true`, {
-          headers: { Authorization: token },
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.err || data.error || `ClickUp request failed (${response.status})`);
-        const tasks = data.tasks || [];
-        for (const task of tasks) rows.push({ ...mapClickupCreator(task), external_id: task.id, source: 'clickup' });
-        if (tasks.length < 100 || rows.length >= 2000) break;
-      }
-      rows = rows.slice(0, 2000);
+      const tasks = await loadClickupTasks(token, listId);
+      rows = tasks.map(task => ({ ...mapClickupCreator(task), external_id: task.id, source: 'clickup' }));
     }
     if (!rows.length) return res.status(400).json({ error: 'rows[] required' });
 

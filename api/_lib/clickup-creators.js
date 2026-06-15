@@ -59,6 +59,26 @@ export function fieldValue(fields, aliases) {
   return '';
 }
 
+export function extractClickupEmail(task, fields = {}) {
+  const named = fieldValue(fields, [
+    'email', 'email address', 'creator email', 'applicant email', 'contact email',
+    'what is your email', 'what is your email address',
+  ]);
+  if (named) return named;
+
+  const candidates = [
+    task?.email,
+    ...Object.values(fields),
+    task?.markdown_description,
+    task?.description,
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    const match = String(candidate).match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+    if (match) return match[0];
+  }
+  return '';
+}
+
 export function mapClickupStatus(rawStatus) {
   const status = normalize(rawStatus);
   const includes = (...terms) => terms.some(term => status.includes(normalize(term)));
@@ -146,7 +166,7 @@ export function mapClickupCreator(task) {
 
   return {
     name: fieldValue(fields, ['creator name', 'full name', 'name', 'applicant name']) || task.name,
-    email: fieldValue(fields, ['email', 'email address', 'creator email']),
+    email: extractClickupEmail(task, fields),
     phone: fieldValue(fields, ['phone', 'phone number', 'mobile', 'mobile number']),
     location: fieldValue(fields, ['location', 'city', 'city/state', 'state', 'where are you located']),
     timezone: fieldValue(fields, ['timezone', 'time zone']),
