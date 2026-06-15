@@ -136,10 +136,10 @@ async function loadSetup(sql) {
       },
       Number(health.clickup_missing_email || 0) > 0 && {
         key: 'clickup_email',
-        title: 'Repair creator emails from ClickUp',
-        detail: 'Read the visible ClickUp view and full task records to restore application emails automatically.',
+        title: 'Restore creator emails from ClickUp',
+        detail: 'ClickUp hides this visible column from its API. Export the view as CSV and HOWL will update existing records by Task ID.',
         count: Number(health.clickup_missing_email || 0),
-        action: 'Repair emails',
+        action: 'Upload ClickUp CSV',
       },
       Number(health.duplicate_groups || 0) > 0 && {
         key: 'duplicates',

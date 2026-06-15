@@ -723,31 +723,7 @@ export default function CreatorWorkspace({
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'ClickUp sync failed');
-      let emailChecked = 0;
-      let emailFound = 0;
-      let emailRemaining = 0;
-      let throttled = false;
-      for (let pass = 0; pass < 10; pass++) {
-        const emailResponse = await fetch('/api/creators-import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'clickup_email_backfill', batch_size: 50 }),
-        });
-        const emailResult = await emailResponse.json();
-        if (!emailResponse.ok) throw new Error(emailResult.error || 'ClickUp email repair failed');
-        emailChecked += emailResult.checked || 0;
-        emailFound += emailResult.found || 0;
-        emailRemaining = emailResult.remaining || 0;
-        throttled = Boolean(emailResult.throttled);
-        if (!emailRemaining || throttled || !emailResult.checked) break;
-      }
-      setImportResult({
-        ...result,
-        email_checked: emailChecked,
-        email_found: emailFound,
-        email_remaining: emailRemaining,
-        email_throttled: throttled,
-      });
+      setImportResult(result);
       await loadCreators();
     } catch (err) {
       setError(err.message);
@@ -1695,6 +1671,7 @@ export default function CreatorWorkspace({
           }}
           onNavigate={target => {
             if (target === 'creative-analytics') setActiveTab?.('creative-analytics');
+            else if (target === 'clickup-import') setShowImport(true);
             else setWorkspaceView(target);
           }}
         />
@@ -1740,24 +1717,23 @@ export default function CreatorWorkspace({
           <div className="app-modal import-modal" onMouseDown={event => event.stopPropagation()}>
             <header><div><span className="workspace-kicker">ClickUp intake</span><h2>Import creators</h2></div><button onClick={() => setShowImport(false)}>Close</button></header>
             <div className="import-body">
-              <p>Export your ClickUp applicant list as CSV. HOWL recognizes common columns including name, email, phone, location, activities, tags, notes, and task ID.</p>
+              <p>ClickUp does not expose the visible Email column through its API. Export this exact ClickUp view as CSV, then upload it here. HOWL matches existing creators by Task ID and preserves their current workflow stage.</p>
               <label className="import-drop">
                 <input type="file" accept=".csv,text/csv" onChange={event => importCsv(event.target.files?.[0])} />
-                <strong>{saving ? 'Importing...' : 'Choose ClickUp CSV'}</strong>
-                <span>Existing records update by ClickUp task ID or email.</span>
+                <strong>{saving ? 'Importing...' : 'Upload exported ClickUp view'}</strong>
+                <span>The export should include Task ID, Task Name, and Email.</span>
               </label>
               <div className="clickup-sync-row">
                 <span>{clickupConfigured ? 'Direct ClickUp sync is connected.' : 'Direct sync needs CLICKUP_API_TOKEN and CLICKUP_CREATOR_LIST_ID.'}</span>
                 <button disabled={!clickupConfigured || saving} onClick={syncClickup}>
-                  {saving ? 'Syncing & repairing…' : 'Sync & repair ClickUp'}
+                  {saving ? 'Syncing…' : 'Sync statuses & fields'}
                 </button>
               </div>
               {importResult && (
                 <div className="import-result">
                   <strong>{importResult.created} created</strong>
                   <strong>{importResult.updated} updated</strong>
-                  <strong>{importResult.email_found || 0} emails repaired</strong>
-                  <span>{importResult.email_remaining || 0} email records remaining</span>
+                  <strong>{importResult.email_found || importResult.emails_added || 0} emails repaired</strong>
                   <span>{importResult.skipped?.length || 0} skipped</span>
                 </div>
               )}

@@ -87,76 +87,6 @@ async function loadClickupTasks(token, listId, viewId = CLICKUP_CREATOR_VIEW_ID)
   return Array.from(byId.values()).slice(0, 2000);
 }
 
-async function backfillClickupEmails(sql, token, listId, batchSize = 50) {
-  const tasks = await loadClickupTasks(token, listId);
-  const existing = await sql`
-    SELECT source_external_id
-    FROM creators
-    WHERE source = 'clickup'
-      AND email IS NULL
-      AND source_external_id IS NOT NULL
-      AND source_metadata->>'clickup_email_checked_at' IS NULL
-  `;
-  const missingIds = new Set(existing.map(row => String(row.source_external_id)));
-  const candidates = tasks.filter(task => missingIds.has(String(task.id))).slice(0, batchSize);
-  let checked = 0;
-  let found = 0;
-  let throttled = false;
-
-  for (let offset = 0; offset < candidates.length; offset += 10) {
-    const batch = candidates.slice(offset, offset + 10);
-    const results = await Promise.all(batch.map(async task => {
-      try {
-        const detail = await clickupRequest(
-          `/task/${encodeURIComponent(task.id)}?include_subtasks=true&include_markdown_description=true`,
-          token,
-        );
-        return { task, detail };
-      } catch (error) {
-        return { task, error };
-      }
-    }));
-    for (const result of results) {
-      if (result.error?.status === 429) {
-        throttled = true;
-        continue;
-      }
-      if (result.error) continue;
-      const mapped = mapClickupCreator(result.detail);
-      const metadata = {
-        clickup_email_checked_at: new Date().toISOString(),
-        clickup_email_source: mapped.email ? 'task_detail' : 'not_returned',
-      };
-      const changed = await sql`
-        UPDATE creators SET
-          email = COALESCE(${mapped.email || null}, email),
-          source_metadata = source_metadata || ${JSON.stringify(metadata)}::jsonb,
-          updated_at = now()
-        WHERE source = 'clickup' AND source_external_id = ${String(result.task.id)}
-        RETURNING email
-      `;
-      checked++;
-      if (mapped.email && changed[0]?.email) found++;
-    }
-    if (throttled) break;
-  }
-
-  const [remaining] = await sql`
-    SELECT count(*)::int AS count
-    FROM creators
-    WHERE source = 'clickup'
-      AND email IS NULL
-      AND source_external_id IS NOT NULL
-      AND source_metadata->>'clickup_email_checked_at' IS NULL
-  `;
-  return {
-    checked,
-    found,
-    remaining: Number(remaining?.count || 0),
-    throttled,
-  };
-}
-
 export default async function handler(req, res) {
   const access = await requirePermission(req, res, 'creators.write');
   if (!access) return;
@@ -173,18 +103,6 @@ export default async function handler(req, res) {
 
   try {
     await ensureCreatorOpsTables(sql);
-    if (req.body?.action === 'clickup_email_backfill') {
-      const token = process.env.CLICKUP_API_TOKEN?.trim();
-      const listId = CLICKUP_CREATOR_LIST_ID;
-      if (!token || !listId) return res.status(409).json({ error: 'ClickUp sync is not configured' });
-      const result = await backfillClickupEmails(
-        sql,
-        token,
-        listId,
-        Math.max(1, Math.min(75, Number(req.body?.batch_size) || 50)),
-      );
-      return res.json({ ok: true, ...result });
-    }
     let rows = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 2000) : [];
     if (req.body?.action === 'clickup_sync') {
       const token = process.env.CLICKUP_API_TOKEN?.trim();
@@ -197,12 +115,13 @@ export default async function handler(req, res) {
 
     let created = 0;
     let updated = 0;
+    let emailsAdded = 0;
     const skipped = [];
     for (let index = 0; index < rows.length; index++) {
       const row = rows[index];
       const mapped = row.source_metadata ? row : {
-        name: value(row, ['name', 'creatorname', 'fullname', 'applicant']),
-        email: value(row, ['email', 'emailaddress']),
+        name: value(row, ['name', 'taskname', 'creatorname', 'fullname', 'applicant']),
+        email: value(row, ['email', 'emailaddress', 'creatoremail', 'applicantemail']),
         phone: value(row, ['phone', 'phonenumber']),
         location: value(row, ['location', 'city', 'state']),
         timezone: value(row, ['timezone']),
@@ -229,22 +148,29 @@ export default async function handler(req, res) {
       const activities = String(mapped.activities || '').split(',').map(item => item.trim()).filter(Boolean);
       const tags = String(mapped.tags || '').split(',').map(item => item.trim()).filter(Boolean);
       const source = mapped.source || 'clickup_import';
+      const sourceMetadata = {
+        ...(mapped.source_metadata || {}),
+        ...(source === 'clickup_import' && email ? {
+          clickup_email_source: 'csv_export',
+          clickup_email_imported_at: new Date().toISOString(),
+        } : {}),
+      };
       const existing = externalId || email
         ? await sql`
-            SELECT id FROM creators
+            SELECT id, email, source FROM creators
             WHERE (
               ${externalId}::text IS NOT NULL
-              AND source = ${source}
               AND source_external_id = ${externalId}
             ) OR (
               ${email || null}::text IS NOT NULL
               AND lower(email) = ${email ? email.toLowerCase() : null}
             )
-            ORDER BY CASE WHEN source = ${source} AND source_external_id = ${externalId} THEN 0 ELSE 1 END
+            ORDER BY CASE WHEN source_external_id = ${externalId} THEN 0 ELSE 1 END
             LIMIT 1
           `
         : [];
       if (existing[0]) {
+        const directClickupSync = source === 'clickup';
         await sql`
           UPDATE creators SET
             name = ${name},
@@ -258,12 +184,13 @@ export default async function handler(req, res) {
             rate_notes = COALESCE(${mapped.rate_notes || null}, rate_notes),
             notes = COALESCE(${mapped.notes || null}, notes),
             avatar_url = COALESCE(${mapped.avatar_url || null}, avatar_url),
-            stage = ${mapped.stage || 'sourced'},
-            status = ${mapped.status || 'prospect'},
-            source_metadata = source_metadata || ${JSON.stringify(mapped.source_metadata || {})}::jsonb,
+            stage = CASE WHEN ${directClickupSync} THEN ${mapped.stage || 'sourced'} ELSE stage END,
+            status = CASE WHEN ${directClickupSync} THEN ${mapped.status || 'prospect'} ELSE status END,
+            source_metadata = source_metadata || ${JSON.stringify(sourceMetadata)}::jsonb,
             updated_at = now()
           WHERE id = ${existing[0].id}
         `;
+        if (email && !existing[0].email) emailsAdded++;
         for (const account of mapped.socials || []) {
           await sql`
             INSERT INTO creator_social_accounts (
@@ -294,7 +221,7 @@ export default async function handler(req, res) {
             ${name}, ${email || null}, ${mapped.phone || null}, ${mapped.location || null},
             ${mapped.timezone || null}, ${mapped.bio || null}, ${activities}, ${tags},
             ${mapped.rate_notes || null}, ${mapped.notes || null}, ${mapped.avatar_url || null},
-            ${JSON.stringify(mapped.source_metadata || {})}::jsonb,
+            ${JSON.stringify(sourceMetadata)}::jsonb,
             ${source}, ${externalId}, ${mapped.stage || 'sourced'}, ${mapped.status || 'prospect'}, ${access.userId}
           )
           RETURNING id
@@ -313,7 +240,7 @@ export default async function handler(req, res) {
         created++;
       }
     }
-    return res.json({ ok: true, created, updated, skipped });
+    return res.json({ ok: true, created, updated, emails_added: emailsAdded, skipped });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

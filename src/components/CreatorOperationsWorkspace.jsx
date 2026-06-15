@@ -36,7 +36,6 @@ export default function CreatorOperationsWorkspace({ canManage = false, onOpenCr
   const [applying, setApplying] = useState(false);
   const [showMappings, setShowMappings] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -76,40 +75,10 @@ export default function CreatorOperationsWorkspace({ canManage = false, onOpenCr
     }
   };
 
-  const repairClickupEmails = async () => {
-    setApplying(true);
-    setError('');
-    setNotice('');
-    try {
-      let found = 0;
-      let remaining = 0;
-      let throttled = false;
-      for (let pass = 0; pass < 10; pass++) {
-        const response = await fetch('/api/creators-import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'clickup_email_backfill', batch_size: 50 }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Could not repair ClickUp emails');
-        found += result.found || 0;
-        remaining = result.remaining || 0;
-        throttled = Boolean(result.throttled);
-        if (!remaining || throttled || !result.checked) break;
-      }
-      setNotice(`${found} creator emails repaired.${remaining ? ` ${remaining} remain for the next pass.` : ''}`);
-      await load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setApplying(false);
-    }
-  };
-
   const handleSetupAction = step => {
     if (step.key === 'clickup_mapping') return applyMappings();
     if (step.key === 'clickup_review') return setShowMappings(true);
-    if (step.key === 'clickup_email') return repairClickupEmails();
+    if (step.key === 'clickup_email') return onNavigate?.('clickup-import');
     if (step.key === 'duplicates' || step.key === 'profiles') return onNavigate?.('health');
     if (step.key === 'attribution') return onNavigate?.('creative-analytics');
   };
@@ -146,7 +115,7 @@ export default function CreatorOperationsWorkspace({ canManage = false, onOpenCr
                 disabled={applying || (step.key === 'clickup_mapping' && !canManage)}
                 onClick={() => handleSetupAction(step)}
               >
-                {applying && ['clickup_mapping', 'clickup_email'].includes(step.key) ? 'Working…' : step.action}
+                {step.key === 'clickup_mapping' && applying ? 'Working…' : step.action}
               </button>
             </article>
           ))}
@@ -182,7 +151,6 @@ export default function CreatorOperationsWorkspace({ canManage = false, onOpenCr
         )}
       </div>
 
-      {notice && <div className="app-success">{notice}</div>}
       <div className="operations-scorecard">
         <div className="urgent"><span>Urgent</span><strong>{summary.urgent || 0}</strong><small>overdue work and follow-ups</small></div>
         <div><span>Needs action</span><strong>{summary.action || 0}</strong><small>team-owned next steps</small></div>
