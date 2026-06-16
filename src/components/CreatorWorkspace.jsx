@@ -1295,7 +1295,13 @@ export default function CreatorWorkspace({
                         ? `${selected.shipping_address1}, ${selected.shipping_city}, ${selected.shipping_region} ${selected.shipping_postal_code}`
                         : 'Add a shipping address in Profile first'}</strong>
                     </div>
-                    <button className="primary-action" disabled={saving || !shopifyConnected || !selected.shipping_address1}>Create free Shopify order</button>
+                    <button
+                      className="primary-action"
+                      disabled={saving || !shopifyConnected || !selected.shipping_address1}
+                      title={!shopifyConnected ? 'Connect Shopify in Admin before creating product seed orders.' : !selected.shipping_address1 ? 'Add a shipping address in Profile first.' : ''}
+                    >
+                      Create free Shopify order
+                    </button>
                   </form>
                 )}
                 <div className="workflow-list">
@@ -1413,7 +1419,7 @@ export default function CreatorWorkspace({
                       <div className="agreement-ready">
                         <input readOnly value={preparedAgreement.url} onFocus={event => event.target.select()} />
                         {gmailConnected
-                          ? <button type="button" disabled={saving || !selected.email} onClick={sendAgreement}>Send with Gmail</button>
+                          ? <button type="button" disabled={saving || !selected.email} title={!selected.email ? 'Add the creator email before sending.' : ''} onClick={sendAgreement}>Send with Gmail</button>
                           : <button type="button" disabled={saving} onClick={connectGmail}>Connect Gmail</button>}
                       </div>
                     )}
@@ -1790,7 +1796,12 @@ export default function CreatorWorkspace({
               </label>
               <div className="clickup-sync-row">
                 <span>{clickupConfigured ? 'Direct ClickUp sync is connected.' : 'Direct sync needs CLICKUP_API_TOKEN and CLICKUP_CREATOR_LIST_ID.'}</span>
-                <button disabled={!clickupConfigured || saving} onClick={syncClickup}>
+                <button
+                  type="button"
+                  disabled={!clickupConfigured || saving}
+                  title={!clickupConfigured ? 'Add CLICKUP_API_TOKEN and CLICKUP_CREATOR_LIST_ID before direct sync.' : ''}
+                  onClick={syncClickup}
+                >
                   {saving ? 'Syncing…' : 'Sync statuses & fields'}
                 </button>
               </div>

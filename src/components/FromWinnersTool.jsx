@@ -140,7 +140,10 @@ export default function FromWinnersTool({ setActiveTab, setVariations, onOpenCre
   };
 
   const generate = async () => {
-    if (!selectedWinners.length) return;
+    if (!selectedWinners.length) {
+      setGenerateError('Select at least one analyzed winner before generating iterations.');
+      return;
+    }
     const incompleteVideos = selectedWinners.filter(
       winner => winner.asset_kind === 'video' && winner.transcription_status !== 'complete',
     );
@@ -390,7 +393,7 @@ ${references}`;
             </div>
             <div className="concept-generate-row">
               <p>{creatorId ? 'Creator context selected.' : 'Choose the person who will actually film the ad.'}</p>
-              <button onClick={generateNetNew} disabled={!creatorId || !netNewProduct || generating}>{generating ? 'Building creator concepts…' : `Generate ${netNewCount} concepts`}</button>
+              <button type="button" onClick={generateNetNew} disabled={generating}>{generating ? 'Building creator concepts…' : `Generate ${netNewCount} concepts`}</button>
             </div>
             {generateError ? <div className="motion-error">{generateError}</div> : null}
             {netNewConcepts.length > 0 && (
@@ -499,7 +502,7 @@ ${references}`;
 
           <div className="concept-generate-row">
             <p>{selectedWinners.length ? `${selectedWinners.length} references ready.` : 'Select two to four winners with complementary learnings.'}</p>
-            <button onClick={generate} disabled={!selectedWinners.length || generating}>{generating ? 'Building test matrix…' : `Generate ${count} concepts`}</button>
+            <button type="button" onClick={generate} disabled={generating}>{generating ? 'Building test matrix…' : `Generate ${count} concepts`}</button>
           </div>
           {generateError ? <div className="motion-error">{generateError}</div> : null}
 
