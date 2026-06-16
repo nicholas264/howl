@@ -40,6 +40,12 @@ export default function WorkspaceHub({ type, setActiveTab, can = () => true }) {
           </button>
         ))}
       </div>
+      {!tools.length && (
+        <div className="workspace-empty">
+          <strong>No tools available for this role.</strong>
+          <p>Ask an admin to update your permissions if this workspace should be accessible.</p>
+        </div>
+      )}
     </div>
   );
 }

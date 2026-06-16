@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, Suspense, lazy } from "react";
+import React, { useState, useCallback, useEffect, useMemo, Suspense, lazy } from "react";
 import { UserButton } from "@clerk/clerk-react";
 // Always-visible shell components stay eagerly imported.
 import ResultsPanel from "./components/ResultsPanel";
@@ -98,23 +98,15 @@ export default function HowlAdEngine({ appAccess }) {
 
   const handleUseInVideo = useCallback((variation) => {
     setVideoText(variation.hook);
-    setActiveTab('video');
-  }, []);
+    setActiveTab(can('assets.write') ? 'video' : 'welcome');
+  }, [can]);
 
   const handleUseOnImage = useCallback((variation) => {
     setImageText(variation.hook);
-    setActiveTab('image');
-  }, []);
+    setActiveTab(can('assets.write') ? 'image' : 'welcome');
+  }, [can]);
 
-  const openEditorSession = useCallback((sessionId) => {
-    setEditorSessionId(Number(sessionId) || null);
-    setActiveTab('ugc-editor');
-  }, []);
   const clearInitialEditorSession = useCallback(() => setEditorSessionId(null), []);
-  const openPlannedCreator = useCallback((creatorId) => {
-    setPlannedCreatorId(Number(creatorId) || null);
-    setActiveTab('creators');
-  }, []);
 
   const exportCSV = () => {
     if (variations.length === 0) return;
@@ -155,8 +147,8 @@ export default function HowlAdEngine({ appAccess }) {
   }, []);
   useEffect(() => { refreshUgcCount(); }, [refreshUgcCount]);
   useEffect(() => {
-    // Refetch when user navigates away from the UGC tab (likely after launching some files).
-    if (activeTab !== 'ugc') refreshUgcCount();
+    // Refetch when user navigates away from the launcher (likely after launching some files).
+    if (activeTab !== 'launcher') refreshUgcCount();
   }, [activeTab, refreshUgcCount]);
 
   const NAV_SECTIONS = [
@@ -215,6 +207,35 @@ export default function HowlAdEngine({ appAccess }) {
     items: section.items.filter(item => !item.permission || can(item.permission)),
   })).filter(section => section.items.length);
 
+  const allowedTabs = useMemo(() => {
+    const tabs = new Set(['welcome']);
+    NAV_SECTIONS.forEach(section => section.items.forEach(item => tabs.add(item.key)));
+    if (can('briefs.write') || can('assets.write') || can('analytics.read')) tabs.add('creative');
+    if (can('analytics.read') || can('launch.read')) tabs.add('performance');
+    if (can('analytics.read')) tabs.add('dashboard-creative');
+    if (can('assets.write')) tabs.add('gallery');
+    if (can('launch.write')) tabs.add('publish');
+    if (variations.length) tabs.add('results');
+    return tabs;
+  }, [NAV_SECTIONS, can, variations.length]);
+
+  const navigate = useCallback((tab) => {
+    setActiveTab(allowedTabs.has(tab) ? tab : 'welcome');
+  }, [allowedTabs]);
+
+  useEffect(() => {
+    if (!allowedTabs.has(activeTab)) setActiveTab('welcome');
+  }, [activeTab, allowedTabs]);
+
+  const openEditorSession = useCallback((sessionId) => {
+    setEditorSessionId(Number(sessionId) || null);
+    navigate('ugc-editor');
+  }, [navigate]);
+  const openPlannedCreator = useCallback((creatorId) => {
+    setPlannedCreatorId(Number(creatorId) || null);
+    navigate('creators');
+  }, [navigate]);
+
   return (
     <div className="app-shell" style={{ minHeight: "100vh", background: "#f7f6f2", color: "#171717", fontFamily: "'Helvetica Neue', Helvetica, sans-serif" }}>
       <div className="shell">
@@ -229,7 +250,7 @@ export default function HowlAdEngine({ appAccess }) {
                 {section.items.map(item => {
                   const isActive = item.match?.includes(activeTab) || activeTab === item.key;
                   return (
-                    <button key={item.key} className={`side-item ${isActive ? 'on' : ''}`} onClick={() => setActiveTab(item.key)}>
+                    <button key={item.key} className={`side-item ${isActive ? 'on' : ''}`} onClick={() => navigate(item.key)}>
                       <span>{item.label}</span>
                       {item.count ? <span className="count">{item.count > 99 ? '99+' : item.count}</span> : null}
                     </button>
@@ -251,7 +272,7 @@ export default function HowlAdEngine({ appAccess }) {
         </aside>
 
         <main className="main-panel">
-      {activeTab === "welcome" && <WelcomeScreen setActiveTab={setActiveTab} can={can} />}
+      {activeTab === "welcome" && <WelcomeScreen setActiveTab={navigate} can={can} />}
 
       {activeTab === "results" && variations.length > 0 && (
         <ResultsPanel
@@ -259,7 +280,7 @@ export default function HowlAdEngine({ appAccess }) {
           uniqueAngles={uniqueAngles} uniqueProducts={uniqueProducts}
           filterAngle={filterAngle} setFilterAngle={setFilterAngle}
           filterProduct={filterProduct} setFilterProduct={setFilterProduct}
-          exportCSV={exportCSV} setActiveTab={setActiveTab}
+          exportCSV={exportCSV} setActiveTab={navigate}
           onUseInVideo={handleUseInVideo} onUseOnImage={handleUseOnImage}
           favorites={favorites} toggleFavorite={toggleFavorite}
         />
@@ -275,27 +296,27 @@ export default function HowlAdEngine({ appAccess }) {
             onOpenEditor={openEditorSession}
             initialCreatorId={plannedCreatorId}
             onInitialCreatorLoaded={() => setPlannedCreatorId(null)}
-            setActiveTab={setActiveTab}
+            setActiveTab={navigate}
           />
         )}
         {activeTab === "creative-plan" && <CreativePlanningWorkspace onOpenCreator={openPlannedCreator} />}
         {activeTab === "campaign-planner" && <CreatorCampaignPlanner onOpenCreator={openPlannedCreator} />}
-        {activeTab === "creative" && <WorkspaceHub type="creative" setActiveTab={setActiveTab} can={can} />}
-        {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={setActiveTab} can={can} />}
+        {activeTab === "creative" && <WorkspaceHub type="creative" setActiveTab={navigate} can={can} />}
+        {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={navigate} can={can} />}
         {activeTab === "admin" && can('admin.users') && <AdminWorkspace onOpenEditor={openEditorSession} />}
-        {activeTab === "from-winners" && <FromWinnersTool setActiveTab={setActiveTab} setVariations={setVariations} onOpenCreator={openPlannedCreator} />}
+        {activeTab === "from-winners" && <FromWinnersTool setActiveTab={navigate} setVariations={setVariations} onOpenCreator={openPlannedCreator} />}
         {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} driveAuth={driveAuth} onAddToCart={addToCart} />}
         {activeTab === "callout" && <CalloutAdTool onAddToCart={addToCart} />}
         {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} onAddToCart={addToCart} />}
         {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} onAddToCart={addToCart} />}
         {activeTab === "founder" && <FounderAdTool />}
         {activeTab === "gallery" && <GalleryTab cart={cart} />}
-        {activeTab === "dashboard-cfo" && <DashboardTool setActiveTab={setActiveTab} view="cfo" />}
-        {activeTab === "dashboard-meta" && <DashboardTool setActiveTab={setActiveTab} view="meta" />}
-        {activeTab === "dashboard-shopify" && <DashboardTool setActiveTab={setActiveTab} view="shopify" />}
-        {activeTab === "dashboard-creative" && <DashboardTool setActiveTab={setActiveTab} view="creative" canManageCreators={can('creators.write')} />}
-        {activeTab === "creative-analytics" && <DashboardTool setActiveTab={setActiveTab} view="creative" canManageCreators={can('creators.write')} />}
-        {activeTab === "dashboard-forecast" && <DashboardTool setActiveTab={setActiveTab} view="forecast" />}
+        {activeTab === "dashboard-cfo" && <DashboardTool setActiveTab={navigate} view="cfo" />}
+        {activeTab === "dashboard-meta" && <DashboardTool setActiveTab={navigate} view="meta" />}
+        {activeTab === "dashboard-shopify" && <DashboardTool setActiveTab={navigate} view="shopify" />}
+        {activeTab === "dashboard-creative" && <DashboardTool setActiveTab={navigate} view="creative" canManageCreators={can('creators.write')} />}
+        {activeTab === "creative-analytics" && <DashboardTool setActiveTab={navigate} view="creative" canManageCreators={can('creators.write')} />}
+        {activeTab === "dashboard-forecast" && <DashboardTool setActiveTab={navigate} view="forecast" />}
         {activeTab === "log" && <LaunchLogTool />}
         {activeTab === "ugc-editor" && (
           <UgcEditorTool
