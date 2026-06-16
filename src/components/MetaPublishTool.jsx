@@ -529,6 +529,10 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
   const pushAll = useCallback(async () => {
     const unpushed = queue.filter(item => !statuses[item.id] || statuses[item.id].status !== 'success');
     if (unpushed.length === 0) return;
+    if (!selectedAdsetId || selectedAdsetId === '__new__') {
+      alert('Select or create an ad set first.');
+      return;
+    }
     setPushingAll(true);
     for (let i = 0; i < unpushed.length; i++) {
       setPushAllProgress(`${i + 1}/${unpushed.length}`);
@@ -536,7 +540,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
     }
     setPushingAll(false);
     setPushAllProgress('');
-  }, [cart, statuses, pushAd]);
+  }, [queue, selectedAdsetId, statuses, pushAd]);
 
   const activeAdsetId = selectedAdsetId && selectedAdsetId !== '__new__' ? selectedAdsetId : null;
   const activeCampaignId = selectedCampaignId && selectedCampaignId !== '__new__' ? selectedCampaignId : null;
@@ -805,8 +809,8 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
               <div style={{ marginTop: 20 }}>
                 <button
                   onClick={launchCreativeTest}
-                  disabled={ctRunning || ctSelectedCount === 0 || !ctConfig.pixelId.trim() || !ctConfig.costCapTarget.trim()}
-                  style={{ ...S.btn(ctRunning || ctSelectedCount === 0 || !ctConfig.pixelId.trim() || !ctConfig.costCapTarget.trim()), width: '100%', padding: '14px 0', fontSize: 11 }}
+                  disabled={ctRunning}
+                  style={{ ...S.btn(ctRunning), width: '100%', padding: '14px 0', fontSize: 11 }}
                 >
                   {ctRunning
                     ? ctProgress || 'Building test...'
@@ -900,8 +904,8 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                 )}
                 <button
                   onClick={handleCreateCampaign}
-                  disabled={creatingCampaign || !newCampaign.name.trim()}
-                  style={S.btn(creatingCampaign || !newCampaign.name.trim())}
+                  disabled={creatingCampaign}
+                  style={S.btn(creatingCampaign)}
                 >
                   {creatingCampaign ? 'Creating…' : 'Create Campaign'}
                 </button>
@@ -948,8 +952,8 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                 </div>
                 <button
                   onClick={handleCreateAdset}
-                  disabled={creatingAdset || !newAdset.name.trim()}
-                  style={S.btn(creatingAdset || !newAdset.name.trim())}
+                  disabled={creatingAdset}
+                  style={S.btn(creatingAdset)}
                 >
                   {creatingAdset ? 'Creating…' : 'Create Ad Set'}
                 </button>
@@ -983,8 +987,8 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
           {queue.length > 0 && (
             <button
               onClick={pushAll}
-              disabled={pushingAll || !activeAdsetId}
-              style={S.btn(pushingAll || !activeAdsetId)}
+              disabled={pushingAll}
+              style={S.btn(pushingAll)}
             >
               {pushingAll ? `Pushing ${pushAllProgress}…` : `Push All (${queue.filter(i => !statuses[i.id] || statuses[i.id].status !== 'success').length})`}
             </button>
@@ -1103,8 +1107,8 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                   <div style={S.statusDot(st.status)} title={st.status || 'idle'} />
                   <button
                     onClick={() => pushAd(item)}
-                    disabled={isPushing || isDone || !activeAdsetId}
-                    style={S.btn(isPushing || isDone || !activeAdsetId)}
+                    disabled={isPushing || isDone}
+                    style={S.btn(isPushing || isDone)}
                   >
                     {isPushing ? 'Pushing…' : isDone ? 'Pushed' : 'Push to Meta'}
                   </button>
