@@ -144,17 +144,32 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
       const response = await fetch('/api/creator-campaign-planner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save_briefs', plan_id: plan.id }),
+        body: JSON.stringify({ action: 'save_briefs', plan_id: plan.id, assignments }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not create briefs');
       setPlan(current => ({ ...current, status: 'briefed' }));
-      setNotice(`${data.briefs?.length || assignments.length} creator briefs created and ready for review.`);
+      setNotice(`${data.briefs?.length || assignments.length} draft creator briefs created. Review and approve each one before sending.`);
     } catch (err) {
       setError(err.message);
     } finally {
       setSaving(false);
     }
+  };
+
+  const updateAssignment = (index, patch) => {
+    setPlan(current => {
+      if (!current) return current;
+      const nextAssignments = [...(current.assignments || [])];
+      nextAssignments[index] = { ...nextAssignments[index], ...patch };
+      return { ...current, assignments: nextAssignments };
+    });
+  };
+
+  const updateAssignmentList = (index, key, value) => {
+    updateAssignment(index, {
+      [key]: value.split('\n').map(item => item.trim()).filter(Boolean),
+    });
   };
 
   const saveGuidelines = async () => {
@@ -439,11 +454,29 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
                         </div>
                         <section className="campaign-script">
                           <span>Hook options</span>
-                          <ol>{(assignment.hooks || []).map(hook => <li key={hook}>{hook}</li>)}</ol>
+                          <textarea
+                            rows="4"
+                            value={(assignment.hooks || []).join('\n')}
+                            onChange={event => updateAssignmentList(index, 'hooks', event.target.value)}
+                          />
                           <span>Body</span>
-                          <p>{assignment.full_script}</p>
+                          <textarea
+                            rows="10"
+                            value={assignment.full_script || ''}
+                            onChange={event => updateAssignment(index, { full_script: event.target.value })}
+                          />
                           <span>CTA options</span>
-                          <ul>{(assignment.ctas || []).map(cta => <li key={cta}>{cta}</li>)}</ul>
+                          <textarea
+                            rows="4"
+                            value={(assignment.ctas || []).join('\n')}
+                            onChange={event => updateAssignmentList(index, 'ctas', event.target.value)}
+                          />
+                          <span>Shot list</span>
+                          <textarea
+                            rows="5"
+                            value={(assignment.shot_list || []).join('\n')}
+                            onChange={event => updateAssignmentList(index, 'shot_list', event.target.value)}
+                          />
                         </section>
                         <footer>
                           <button onClick={() => onOpenCreator?.(assignment.creator_id)}>Open creator</button>
@@ -456,9 +489,9 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
               </div>
 
               <div className="campaign-approve">
-                <div><span>Ready to operationalize?</span><strong>Create one editable brief per assignment.</strong></div>
+                <div><span>Ready to operationalize?</span><strong>Create draft briefs. Review and approve each one before sending.</strong></div>
                 <button onClick={saveBriefs} disabled={saving || plan.status === 'briefed'}>
-                  {plan.status === 'briefed' ? 'Briefs created' : saving ? 'Creating briefs…' : 'Approve plan + create briefs'}
+                  {plan.status === 'briefed' ? 'Briefs created' : saving ? 'Creating briefs…' : 'Create editable draft briefs'}
                 </button>
               </div>
               {notice ? <div className="app-notice">{notice}</div> : null}

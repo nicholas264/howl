@@ -113,6 +113,7 @@ export default function CreatorWorkspace({
     submission_links: [], production_summary: {}, guidance: { milestones: [], next_action: null },
   });
   const [briefForm, setBriefForm] = useState({ product: '', objective: '', angle: '', direction: '', strategy_mode: 'past_performers' });
+  const [briefDraft, setBriefDraft] = useState(null);
   const [outreach, setOutreach] = useState({
     channel: 'email', subject: '', body: '', status: 'draft', next_follow_up_at: defaultFollowUpDate(),
   });
@@ -836,6 +837,7 @@ export default function CreatorWorkspace({
   };
 
   const sendBriefAssignment = async brief => {
+    if (brief.status !== 'approved') return setError('Approve the brief before sending it to the creator.');
     if (!selected?.email) return setError('Add the creator email before sending an assignment.');
     if (!gmailConnected) return connectGmail();
     setSaving(true);
@@ -868,6 +870,45 @@ export default function CreatorWorkspace({
       const emailData = await emailResponse.json();
       if (!emailResponse.ok) throw new Error(emailData.error || 'Could not send assignment');
       setWorkflow(linkData.workflow);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const editBrief = brief => {
+    setBriefDraft({
+      id: brief.id,
+      title: brief.title || '',
+      brief: brief.brief || '',
+      script: brief.script || '',
+      status: brief.status || 'draft',
+    });
+  };
+
+  const saveBriefDraft = async (status = briefDraft?.status || 'draft') => {
+    if (!briefDraft) return;
+    setSaving(true);
+    setError('');
+    try {
+      const response = await fetch('/api/creator-workflow', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resource: 'brief',
+          creator_id: selected.id,
+          id: briefDraft.id,
+          title: briefDraft.title,
+          brief: briefDraft.brief,
+          script: briefDraft.script,
+          status,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not update brief');
+      await refreshWorkflow(selected.id);
+      setBriefDraft(null);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1422,10 +1463,33 @@ export default function CreatorWorkspace({
                     <details key={brief.id} className="workflow-card" open={workflow.briefs[0]?.id === brief.id}>
                       <summary><span><strong>{brief.title}</strong><small>{brief.product || brief.angle || 'Creator brief'}</small></span><i>{brief.status}</i></summary>
                       <div className="workflow-card-body">
-                        <h4>Brief</h4><p className="prewrap">{brief.brief}</p>
-                        <h4>Script</h4><p className="prewrap">{brief.script}</p>
+                        {briefDraft?.id === brief.id ? (
+                          <div className="brief-editor">
+                            <label>Title<input value={briefDraft.title} onChange={event => setBriefDraft(current => ({ ...current, title: event.target.value }))} /></label>
+                            <label>Brief<textarea rows="10" value={briefDraft.brief} onChange={event => setBriefDraft(current => ({ ...current, brief: event.target.value }))} /></label>
+                            <label>Script<textarea rows="12" value={briefDraft.script} onChange={event => setBriefDraft(current => ({ ...current, script: event.target.value }))} /></label>
+                            <div>
+                              <button type="button" disabled={saving} onClick={() => saveBriefDraft('draft')}>Save draft</button>
+                              <button type="button" disabled={saving} onClick={() => saveBriefDraft('approved')}>Approve brief</button>
+                              <button type="button" disabled={saving} onClick={() => setBriefDraft(null)}>Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <h4>Brief</h4><p className="prewrap">{brief.brief}</p>
+                            <h4>Script</h4><p className="prewrap">{brief.script}</p>
+                          </>
+                        )}
                         {!!brief.deliverables?.length && <><h4>Deliverables</h4><ul>{brief.deliverables.map((item, index) => <li key={index}>{item}</li>)}</ul></>}
-                        {canWriteBriefs && <button className="brief-send" disabled={saving} onClick={() => sendBriefAssignment(brief)}>Send assignment to creator</button>}
+                        {canWriteBriefs && briefDraft?.id !== brief.id && (
+                          <div className="brief-actions">
+                            <button type="button" onClick={() => editBrief(brief)}>Edit script</button>
+                            <button type="button" onClick={() => editBrief(brief)}>Review / approve</button>
+                            <button className="brief-send" disabled={saving || brief.status !== 'approved'} onClick={() => sendBriefAssignment(brief)}>
+                              {brief.status === 'approved' ? 'Send assignment to creator' : 'Approval required before sending'}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </details>
                   ))}

@@ -507,7 +507,7 @@ export default async function handler(req, res) {
 
   try {
     await ensureCreatorOpsTables(sql);
-    const creatorId = Number(req.query.creator_id || req.body?.creator_id);
+    const creatorId = Number(req.query?.creator_id || req.body?.creator_id);
     if (!creatorId) return res.status(400).json({ error: 'creator_id required' });
 
     if (req.method === 'GET') return res.json(await getWorkflow(sql, creatorId));
@@ -861,10 +861,13 @@ export default async function handler(req, res) {
         const briefId = Number(body.brief_id) || null;
         if (briefId) {
           const [brief] = await sql`
-            SELECT id FROM creator_briefs
+            SELECT id, status FROM creator_briefs
             WHERE id = ${briefId} AND creator_id = ${creatorId}
           `;
           if (!brief) return res.status(400).json({ error: 'Selected brief does not belong to this creator' });
+          if (brief.status !== 'approved') {
+            return res.status(409).json({ error: 'Approve the brief before creating a creator upload link.' });
+          }
         }
         const dueAt = timestamp(body.due_at);
         if (dueAt === undefined) return res.status(400).json({ error: 'Submission due date is invalid' });
@@ -919,16 +922,29 @@ export default async function handler(req, res) {
 
     if (req.method === 'PATCH') {
       if (body.resource === 'brief') {
+        const status = clean(body.status, 50);
+        if (status && !['draft', 'approved', 'sent', 'archived'].includes(status)) {
+          return res.status(400).json({ error: 'Unsupported brief status' });
+        }
         const [brief] = await sql`
           UPDATE creator_briefs SET
             title = COALESCE(${clean(body.title, 300)}, title),
             brief = COALESCE(${clean(body.brief)}, brief),
             script = COALESCE(${clean(body.script)}, script),
-            status = COALESCE(${clean(body.status, 50)}, status),
+            status = COALESCE(${status}, status),
             updated_at = now()
           WHERE id = ${Number(body.id)} AND creator_id = ${creatorId}
           RETURNING *
         `;
+        if (brief && status === 'approved') {
+          await sql`
+            INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+            VALUES (
+              ${creatorId}, 'brief_approved', ${`Brief approved: ${brief.title}`},
+              ${JSON.stringify({ brief_id: brief.id })}::jsonb, ${access.userId}
+            )
+          `;
+        }
         return brief ? res.json({ brief }) : res.status(404).json({ error: 'Brief not found' });
       }
       if (body.resource === 'outreach') {

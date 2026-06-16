@@ -408,15 +408,23 @@ Use each creator at most twice. Return exactly ${assetCount} assignments and hon
   return plan;
 }
 
-async function saveBriefs(sql, access, planId) {
+async function saveBriefs(sql, access, planId, assignmentOverride = null) {
   const [plan] = await sql`SELECT * FROM creator_campaign_plans WHERE id = ${planId}`;
   if (!plan) throw new Error('Campaign plan not found');
   if (plan.status === 'briefed') {
     return sql`SELECT * FROM creator_briefs WHERE generation_source = ${`campaign_plan:${planId}`} ORDER BY id`;
   }
+  const assignments = Array.isArray(assignmentOverride) && assignmentOverride.length
+    ? assignmentOverride.map((assignment, index) => ({ ...assignment, slot: index + 1 }))
+    : plan.assignments || [];
+  const guidelines = await loadBrandGuidelines(sql);
+  const violations = guidelineViolations(assignments, guidelines);
+  if (violations.length) {
+    throw new Error(`Brand guardrails blocked approved scripts: ${violations.slice(0, 5).join(', ')}`);
+  }
   const briefs = [];
   const updatedAssignments = [];
-  for (const assignment of plan.assignments || []) {
+  for (const assignment of assignments) {
     const briefText = [
       `FORMAT\n${assignment.format?.replaceAll('_', ' ')}`,
       `WHY THIS CREATOR\n${assignment.creator_match}`,
@@ -584,7 +592,7 @@ export default async function handler(req, res) {
     if (req.body?.action === 'save_briefs') {
       const planId = Number(req.body?.plan_id);
       if (!planId) return res.status(400).json({ error: 'plan_id required' });
-      const briefs = await saveBriefs(sql, access, planId);
+      const briefs = await saveBriefs(sql, access, planId, req.body?.assignments);
       return res.json({ briefs });
     }
     return res.status(400).json({ error: 'Unknown action' });
