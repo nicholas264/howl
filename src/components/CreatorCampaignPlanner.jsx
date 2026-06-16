@@ -318,7 +318,11 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
                     <option value="">Choose creator record</option>
                     {creatorOptions.map(creator => <option value={creator.id} key={creator.id}>{creator.name} · {creator.stage}</option>)}
                   </select>
-                  <button disabled={!linkSelections[item.label] || linking === item.label} onClick={() => linkCreator(item.label)}>
+                  <button
+                    disabled={!linkSelections[item.label] || linking === item.label}
+                    title={!linkSelections[item.label] ? 'Choose a creator record before linking this historical label.' : ''}
+                    onClick={() => linkCreator(item.label)}
+                  >
                     {linking === item.label ? 'Linking…' : 'Link'}
                   </button>
                 </section>
@@ -374,7 +378,7 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
             Objective
             <textarea rows="4" value={objective} onChange={event => setObjective(event.target.value)} />
           </label>
-          <button className="campaign-generate" onClick={generate} disabled={generating || !selectedProduct}>
+          <button className="campaign-generate" onClick={generate} disabled={generating}>
             {generating ? 'Analyzing creators and account patterns…' : 'Build campaign plan'}
           </button>
           {error ? <div className="app-error">{error}</div> : null}
@@ -495,7 +499,11 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
 
               <div className="campaign-approve">
                 <div><span>Ready to operationalize?</span><strong>Create draft briefs. Review and approve each one before sending.</strong></div>
-                <button onClick={saveBriefs} disabled={saving || plan.status === 'briefed'}>
+                <button
+                  onClick={saveBriefs}
+                  disabled={saving || plan.status === 'briefed'}
+                  title={plan.status === 'briefed' ? 'Draft briefs have already been created for this plan.' : ''}
+                >
                   {plan.status === 'briefed' ? 'Briefs created' : saving ? 'Creating briefs…' : 'Create editable draft briefs'}
                 </button>
               </div>

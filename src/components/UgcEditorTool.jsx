@@ -542,10 +542,20 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
 
                     {stage !== 'rendering' && (
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <button onClick={render} style={primaryBtn} disabled={!segments.length}>
+                        <button
+                          onClick={render}
+                          style={primaryBtn}
+                          disabled={!segments.length}
+                          title={!segments.length ? 'Transcribe the asset before rendering an edited cut.' : ''}
+                        >
                           {stage === 'done' ? 'Re-render' : 'Render'}
                         </button>
-                        <button onClick={suggestCleanup} style={secondaryBtn} disabled={aiCleaning || !words.length}>
+                        <button
+                          onClick={suggestCleanup}
+                          style={secondaryBtn}
+                          disabled={aiCleaning || !words.length}
+                          title={!words.length ? 'Transcribe the asset before using AI cleanup.' : ''}
+                        >
                           {aiCleaning ? 'Reviewing...' : 'AI cleanup'}
                         </button>
                         <button onClick={resetWords} style={secondaryBtn}>Reset cuts</button>

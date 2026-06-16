@@ -1159,11 +1159,21 @@ export default function CalloutAdTool({ onAddToCart }) {
           </div>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-            <button onClick={exportPng} disabled={!imgUrl || exporting} style={primaryBtn}>
+            <button
+              onClick={exportPng}
+              disabled={!imgUrl || exporting}
+              style={primaryBtn}
+              title={!imgUrl ? 'Upload or choose an image before downloading a PNG.' : ''}
+            >
               {exporting ? 'Rendering…' : 'Download PNG'}
             </button>
             {onAddToCart && (
-              <button onClick={sendToCart} disabled={!imgUrl || exporting} style={secondaryBtn}>
+              <button
+                onClick={sendToCart}
+                disabled={!imgUrl || exporting}
+                style={secondaryBtn}
+                title={!imgUrl ? 'Upload or choose an image before sending to cart.' : ''}
+              >
                 Send to Cart
               </button>
             )}
