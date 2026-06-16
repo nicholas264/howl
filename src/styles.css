@@ -150,6 +150,26 @@ input, textarea, select, button { font-family: inherit; }
 .dash-subtab:hover { color: var(--text); }
 .dash-subtab.on { color: var(--flame); background: var(--flame-dim); }
 
+.dashboard-workspace.dashboard-motion-workspace{--surface:#fff;--surface2:#f4f1ea;--border:#dedbd3;--border2:#c9c4ba;--text:#171717;--muted:#6f6d68;--muted2:#88857f;--flame:#d84a17;--flame-dim:#fff0e9;--flame-border:#efb9a4;box-sizing:border-box;width:100%;background:#f7f6f2;color:#171717;font-family:'Helvetica Neue',Helvetica,sans-serif}
+.dashboard-motion-workspace *{box-sizing:border-box}
+.dashboard-motion-workspace .dash-subnav{gap:5px;margin-bottom:26px;padding:5px;background:#fff;border-color:#dedbd3;border-radius:12px;box-shadow:0 10px 28px rgba(45,40,30,.05)}
+.dashboard-motion-workspace .dash-subtab{padding:10px 16px;border-radius:8px;color:#77746f;font:700 11px/1 'Helvetica Neue',sans-serif;letter-spacing:.04em;text-transform:none}
+.dashboard-motion-workspace .dash-subtab:hover{background:#faf9f6;color:#171717}
+.dashboard-motion-workspace .dash-subtab.on{background:#171717;color:#fff;box-shadow:none}
+.dashboard-motion-workspace .eyebrow{color:#b84418;font-size:11px;letter-spacing:.16em}
+.dashboard-motion-workspace .display-lg,.dashboard-motion-workspace .display-md{color:#171717}
+.dashboard-motion-workspace .display-lg{font-size:48px}
+.dashboard-motion-workspace .display-md{font-size:34px}
+.dashboard-motion-workspace .display-italic{color:#6f6d68}
+.dashboard-motion-workspace button{transition:background .15s,border-color .15s,color .15s,transform .15s}
+.dashboard-motion-workspace button:hover:not(:disabled){transform:translateY(-1px)}
+.dashboard-motion-workspace input,.dashboard-motion-workspace select,.dashboard-motion-workspace textarea{color-scheme:light;outline-color:#d84a17}
+.dashboard-motion-workspace table{border-collapse:collapse}
+.dashboard-motion-workspace th{color:#77746f}
+.dashboard-motion-workspace td{color:#343330}
+.dashboard-motion-workspace code{background:#f4f1ea;border:1px solid #dedbd3;border-radius:5px;color:#343330}
+@media(max-width:900px){.dashboard-workspace.dashboard-motion-workspace{padding:28px 18px 60px!important}.dashboard-motion-workspace .display-lg{font-size:40px}.dashboard-motion-workspace .display-md{font-size:30px}.dashboard-motion-workspace .dash-subnav{width:100%;overflow-x:auto}.dashboard-motion-workspace .dash-subtab{white-space:nowrap}}
+
 /* Creative intelligence workspace: bright report surface inside the HOWL shell. */
 .motion-workspace { color:#171717; background:#f7f6f2; border:1px solid #dedbd3; border-radius:22px; padding:30px; margin-bottom:22px; box-shadow:0 20px 50px rgba(0,0,0,.18); font-family:'Helvetica Neue',Helvetica,sans-serif; }
 .motion-report-head { display:flex; justify-content:space-between; gap:32px; align-items:flex-end; padding:8px 4px 28px; }
