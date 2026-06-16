@@ -215,7 +215,7 @@ export default function HowlAdEngine({ appAccess }) {
     if (can('analytics.read')) tabs.add('dashboard-creative');
     if (can('assets.write')) tabs.add('gallery');
     if (can('launch.write')) tabs.add('publish');
-    if (variations.length) tabs.add('results');
+    if (can('briefs.write')) tabs.add('results');
     return tabs;
   }, [NAV_SECTIONS, can, variations.length]);
 
@@ -274,16 +274,24 @@ export default function HowlAdEngine({ appAccess }) {
         <main className="main-panel">
       {activeTab === "welcome" && <WelcomeScreen setActiveTab={navigate} can={can} />}
 
-      {activeTab === "results" && variations.length > 0 && (
-        <ResultsPanel
-          variations={variations} filtered={filtered}
-          uniqueAngles={uniqueAngles} uniqueProducts={uniqueProducts}
-          filterAngle={filterAngle} setFilterAngle={setFilterAngle}
-          filterProduct={filterProduct} setFilterProduct={setFilterProduct}
-          exportCSV={exportCSV} setActiveTab={navigate}
-          onUseInVideo={handleUseInVideo} onUseOnImage={handleUseOnImage}
-          favorites={favorites} toggleFavorite={toggleFavorite}
-        />
+      {activeTab === "results" && (
+        variations.length > 0 ? (
+          <ResultsPanel
+            variations={variations} filtered={filtered}
+            uniqueAngles={uniqueAngles} uniqueProducts={uniqueProducts}
+            filterAngle={filterAngle} setFilterAngle={setFilterAngle}
+            filterProduct={filterProduct} setFilterProduct={setFilterProduct}
+            exportCSV={exportCSV} setActiveTab={navigate}
+            onUseInVideo={handleUseInVideo} onUseOnImage={handleUseOnImage}
+            favorites={favorites} toggleFavorite={toggleFavorite}
+          />
+        ) : (
+          <div className="workspace-empty">
+            <strong>No generated concepts yet.</strong>
+            <p>Generate concepts from the Concept Studio, then this results workspace will stay available for review, favorites, and exports.</p>
+            <button type="button" className="primary-action" onClick={() => navigate('from-winners')}>Open Concept Studio</button>
+          </div>
+        )
       )}
 
       <Suspense fallback={<TabFallback />}>

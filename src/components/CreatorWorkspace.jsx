@@ -985,7 +985,7 @@ export default function CreatorWorkspace({
           <h1>Creators</h1>
           <p>Source, qualify, brief, produce, and measure creator relationships in one record.</p>
         </div>
-        {workspaceView === 'database' && canManageCreators && <div className="creator-head-actions"><button onClick={() => setShowImport(true)}>Import</button><button className="primary-action" onClick={() => setShowCreate(true)}>Add creator</button></div>}
+        {workspaceView === 'database' && canManageCreators && <div className="creator-head-actions"><button type="button" onClick={() => setShowImport(true)}>Import</button><button type="button" className="primary-action" onClick={() => setShowCreate(true)}>Add creator</button></div>}
       </header>
 
       <div className="creator-view-tabs">
@@ -1485,7 +1485,7 @@ export default function CreatorWorkspace({
                           <div className="brief-actions">
                             <button type="button" onClick={() => editBrief(brief)}>Edit script</button>
                             <button type="button" onClick={() => editBrief(brief)}>Review / approve</button>
-                            <button className="brief-send" disabled={saving || brief.status !== 'approved'} onClick={() => sendBriefAssignment(brief)}>
+                            <button type="button" className="brief-send" disabled={saving || brief.status !== 'approved'} onClick={() => sendBriefAssignment(brief)}>
                               {brief.status === 'approved' ? 'Send assignment to creator' : 'Approval required before sending'}
                             </button>
                           </div>
@@ -1626,7 +1626,7 @@ export default function CreatorWorkspace({
                         <i>{link.status}</i>
                       </header>
                       {canWriteAssets && link.status === 'active' && (
-                        <button onClick={() => revokeSubmissionLink(link.id)}>Revoke upload link</button>
+                        <button type="button" onClick={() => revokeSubmissionLink(link.id)}>Revoke upload link</button>
                       )}
                     </article>
                   ))}
@@ -1667,7 +1667,7 @@ export default function CreatorWorkspace({
                       {item.source_url && <a href={item.source_url} target="_blank" rel="noreferrer">Open source asset</a>}
                       {item.output_url && <a href={item.output_url} target="_blank" rel="noreferrer">Open finished edit</a>}
                       {canWriteAssets && item.ugc_session_id && (
-                        <button className="editor-linked" onClick={() => onOpenEditor?.(item.ugc_session_id)}>
+                        <button type="button" className="editor-linked" onClick={() => onOpenEditor?.(item.ugc_session_id)}>
                           Open in UGC Editor
                         </button>
                       )}
@@ -1780,7 +1780,7 @@ export default function CreatorWorkspace({
       {showImport && (
         <div className="app-modal-backdrop" onMouseDown={() => setShowImport(false)}>
           <div className="app-modal import-modal" onMouseDown={event => event.stopPropagation()}>
-            <header><div><span className="workspace-kicker">ClickUp intake</span><h2>Import creators</h2></div><button onClick={() => setShowImport(false)}>Close</button></header>
+            <header><div><span className="workspace-kicker">ClickUp intake</span><h2>Import creators</h2></div><button type="button" onClick={() => setShowImport(false)}>Close</button></header>
             <div className="import-body">
               <p>ClickUp does not expose the visible Email column through its API. Export this exact ClickUp view as CSV, then upload it here. HOWL matches existing creators by Task ID and preserves their current workflow stage.</p>
               <label className="import-drop">

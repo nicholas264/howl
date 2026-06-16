@@ -192,14 +192,23 @@ export default function CreatorOperationsWorkspace({ canManage = false, onOpenCr
             </span>
             {item.action_key === 'finish_edit' && item.edit_session_id ? (
               <span className="operations-inline-actions">
-                <button
+                <span
+                  className="operations-inline-action"
+                  role="button"
+                  tabIndex={0}
                   onClick={event => {
+                    event.stopPropagation();
+                    onOpenEditor?.(item.edit_session_id);
+                  }}
+                  onKeyDown={event => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
                     event.stopPropagation();
                     onOpenEditor?.(item.edit_session_id);
                   }}
                 >
                   Open editor
-                </button>
+                </span>
               </span>
             ) : (
               <time>{dateLabel(item.action_date) || 'Open record'}</time>
