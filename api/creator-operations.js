@@ -223,6 +223,8 @@ export default async function handler(req, res) {
           agreement.sent_at AS agreement_sent_at,
           agreement.expires_at AS agreement_expires_at,
           submission.expires_at AS submission_expires_at,
+          edit_queue.ugc_session_id AS edit_session_id,
+          edit_queue.title AS edit_title,
           EXISTS (
             SELECT 1 FROM creator_outreach o
             WHERE o.creator_id = c.id
@@ -331,6 +333,16 @@ export default async function handler(req, res) {
           WHERE l.creator_id = c.id AND l.status = 'active' AND l.expires_at > now()
           ORDER BY l.created_at DESC LIMIT 1
         ) submission ON true
+        LEFT JOIN LATERAL (
+          SELECT d.ugc_session_id, d.title
+          FROM creator_deliverables d
+          WHERE d.creator_id = c.id
+            AND d.ugc_session_id IS NOT NULL
+            AND d.status NOT IN ('complete', 'launched', 'cancelled')
+            AND d.completed_asset_count < d.expected_asset_count
+          ORDER BY d.received_at DESC NULLS LAST, d.updated_at DESC
+          LIMIT 1
+        ) edit_queue ON true
         WHERE c.status <> 'inactive' AND c.stage <> 'alumni'
       ),
       classified AS (

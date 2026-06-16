@@ -1729,6 +1729,7 @@ export default function CreatorWorkspace({
       ) : workspaceView === 'operations' ? (
         <CreatorOperationsWorkspace
           canManage={canManageCreators}
+          onOpenEditor={onOpenEditor}
           onOpenCreator={(creator, targetTab) => {
             setWorkspaceView('database');
             openCreator(creator, targetTab);

@@ -20,6 +20,7 @@ function dateLabel(value) {
 
 function actionDetail(item) {
   if (item.action_key === 'production_overdue') return item.overdue_title || 'Incomplete creator deliverable';
+  if (item.action_key === 'finish_edit') return item.edit_title ? `Footage ready: ${item.edit_title}` : 'Creator footage is received and ready to edit.';
   if (item.action_key === 'follow_up') return 'Creator outreach needs a response or next step.';
   if (item.action_key === 'await_agreement') return 'Agreement sent; acceptance is still outstanding.';
   if (item.action_key === 'await_footage') return 'Assignment is live; footage has not arrived yet.';
@@ -29,7 +30,7 @@ function actionDetail(item) {
   return `${item.stage} creator · ${item.category}`;
 }
 
-export default function CreatorOperationsWorkspace({ canManage = false, onOpenCreator, onNavigate }) {
+export default function CreatorOperationsWorkspace({ canManage = false, onOpenCreator, onOpenEditor, onNavigate }) {
   const [data, setData] = useState({ items: [], summary: { categories: {} } });
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
@@ -189,7 +190,20 @@ export default function CreatorOperationsWorkspace({ canManage = false, onOpenCr
               <strong>{item.action_label}</strong>
               <small>{actionDetail(item)}</small>
             </span>
-            <time>{dateLabel(item.action_date) || 'Open record'}</time>
+            {item.action_key === 'finish_edit' && item.edit_session_id ? (
+              <span className="operations-inline-actions">
+                <button
+                  onClick={event => {
+                    event.stopPropagation();
+                    onOpenEditor?.(item.edit_session_id);
+                  }}
+                >
+                  Open editor
+                </button>
+              </span>
+            ) : (
+              <time>{dateLabel(item.action_date) || 'Open record'}</time>
+            )}
             <b>→</b>
           </button>
         ))}

@@ -11,6 +11,14 @@ const DEFAULT_SETTINGS = {
   autoCutSilences: true,
 };
 
+const SESSION_FILTERS = [
+  ['needs_edit', 'Needs edit'],
+  ['creator', 'Creator footage'],
+  ['untranscribed', 'Needs transcript'],
+  ['rendered', 'Rendered'],
+  ['all', 'All'],
+];
+
 export default function UgcEditorTool({ initialSessionId = null, onInitialSessionLoaded, onAddToCart }) {
   const { getToken } = useAuth();
   const [sessions, setSessions] = useState([]);
@@ -29,6 +37,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   const [aiCleaning, setAiCleaning] = useState(false);
   const [aiCleanupMessage, setAiCleanupMessage] = useState('');
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [sessionFilter, setSessionFilter] = useState('needs_edit');
   const videoRef = useRef(null);
   const autosaveTimer = useRef(null);
   const dirtyRef = useRef(false);
@@ -70,6 +79,30 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   }, [words, settings, duration, activeSession]);
 
   const markDirty = () => { dirtyRef.current = true; };
+
+  const sessionStats = useMemo(() => sessions.reduce((stats, session) => {
+    stats.all += 1;
+    if (session.creator_id) stats.creator += 1;
+    if (!Number(session.word_count || 0) && !session.rendered_url) stats.untranscribed += 1;
+    if (session.rendered_url || session.status === 'rendered') stats.rendered += 1;
+    if (session.creator_id && !(session.rendered_url || session.status === 'rendered')) stats.needs_edit += 1;
+    return stats;
+  }, { all: 0, creator: 0, untranscribed: 0, rendered: 0, needs_edit: 0 }), [sessions]);
+
+  const filteredSessions = useMemo(() => sessions.filter(session => {
+    if (sessionFilter === 'all') return true;
+    if (sessionFilter === 'creator') return Boolean(session.creator_id);
+    if (sessionFilter === 'untranscribed') return !Number(session.word_count || 0) && !session.rendered_url;
+    if (sessionFilter === 'rendered') return Boolean(session.rendered_url) || session.status === 'rendered';
+    if (sessionFilter === 'needs_edit') return Boolean(session.creator_id) && !(session.rendered_url || session.status === 'rendered');
+    return true;
+  }), [sessions, sessionFilter]);
+
+  const sessionTitle = session => session?.deliverable_title || session?.title || session?.file_name || `Session ${session?.id}`;
+  const sessionContext = session => [
+    session?.creator_name,
+    session?.brief_title,
+  ].filter(Boolean).join(' · ');
 
   const updateSetting = (key, value) => {
     setSettings(prev => ({ ...prev, [key]: value }));
@@ -306,10 +339,22 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       if (!response.ok) throw new Error(data.error || 'Server render failed');
       const url = data.url;
       setOutputUrl(url);
-      setActiveSession(prev => prev ? { ...prev, rendered_url: url, status: 'rendered' } : prev);
+      setActiveSession(prev => prev ? {
+        ...prev,
+        rendered_url: url,
+        status: 'rendered',
+        deliverable_status: prev.deliverable_id ? 'edited' : prev.deliverable_status,
+        completed_asset_count: prev.deliverable_id ? Math.max(Number(prev.completed_asset_count || 0), 1) : prev.completed_asset_count,
+      } : prev);
       setSessions(prev => prev.map(session => (
         session.id === activeSession.id
-          ? { ...session, rendered_url: url, status: 'rendered' }
+          ? {
+              ...session,
+              rendered_url: url,
+              status: 'rendered',
+              deliverable_status: session.deliverable_id ? 'edited' : session.deliverable_status,
+              completed_asset_count: session.deliverable_id ? Math.max(Number(session.completed_asset_count || 0), 1) : session.completed_asset_count,
+            }
           : session
       )));
       setProgress(1);
@@ -338,7 +383,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       dataUrl: outputUrl,
       videoUrl: outputUrl,
       name: activeSession?.creator_name
-        ? `${activeSession.creator_name} UGC edit`
+        ? `${activeSession.creator_name} · ${activeSession.deliverable_title || 'UGC edit'}`
         : `UGC edit ${new Date().toLocaleString()}`,
       creator: activeSession?.creator_name || null,
       creatorId: activeSession?.creator_id || null,
@@ -362,31 +407,53 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', minHeight: 'calc(100vh - 60px)' }}>
       <aside style={sidebarStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <span style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f' }}>Sessions</span>
+          <span style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f' }}>Edit queue</span>
           <button onClick={newSession} style={ghostBtn}>+ New</button>
+        </div>
+        <div style={queueSummary}>
+          <strong>{sessionStats.needs_edit}</strong>
+          <span>creator uploads need editing</span>
+        </div>
+        <div style={filterRow}>
+          {SESSION_FILTERS.map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setSessionFilter(key)}
+              style={{
+                ...filterBtn,
+                ...(sessionFilter === key ? { background: '#171717', color: '#fff', borderColor: '#171717' } : {}),
+              }}
+            >
+              {label}<i>{sessionStats[key] || 0}</i>
+            </button>
+          ))}
         </div>
         {sessionsLoading && <div style={{ color: '#88857f', fontSize: 12 }}>Loading…</div>}
         {!sessionsLoading && !sessions.length && (
           <div style={{ color: '#88857f', fontSize: 12 }}>No sessions yet. Upload a video to start.</div>
         )}
+        {!sessionsLoading && sessions.length > 0 && !filteredSessions.length && (
+          <div style={{ color: '#88857f', fontSize: 12 }}>No sessions match this view.</div>
+        )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {sessions.map(s => (
+          {filteredSessions.map(s => (
             <div
               key={s.id}
               onClick={() => loadSession(s.id)}
               style={{
                 ...sessionCard,
-                ...(activeSession?.id === s.id ? { borderColor: '#d84a17', background: '#1f1410' } : {}),
+                ...(activeSession?.id === s.id ? { borderColor: '#d84a17', background: '#fff0e9' } : {}),
               }}
             >
               <div style={{ fontSize: 12, color: '#171717', fontWeight: 600, wordBreak: 'break-all' }}>
-                {s.title || s.file_name || `Session ${s.id}`}
-                {s.creator_name && <span style={{ display: 'block', color: '#d84a17', fontSize: 8, marginTop: 3 }}>{s.creator_name}</span>}
+                {sessionTitle(s)}
+                {sessionContext(s) && <span style={{ display: 'block', color: '#b84418', fontSize: 8, marginTop: 3 }}>{sessionContext(s)}</span>}
               </div>
               <div style={{ fontSize: 10, color: '#77746f', marginTop: 4 }}>
                 {s.file_size ? `${(s.file_size / 1024 / 1024).toFixed(1)} MB · ` : ''}
                 {s.duration ? `${parseFloat(s.duration).toFixed(1)}s · ` : ''}
-                {s.status}
+                {s.creator_id ? 'Creator upload · ' : 'Manual upload · '}
+                {s.rendered_url ? 'rendered' : s.status}
               </div>
               <button
                 onClick={(e) => { e.stopPropagation(); deleteSession(s.id); }}
@@ -402,15 +469,21 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       <div style={{ padding: 24, maxWidth: 1100 }}>
         <h1 style={{ fontSize: 22, marginBottom: 4 }}>UGC Editor</h1>
         <p style={{ color: '#77746f', marginTop: 0, fontSize: 13 }}>
-          Upload raw footage (multi-GB OK) → cut silences and bad takes from the transcript → burn captions → export. Sessions are saved automatically.
+          Creator uploads land here automatically from assignment links. Cut silences and bad takes from the transcript, burn captions, render, then send the finished asset to launch.
         </p>
+        <div style={editorStats}>
+          <div><span>Needs edit</span><strong>{sessionStats.needs_edit}</strong></div>
+          <div><span>Needs transcript</span><strong>{sessionStats.untranscribed}</strong></div>
+          <div><span>Rendered</span><strong>{sessionStats.rendered}</strong></div>
+          <div><span>Total sessions</span><strong>{sessionStats.all}</strong></div>
+        </div>
 
         {!videoUrl && stage !== 'uploading' && (
           <label
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
-            style={{ ...uploadBox, borderColor: dragOver ? '#d84a17' : '#dedbd3', background: dragOver ? '#1f1410' : '#fff' }}
+            style={{ ...uploadBox, borderColor: dragOver ? '#d84a17' : '#dedbd3', background: dragOver ? '#fff0e9' : '#fff' }}
           >
             <input type="file" accept="video/*" onChange={handleFile} style={{ display: 'none' }} />
             <div style={{ fontSize: 14 }}>Click or drag a video here (mp4, mov, webm)</div>
@@ -431,9 +504,18 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
             <div style={{ position: 'sticky', top: 16 }}>
               <video ref={videoRef} src={videoUrl} controls crossOrigin="anonymous" style={{ width: '100%', borderRadius: 8, background: '#000', maxHeight: 320 }} />
               <div style={{ fontSize: 12, color: '#77746f', marginTop: 6 }}>
+                {activeSession?.creator_name && <strong style={{ display: 'block', color: '#171717', marginBottom: 3 }}>{activeSession.creator_name}</strong>}
+                {activeSession?.deliverable_title && <span style={{ display: 'block', color: '#b84418', marginBottom: 3 }}>{activeSession.deliverable_title}</span>}
                 {activeSession?.file_name || file?.name}
                 {activeSession?.file_size ? ` · ${(activeSession.file_size / 1024 / 1024).toFixed(1)} MB` : (file ? ` · ${(file.size / 1024 / 1024).toFixed(1)} MB` : '')}
               </div>
+              {activeSession?.brief_title && (
+                <div style={contextBox}>
+                  <span>Brief</span>
+                  <strong>{activeSession.brief_title}</strong>
+                  <small>{activeSession.deliverable_status || activeSession.status}</small>
+                </div>
+              )}
 
               <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {(stage === 'uploaded' || stage === 'idle') && activeSession && (
@@ -579,6 +661,26 @@ function remapWordsToOutput(keptWords, segments) {
 const sidebarStyle = {
   borderRight: '1px solid #dedbd3', background: '#fff', padding: 16, overflowY: 'auto',
   maxHeight: 'calc(100vh - 60px)',
+};
+const queueSummary = {
+  display: 'grid', gap: 2, padding: 12, marginBottom: 10, background: '#faf9f6',
+  border: '1px solid #ebe8e1', borderRadius: 8,
+};
+const filterRow = {
+  display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 12,
+};
+const filterBtn = {
+  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 8px',
+  background: '#fff', border: '1px solid #dedbd3', borderRadius: 999,
+  color: '#6f6d68', cursor: 'pointer', fontSize: 9, fontWeight: 700,
+};
+const editorStats = {
+  display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8,
+  margin: '18px 0 8px',
+};
+const contextBox = {
+  display: 'grid', gap: 4, marginTop: 10, padding: 10, background: '#fff',
+  border: '1px solid #dedbd3', borderRadius: 8, fontSize: 11, color: '#6f6d68',
 };
 const sessionCard = {
   border: '1px solid #dedbd3', borderRadius: 6, padding: 10, cursor: 'pointer',

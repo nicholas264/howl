@@ -1,6 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 import { del } from '@vercel/blob';
 import { requirePermission } from '../_lib/app-access.js';
+import { ensureCreatorOpsTables } from '../_lib/creator-ops.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '5mb' } } };
 
@@ -10,9 +11,19 @@ export default async function handler(req, res) {
   const sql = neon(process.env.DATABASE_URL);
   const ownRow = async (id) => {
     const rows = await sql`
-      SELECT u.*, c.name AS creator_name
+      SELECT u.*, c.name AS creator_name,
+        CASE WHEN jsonb_typeof(u.words) = 'array' THEN jsonb_array_length(u.words) ELSE 0 END AS word_count,
+        b.title AS brief_title,
+        d.title AS deliverable_title,
+        d.status AS deliverable_status,
+        d.expected_asset_count,
+        d.received_asset_count,
+        d.completed_asset_count,
+        d.shipped_asset_count
       FROM ugc_sessions u
       LEFT JOIN creators c ON c.id = u.creator_id
+      LEFT JOIN creator_briefs b ON b.id = u.brief_id
+      LEFT JOIN creator_deliverables d ON d.id = u.deliverable_id
       WHERE u.id = ${id}
       LIMIT 1
     `;
@@ -20,6 +31,7 @@ export default async function handler(req, res) {
   };
 
   try {
+    await ensureCreatorOpsTables(sql);
     if (req.method === 'GET') {
       const id = req.query.id;
       if (id) {
@@ -31,9 +43,19 @@ export default async function handler(req, res) {
       const rows = await sql`
         SELECT u.id, u.title, u.file_name, u.file_size, u.duration, u.video_url,
           u.thumbnail_url, u.status, u.last_error, u.creator_id, u.brief_id, u.deliverable_id, u.rendered_url,
-          u.created_at, u.updated_at, c.name AS creator_name
+          u.created_at, u.updated_at, c.name AS creator_name,
+          CASE WHEN jsonb_typeof(u.words) = 'array' THEN jsonb_array_length(u.words) ELSE 0 END AS word_count,
+          b.title AS brief_title,
+          d.title AS deliverable_title,
+          d.status AS deliverable_status,
+          d.expected_asset_count,
+          d.received_asset_count,
+          d.completed_asset_count,
+          d.shipped_asset_count
         FROM ugc_sessions u
         LEFT JOIN creators c ON c.id = u.creator_id
+        LEFT JOIN creator_briefs b ON b.id = u.brief_id
+        LEFT JOIN creator_deliverables d ON d.id = u.deliverable_id
         ORDER BY u.updated_at DESC
         LIMIT ${limit}
       `;

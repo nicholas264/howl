@@ -365,4 +365,5 @@ input, textarea, select, button { font-family: inherit; }
 .app-shell .app-error,.app-shell .err{background:#fff3ed;border-color:#efb9a4;color:#b42318}
 .app-shell .primary-action,.app-shell .gobtn{background:#d84a17;border-color:#d84a17;color:#fff}
 .app-shell button:disabled{cursor:not-allowed}
+.operations-inline-actions{display:flex;justify-content:flex-end}.operations-inline-actions button{padding:8px 10px;background:#171717;border:1px solid #171717;border-radius:7px;color:#fff;font-size:8px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;cursor:pointer}.operations-inline-actions button:hover{background:#2b2925}
 @media(max-width:760px){.app-shell .shell{background:#f7f6f2}.app-shell .sidebar{box-shadow:0 8px 28px rgba(45,40,30,.08)}.app-shell .sidebar-top{min-height:0;padding:8px 11px}.app-shell .sidebar-top img{width:96px}.app-shell .sidebar-sub{display:none}}
