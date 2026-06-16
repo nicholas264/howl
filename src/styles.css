@@ -336,9 +336,9 @@ input, textarea, select, button { font-family: inherit; }
 .app-shell{--bg:#f7f6f2;--surface:#fff;--surface2:#f4f1ea;--border:#dedbd3;--border2:#c9c4ba;--text:#171717;--muted:#6f6d68;--muted2:#88857f;--flame:#d84a17;--flame-dim:#fff0e9;--flame-border:#efb9a4;background:var(--bg);color:var(--text);font-family:'Helvetica Neue',Helvetica,sans-serif}
 .app-shell .shell{background:linear-gradient(90deg,#fff 0 219px,#f7f6f2 219px)}
 .app-shell .sidebar{background:#fff;border-right:1px solid #dedbd3;box-shadow:12px 0 36px rgba(45,40,30,.05)}
-.app-shell .sidebar-top{min-height:118px;padding:22px 18px 18px;background:linear-gradient(180deg,#fff,#faf9f6);border-bottom:1px solid #ebe8e1}
-.app-shell .sidebar-top img{width:82px;height:auto;margin:0}
-.app-shell .sidebar-sub{color:#b84418;font-size:15px}
+.app-shell .sidebar-top{min-height:86px;padding:17px 18px 14px;background:linear-gradient(180deg,#fff,#faf9f6);border-bottom:1px solid #ebe8e1;gap:7px}
+.app-shell .sidebar-top img{width:64px;height:auto;margin:0 0 0 -1px}
+.app-shell .sidebar-sub{padding-left:1px;color:#b84418;font-size:13px;line-height:1.05}
 .app-shell .sidebar-section{padding:18px 12px 6px 8px;color:#88857f;font:italic 15px/1 'Instrument Serif',Georgia,serif}
 .app-shell .side-nav{gap:2px;padding:8px 10px 14px}
 .app-shell .side-item{padding:8px 11px;border-radius:9px;color:#6f6d68;font:600 12px/1.25 'Helvetica Neue',Helvetica,sans-serif}
@@ -365,4 +365,4 @@ input, textarea, select, button { font-family: inherit; }
 .app-shell .app-error,.app-shell .err{background:#fff3ed;border-color:#efb9a4;color:#b42318}
 .app-shell .primary-action,.app-shell .gobtn{background:#d84a17;border-color:#d84a17;color:#fff}
 .app-shell button:disabled{cursor:not-allowed}
-@media(max-width:760px){.app-shell .shell{background:#f7f6f2}.app-shell .sidebar{box-shadow:0 8px 28px rgba(45,40,30,.08)}.app-shell .sidebar-top{min-height:0}.app-shell .sidebar-top img{width:56px}}
+@media(max-width:760px){.app-shell .shell{background:#f7f6f2}.app-shell .sidebar{box-shadow:0 8px 28px rgba(45,40,30,.08)}.app-shell .sidebar-top{min-height:0;padding:9px 12px}.app-shell .sidebar-top img{width:48px}}
