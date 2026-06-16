@@ -220,8 +220,7 @@ export default function HowlAdEngine({ appAccess }) {
       <div className="shell">
         <aside className="sidebar">
           <div className="sidebar-top">
-            <img src="/logos/howl-stacked-blk.png" alt="HOWL Campfires" />
-            <div className="sidebar-sub">The Campfire</div>
+            <img src="/logos/howl-horizontal-wht.png" alt="HOWL Campfires" />
           </div>
           <nav className="side-nav">
             {NAV_SECTIONS.map(section => (
