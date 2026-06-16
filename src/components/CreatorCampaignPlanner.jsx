@@ -213,6 +213,11 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const openCreator = creatorId => {
+    if (onOpenCreator) return onOpenCreator(Number(creatorId));
+    setError('Creator navigation is not available from this view.');
+  };
+
   const linkCreator = async label => {
     const creatorId = Number(linkSelections[label]);
     if (!creatorId) return;
@@ -479,7 +484,7 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
                           />
                         </section>
                         <footer>
-                          <button onClick={() => onOpenCreator?.(assignment.creator_id)}>Open creator</button>
+                          <button type="button" onClick={() => openCreator(assignment.creator_id)}>Open creator</button>
                           <small>{(assignment.shot_list || []).length} planned shots · {(assignment.hooks || []).length} hooks</small>
                         </footer>
                       </div>

@@ -71,7 +71,7 @@ function CandidateCard({ record, type, selected, onSelect }) {
   const quality = readiness(record);
   const fit = fitAssessment(record);
   return (
-    <button className={`talent-card ${selected ? 'selected' : ''}`} onClick={() => onSelect(record)}>
+    <button type="button" className={`talent-card ${selected ? 'selected' : ''}`} onClick={() => onSelect(record)}>
       <span className="talent-avatar">
         {(record.avatar_url || social?.avatar_url) ? <img src={record.avatar_url || social.avatar_url} alt="" /> : (record.name || '?').slice(0, 1)}
       </span>
@@ -349,7 +349,13 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
           ))}
         </nav>
         {mode === 'applications' && canManage && (
-          <button className="talent-batch-enrich" onClick={enrichInbox} disabled={saving || batchEnriching || !queueSummary.needsEnrichment}>
+          <button
+            type="button"
+            className="talent-batch-enrich"
+            onClick={enrichInbox}
+            disabled={saving || batchEnriching || !queueSummary.needsEnrichment}
+            title={!queueSummary.needsEnrichment ? 'No Instagram application profiles need enrichment right now.' : ''}
+          >
             {batchEnriching ? 'Enriching...' : 'Enrich next 5'}
           </button>
         )}
@@ -389,7 +395,7 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
 
         {selected && (
           <aside className="talent-detail">
-            <button className="detail-close" onClick={() => setSelected(null)}>Close</button>
+            <button type="button" className="detail-close" onClick={() => setSelected(null)}>Close</button>
             <span className="workspace-kicker">{mode === 'applications' ? 'Creator application' : 'Discovery profile'}</span>
             <h2>{selected.name || socialLine(selected)?.handle}</h2>
             <p>{selected.location || selected.email || selected.source?.replaceAll('_', ' ')}</p>

@@ -81,6 +81,11 @@ export default function CreatorDataHealthWorkspace({ canMerge = false, onOpenCre
     }
   };
 
+  const openCreator = record => {
+    if (onOpenCreator) return onOpenCreator(record);
+    setError('Creator navigation is not available from this view.');
+  };
+
   const summary = data.summary || {};
   return (
     <section className="creator-data-health">
@@ -108,7 +113,7 @@ export default function CreatorDataHealthWorkspace({ canMerge = false, onOpenCre
               <div>
                 {group.records.map((record, index) => (
                   <section key={record.id} className={index === 0 ? 'recommended' : ''}>
-                    <button type="button" className="duplicate-record" onClick={() => onOpenCreator?.(record)}>
+                    <button type="button" className="duplicate-record" onClick={() => openCreator(record)}>
                       <span className="duplicate-avatar">{record.name?.slice(0, 1) || '?'}</span>
                       <span><strong>{record.name}</strong><small>{record.email || record.location || 'No contact details'}</small></span>
                       <span><b>{record.followers ? Number(record.followers).toLocaleString() : '—'}</b><small>followers</small></span>
@@ -136,7 +141,7 @@ export default function CreatorDataHealthWorkspace({ canMerge = false, onOpenCre
           </div>
           <div className="profile-health-list">
             {profiles.map(record => (
-              <button type="button" key={record.id} onClick={() => onOpenCreator?.(record)}>
+              <button type="button" key={record.id} onClick={() => openCreator(record)}>
                 <span className="health-avatar">{record.avatar_url ? <img src={record.avatar_url} alt="" /> : record.name.slice(0, 1)}</span>
                 <span><strong>{record.name}</strong><small>{record.primary_social?.handle || record.email || 'No contact identity'}</small></span>
                 <span className="health-progress"><i><b style={{ width: `${record.completeness}%` }} /></i><small>{record.completeness}% complete</small></span>
