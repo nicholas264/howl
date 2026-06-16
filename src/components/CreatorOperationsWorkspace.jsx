@@ -82,6 +82,7 @@ export default function CreatorOperationsWorkspace({ canManage = false, onOpenCr
     if (step.key === 'clickup_email') return onNavigate?.('clickup-import');
     if (step.key === 'duplicates' || step.key === 'profiles') return onNavigate?.('health');
     if (step.key === 'attribution') return onNavigate?.('creative-analytics');
+    setError(`No action is configured for "${step.title || step.key}".`);
   };
 
   const visible = useMemo(() => data.items.filter(item => {

@@ -59,6 +59,7 @@ export default function CreativePerformanceWorkspace({
   const [assignmentMessage, setAssignmentMessage] = useState('');
   const [assignmentError, setAssignmentError] = useState(false);
   const [batchAssigning, setBatchAssigning] = useState(false);
+  const [conceptMessage, setConceptMessage] = useState('');
 
   useEffect(() => {
     fetch('/api/creators')
@@ -88,6 +89,12 @@ export default function CreativePerformanceWorkspace({
     [groups],
   );
   const selectedSet = selected;
+  const selectedAnalyzedCount = groups.filter(g => selected.has(g.groupKey) && g.isAnalyzed).length;
+  const fallbackWinnerCount = topGroups.filter(g => g.isAnalyzed && statusFor(g) === 'Winner').slice(0, 4).length;
+  const conceptReferenceCount = selectedAnalyzedCount || fallbackWinnerCount;
+  const conceptButtonLabel = selected.size
+    ? `Generate from ${selectedAnalyzedCount || 0} selected`
+    : `Generate from ${fallbackWinnerCount || 'winners'}`;
   const toggleSelected = (key) => {
     setSelected(prev => {
       const next = new Set(prev);
@@ -106,8 +113,13 @@ export default function CreativePerformanceWorkspace({
     const fallbackWinners = topGroups
       .filter(g => g.isAnalyzed && statusFor(g) === 'Winner')
       .slice(0, 4);
+    if (!selectedAnalyzed.length && !fallbackWinners.length) {
+      setConceptMessage('Analyze at least one winning creative before generating scripts from performance.');
+      return;
+    }
     const keys = (selectedAnalyzed.length ? selectedAnalyzed : fallbackWinners).map(g => g.groupKey);
     sessionStorage.setItem('howl:selected-winners', JSON.stringify(keys));
+    setConceptMessage('');
     setActiveTab('from-winners');
   };
   const assignCreator = async (group, creatorId) => {
@@ -187,11 +199,16 @@ export default function CreativePerformanceWorkspace({
         </div>
         <div className="motion-toolbar-group">
           <button onClick={onSync} disabled={syncing}>{syncing ? 'Syncing…' : 'Sync Meta'}</button>
-          <button className="motion-primary" onClick={sendToConcepts}>
-            Generate from {selected.size || 'winners'}
+          <button
+            className="motion-primary"
+            onClick={sendToConcepts}
+            title={!conceptReferenceCount ? 'Analyze at least one winning creative first.' : ''}
+          >
+            {conceptButtonLabel}
           </button>
         </div>
       </div>
+      {conceptMessage ? <div className="motion-error">{conceptMessage}</div> : null}
 
       <div className="motion-attribution">
         <div className="motion-attribution-copy">
