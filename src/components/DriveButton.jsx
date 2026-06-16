@@ -1,12 +1,12 @@
 export default function DriveButton({ connected, connect, disconnect }) {
   return connected ? (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#3fb950' }}>
+      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#256b35' }}>
         ● Drive Connected
       </div>
       <button
         onClick={disconnect}
-        style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#6e7681', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+        style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#88857f', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
       >
         Disconnect
       </button>
@@ -17,9 +17,9 @@ export default function DriveButton({ connected, connect, disconnect }) {
       style={{
         padding: '7px 14px',
         background: 'none',
-        border: '1px solid #2a3441',
+        border: '1px solid #dedbd3',
         borderRadius: 4,
-        color: '#8b949e',
+        color: '#77746f',
         fontFamily: 'inherit',
         fontSize: 9,
         letterSpacing: 1.5,

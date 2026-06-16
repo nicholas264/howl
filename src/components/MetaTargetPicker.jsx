@@ -8,19 +8,19 @@ const OBJECTIVES = [
 ];
 
 const S = {
-  wrap: { border: '1px solid #2a3441', borderRadius: 6, background: '#161b22', padding: 16 },
-  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#8b949e', marginBottom: 6, display: 'block' },
-  input: { background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', width: '100%' },
-  select: { background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, cursor: 'pointer', width: '100%' },
+  wrap: { border: '1px solid #dedbd3', borderRadius: 6, background: '#fff', padding: 16 },
+  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#77746f', marginBottom: 6, display: 'block' },
+  input: { background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', width: '100%' },
+  select: { background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, cursor: 'pointer', width: '100%' },
   btn: (disabled) => ({
-    padding: '8px 14px', background: disabled ? '#2a3441' : '#DC440A', border: 'none',
-    color: disabled ? '#6e7681' : '#fff', fontFamily: 'inherit', fontSize: 10,
+    padding: '8px 14px', background: disabled ? '#dedbd3' : '#d84a17', border: 'none',
+    color: disabled ? '#88857f' : '#fff', fontFamily: 'inherit', fontSize: 10,
     fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 4,
   }),
-  ghostBtn: { padding: '8px 12px', background: 'none', border: '1px solid #2a3441', color: '#8b949e', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 },
+  ghostBtn: { padding: '8px 12px', background: 'none', border: '1px solid #dedbd3', color: '#77746f', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 },
   row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
   inlineRow: { display: 'flex', gap: 8, marginTop: 8, alignItems: 'flex-end' },
-  hint: { fontSize: 9, color: '#6e7681', marginTop: 6, letterSpacing: 1 },
+  hint: { fontSize: 9, color: '#88857f', marginTop: 6, letterSpacing: 1 },
 };
 
 export default function MetaTargetPicker({ selectedAdsetId, onAdsetChange }) {
@@ -125,10 +125,10 @@ export default function MetaTargetPicker({ selectedAdsetId, onAdsetChange }) {
 
   return (
     <div style={S.wrap}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, fontSize: 9, color: '#6e7681', letterSpacing: 2, textTransform: 'uppercase' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, fontSize: 9, color: '#88857f', letterSpacing: 2, textTransform: 'uppercase' }}>
         <div>
           {cacheLabel}
-          {callCountPct != null && <span style={{ marginLeft: 12, color: callCountPct > 80 ? '#f85149' : callCountPct > 50 ? '#DC440A' : '#3fb950' }}>Meta usage: {callCountPct}%</span>}
+          {callCountPct != null && <span style={{ marginLeft: 12, color: callCountPct > 80 ? '#b42318' : callCountPct > 50 ? '#d84a17' : '#256b35' }}>Meta usage: {callCountPct}%</span>}
         </div>
         <button style={{ ...S.ghostBtn, padding: '4px 10px' }} onClick={() => load(true)} disabled={loadingCampaigns}>
           {loadingCampaigns ? '…' : '↻ Refresh'}
@@ -161,7 +161,7 @@ export default function MetaTargetPicker({ selectedAdsetId, onAdsetChange }) {
       </div>
 
       {selectedCampaignId === '__new__' && (
-        <div style={{ marginTop: 14, padding: 12, border: '1px dashed #2a3441', borderRadius: 4 }}>
+        <div style={{ marginTop: 14, padding: 12, border: '1px dashed #dedbd3', borderRadius: 4 }}>
           <label style={S.label}>New campaign</label>
           <div style={S.inlineRow}>
             <input style={{ ...S.input, flex: 2 }} placeholder="Campaign name" value={newCampaign.name} onChange={e => setNewCampaign(p => ({ ...p, name: e.target.value }))} />
@@ -177,7 +177,7 @@ export default function MetaTargetPicker({ selectedAdsetId, onAdsetChange }) {
       )}
 
       {internalAdsetId === '__new__' && selectedCampaignId && selectedCampaignId !== '__new__' && (
-        <div style={{ marginTop: 14, padding: 12, border: '1px dashed #2a3441', borderRadius: 4 }}>
+        <div style={{ marginTop: 14, padding: 12, border: '1px dashed #dedbd3', borderRadius: 4 }}>
           <label style={S.label}>New ad set</label>
           <div style={S.inlineRow}>
             <input style={{ ...S.input, flex: 2 }} placeholder="Ad set name" value={newAdset.name} onChange={e => setNewAdset(p => ({ ...p, name: e.target.value }))} />

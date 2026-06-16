@@ -36,22 +36,22 @@ function PagePicker({ value, onChange }) {
             <span style={{ flex: 1 }}>{selected.name}</span>
           </>
         ) : (
-          <span style={{ flex: 1, color: '#6e7681' }}>
+          <span style={{ flex: 1, color: '#88857f' }}>
             {loading ? 'Loading Pages…' : error ? `Error: ${error}` : pages.length ? 'Select Facebook Page' : 'No Pages found'}
           </span>
         )}
-        <span style={{ color: '#6e7681', fontSize: 9 }}>▼</span>
+        <span style={{ color: '#88857f', fontSize: 9 }}>▼</span>
       </button>
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
           <div style={{
             position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 51,
-            background: '#0d1117', border: '1px solid #2a3441', borderRadius: 4,
+            background: '#fff', border: '1px solid #dedbd3', borderRadius: 4,
             maxHeight: 280, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
           }}>
             {pages.length === 0 && (
-              <div style={{ padding: 12, color: '#8b949e', fontSize: 11 }}>
+              <div style={{ padding: 12, color: '#77746f', fontSize: 11 }}>
                 {loading ? 'Loading…' : 'No Facebook Pages accessible to this token.'}
               </div>
             )}
@@ -66,13 +66,13 @@ function PagePicker({ value, onChange }) {
                     width: '100%', display: 'flex', alignItems: 'center', gap: 10,
                     padding: '8px 10px', cursor: 'pointer', textAlign: 'left',
                     background: active ? '#1f2630' : 'transparent',
-                    border: 0, color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11,
+                    border: 0, color: '#171717', fontFamily: 'inherit', fontSize: 11,
                   }}
                 >
                   <ProfileAvatar src={p.picture_url} name={p.name} size={28} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600 }}>{p.name}</div>
-                    <div style={{ fontSize: 9, color: '#6e7681' }}>{p.username ? `@${p.username} · ` : ''}{p.id}</div>
+                    <div style={{ fontSize: 9, color: '#88857f' }}>{p.username ? `@${p.username} · ` : ''}{p.id}</div>
                   </div>
                 </button>
               );
@@ -103,7 +103,7 @@ function ProfileAvatar({ src, name, size = 24 }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%', flexShrink: 0,
-      background: '#2a3441', color: '#f0f4f8',
+      background: '#dedbd3', color: '#171717',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: size * 0.45, fontWeight: 700,
     }}>{(name || '?').charAt(0).toUpperCase()}</div>
@@ -151,22 +151,22 @@ function InstagramAccountPicker({ value, onChange }) {
             <span style={{ flex: 1 }}>@{selected.username || selected.id}</span>
           </>
         ) : (
-          <span style={{ flex: 1, color: '#6e7681' }}>
+          <span style={{ flex: 1, color: '#88857f' }}>
             {loading ? 'Loading IG accounts…' : error ? `Error: ${error}` : accounts.length ? 'Select Instagram account' : 'No IG accounts found'}
           </span>
         )}
-        <span style={{ color: '#6e7681', fontSize: 9 }}>▼</span>
+        <span style={{ color: '#88857f', fontSize: 9 }}>▼</span>
       </button>
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
           <div style={{
             position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 51,
-            background: '#0d1117', border: '1px solid #2a3441', borderRadius: 4,
+            background: '#fff', border: '1px solid #dedbd3', borderRadius: 4,
             maxHeight: 280, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
           }}>
             {accounts.length === 0 && (
-              <div style={{ padding: 12, color: '#8b949e', fontSize: 11 }}>
+              <div style={{ padding: 12, color: '#77746f', fontSize: 11 }}>
                 {loading ? 'Loading…' : 'No Instagram accounts linked to this ad account or page.'}
               </div>
             )}
@@ -181,13 +181,13 @@ function InstagramAccountPicker({ value, onChange }) {
                     width: '100%', display: 'flex', alignItems: 'center', gap: 10,
                     padding: '8px 10px', cursor: 'pointer', textAlign: 'left',
                     background: active ? '#1f2630' : 'transparent',
-                    border: 0, color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11,
+                    border: 0, color: '#171717', fontFamily: 'inherit', fontSize: 11,
                   }}
                 >
                   <ProfileAvatar src={a.profile_pic_url} name={a.username} size={28} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600 }}>@{a.username || '(no username)'}</div>
-                    <div style={{ fontSize: 9, color: '#6e7681' }}>{a.id} · {a.source}</div>
+                    <div style={{ fontSize: 9, color: '#88857f' }}>{a.id} · {a.source}</div>
                   </div>
                 </button>
               );
@@ -260,31 +260,31 @@ function buildAdName({ creator, productId, angleId }) {
 
 const S = {
   wrap: { padding: '28px 36px', maxWidth: 1200 },
-  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#8b949e', marginBottom: 8, display: 'block' },
-  input: { background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', width: '100%' },
-  select: { background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, cursor: 'pointer', width: '100%' },
+  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#77746f', marginBottom: 8, display: 'block' },
+  input: { background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', width: '100%' },
+  select: { background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, cursor: 'pointer', width: '100%' },
   btn: (disabled) => ({
-    padding: '9px 18px', background: disabled ? '#2a3441' : '#DC440A', border: 'none',
-    color: disabled ? '#6e7681' : '#fff', fontFamily: 'inherit', fontSize: 10,
+    padding: '9px 18px', background: disabled ? '#dedbd3' : '#d84a17', border: 'none',
+    color: disabled ? '#88857f' : '#fff', fontFamily: 'inherit', fontSize: 10,
     fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 4,
   }),
-  ghostBtn: { padding: '8px 14px', background: 'none', border: '1px solid #2a3441', color: '#8b949e', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 },
-  card: { border: '1px solid #2a3441', borderRadius: 6, background: '#161b22', padding: 14, display: 'grid', gridTemplateColumns: '140px minmax(0, 1fr) auto', gap: 16, alignItems: 'center' },
-  thumb: { width: 140, height: 140, objectFit: 'cover', borderRadius: 4, background: '#1c2330', display: 'block' },
-  thumbPlaceholder: { width: 140, height: 140, borderRadius: 4, background: '#1c2330', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: '#6e7681', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700 },
-  fileMeta: { fontSize: 10, color: '#8b949e', marginBottom: 4 },
-  fileName: { fontSize: 12, fontWeight: 600, color: '#f0f4f8', wordBreak: 'break-all' },
+  ghostBtn: { padding: '8px 14px', background: 'none', border: '1px solid #dedbd3', color: '#77746f', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 },
+  card: { border: '1px solid #dedbd3', borderRadius: 6, background: '#fff', padding: 14, display: 'grid', gridTemplateColumns: '140px minmax(0, 1fr) auto', gap: 16, alignItems: 'center' },
+  thumb: { width: 140, height: 140, objectFit: 'cover', borderRadius: 4, background: '#f4f1ea', display: 'block' },
+  thumbPlaceholder: { width: 140, height: 140, borderRadius: 4, background: '#f4f1ea', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: '#88857f', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700 },
+  fileMeta: { fontSize: 10, color: '#77746f', marginBottom: 4 },
+  fileName: { fontSize: 12, fontWeight: 600, color: '#171717', wordBreak: 'break-all' },
   row: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginTop: 10 },
   status: (kind) => ({
     fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700,
     padding: '3px 8px', borderRadius: 3, display: 'inline-block',
-    color: kind === 'pushing' ? '#DC440A' : kind === 'launched' ? '#3fb950' : kind === 'error' ? '#f85149' : '#8b949e',
-    background: kind === 'pushing' ? 'rgba(220,68,10,0.15)' : kind === 'launched' ? 'rgba(63,185,80,0.15)' : kind === 'error' ? 'rgba(248,81,73,0.15)' : '#2a3441',
-    border: `1px solid ${kind === 'pushing' ? 'rgba(220,68,10,0.4)' : kind === 'launched' ? 'rgba(63,185,80,0.4)' : kind === 'error' ? 'rgba(248,81,73,0.4)' : '#2a3441'}`,
+    color: kind === 'pushing' ? '#d84a17' : kind === 'launched' ? '#256b35' : kind === 'error' ? '#b42318' : '#77746f',
+    background: kind === 'pushing' ? 'rgba(220,68,10,0.15)' : kind === 'launched' ? 'rgba(63,185,80,0.15)' : kind === 'error' ? 'rgba(248,81,73,0.15)' : '#dedbd3',
+    border: `1px solid ${kind === 'pushing' ? 'rgba(220,68,10,0.4)' : kind === 'launched' ? 'rgba(63,185,80,0.4)' : kind === 'error' ? 'rgba(248,81,73,0.4)' : '#dedbd3'}`,
   }),
-  err: { padding: '8px 12px', border: '1px solid rgba(220,68,10,0.4)', background: 'rgba(220,68,10,0.1)', color: '#DC440A', fontSize: 10, borderRadius: 4, marginTop: 8 },
-  empty: { border: '2px dashed #2a3441', borderRadius: 6, padding: '48px', textAlign: 'center', color: '#6e7681', fontSize: 11 },
-  settings: { border: '1px solid #2a3441', borderRadius: 6, background: '#161b22', padding: 16, marginBottom: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 },
+  err: { padding: '8px 12px', border: '1px solid rgba(220,68,10,0.4)', background: 'rgba(220,68,10,0.1)', color: '#d84a17', fontSize: 10, borderRadius: 4, marginTop: 8 },
+  empty: { border: '2px dashed #dedbd3', borderRadius: 6, padding: '48px', textAlign: 'center', color: '#88857f', fontSize: 11 },
+  settings: { border: '1px solid #dedbd3', borderRadius: 6, background: '#fff', padding: 16, marginBottom: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 },
 };
 
 export default function UgcInboxTool() {
@@ -453,8 +453,8 @@ export default function UgcInboxTool() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 }}>
         <div>
           <div className="eyebrow" style={{ marginBottom: 6 }}>Launch</div>
-          <div className="display-lg" style={{ color: '#f0f4f8' }}>UGC Inbox</div>
-          <div className="display-italic" style={{ fontSize: 14, color: '#8b949e', marginTop: 6 }}>
+          <div className="display-lg" style={{ color: '#171717' }}>UGC Inbox</div>
+          <div className="display-italic" style={{ fontSize: 14, color: '#77746f', marginTop: 6 }}>
             Files waiting in Drive — launch to Meta and we'll file them away.
           </div>
         </div>
@@ -503,8 +503,8 @@ export default function UgcInboxTool() {
 
       {!loading && files.length === 0 && (
         <div style={{ ...S.empty, padding: '72px 32px' }}>
-          <div className="display-lg" style={{ color: '#f0f4f8', marginBottom: 10 }}>The camp is quiet.</div>
-          <div className="display-italic" style={{ fontSize: 14, color: '#8b949e', maxWidth: 480, margin: '0 auto', lineHeight: 1.5 }}>
+          <div className="display-lg" style={{ color: '#171717', marginBottom: 10 }}>The camp is quiet.</div>
+          <div className="display-italic" style={{ fontSize: 14, color: '#77746f', maxWidth: 480, margin: '0 auto', lineHeight: 1.5 }}>
             When your team drops assets in the Drive inbox, they'll appear here ready to launch.
           </div>
         </div>
@@ -524,14 +524,14 @@ export default function UgcInboxTool() {
                     <DriveThumb
                       fileId={file.feed.id}
                       alt="feed"
-                      style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, objectFit: 'cover', borderRadius: 4, border: '2px solid #161b22', zIndex: 1 }}
-                      fallback={<div style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, borderRadius: 4, background: '#1c2330', border: '2px solid #161b22', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6e7681', fontSize: 9, letterSpacing: 1 }}>1:1</div>}
+                      style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, objectFit: 'cover', borderRadius: 4, border: '2px solid #fff', zIndex: 1 }}
+                      fallback={<div style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, borderRadius: 4, background: '#f4f1ea', border: '2px solid #fff', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#88857f', fontSize: 9, letterSpacing: 1 }}>1:1</div>}
                     />
                     <DriveThumb
                       fileId={file.story.id}
                       alt="story"
-                      style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, objectFit: 'cover', borderRadius: 4, border: '2px solid #161b22', zIndex: 2 }}
-                      fallback={<div style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, borderRadius: 4, background: '#1c2330', border: '2px solid #161b22', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6e7681', fontSize: 9, letterSpacing: 1 }}>9:16</div>}
+                      style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, objectFit: 'cover', borderRadius: 4, border: '2px solid #fff', zIndex: 2 }}
+                      fallback={<div style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, borderRadius: 4, background: '#f4f1ea', border: '2px solid #fff', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#88857f', fontSize: 9, letterSpacing: 1 }}>9:16</div>}
                     />
                   </div>
                 ) : isVideo ? (
@@ -563,13 +563,13 @@ export default function UgcInboxTool() {
                 <div style={S.fileName}>
                   {file.kind === 'pair' ? (file.folderName || file.name) : file.name}
                   {file.kind === 'pair' && (
-                    <span style={{ marginLeft: 10, fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#3fb950', fontWeight: 700, background: 'rgba(63,185,80,0.1)', padding: '2px 6px', borderRadius: 3, border: '1px solid rgba(63,185,80,0.4)' }}>
+                    <span style={{ marginLeft: 10, fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#256b35', fontWeight: 700, background: 'rgba(63,185,80,0.1)', padding: '2px 6px', borderRadius: 3, border: '1px solid rgba(63,185,80,0.4)' }}>
                       1:1 + 9:16 Paired
                     </span>
                   )}
                 </div>
                 {file.folderPath && (
-                  <div style={{ fontSize: 9, color: '#DC440A', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 }}>
+                  <div style={{ fontSize: 9, color: '#d84a17', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 }}>
                     📁 {file.folderPath}
                   </div>
                 )}
@@ -639,7 +639,7 @@ export default function UgcInboxTool() {
                     </select>
                   </div>
                 )}
-                <div style={{ fontSize: 9, color: '#6e7681', marginTop: 8, fontFamily: 'monospace' }}>
+                <div style={{ fontSize: 9, color: '#88857f', marginTop: 8, fontFamily: 'monospace' }}>
                   → {buildAdName({ creator: meta.creator, productId: meta.productId, angleId: meta.angleId })}
                 </div>
                 {(status === 'pushing' || status === 'error' || status === 'launched') && (
@@ -661,16 +661,16 @@ export default function UgcInboxTool() {
                     href={`https://adsmanager.facebook.com/adsmanager/manage/ads/edit?act=${(import.meta.env.VITE_META_AD_ACCOUNT_ID || '').replace('act_','')}&selected_ad_ids=${meta.adId}`}
                     target="_blank"
                     rel="noreferrer"
-                    style={{ fontSize: 9, color: '#3fb950', letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700 }}
+                    style={{ fontSize: 9, color: '#256b35', letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700 }}
                   >
                     View in Meta →
                   </a>
                 )}
                 {status === 'launched' && meta.adId && (
-                  <div style={{ fontSize: 9, color: '#6e7681', fontFamily: 'monospace' }}>{meta.adId}</div>
+                  <div style={{ fontSize: 9, color: '#88857f', fontFamily: 'monospace' }}>{meta.adId}</div>
                 )}
                 {file.webViewLink && (
-                  <a href={file.webViewLink} target="_blank" rel="noreferrer" style={{ fontSize: 9, color: '#8b949e', letterSpacing: 2, textTransform: 'uppercase' }}>Open in Drive</a>
+                  <a href={file.webViewLink} target="_blank" rel="noreferrer" style={{ fontSize: 9, color: '#77746f', letterSpacing: 2, textTransform: 'uppercase' }}>Open in Drive</a>
                 )}
                 {status !== 'launched' && status !== 'pushing' && (
                   <button
@@ -693,7 +693,7 @@ export default function UgcInboxTool() {
                         updateFile(file.id, { error: `Delete failed: ${err.message}` });
                       }
                     }}
-                    style={{ fontSize: 9, color: '#f85149', letterSpacing: 2, textTransform: 'uppercase', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, fontWeight: 600 }}
+                    style={{ fontSize: 9, color: '#b42318', letterSpacing: 2, textTransform: 'uppercase', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, fontWeight: 600 }}
                   >
                     Delete
                   </button>

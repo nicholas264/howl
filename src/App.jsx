@@ -27,7 +27,7 @@ import { cartGetAll, cartPut, cartDelete } from "./utils/cartDb";
 import "./styles.css";
 
 const TabFallback = () => (
-  <div style={{ padding: 32, color: '#8b949e', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase' }}>
+  <div style={{ padding: 32, color: '#77746f', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase' }}>
     Loading…
   </div>
 );
@@ -216,11 +216,11 @@ export default function HowlAdEngine({ appAccess }) {
   })).filter(section => section.items.length);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0d1117", color: "#f0f4f8", fontFamily: "'JetBrains Mono', 'SF Mono', monospace" }}>
+    <div className="app-shell" style={{ minHeight: "100vh", background: "#f7f6f2", color: "#171717", fontFamily: "'Helvetica Neue', Helvetica, sans-serif" }}>
       <div className="shell">
         <aside className="sidebar">
           <div className="sidebar-top">
-            <img src="/logos/howl-horizontal-wht.png" alt="HOWL Campfires" />
+            <img src="/logos/howl-stacked-blk.png" alt="HOWL Campfires" />
             <div className="sidebar-sub">The Campfire</div>
           </div>
           <nav className="side-nav">
@@ -243,7 +243,7 @@ export default function HowlAdEngine({ appAccess }) {
             <UserButton
               afterSignOutUrl="/"
               appearance={{
-                variables: { colorPrimary: '#DC440A', colorBackground: '#0d1117', colorText: '#f0f4f8' },
+                variables: { colorPrimary: '#d84a17', colorBackground: '#fff', colorText: '#171717' },
                 elements: { userButtonAvatarBox: { width: 26, height: 26 } },
               }}
             />

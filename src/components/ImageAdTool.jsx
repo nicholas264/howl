@@ -27,7 +27,7 @@ function alignFor(x) {
 
 const TEXT_COLORS = [
   { id: 'white',  label: 'White',  value: '#ffffff' },
-  { id: 'dark',   label: 'Dark',   value: '#1c2330' },
+  { id: 'dark',   label: 'Dark',   value: '#f4f1ea' },
   { id: 'orange', label: 'Orange', value: COLORS.flame },
 ];
 
@@ -515,16 +515,16 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
     <>
       <div>
         <div style={{ ...S.label, display: 'flex', justifyContent: 'space-between' }}>
-          <span>Headline Size</span><span style={{ color: '#f0f4f8' }}>{fontSize}px</span>
+          <span>Headline Size</span><span style={{ color: '#171717' }}>{fontSize}px</span>
         </div>
-        <input type="range" min={32} max={200} step={4} value={fontSize} onChange={e => setFontSize(Number(e.target.value))} style={{ width: '100%', accentColor: '#DC440A' }} />
+        <input type="range" min={32} max={200} step={4} value={fontSize} onChange={e => setFontSize(Number(e.target.value))} style={{ width: '100%', accentColor: '#d84a17' }} />
       </div>
 
       <div>
         <div style={{ ...S.label, display: 'flex', justifyContent: 'space-between' }}>
-          <span>Body Size</span><span style={{ color: '#f0f4f8' }}>{bodyFontSize}px</span>
+          <span>Body Size</span><span style={{ color: '#171717' }}>{bodyFontSize}px</span>
         </div>
-        <input type="range" min={14} max={120} step={2} value={bodyFontSize} onChange={e => setBodyFontSize(Number(e.target.value))} style={{ width: '100%', accentColor: '#DC440A' }} />
+        <input type="range" min={14} max={120} step={2} value={bodyFontSize} onChange={e => setBodyFontSize(Number(e.target.value))} style={{ width: '100%', accentColor: '#d84a17' }} />
       </div>
 
       <div>
@@ -535,7 +535,7 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
             return (
               <button key={c.id} onClick={() => setColorId(c.id)} style={{
                 flex: 1, padding: '7px 0', borderRadius: 4, cursor: 'pointer',
-                border: `2px solid ${colorId === c.id ? '#DC440A' : '#2a3441'}`,
+                border: `2px solid ${colorId === c.id ? '#d84a17' : '#dedbd3'}`,
                 background: isLight ? '#f5f5f5' : c.value,
                 color: isLight ? '#333' : '#fff',
                 fontFamily: 'inherit', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase',
@@ -561,7 +561,7 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
             <button onClick={() => setBodyPos(DEFAULT_BODY_POS)} style={S.link}>Reset</button>
           </div>
         </div>
-        <div style={{ fontSize: 9, color: '#8b949e', lineHeight: 1.5 }}>
+        <div style={{ fontSize: 9, color: '#77746f', lineHeight: 1.5 }}>
           Drag the headline or body on the preview to reposition.
         </div>
       </div>
@@ -570,9 +570,9 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
         <div style={S.label}>Text Shadow</div>
         <button onClick={() => setShadow(s => !s)} style={{
           padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
-          border: `1px solid ${shadow ? '#DC440A' : '#2a3441'}`,
-          background: shadow ? '#DC440A' : '#1c2330',
-          color: shadow ? '#fff' : '#8b949e',
+          border: `1px solid ${shadow ? '#d84a17' : '#dedbd3'}`,
+          background: shadow ? '#d84a17' : '#f4f1ea',
+          color: shadow ? '#fff' : '#77746f',
           fontFamily: 'inherit', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase',
         }}>{shadow ? 'On' : 'Off'}</button>
       </div>
@@ -590,9 +590,9 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
               onChange={e => setPresetName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && savePreset()}
               placeholder="Preset name…"
-              style={{ flex: 1, padding: '5px 8px', border: '1px solid #2a3441', borderRadius: 4, fontFamily: 'inherit', fontSize: 10, outline: 'none' }}
+              style={{ flex: 1, padding: '5px 8px', border: '1px solid #dedbd3', borderRadius: 4, fontFamily: 'inherit', fontSize: 10, outline: 'none' }}
             />
-            <button onClick={savePreset} style={{ ...S.link, color: '#fff', background: '#DC440A', padding: '5px 10px', borderRadius: 4 }}>Save</button>
+            <button onClick={savePreset} style={{ ...S.link, color: '#fff', background: '#d84a17', padding: '5px 10px', borderRadius: 4 }}>Save</button>
           </div>
         )}
         {presets.length > 0 && (
@@ -601,10 +601,10 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <button onClick={() => applyPreset(p)} style={{
                   flex: 1, textAlign: 'left', padding: '5px 8px', borderRadius: 4, cursor: 'pointer',
-                  border: '1px solid #2a3441', background: '#1c2330', color: '#f0f4f8',
+                  border: '1px solid #dedbd3', background: '#f4f1ea', color: '#171717',
                   fontFamily: 'inherit', fontSize: 10,
                 }}>{p.name} <span style={{ color: '#b0a898', fontSize: 9 }}>{p.fontSize}px · {p.colorId}</span></button>
-                <button onClick={() => deletePreset(p.id)} style={{ ...S.link, color: '#374151', fontSize: 12 }}>×</button>
+                <button onClick={() => deletePreset(p.id)} style={{ ...S.link, color: '#c9c4ba', fontSize: 12 }}>×</button>
               </div>
             ))}
           </div>
@@ -615,10 +615,10 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <div style={{ padding: '20px 28px', borderBottom: '1px solid #2a3441', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+      <div style={{ padding: '20px 28px', borderBottom: '1px solid #dedbd3', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
           <div className="eyebrow" style={{ marginBottom: 4 }}>Create</div>
-          <div className="display-md" style={{ color: '#f0f4f8' }}>Image Ads</div>
+          <div className="display-md" style={{ color: '#171717' }}>Image Ads</div>
         </div>
         <button
           onClick={async () => {
@@ -628,23 +628,23 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
               alert(r.ok ? 'Schema synced — image_library table is ready.' : `Schema failed: ${d.error || r.status}`);
             } catch (err) { alert(`Schema failed: ${err.message}`); }
           }}
-          style={{ fontSize: 9, padding: '6px 12px', borderRadius: 4, border: '1px solid #2a3441', background: '#1c2330', color: '#8b949e', fontFamily: 'inherit', letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer' }}
+          style={{ fontSize: 9, padding: '6px 12px', borderRadius: 4, border: '1px solid #dedbd3', background: '#f4f1ea', color: '#77746f', fontFamily: 'inherit', letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer' }}
           title="Run /api/db/schema — idempotent, safe to click."
         >Init DB Schema</button>
       </div>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 
       {/* Left panel */}
-      <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #2a3441', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #dedbd3', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
 
         {/* Mode toggle */}
-        <div style={{ padding: '10px 16px', borderBottom: '1px solid #2a3441', display: 'flex', gap: 6 }}>
+        <div style={{ padding: '10px 16px', borderBottom: '1px solid #dedbd3', display: 'flex', gap: 6 }}>
           {['single', 'batch'].map(m => (
             <button key={m} onClick={() => setMode(m)} style={{
               flex: 1, padding: '6px 0', borderRadius: 4, cursor: 'pointer',
-              border: `1px solid ${mode === m ? '#DC440A' : '#2a3441'}`,
-              background: mode === m ? '#DC440A' : '#1c2330',
-              color: mode === m ? '#fff' : '#8b949e',
+              border: `1px solid ${mode === m ? '#d84a17' : '#dedbd3'}`,
+              background: mode === m ? '#d84a17' : '#f4f1ea',
+              color: mode === m ? '#fff' : '#77746f',
               fontFamily: 'inherit', fontSize: 9, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase',
             }}>{m === 'single' ? 'Single' : 'Batch'}</button>
           ))}
@@ -659,9 +659,9 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
               {FORMATS.map(f => (
                 <button key={f.id} onClick={() => setFormatId(f.id)} style={{
                   flex: 1, padding: '7px 0', borderRadius: 4, cursor: 'pointer',
-                  border: `2px solid ${formatId === f.id ? '#DC440A' : '#2a3441'}`,
-                  background: formatId === f.id ? 'rgba(220,68,10,0.15)' : '#1c2330',
-                  color: formatId === f.id ? '#DC440A' : '#8b949e',
+                  border: `2px solid ${formatId === f.id ? '#d84a17' : '#dedbd3'}`,
+                  background: formatId === f.id ? 'rgba(220,68,10,0.15)' : '#f4f1ea',
+                  color: formatId === f.id ? '#d84a17' : '#77746f',
                   fontFamily: 'inherit', fontSize: 10, fontWeight: formatId === f.id ? 700 : 400,
                   letterSpacing: 1, textTransform: 'uppercase',
                 }}>{f.label}</button>
@@ -674,30 +674,30 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
             onDrop={e => { e.preventDefault(); setDragging(false); Array.from(e.dataTransfer.files).forEach(addImage); }}
             onDragOver={e => { e.preventDefault(); setDragging(true); }}
             onDragLeave={e => { if (e.currentTarget.contains(e.relatedTarget)) return; setDragging(false); }}
-            style={{ borderRadius: 4, padding: dragging ? 6 : 0, margin: dragging ? -6 : 0, background: dragging ? 'rgba(220,68,10,0.10)' : 'transparent', outline: dragging ? '1px dashed #DC440A' : 'none' }}
+            style={{ borderRadius: 4, padding: dragging ? 6 : 0, margin: dragging ? -6 : 0, background: dragging ? 'rgba(220,68,10,0.10)' : 'transparent', outline: dragging ? '1px dashed #d84a17' : 'none' }}
           >
             <div style={{ ...S.label, display: 'flex', justifyContent: 'space-between' }}>
-              <span>Images {mode === 'batch' && images.length > 0 && <span style={{ color: '#DC440A' }}>({selectedIds.size} selected)</span>}{uploading > 0 && <span style={{ color: '#8b949e', marginLeft: 6 }}>· uploading {uploading}…</span>}</span>
+              <span>Images {mode === 'batch' && images.length > 0 && <span style={{ color: '#d84a17' }}>({selectedIds.size} selected)</span>}{uploading > 0 && <span style={{ color: '#77746f', marginLeft: 6 }}>· uploading {uploading}…</span>}</span>
               <button onClick={() => fileInputRef.current?.click()} style={S.link}>+ Add</button>
             </div>
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={e => { Array.from(e.target.files).forEach(addImage); e.target.value = ''; }} style={{ display: 'none' }} />
             {images.length === 0 ? (
               <label
                 onClick={() => fileInputRef.current?.click()}
-                style={{ display: 'block', padding: '18px 12px', borderRadius: 4, cursor: 'pointer', textAlign: 'center', border: `1px dashed ${dragging ? '#DC440A' : '#374151'}`, background: 'transparent' }}
+                style={{ display: 'block', padding: '18px 12px', borderRadius: 4, cursor: 'pointer', textAlign: 'center', border: `1px dashed ${dragging ? '#d84a17' : '#c9c4ba'}`, background: 'transparent' }}
               >
-                <div style={{ fontSize: 10, color: dragging ? '#DC440A' : '#8b949e' }}>{dragging ? 'Drop images here' : 'Upload or drag images'}</div>
+                <div style={{ fontSize: 10, color: dragging ? '#d84a17' : '#77746f' }}>{dragging ? 'Drop images here' : 'Upload or drag images'}</div>
               </label>
             ) : (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {images.map(img => {
                   const isActive = mode === 'single' ? activeImg?.id === img.id : selectedIds.has(img.id);
                   return (
-                    <div key={img.id} style={{ position: 'relative', width: 72, height: 72, borderRadius: 4, overflow: 'hidden', border: `2px solid ${isActive ? '#DC440A' : '#2a3441'}`, cursor: 'pointer', flexShrink: 0 }}
+                    <div key={img.id} style={{ position: 'relative', width: 72, height: 72, borderRadius: 4, overflow: 'hidden', border: `2px solid ${isActive ? '#d84a17' : '#dedbd3'}`, cursor: 'pointer', flexShrink: 0 }}
                       onClick={() => mode === 'single' ? setActiveImg(img) : toggleSelected(img.id)}>
                       <img crossOrigin="anonymous" src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                       {mode === 'batch' && selectedIds.has(img.id) && (
-                        <div style={{ position: 'absolute', top: 3, left: 3, width: 14, height: 14, background: '#DC440A', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ position: 'absolute', top: 3, left: 3, width: 14, height: 14, background: '#d84a17', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <span style={{ color: '#fff', fontSize: 9, lineHeight: 1 }}>✓</span>
                         </div>
                       )}
@@ -706,7 +706,7 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
                     </div>
                   );
                 })}
-                <div onClick={() => fileInputRef.current?.click()} style={{ width: 72, height: 72, borderRadius: 4, border: '1px dashed #c0b89a', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#8b949e', fontSize: 20, flexShrink: 0 }}>+</div>
+                <div onClick={() => fileInputRef.current?.click()} style={{ width: 72, height: 72, borderRadius: 4, border: '1px dashed #c0b89a', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#77746f', fontSize: 20, flexShrink: 0 }}>+</div>
               </div>
             )}
           </div>
@@ -735,8 +735,8 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
                 </div>
                 <textarea value={batchHooks} onChange={e => setBatchHooks(e.target.value)} placeholder={"Still had a campfire at 6°\nNucking futs.\nFeel it to believe it."} rows={6} style={S.textarea} />
                 {batchHookList.length > 0 && images.length > 0 && (
-                  <div style={{ fontSize: 9, color: '#8b949e', marginTop: 4 }}>
-                    {selImgs.length} image{selImgs.length !== 1 ? 's' : ''} × {batchHookList.length} hook{batchHookList.length !== 1 ? 's' : ''} = <b style={{ color: '#f0f4f8' }}>{selImgs.length * batchHookList.length} ads</b>
+                  <div style={{ fontSize: 9, color: '#77746f', marginTop: 4 }}>
+                    {selImgs.length} image{selImgs.length !== 1 ? 's' : ''} × {batchHookList.length} hook{batchHookList.length !== 1 ? 's' : ''} = <b style={{ color: '#171717' }}>{selImgs.length * batchHookList.length} ads</b>
                   </div>
                 )}
               </div>
@@ -747,7 +747,7 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
               {mode === 'batch' && images.length > 0 && (
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button onClick={() => setSelectedIds(new Set(images.map(i => i.id)))} style={{ ...S.link, fontSize: 9 }}>Select all</button>
-                  <span style={{ color: '#2a3441' }}>·</span>
+                  <span style={{ color: '#dedbd3' }}>·</span>
                   <button onClick={() => setSelectedIds(new Set())} style={{ ...S.link, fontSize: 9, color: '#b0a898' }}>None</button>
                 </div>
               )}
@@ -758,9 +758,9 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
         </div>
 
         {/* Export pinned bottom */}
-        <div style={{ flexShrink: 0, padding: '14px 16px', borderTop: '1px solid #2a3441' }}>
+        <div style={{ flexShrink: 0, padding: '14px 16px', borderTop: '1px solid #dedbd3' }}>
           {exporting && exportMsg && (
-            <div style={{ fontSize: 9, color: '#8b949e', marginBottom: 8, letterSpacing: 1 }}>Rendering {exportMsg}…</div>
+            <div style={{ fontSize: 9, color: '#77746f', marginBottom: 8, letterSpacing: 1 }}>Rendering {exportMsg}…</div>
           )}
           {mode === 'single' ? (
             <>
@@ -843,8 +843,8 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
 }
 
 const S = {
-  label: { fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8b949e', marginBottom: 6, fontWeight: 600, display: 'block' },
-  link: { fontSize: 9, color: '#DC440A', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 },
-  textarea: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #2a3441', borderRadius: 4, background: '#1c2330', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.5, resize: 'vertical', outline: 'none' },
-  exportBtn: (disabled) => ({ width: '100%', padding: '12px 0', background: disabled ? '#2a3441' : '#DC440A', border: 'none', borderRadius: 4, color: disabled ? '#6e7681' : '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer' }),
+  label: { fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', marginBottom: 6, fontWeight: 600, display: 'block' },
+  link: { fontSize: 9, color: '#d84a17', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 },
+  textarea: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #dedbd3', borderRadius: 4, background: '#f4f1ea', color: '#171717', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.5, resize: 'vertical', outline: 'none' },
+  exportBtn: (disabled) => ({ width: '100%', padding: '12px 0', background: disabled ? '#dedbd3' : '#d84a17', border: 'none', borderRadius: 4, color: disabled ? '#88857f' : '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer' }),
 };

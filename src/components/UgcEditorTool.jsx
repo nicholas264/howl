@@ -362,12 +362,12 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', minHeight: 'calc(100vh - 60px)' }}>
       <aside style={sidebarStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <span style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: '#8b949e' }}>Sessions</span>
+          <span style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f' }}>Sessions</span>
           <button onClick={newSession} style={ghostBtn}>+ New</button>
         </div>
-        {sessionsLoading && <div style={{ color: '#6e7681', fontSize: 12 }}>Loading…</div>}
+        {sessionsLoading && <div style={{ color: '#88857f', fontSize: 12 }}>Loading…</div>}
         {!sessionsLoading && !sessions.length && (
-          <div style={{ color: '#6e7681', fontSize: 12 }}>No sessions yet. Upload a video to start.</div>
+          <div style={{ color: '#88857f', fontSize: 12 }}>No sessions yet. Upload a video to start.</div>
         )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {sessions.map(s => (
@@ -376,21 +376,21 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
               onClick={() => loadSession(s.id)}
               style={{
                 ...sessionCard,
-                ...(activeSession?.id === s.id ? { borderColor: '#DC440A', background: '#1f1410' } : {}),
+                ...(activeSession?.id === s.id ? { borderColor: '#d84a17', background: '#1f1410' } : {}),
               }}
             >
-              <div style={{ fontSize: 12, color: '#f0f4f8', fontWeight: 600, wordBreak: 'break-all' }}>
+              <div style={{ fontSize: 12, color: '#171717', fontWeight: 600, wordBreak: 'break-all' }}>
                 {s.title || s.file_name || `Session ${s.id}`}
-                {s.creator_name && <span style={{ display: 'block', color: '#DC440A', fontSize: 8, marginTop: 3 }}>{s.creator_name}</span>}
+                {s.creator_name && <span style={{ display: 'block', color: '#d84a17', fontSize: 8, marginTop: 3 }}>{s.creator_name}</span>}
               </div>
-              <div style={{ fontSize: 10, color: '#8b949e', marginTop: 4 }}>
+              <div style={{ fontSize: 10, color: '#77746f', marginTop: 4 }}>
                 {s.file_size ? `${(s.file_size / 1024 / 1024).toFixed(1)} MB · ` : ''}
                 {s.duration ? `${parseFloat(s.duration).toFixed(1)}s · ` : ''}
                 {s.status}
               </div>
               <button
                 onClick={(e) => { e.stopPropagation(); deleteSession(s.id); }}
-                style={{ ...ghostBtn, marginTop: 6, fontSize: 9, padding: '3px 6px', color: '#f85149', borderColor: 'rgba(248,81,73,0.3)' }}
+                style={{ ...ghostBtn, marginTop: 6, fontSize: 9, padding: '3px 6px', color: '#b42318', borderColor: 'rgba(248,81,73,0.3)' }}
               >
                 Delete
               </button>
@@ -401,7 +401,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
 
       <div style={{ padding: 24, maxWidth: 1100 }}>
         <h1 style={{ fontSize: 22, marginBottom: 4 }}>UGC Editor</h1>
-        <p style={{ color: '#8b949e', marginTop: 0, fontSize: 13 }}>
+        <p style={{ color: '#77746f', marginTop: 0, fontSize: 13 }}>
           Upload raw footage (multi-GB OK) → cut silences and bad takes from the transcript → burn captions → export. Sessions are saved automatically.
         </p>
 
@@ -410,7 +410,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
-            style={{ ...uploadBox, borderColor: dragOver ? '#DC440A' : '#2a3441', background: dragOver ? '#1f1410' : '#161b22' }}
+            style={{ ...uploadBox, borderColor: dragOver ? '#d84a17' : '#dedbd3', background: dragOver ? '#1f1410' : '#fff' }}
           >
             <input type="file" accept="video/*" onChange={handleFile} style={{ display: 'none' }} />
             <div style={{ fontSize: 14 }}>Click or drag a video here (mp4, mov, webm)</div>
@@ -420,8 +420,8 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         {stage === 'uploading' && (
           <div style={{ ...statusBox, marginTop: 16 }}>
             Uploading to Vercel Blob… {Math.round(uploadProgress * 100)}%
-            <div style={{ height: 4, background: '#2a3441', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
-              <div style={{ width: `${uploadProgress * 100}%`, height: '100%', background: '#DC440A' }} />
+            <div style={{ height: 4, background: '#dedbd3', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
+              <div style={{ width: `${uploadProgress * 100}%`, height: '100%', background: '#d84a17' }} />
             </div>
           </div>
         )}
@@ -430,7 +430,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
           <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24, marginTop: 16, alignItems: 'start' }}>
             <div style={{ position: 'sticky', top: 16 }}>
               <video ref={videoRef} src={videoUrl} controls crossOrigin="anonymous" style={{ width: '100%', borderRadius: 8, background: '#000', maxHeight: 320 }} />
-              <div style={{ fontSize: 12, color: '#8b949e', marginTop: 6 }}>
+              <div style={{ fontSize: 12, color: '#77746f', marginTop: 6 }}>
                 {activeSession?.file_name || file?.name}
                 {activeSession?.file_size ? ` · ${(activeSession.file_size / 1024 / 1024).toFixed(1)} MB` : (file ? ` · ${(file.size / 1024 / 1024).toFixed(1)} MB` : '')}
               </div>
@@ -454,7 +454,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                       Burn captions
                     </label>
 
-                    <div style={{ fontSize: 12, color: '#8b949e' }}>
+                    <div style={{ fontSize: 12, color: '#77746f' }}>
                       {duration ? `${duration.toFixed(1)}s raw · ${keptDuration.toFixed(1)}s kept · ${cutDuration.toFixed(1)}s removed` : null}
                     </div>
 
@@ -470,17 +470,17 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                       </div>
                     )}
                     {aiCleanupMessage && (
-                      <div style={{ fontSize: 11, color: '#c5ccd5', lineHeight: 1.5 }}>
+                      <div style={{ fontSize: 11, color: '#343330', lineHeight: 1.5 }}>
                         {aiCleanupMessage}
                       </div>
                     )}
-                    <div style={{ fontSize: 11, color: '#8b949e' }}>
+                    <div style={{ fontSize: 11, color: '#77746f' }}>
                       Rendering uses the saved source and keeps the finished edit available after reload.
                     </div>
                     {stage === 'rendering' && (
                       <div style={statusBox}>
                         Rendering… {Math.round(progress * 100)}%
-                        <div style={{ fontSize: 10, color: '#6e7681', marginTop: 4, fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <div style={{ fontSize: 10, color: '#88857f', marginTop: 4, fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {logTail}
                         </div>
                       </div>
@@ -498,16 +498,16 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                   </>
                 )}
 
-                {error && <div style={{ color: '#f85149', fontSize: 13 }}>{error}</div>}
+                {error && <div style={{ color: '#b42318', fontSize: 13 }}>{error}</div>}
               </div>
             </div>
 
             <div>
-              <div style={{ fontSize: 11, textTransform: 'uppercase', color: '#6e7681', marginBottom: 8, letterSpacing: 1 }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', color: '#88857f', marginBottom: 8, letterSpacing: 1 }}>
                 Transcript {words.length ? `· click words to cut` : ''}
               </div>
               <div style={transcriptBox}>
-                {!words.length && <div style={{ color: '#6e7681', fontSize: 13 }}>Transcript will appear here.</div>}
+                {!words.length && <div style={{ color: '#88857f', fontSize: 13 }}>Transcript will appear here.</div>}
                 {words.map((w, i) => (
                   <span
                     key={i}
@@ -517,7 +517,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                       cursor: 'pointer',
                       padding: '1px 4px',
                       borderRadius: 3,
-                      color: w.kept ? '#f0f4f8' : '#6e7681',
+                      color: w.kept ? '#171717' : '#88857f',
                       textDecoration: w.kept ? 'none' : 'line-through',
                       background: w.kept ? 'transparent' : '#1f2630',
                       flex: '0 0 auto',
@@ -577,37 +577,37 @@ function remapWordsToOutput(keptWords, segments) {
 }
 
 const sidebarStyle = {
-  borderRight: '1px solid #2a3441', background: '#0d1117', padding: 16, overflowY: 'auto',
+  borderRight: '1px solid #dedbd3', background: '#fff', padding: 16, overflowY: 'auto',
   maxHeight: 'calc(100vh - 60px)',
 };
 const sessionCard = {
-  border: '1px solid #2a3441', borderRadius: 6, padding: 10, cursor: 'pointer',
-  background: '#161b22',
+  border: '1px solid #dedbd3', borderRadius: 6, padding: 10, cursor: 'pointer',
+  background: '#fff',
 };
 const uploadBox = {
   display: 'flex', alignItems: 'center', justifyContent: 'center',
-  height: 200, border: '2px dashed #2a3441', borderRadius: 8, cursor: 'pointer',
-  color: '#8b949e', marginTop: 16, background: '#161b22',
+  height: 200, border: '2px dashed #dedbd3', borderRadius: 8, cursor: 'pointer',
+  color: '#77746f', marginTop: 16, background: '#fff',
 };
 const primaryBtn = {
-  background: '#DC440A', color: '#fff', border: 0, padding: '10px 16px',
+  background: '#d84a17', color: '#fff', border: 0, padding: '10px 16px',
   borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600,
 };
 const secondaryBtn = {
-  background: 'transparent', color: '#f0f4f8', border: '1px solid #2a3441',
+  background: 'transparent', color: '#171717', border: '1px solid #dedbd3',
   padding: '10px 16px', borderRadius: 6, cursor: 'pointer', fontSize: 13,
 };
 const ghostBtn = {
-  background: 'transparent', color: '#8b949e', border: '1px solid #2a3441',
+  background: 'transparent', color: '#77746f', border: '1px solid #dedbd3',
   padding: '4px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase',
 };
-const checkboxRow = { fontSize: 13, color: '#f0f4f8', display: 'flex', gap: 8, alignItems: 'center' };
+const checkboxRow = { fontSize: 13, color: '#171717', display: 'flex', gap: 8, alignItems: 'center' };
 const statusBox = {
-  background: '#161b22', border: '1px solid #2a3441', borderRadius: 6,
-  padding: 12, fontSize: 13, color: '#f0f4f8',
+  background: '#fff', border: '1px solid #dedbd3', borderRadius: 6,
+  padding: 12, fontSize: 13, color: '#171717',
 };
 const transcriptBox = {
-  background: '#0d1117', border: '1px solid #2a3441', borderRadius: 8,
+  background: '#fff', border: '1px solid #dedbd3', borderRadius: 8,
   padding: 14, fontSize: 14, lineHeight: 1.8, height: 460, overflowY: 'auto',
   display: 'flex', flexWrap: 'wrap', alignContent: 'flex-start', gap: '2px 6px',
   wordBreak: 'break-word',

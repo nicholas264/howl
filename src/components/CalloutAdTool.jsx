@@ -999,7 +999,7 @@ export default function CalloutAdTool({ onAddToCart }) {
   return (
     <div style={{ padding: 24, maxWidth: 1300, margin: '0 auto' }}>
       <h1 style={{ fontSize: 22, marginBottom: 4 }}>Callout Ads</h1>
-      <p style={{ color: '#8b949e', marginTop: 0, fontSize: 13 }}>
+      <p style={{ color: '#77746f', marginTop: 0, fontSize: 13 }}>
         Product photo + title + leader-line callouts. Drag the dots onto the feature you're calling out.
       </p>
 
@@ -1091,7 +1091,7 @@ export default function CalloutAdTool({ onAddToCart }) {
                   transform: 'translate(-50%, -50%)',
                   width: 10, height: 10, borderRadius: '50%',
                   background: '#F9F3DF',
-                  border: selectedId === c.id ? '2px solid #DC440A' : '2px solid transparent',
+                  border: selectedId === c.id ? '2px solid #d84a17' : '2px solid transparent',
                   cursor: 'grab', zIndex: 3,
                 }}
               />
@@ -1153,7 +1153,7 @@ export default function CalloutAdTool({ onAddToCart }) {
             {!imgUrl && (
               <div style={{
                 position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#6e7681', fontSize: 12, pointerEvents: 'none',
+                color: '#88857f', fontSize: 12, pointerEvents: 'none',
               }}>Upload a product image →</div>
             )}
           </div>
@@ -1212,26 +1212,26 @@ export default function CalloutAdTool({ onAddToCart }) {
           </div>
 
           {variations.length > 0 && (
-            <div style={{ marginTop: 18, borderTop: '1px solid #2a3441', paddingTop: 14 }}>
+            <div style={{ marginTop: 18, borderTop: '1px solid #dedbd3', paddingTop: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, color: '#8b949e' }}>
+                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, color: '#77746f' }}>
                   Variations ({variations.length})
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button onClick={downloadAllVariations} style={chipOff}>Download all</button>
-                  <button onClick={() => setVariations([])} style={{ ...chipOff, color: '#f85149' }}>Clear</button>
+                  <button onClick={() => setVariations([])} style={{ ...chipOff, color: '#b42318' }}>Clear</button>
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
                 {variations.map(v => (
-                  <div key={v.id} style={{ background: '#0d1117', border: '1px solid #2a3441', borderRadius: 6, overflow: 'hidden' }}>
+                  <div key={v.id} style={{ background: '#fff', border: '1px solid #dedbd3', borderRadius: 6, overflow: 'hidden' }}>
                     <img
                       src={v.dataUrl}
                       alt={v.fileName}
                       style={{ width: '100%', display: 'block', aspectRatio: `${format.w} / ${format.h}`, objectFit: 'cover' }}
                     />
                     <div style={{ padding: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <div style={{ fontSize: 10, color: '#8b949e', wordBreak: 'break-all' }}>{v.fileName}</div>
+                      <div style={{ fontSize: 10, color: '#77746f', wordBreak: 'break-all' }}>{v.fileName}</div>
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         <button onClick={() => downloadVariation(v)} style={chipOff}>Download</button>
                         <button onClick={() => useVariationAsBase(v)} style={chipOff}>Edit</button>
@@ -1277,7 +1277,7 @@ export default function CalloutAdTool({ onAddToCart }) {
               </select>
               <button onClick={saveDraft} style={chipOff}>{draftId ? 'Update' : 'Save'}</button>
               {draftId && (
-                <button onClick={() => deleteDraft(draftId)} style={{ ...chipOff, color: '#f85149' }}>Delete</button>
+                <button onClick={() => deleteDraft(draftId)} style={{ ...chipOff, color: '#b42318' }}>Delete</button>
               )}
             </div>
           </Row>
@@ -1311,8 +1311,8 @@ export default function CalloutAdTool({ onAddToCart }) {
               onDragLeave={() => setDragOver(false)}
               onDrop={handleDrop}
               style={{
-                border: `1px dashed ${dragOver ? COLORS.flame : '#2a3441'}`,
-                background: dragOver ? '#1f2630' : '#0d1117',
+                border: `1px dashed ${dragOver ? COLORS.flame : '#dedbd3'}`,
+                background: dragOver ? '#1f2630' : '#fff',
                 borderRadius: 6,
                 padding: 12,
                 display: 'flex',
@@ -1321,14 +1321,14 @@ export default function CalloutAdTool({ onAddToCart }) {
               }}
             >
               <input type="file" accept="image/*" multiple onChange={handleFile} style={{ fontSize: 12 }} />
-              <div style={{ fontSize: 11, color: '#6e7681' }}>
+              <div style={{ fontSize: 11, color: '#88857f' }}>
                 Drag & drop image(s) here for bulk upload. First file becomes the active stage image; the rest go straight to the library.
                 {bulkUploading > 0 && <span style={{ marginLeft: 6, color: COLORS.flame }}>Uploading {bulkUploading}…</span>}
               </div>
             </div>
             {savedImages.length > 0 && (
               <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#8b949e', marginBottom: 6 }}>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#77746f', marginBottom: 6 }}>
                   Saved images ({savedImages.length})
                 </div>
                 <div style={{
@@ -1383,9 +1383,9 @@ export default function CalloutAdTool({ onAddToCart }) {
             <input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} style={input} />
           </Row>
 
-          <div style={{ borderTop: '1px solid #2a3441', paddingTop: 10 }}>
+          <div style={{ borderTop: '1px solid #dedbd3', paddingTop: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, color: '#8b949e' }}>Callouts</div>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, color: '#77746f' }}>Callouts</div>
               <button onClick={addCallout} style={chipOff}>+ Add</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1394,21 +1394,21 @@ export default function CalloutAdTool({ onAddToCart }) {
                   key={c.id}
                   onClick={() => setSelectedId(c.id)}
                   style={{
-                    background: selectedId === c.id ? '#1f2630' : '#161b22',
-                    border: '1px solid #2a3441',
+                    background: selectedId === c.id ? '#1f2630' : '#fff',
+                    border: '1px solid #dedbd3',
                     borderRadius: 6, padding: 10, cursor: 'pointer',
                     display: 'flex', flexDirection: 'column', gap: 6,
                   }}
                 >
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <span style={{ fontSize: 10, color: '#6e7681' }}>#{i + 1}</span>
+                    <span style={{ fontSize: 10, color: '#88857f' }}>#{i + 1}</span>
                     <button
                       onClick={(e) => { e.stopPropagation(); updateCallout(c.id, { side: c.side === 'left' ? 'right' : 'left' }); }}
                       style={chipOff}
                     >{c.side === 'left' ? '← Left' : 'Right →'}</button>
                     <button
                       onClick={(e) => { e.stopPropagation(); removeCallout(c.id); }}
-                      style={{ ...chipOff, marginLeft: 'auto', color: '#f85149' }}
+                      style={{ ...chipOff, marginLeft: 'auto', color: '#b42318' }}
                     >Remove</button>
                   </div>
                   <input
@@ -1427,7 +1427,7 @@ export default function CalloutAdTool({ onAddToCart }) {
                 </div>
               ))}
             </div>
-            <div style={{ fontSize: 11, color: '#6e7681', marginTop: 8, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 11, color: '#88857f', marginTop: 8, lineHeight: 1.5 }}>
               Drag the cream dot to anchor the leader line to a feature. Drag the text block freely to position the callout anywhere on the canvas — the line follows. Crossing the centerline auto-flips the text alignment.
             </div>
           </div>
@@ -1498,21 +1498,21 @@ function FeatureLibraryModal({ productId, productName, specs, onClose, onSaved }
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: '#0d1117', border: '1px solid #2a3441', borderRadius: 8,
+          background: '#fff', border: '1px solid #dedbd3', borderRadius: 8,
           width: '100%', maxWidth: 820, maxHeight: '85vh', overflow: 'auto', padding: 22,
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
           <h2 style={{ margin: 0, fontSize: 18 }}>Feature library — {productName}</h2>
-          <button onClick={onClose} style={{ background: 'transparent', border: 0, color: '#8b949e', fontSize: 22, cursor: 'pointer' }}>×</button>
+          <button onClick={onClose} style={{ background: 'transparent', border: 0, color: '#77746f', fontSize: 22, cursor: 'pointer' }}>×</button>
         </div>
-        <p style={{ color: '#8b949e', fontSize: 12, marginTop: 0 }}>
+        <p style={{ color: '#77746f', fontSize: 12, marginTop: 0 }}>
           These specs ground the auto-place vision call. The more precise your visual description and typical location, the more accurately Claude lands the dot. Body copy auto-fills new callouts and updates existing ones with a matching heading.
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 12 }}>
           {draft.map((s, i) => (
-            <div key={s.id || `new-${i}`} style={{ background: '#161b22', border: '1px solid #2a3441', borderRadius: 6, padding: 12 }}>
+            <div key={s.id || `new-${i}`} style={{ background: '#fff', border: '1px solid #dedbd3', borderRadius: 6, padding: 12 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
                 <input
                   value={s.feature_name}
@@ -1520,11 +1520,11 @@ function FeatureLibraryModal({ productId, productName, specs, onClose, onSaved }
                   placeholder="Feature name (e.g. A-Flame Burner)"
                   style={{ ...input, fontWeight: 600 }}
                 />
-                <button onClick={() => remove(i)} style={{ ...chipOff, color: '#f85149' }}>Remove</button>
+                <button onClick={() => remove(i)} style={{ ...chipOff, color: '#b42318' }}>Remove</button>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
                 <div>
-                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#8b949e', marginBottom: 4 }}>Visual description</div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#77746f', marginBottom: 4 }}>Visual description</div>
                   <textarea
                     value={s.visual_description || ''}
                     onChange={(e) => update(i, { visual_description: e.target.value })}
@@ -1534,7 +1534,7 @@ function FeatureLibraryModal({ productId, productName, specs, onClose, onSaved }
                   />
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#8b949e', marginBottom: 4 }}>Typical location</div>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#77746f', marginBottom: 4 }}>Typical location</div>
                   <textarea
                     value={s.typical_location || ''}
                     onChange={(e) => update(i, { typical_location: e.target.value })}
@@ -1545,7 +1545,7 @@ function FeatureLibraryModal({ productId, productName, specs, onClose, onSaved }
                 </div>
               </div>
               <div>
-                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#8b949e', marginBottom: 4 }}>Body copy</div>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#77746f', marginBottom: 4 }}>Body copy</div>
                 <textarea
                   value={s.body_copy || ''}
                   onChange={(e) => update(i, { body_copy: e.target.value })}
@@ -1573,19 +1573,19 @@ function FeatureLibraryModal({ productId, productName, specs, onClose, onSaved }
 function Row({ label, children }) {
   return (
     <div>
-      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#8b949e', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#77746f', marginBottom: 4 }}>{label}</div>
       {children}
     </div>
   );
 }
 
 const input = {
-  width: '100%', background: '#0d1117', border: '1px solid #2a3441',
-  color: '#f0f4f8', padding: '8px 10px', borderRadius: 4, fontSize: 13,
+  width: '100%', background: '#fff', border: '1px solid #dedbd3',
+  color: '#171717', padding: '8px 10px', borderRadius: 4, fontSize: 13,
   fontFamily: "'JetBrains Mono', monospace",
 };
 const chipBase = {
-  background: 'transparent', color: '#f0f4f8', border: '1px solid #2a3441',
+  background: 'transparent', color: '#171717', border: '1px solid #dedbd3',
   padding: '4px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11,
 };
 const chipOff = chipBase;
@@ -1595,6 +1595,6 @@ const primaryBtn = {
   borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600,
 };
 const secondaryBtn = {
-  background: 'transparent', color: '#f0f4f8', border: '1px solid #2a3441',
+  background: 'transparent', color: '#171717', border: '1px solid #dedbd3',
   padding: '10px 16px', borderRadius: 6, cursor: 'pointer', fontSize: 13,
 };

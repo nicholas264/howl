@@ -57,7 +57,7 @@ function AuthenticatedApp() {
   if (error) {
     return (
       <div className="access-denied">
-        <img src="/logos/howl-horizontal-wht.png" alt="HOWL Campfires" />
+        <img src="/logos/howl-stacked-blk.png" alt="HOWL Campfires" />
         <span className="workspace-kicker">Access check failed</span>
         <h1>We could not verify this account.</h1>
         <p>{error}</p>
@@ -87,13 +87,13 @@ function AuthenticatedApp() {
 
 const appearance = {
   variables: {
-    colorPrimary: '#DC440A',
-    colorBackground: '#0d1117',
-    colorInputBackground: '#1c2330',
-    colorInputText: '#f0f4f8',
-    colorText: '#f0f4f8',
-    colorTextSecondary: '#8b949e',
-    fontFamily: 'JetBrains Mono, monospace',
+    colorPrimary: '#d84a17',
+    colorBackground: '#fff',
+    colorInputBackground: '#f4f1ea',
+    colorInputText: '#171717',
+    colorText: '#171717',
+    colorTextSecondary: '#6f6d68',
+    fontFamily: 'Helvetica Neue, Helvetica, sans-serif',
   },
   elements: {
     footerAction: { display: 'none' },
@@ -120,7 +120,7 @@ const app = isCreatorSubmission ? (
       <AuthenticatedApp />
     </SignedIn>
     <SignedOut>
-      <div style={{ minHeight: '100vh', background: '#0d1117', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+      <div style={{ minHeight: '100vh', background: '#f7f6f2', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
         <SignIn routing="hash" />
       </div>
     </SignedOut>

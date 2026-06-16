@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 
 const INPUT_STYLE = {
-  background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8',
+  background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717',
   fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4,
   outline: 'none', width: '100%',
 };
@@ -61,7 +61,7 @@ export function ProfileAvatar({ src, name, size = 24 }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%', flexShrink: 0,
-      background: '#2a3441', color: '#f0f4f8',
+      background: '#dedbd3', color: '#171717',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: size * 0.45, fontWeight: 700,
     }}>{(name || '?').charAt(0).toUpperCase()}</div>
@@ -102,22 +102,22 @@ export function PagePicker({ value, onChange }) {
             <span style={{ flex: 1 }}>{selected.name}</span>
           </>
         ) : (
-          <span style={{ flex: 1, color: '#6e7681' }}>
+          <span style={{ flex: 1, color: '#88857f' }}>
             {loading ? 'Loading Pages…' : error ? `Error: ${error}` : pages.length ? 'Select Facebook Page' : 'No Pages found'}
           </span>
         )}
-        <span style={{ color: '#6e7681', fontSize: 9 }}>▼</span>
+        <span style={{ color: '#88857f', fontSize: 9 }}>▼</span>
       </button>
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
           <div style={{
             position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 51,
-            background: '#0d1117', border: '1px solid #2a3441', borderRadius: 4,
+            background: '#fff', border: '1px solid #dedbd3', borderRadius: 4,
             maxHeight: 280, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
           }}>
             {pages.length === 0 && (
-              <div style={{ padding: 12, color: '#8b949e', fontSize: 11 }}>
+              <div style={{ padding: 12, color: '#77746f', fontSize: 11 }}>
                 {loading ? 'Loading…' : 'No Facebook Pages accessible to this token.'}
               </div>
             )}
@@ -131,13 +131,13 @@ export function PagePicker({ value, onChange }) {
                     width: '100%', display: 'flex', alignItems: 'center', gap: 10,
                     padding: '8px 10px', cursor: 'pointer', textAlign: 'left',
                     background: active ? '#1f2630' : 'transparent',
-                    border: 0, color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11,
+                    border: 0, color: '#171717', fontFamily: 'inherit', fontSize: 11,
                   }}
                 >
                   <ProfileAvatar src={p.picture_url} name={p.name} size={28} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600 }}>{p.name}</div>
-                    <div style={{ fontSize: 9, color: '#6e7681' }}>{p.username ? `@${p.username} · ` : ''}{p.id}</div>
+                    <div style={{ fontSize: 9, color: '#88857f' }}>{p.username ? `@${p.username} · ` : ''}{p.id}</div>
                   </div>
                 </button>
               );
@@ -183,22 +183,22 @@ export function InstagramAccountPicker({ value, onChange }) {
             <span style={{ flex: 1 }}>@{selected.username || selected.id}</span>
           </>
         ) : (
-          <span style={{ flex: 1, color: '#6e7681' }}>
+          <span style={{ flex: 1, color: '#88857f' }}>
             {loading ? 'Loading IG accounts…' : error ? `Error: ${error}` : accounts.length ? 'Select Instagram account' : 'No IG accounts found'}
           </span>
         )}
-        <span style={{ color: '#6e7681', fontSize: 9 }}>▼</span>
+        <span style={{ color: '#88857f', fontSize: 9 }}>▼</span>
       </button>
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
           <div style={{
             position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 51,
-            background: '#0d1117', border: '1px solid #2a3441', borderRadius: 4,
+            background: '#fff', border: '1px solid #dedbd3', borderRadius: 4,
             maxHeight: 280, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
           }}>
             {accounts.length === 0 && (
-              <div style={{ padding: 12, color: '#8b949e', fontSize: 11 }}>
+              <div style={{ padding: 12, color: '#77746f', fontSize: 11 }}>
                 {loading ? 'Loading…' : 'No Instagram accounts linked to this ad account or page.'}
               </div>
             )}
@@ -212,13 +212,13 @@ export function InstagramAccountPicker({ value, onChange }) {
                     width: '100%', display: 'flex', alignItems: 'center', gap: 10,
                     padding: '8px 10px', cursor: 'pointer', textAlign: 'left',
                     background: active ? '#1f2630' : 'transparent',
-                    border: 0, color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11,
+                    border: 0, color: '#171717', fontFamily: 'inherit', fontSize: 11,
                   }}
                 >
                   <ProfileAvatar src={a.profile_pic_url} name={a.username} size={28} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600 }}>@{a.username || '(no username)'}</div>
-                    <div style={{ fontSize: 9, color: '#6e7681' }}>{a.id} · {a.source}</div>
+                    <div style={{ fontSize: 9, color: '#88857f' }}>{a.id} · {a.source}</div>
                   </div>
                 </button>
               );

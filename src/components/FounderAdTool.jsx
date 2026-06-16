@@ -161,18 +161,18 @@ export default function FounderAdTool() {
   const selectedType = SCRIPT_TYPES.find(t => t.id === scriptType);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#0d1117' }}>
-      <div style={{ padding: '20px 28px', borderBottom: '1px solid #2a3441' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#fff' }}>
+      <div style={{ padding: '20px 28px', borderBottom: '1px solid #dedbd3' }}>
         <div className="eyebrow" style={{ marginBottom: 4 }}>Create</div>
-        <div className="display-md" style={{ color: '#f0f4f8' }}>Founder Ads</div>
-        <div className="display-italic" style={{ fontSize: 13, color: '#8b949e', marginTop: 4 }}>
+        <div className="display-md" style={{ color: '#171717' }}>Founder Ads</div>
+        <div className="display-italic" style={{ fontSize: 13, color: '#77746f', marginTop: 4 }}>
           First-person scripts in your voice — hook, story, proof, CTA.
         </div>
       </div>
       <div style={{ display: 'flex', flex: 1 }}>
 
       {/* Left config panel */}
-      <div style={{ width: 320, flexShrink: 0, borderRight: '1px solid #2a3441', padding: '28px 24px', display: 'flex', flexDirection: 'column', gap: 24, overflowY: 'auto' }}>
+      <div style={{ width: 320, flexShrink: 0, borderRight: '1px solid #dedbd3', padding: '28px 24px', display: 'flex', flexDirection: 'column', gap: 24, overflowY: 'auto' }}>
 
         {/* Script Type */}
         <div>
@@ -226,7 +226,7 @@ export default function FounderAdTool() {
 
         {/* Custom context */}
         <div>
-          <div style={S.label}>Founder Notes <span style={{ color: '#6e7681', fontWeight: 400 }}>(optional)</span></div>
+          <div style={S.label}>Founder Notes <span style={{ color: '#88857f', fontWeight: 400 }}>(optional)</span></div>
           <textarea
             value={customContext}
             onChange={e => setCustomContext(e.target.value)}
@@ -249,11 +249,11 @@ export default function FounderAdTool() {
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#f0f4f8', letterSpacing: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#171717', letterSpacing: 1 }}>
               Founder Ad Script
             </div>
             {selectedType && (
-              <div style={{ fontSize: 10, color: '#8b949e', marginTop: 3, letterSpacing: 1 }}>
+              <div style={{ fontSize: 10, color: '#77746f', marginTop: 3, letterSpacing: 1 }}>
                 {selectedType.label} · {PRODUCTS.find(p => p.id === product)?.short} · {length}s · {TONES.find(t => t.id === tone)?.label}
               </div>
             )}
@@ -269,20 +269,20 @@ export default function FounderAdTool() {
 
         {/* Saved scripts drawer */}
         {showSaved && saved.length > 0 && (
-          <div style={{ marginBottom: 24, border: '1px solid #2a3441', borderRadius: 6, overflow: 'hidden' }}>
+          <div style={{ marginBottom: 24, border: '1px solid #dedbd3', borderRadius: 6, overflow: 'hidden' }}>
             {saved.map((s, i) => (
-              <div key={s.id} style={{ padding: '12px 16px', borderBottom: i < saved.length - 1 ? '1px solid #2a3441' : 'none', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <div key={s.id} style={{ padding: '12px 16px', borderBottom: i < saved.length - 1 ? '1px solid #dedbd3' : 'none', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 10, color: '#f0f4f8', fontWeight: 600, marginBottom: 2 }}>
+                  <div style={{ fontSize: 10, color: '#171717', fontWeight: 600, marginBottom: 2 }}>
                     {SCRIPT_TYPES.find(t => t.id === s.scriptType)?.label} · {PRODUCTS.find(p => p.id === s.product)?.short} · {s.length}s
                   </div>
-                  <div style={{ fontSize: 9, color: '#8b949e', lineHeight: 1.5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                  <div style={{ fontSize: 9, color: '#77746f', lineHeight: 1.5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                     {s.script.slice(0, 120)}...
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                   <button onClick={() => { setScript(s.script); setShowSaved(false); }} style={S.microBtn}>Load</button>
-                  <button onClick={() => deleteScript(s.id)} style={{ ...S.microBtn, color: '#DC440A' }}>Del</button>
+                  <button onClick={() => deleteScript(s.id)} style={{ ...S.microBtn, color: '#d84a17' }}>Del</button>
                 </div>
               </div>
             ))}
@@ -291,14 +291,14 @@ export default function FounderAdTool() {
 
         {/* Script display */}
         {loading && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: '#8b949e', fontSize: 11, padding: '40px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: '#77746f', fontSize: 11, padding: '40px 0' }}>
             <div style={S.spinner} />
             Writing your founder script...
           </div>
         )}
 
         {!loading && !script && (
-          <div style={{ padding: '60px 0', textAlign: 'center', color: '#6e7681', fontSize: 11, letterSpacing: 1 }}>
+          <div style={{ padding: '60px 0', textAlign: 'center', color: '#88857f', fontSize: 11, letterSpacing: 1 }}>
             Configure your script on the left and hit Write Script.
           </div>
         )}
@@ -306,17 +306,17 @@ export default function FounderAdTool() {
         {!loading && script && (
           <div>
             {/* Parsed sections */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 24, border: '1px solid #2a3441', borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0, marginBottom: 24, border: '1px solid #dedbd3', borderRadius: 8, overflow: 'hidden' }}>
               {parseScript(script).map((section, i) => (
                 <div key={i} style={{
                   padding: '20px 24px',
-                  borderBottom: i < parseScript(script).length - 1 ? '1px solid #2a3441' : 'none',
-                  background: section.label === 'HOOK' ? 'rgba(220,68,10,0.07)' : '#161b22',
+                  borderBottom: i < parseScript(script).length - 1 ? '1px solid #dedbd3' : 'none',
+                  background: section.label === 'HOOK' ? 'rgba(220,68,10,0.07)' : '#fff',
                 }}>
-                  <div style={{ fontSize: 8, letterSpacing: 3, textTransform: 'uppercase', color: section.label === 'HOOK' ? '#DC440A' : '#6e7681', marginBottom: 10, fontWeight: 700 }}>
+                  <div style={{ fontSize: 8, letterSpacing: 3, textTransform: 'uppercase', color: section.label === 'HOOK' ? '#d84a17' : '#88857f', marginBottom: 10, fontWeight: 700 }}>
                     {section.label}
                   </div>
-                  <div style={{ fontSize: 14, lineHeight: 1.8, color: '#f0f4f8', fontFamily: "'Instrument Serif', serif" }}>
+                  <div style={{ fontSize: 14, lineHeight: 1.8, color: '#171717', fontFamily: "'Instrument Serif', serif" }}>
                     {section.text}
                   </div>
                 </div>
@@ -325,7 +325,7 @@ export default function FounderAdTool() {
 
             {/* Word count + actions */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: 9, color: '#6e7681', letterSpacing: 1 }}>
+              <div style={{ fontSize: 9, color: '#88857f', letterSpacing: 1 }}>
                 {script.split(/\s+/).filter(Boolean).length} words · ~{Math.round(script.split(/\s+/).filter(Boolean).length / 2.5)}s read time
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
@@ -374,23 +374,23 @@ function parseScript(raw) {
 }
 
 const S = {
-  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#8b949e', marginBottom: 8, fontWeight: 600 },
+  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#77746f', marginBottom: 8, fontWeight: 600 },
   typeBtn: (active) => ({
-    padding: '10px 12px', border: `1px solid ${active ? '#DC440A' : '#2a3441'}`,
-    background: active ? 'rgba(220,68,10,0.12)' : '#161b22', color: active ? '#f0f4f8' : '#8b949e',
+    padding: '10px 12px', border: `1px solid ${active ? '#d84a17' : '#dedbd3'}`,
+    background: active ? 'rgba(220,68,10,0.12)' : '#fff', color: active ? '#171717' : '#77746f',
     fontFamily: 'inherit', fontSize: 11, cursor: 'pointer', borderRadius: 4, textAlign: 'left', transition: 'all .15s',
   }),
   optBtn: (active) => ({
-    padding: '9px 12px', border: `1px solid ${active ? '#DC440A' : '#2a3441'}`,
-    background: active ? 'rgba(220,68,10,0.12)' : '#161b22', color: active ? '#f0f4f8' : '#8b949e',
+    padding: '9px 12px', border: `1px solid ${active ? '#d84a17' : '#dedbd3'}`,
+    background: active ? 'rgba(220,68,10,0.12)' : '#fff', color: active ? '#171717' : '#77746f',
     fontFamily: 'inherit', fontSize: 11, cursor: 'pointer', borderRadius: 4, textAlign: 'left', transition: 'all .15s',
   }),
-  textarea: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #2a3441', borderRadius: 4, background: '#161b22', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11, lineHeight: 1.6, resize: 'vertical', outline: 'none' },
-  generateBtn: (disabled) => ({ padding: '13px 0', background: disabled ? '#2a3441' : '#DC440A', border: 'none', borderRadius: 4, color: disabled ? '#6e7681' : '#fff', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer', width: '100%' }),
-  error: { padding: '10px 12px', border: '1px solid rgba(220,68,10,0.4)', background: 'rgba(220,68,10,0.12)', color: '#DC440A', fontSize: 11, borderRadius: 4 },
-  primaryBtn: { padding: '9px 20px', background: '#DC440A', border: 'none', borderRadius: 4, color: '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', cursor: 'pointer' },
-  secondaryBtn: { padding: '9px 16px', background: 'none', border: '1px solid #2a3441', borderRadius: 4, color: '#8b949e', fontFamily: 'inherit', fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', cursor: 'pointer' },
-  actionBtn: (active) => ({ padding: '7px 14px', background: active ? 'rgba(220,68,10,0.12)' : 'none', border: `1px solid ${active ? '#DC440A' : '#2a3441'}`, borderRadius: 4, color: active ? '#DC440A' : '#8b949e', fontFamily: 'inherit', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer' }),
-  microBtn: { padding: '4px 10px', background: 'none', border: '1px solid #2a3441', borderRadius: 3, color: '#8b949e', fontFamily: 'inherit', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer' },
-  spinner: { width: 14, height: 14, border: '2px solid #2a3441', borderTopColor: '#DC440A', borderRadius: '50%', animation: 'sp .7s linear infinite', display: 'inline-block' },
+  textarea: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #dedbd3', borderRadius: 4, background: '#fff', color: '#171717', fontFamily: 'inherit', fontSize: 11, lineHeight: 1.6, resize: 'vertical', outline: 'none' },
+  generateBtn: (disabled) => ({ padding: '13px 0', background: disabled ? '#dedbd3' : '#d84a17', border: 'none', borderRadius: 4, color: disabled ? '#88857f' : '#fff', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer', width: '100%' }),
+  error: { padding: '10px 12px', border: '1px solid rgba(220,68,10,0.4)', background: 'rgba(220,68,10,0.12)', color: '#d84a17', fontSize: 11, borderRadius: 4 },
+  primaryBtn: { padding: '9px 20px', background: '#d84a17', border: 'none', borderRadius: 4, color: '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', cursor: 'pointer' },
+  secondaryBtn: { padding: '9px 16px', background: 'none', border: '1px solid #dedbd3', borderRadius: 4, color: '#77746f', fontFamily: 'inherit', fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', cursor: 'pointer' },
+  actionBtn: (active) => ({ padding: '7px 14px', background: active ? 'rgba(220,68,10,0.12)' : 'none', border: `1px solid ${active ? '#d84a17' : '#dedbd3'}`, borderRadius: 4, color: active ? '#d84a17' : '#77746f', fontFamily: 'inherit', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer' }),
+  microBtn: { padding: '4px 10px', background: 'none', border: '1px solid #dedbd3', borderRadius: 3, color: '#77746f', fontFamily: 'inherit', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer' },
+  spinner: { width: 14, height: 14, border: '2px solid #dedbd3', borderTopColor: '#d84a17', borderRadius: '50%', animation: 'sp .7s linear infinite', display: 'inline-block' },
 };

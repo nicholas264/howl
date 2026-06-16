@@ -10,30 +10,30 @@ const FILTERS = [
 const S = {
   wrap: { padding: '28px 36px', maxWidth: 1200 },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
-  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#8b949e' },
+  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#77746f' },
   filters: { display: 'flex', gap: 6 },
   chip: (active) => ({
     padding: '6px 14px', borderRadius: 4, fontSize: 9, letterSpacing: 2, textTransform: 'uppercase',
     fontFamily: 'inherit', fontWeight: 600, cursor: 'pointer',
-    border: `1px solid ${active ? '#DC440A' : '#2a3441'}`,
-    background: active ? 'rgba(220,68,10,0.15)' : '#1c2330',
-    color: active ? '#DC440A' : '#8b949e',
+    border: `1px solid ${active ? '#d84a17' : '#dedbd3'}`,
+    background: active ? 'rgba(220,68,10,0.15)' : '#f4f1ea',
+    color: active ? '#d84a17' : '#77746f',
   }),
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 },
-  card: { border: '1px solid #2a3441', borderRadius: 6, background: '#161b22', overflow: 'hidden' },
-  thumb: { width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block', background: '#1c2330' },
+  card: { border: '1px solid #dedbd3', borderRadius: 6, background: '#fff', overflow: 'hidden' },
+  thumb: { width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block', background: '#f4f1ea' },
   info: { padding: '10px 12px' },
-  name: { fontSize: 10, color: '#f0f4f8', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 4 },
-  meta: { fontSize: 9, color: '#6e7681', marginBottom: 8 },
+  name: { fontSize: 10, color: '#171717', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 4 },
+  meta: { fontSize: 9, color: '#88857f', marginBottom: 8 },
   badge: (status) => {
-    if (status === 'pushed') return { background: 'rgba(63,185,80,0.15)', color: '#3fb950', border: '1px solid rgba(63,185,80,0.4)' };
-    if (status === 'error') return { background: 'rgba(248,81,73,0.15)', color: '#f85149', border: '1px solid rgba(248,81,73,0.4)' };
-    return { background: '#2a3441', color: '#8b949e', border: '1px solid #2a3441' };
+    if (status === 'pushed') return { background: 'rgba(63,185,80,0.15)', color: '#256b35', border: '1px solid rgba(63,185,80,0.4)' };
+    if (status === 'error') return { background: 'rgba(248,81,73,0.15)', color: '#b42318', border: '1px solid rgba(248,81,73,0.4)' };
+    return { background: '#dedbd3', color: '#77746f', border: '1px solid #dedbd3' };
   },
   badgeBase: { display: 'inline-block', padding: '3px 8px', borderRadius: 3, fontSize: 8, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700 },
-  empty: { border: '2px dashed #2a3441', borderRadius: 6, padding: '48px', textAlign: 'center', color: '#6e7681', fontSize: 11 },
-  videoThumb: { width: '100%', aspectRatio: '1', background: '#1c2330', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #2a3441' },
-  carouselThumb: { width: '100%', aspectRatio: '1', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, background: '#1c2330', padding: 2 },
+  empty: { border: '2px dashed #dedbd3', borderRadius: 6, padding: '48px', textAlign: 'center', color: '#88857f', fontSize: 11 },
+  videoThumb: { width: '100%', aspectRatio: '1', background: '#f4f1ea', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #dedbd3' },
+  carouselThumb: { width: '100%', aspectRatio: '1', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, background: '#f4f1ea', padding: 2 },
 };
 
 function statusLabel(status) {
@@ -81,8 +81,8 @@ export default function GalleryTab({ cart }) {
     <div style={S.wrap}>
       <div style={{ marginBottom: 24 }}>
         <div className="eyebrow" style={{ marginBottom: 6 }}>Launch</div>
-        <div className="display-lg" style={{ color: '#f0f4f8' }}>Gallery</div>
-        <div className="display-italic" style={{ fontSize: 14, color: '#8b949e', marginTop: 6 }}>
+        <div className="display-lg" style={{ color: '#171717' }}>Gallery</div>
+        <div className="display-italic" style={{ fontSize: 14, color: '#77746f', marginTop: 6 }}>
           Everything in your publish cart — drafts, pushed, and failures.
         </div>
       </div>
@@ -113,8 +113,8 @@ export default function GalleryTab({ cart }) {
                 {/* Thumbnail */}
                 {item.type === 'video' ? (
                   <div style={S.videoThumb}>
-                    <span style={{ fontSize: 28, color: '#6e7681' }}>&#9654;</span>
-                    <span style={{ fontSize: 8, color: '#6e7681', letterSpacing: 2, marginTop: 6 }}>VIDEO</span>
+                    <span style={{ fontSize: 28, color: '#88857f' }}>&#9654;</span>
+                    <span style={{ fontSize: 8, color: '#88857f', letterSpacing: 2, marginTop: 6 }}>VIDEO</span>
                   </div>
                 ) : item.type === 'carousel' && item.cards ? (
                   <div style={S.carouselThumb}>
@@ -136,7 +136,7 @@ export default function GalleryTab({ cart }) {
                     {statusLabel(status)}
                   </span>
                   {item.metaPushedAt && status === 'pushed' && (
-                    <span style={{ fontSize: 8, color: '#6e7681', marginLeft: 6 }}>
+                    <span style={{ fontSize: 8, color: '#88857f', marginLeft: 6 }}>
                       {formatDate(item.metaPushedAt)}
                     </span>
                   )}

@@ -155,7 +155,7 @@ export default function StaticEditor({ variation, savedImages, onAddImage, onRem
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
               {TEMPLATES.map((t) => (
                 <button key={t.id} onClick={() => setTemplateId(t.id)} style={{
-                  padding: '8px 14px', border: `1px solid ${templateId === t.id ? '#DC440A' : '#e0d9c4'}`,
+                  padding: '8px 14px', border: `1px solid ${templateId === t.id ? '#d84a17' : '#e0d9c4'}`,
                   background: templateId === t.id ? '#fef8f0' : '#fff',
                   color: templateId === t.id ? '#333F4C' : '#8a8270',
                   fontFamily: 'inherit', fontSize: 10, letterSpacing: 1,
@@ -169,7 +169,7 @@ export default function StaticEditor({ variation, savedImages, onAddImage, onRem
             <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
               {Object.entries(FORMATS).map(([key, f]) => (
                 <button key={key} onClick={() => setFormatKey(key)} style={{
-                  padding: '6px 12px', border: `1px solid ${formatKey === key ? '#DC440A' : '#e0d9c4'}`,
+                  padding: '6px 12px', border: `1px solid ${formatKey === key ? '#d84a17' : '#e0d9c4'}`,
                   background: formatKey === key ? '#fef8f0' : '#fff',
                   color: formatKey === key ? '#333F4C' : '#8a8270',
                   fontFamily: 'inherit', fontSize: 10, cursor: 'pointer', borderRadius: 4, flex: 1, textAlign: 'center',
@@ -206,7 +206,7 @@ export default function StaticEditor({ variation, savedImages, onAddImage, onRem
 
             {/* Image picker */}
             <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8a8270', marginBottom: 8 }}>
-              Images {selectedImages.length > 0 && <span style={{ color: '#DC440A' }}>({selectedImages.length} selected)</span>}
+              Images {selectedImages.length > 0 && <span style={{ color: '#d84a17' }}>({selectedImages.length} selected)</span>}
             </div>
 
             {savedImages.length === 0 ? (
@@ -222,8 +222,8 @@ export default function StaticEditor({ variation, savedImages, onAddImage, onRem
                         onClick={() => toggleSelect(img.id)}
                         style={{
                           width: 64, height: 64, borderRadius: 4, overflow: 'hidden', cursor: 'pointer',
-                          border: isSelected ? '2px solid #DC440A' : '2px solid #e0d9c4',
-                          outline: isPreviewing && isSelected ? '2px solid #DC440A' : 'none',
+                          border: isSelected ? '2px solid #d84a17' : '2px solid #e0d9c4',
+                          outline: isPreviewing && isSelected ? '2px solid #d84a17' : 'none',
                           outlineOffset: 2,
                           opacity: isSelected ? 1 : 0.5,
                           transition: 'opacity 0.15s, border-color 0.15s',
@@ -253,13 +253,13 @@ export default function StaticEditor({ variation, savedImages, onAddImage, onRem
               onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
               onDragLeave={() => setDragging(false)}
               style={{
-                display: 'block', padding: '8px 10px', border: `1px dashed ${dragging ? '#DC440A' : '#c0b89a'}`,
+                display: 'block', padding: '8px 10px', border: `1px dashed ${dragging ? '#d84a17' : '#c0b89a'}`,
                 borderRadius: 4, cursor: 'pointer', textAlign: 'center',
                 background: dragging ? '#fef8f0' : 'transparent', marginBottom: 4,
               }}
             >
               <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" onChange={handleFileSelect} style={{ display: 'none' }} />
-              <div style={{ fontSize: 9, color: dragging ? '#DC440A' : '#8a8270' }}>
+              <div style={{ fontSize: 9, color: dragging ? '#d84a17' : '#8a8270' }}>
                 {dragging ? 'Drop to upload' : '+ Upload image'}
               </div>
             </label>
@@ -273,7 +273,7 @@ export default function StaticEditor({ variation, savedImages, onAddImage, onRem
               disabled={exporting || selectedImages.length === 0}
               style={{
                 padding: '12px 16px',
-                background: (exporting || selectedImages.length === 0) ? '#e0d9c4' : '#DC440A',
+                background: (exporting || selectedImages.length === 0) ? '#e0d9c4' : '#d84a17',
                 border: 'none',
                 color: (exporting || selectedImages.length === 0) ? '#a09880' : '#fff',
                 fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2,

@@ -22,23 +22,23 @@ const OBJECTIVES = [
 const S = {
   wrap: { padding: '28px 36px', maxWidth: 1100 },
   section: { marginBottom: 32 },
-  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#8b949e', marginBottom: 10, display: 'block' },
-  input: { background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11, padding: '9px 12px', borderRadius: 4, outline: 'none', width: '100%' },
+  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#77746f', marginBottom: 10, display: 'block' },
+  input: { background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, padding: '9px 12px', borderRadius: 4, outline: 'none', width: '100%' },
   row: { display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' },
   col: { display: 'flex', flexDirection: 'column', gap: 6 },
   btn: (disabled) => ({
-    padding: '9px 18px', background: disabled ? '#2a3441' : '#DC440A', border: 'none',
-    color: disabled ? '#6e7681' : '#fff', fontFamily: 'inherit', fontSize: 10,
+    padding: '9px 18px', background: disabled ? '#dedbd3' : '#d84a17', border: 'none',
+    color: disabled ? '#88857f' : '#fff', fontFamily: 'inherit', fontSize: 10,
     fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer',
     borderRadius: 4, whiteSpace: 'nowrap',
   }),
-  ghostBtn: { padding: '9px 18px', background: 'none', border: '1px solid #2a3441', color: '#8b949e', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 },
-  select: { background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11, padding: '9px 12px', borderRadius: 4, cursor: 'pointer' },
-  card: { border: '1px solid #2a3441', borderRadius: 6, padding: 16, background: '#161b22', display: 'flex', gap: 16, alignItems: 'flex-start' },
-  statusDot: (s) => ({ width: 8, height: 8, borderRadius: '50%', background: s === 'success' ? '#3fb950' : s === 'error' ? '#f85149' : s === 'pushing' ? '#DC440A' : '#2a3441', flexShrink: 0, marginTop: 6 }),
-  divider: { borderTop: '1px solid #2a3441', margin: '24px 0' },
-  err: { padding: '8px 12px', border: '1px solid rgba(220,68,10,0.4)', background: 'rgba(220,68,10,0.1)', color: '#DC440A', fontSize: 10, borderRadius: 4, marginTop: 8 },
-  success: { padding: '8px 12px', border: '1px solid rgba(63,185,80,0.4)', background: 'rgba(63,185,80,0.1)', color: '#3fb950', fontSize: 10, borderRadius: 4, marginTop: 8 },
+  ghostBtn: { padding: '9px 18px', background: 'none', border: '1px solid #dedbd3', color: '#77746f', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 },
+  select: { background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, padding: '9px 12px', borderRadius: 4, cursor: 'pointer' },
+  card: { border: '1px solid #dedbd3', borderRadius: 6, padding: 16, background: '#fff', display: 'flex', gap: 16, alignItems: 'flex-start' },
+  statusDot: (s) => ({ width: 8, height: 8, borderRadius: '50%', background: s === 'success' ? '#256b35' : s === 'error' ? '#b42318' : s === 'pushing' ? '#d84a17' : '#dedbd3', flexShrink: 0, marginTop: 6 }),
+  divider: { borderTop: '1px solid #dedbd3', margin: '24px 0' },
+  err: { padding: '8px 12px', border: '1px solid rgba(220,68,10,0.4)', background: 'rgba(220,68,10,0.1)', color: '#d84a17', fontSize: 10, borderRadius: 4, marginTop: 8 },
+  success: { padding: '8px 12px', border: '1px solid rgba(63,185,80,0.4)', background: 'rgba(63,185,80,0.1)', color: '#256b35', fontSize: 10, borderRadius: 4, marginTop: 8 },
 };
 
 export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartItem, onRemoveCartItem }) {
@@ -548,8 +548,8 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
     <div style={S.wrap}>
       <div style={{ marginBottom: 28 }}>
         <div className="eyebrow" style={{ marginBottom: 6 }}>Launch</div>
-        <div className="display-lg" style={{ color: '#f0f4f8' }}>Publish</div>
-        <div className="display-italic" style={{ fontSize: 14, color: '#8b949e', marginTop: 6 }}>
+        <div className="display-lg" style={{ color: '#171717' }}>Publish</div>
+        <div className="display-italic" style={{ fontSize: 14, color: '#77746f', marginTop: 6 }}>
           Push creatives from the gallery out to Meta — manual one-off or creative-test batch.
         </div>
       </div>
@@ -559,7 +559,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
         <span style={S.label}>Settings</span>
         <div style={{ ...S.row, marginBottom: 10 }}>
           <div style={{ ...S.col, flex: 1, minWidth: 200 }}>
-            <span style={{ fontSize: 10, color: '#8b949e' }}>Facebook Page ID</span>
+            <span style={{ fontSize: 10, color: '#77746f' }}>Facebook Page ID</span>
             <input
               style={S.input}
               placeholder="e.g. 123456789012345"
@@ -568,7 +568,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
             />
           </div>
           <div style={{ ...S.col, flex: 2, minWidth: 280 }}>
-            <span style={{ fontSize: 10, color: '#8b949e' }}>Destination URL</span>
+            <span style={{ fontSize: 10, color: '#77746f' }}>Destination URL</span>
             <input
               style={S.input}
               placeholder="https://howlcampfires.com/products/r4-mkii"
@@ -577,7 +577,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
             />
           </div>
         </div>
-        <div style={{ fontSize: 9, color: '#6e7681', letterSpacing: 1 }}>
+        <div style={{ fontSize: 9, color: '#88857f', letterSpacing: 1 }}>
           Meta credentials (access token, ad account ID) are loaded from your .env file.
         </div>
       </div>
@@ -589,13 +589,13 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             onClick={() => setPublishMode('manual')}
-            style={{ padding: '8px 18px', border: `1px solid ${publishMode === 'manual' ? '#DC440A' : '#2a3441'}`, background: publishMode === 'manual' ? 'rgba(220,68,10,0.15)' : '#1c2330', color: publishMode === 'manual' ? '#DC440A' : '#8b949e', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4, fontWeight: 600 }}
+            style={{ padding: '8px 18px', border: `1px solid ${publishMode === 'manual' ? '#d84a17' : '#dedbd3'}`, background: publishMode === 'manual' ? 'rgba(220,68,10,0.15)' : '#f4f1ea', color: publishMode === 'manual' ? '#d84a17' : '#77746f', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4, fontWeight: 600 }}
           >
             Manual Publish
           </button>
           <button
             onClick={() => setPublishMode('creative_test')}
-            style={{ padding: '8px 18px', border: `1px solid ${publishMode === 'creative_test' ? '#DC440A' : '#2a3441'}`, background: publishMode === 'creative_test' ? 'rgba(220,68,10,0.15)' : '#1c2330', color: publishMode === 'creative_test' ? '#DC440A' : '#8b949e', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4, fontWeight: 600 }}
+            style={{ padding: '8px 18px', border: `1px solid ${publishMode === 'creative_test' ? '#d84a17' : '#dedbd3'}`, background: publishMode === 'creative_test' ? 'rgba(220,68,10,0.15)' : '#f4f1ea', color: publishMode === 'creative_test' ? '#d84a17' : '#77746f', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4, fontWeight: 600 }}
           >
             Creative Test
           </button>
@@ -607,29 +607,29 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
         <>
           <div style={S.section}>
             <span style={S.label}>Test Configuration</span>
-            <div style={{ fontSize: 9, color: '#6e7681', marginBottom: 14, letterSpacing: 1, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 9, color: '#88857f', marginBottom: 14, letterSpacing: 1, lineHeight: 1.6 }}>
               Creates 1 ABO campaign with 1 ad set per creative. Cost cap bid strategy — Meta only spends on creatives that can hit your CPA target.
               <br />Everything starts PAUSED — review in Ads Manager before going live.
             </div>
             <div style={{ ...S.row, marginBottom: 12 }}>
               <div style={{ ...S.col, flex: 2 }}>
-                <span style={{ fontSize: 10, color: '#8b949e' }}>Test Name</span>
+                <span style={{ fontSize: 10, color: '#77746f' }}>Test Name</span>
                 <input style={S.input} placeholder={`[CT] HOWL — ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`} value={ctConfig.testName} onChange={e => updateCtConfig('testName', e.target.value)} />
               </div>
               <div style={{ ...S.col, flex: 1 }}>
-                <span style={{ fontSize: 10, color: '#8b949e' }}>Budget / Creative / Day ($)</span>
+                <span style={{ fontSize: 10, color: '#77746f' }}>Budget / Creative / Day ($)</span>
                 <input style={S.input} type="number" min="5" placeholder="20" value={ctConfig.budgetPerCreative} onChange={e => updateCtConfig('budgetPerCreative', e.target.value)} />
               </div>
               <div style={{ ...S.col, flex: 1 }}>
-                <span style={{ fontSize: 10, color: '#8b949e' }}>Pixel ID</span>
+                <span style={{ fontSize: 10, color: '#77746f' }}>Pixel ID</span>
                 <input style={S.input} placeholder="Pixel ID" value={ctConfig.pixelId} onChange={e => updateCtConfig('pixelId', e.target.value)} />
               </div>
             </div>
             {/* Cost Cap */}
             <div style={{ ...S.row, marginBottom: 12, alignItems: 'flex-end' }}>
               <div style={{ ...S.col, flex: 1 }}>
-                <span style={{ fontSize: 10, color: '#8b949e' }}>Cost Cap Target CPA ($)</span>
-                <input style={{ ...S.input, borderColor: ctConfig.costCapTarget ? '#DC440A' : '#2a3441' }} type="number" min="1" placeholder="e.g. 45" value={ctConfig.costCapTarget} onChange={e => updateCtConfig('costCapTarget', e.target.value)} />
+                <span style={{ fontSize: 10, color: '#77746f' }}>Cost Cap Target CPA ($)</span>
+                <input style={{ ...S.input, borderColor: ctConfig.costCapTarget ? '#d84a17' : '#dedbd3' }} type="number" min="1" placeholder="e.g. 45" value={ctConfig.costCapTarget} onChange={e => updateCtConfig('costCapTarget', e.target.value)} />
               </div>
               <div style={{ flex: 2 }}>
                 <button onClick={loadCpaAnalysis} disabled={loadingCpa} style={S.ghostBtn}>
@@ -640,7 +640,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
 
             {/* CPA Analysis */}
             {cpaAnalysis && (
-              <div style={{ border: '1px solid #2a3441', borderRadius: 6, padding: 14, marginBottom: 14, background: '#0d1117' }}>
+              <div style={{ border: '1px solid #dedbd3', borderRadius: 6, padding: 14, marginBottom: 14, background: '#fff' }}>
                 <span style={{ ...S.label, marginBottom: 10 }}>Account CPA Analysis</span>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 14 }}>
                   {[
@@ -648,18 +648,18 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                     { label: 'Last 14 Days', data: cpaAnalysis.last14d },
                     { label: 'Last 30 Days', data: cpaAnalysis.last30d },
                   ].map(({ label, data }) => (
-                    <div key={label} style={{ background: '#161b22', borderRadius: 4, padding: '10px 12px' }}>
-                      <div style={{ fontSize: 8, color: '#6e7681', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>{label}</div>
+                    <div key={label} style={{ background: '#fff', borderRadius: 4, padding: '10px 12px' }}>
+                      <div style={{ fontSize: 8, color: '#88857f', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>{label}</div>
                       {data?.cpa ? (
                         <>
-                          <div style={{ fontSize: 20, fontWeight: 700, color: '#f0f4f8' }}>${parseFloat(data.cpa).toFixed(2)}</div>
-                          <div style={{ fontSize: 9, color: '#8b949e', marginTop: 4 }}>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: '#171717' }}>${parseFloat(data.cpa).toFixed(2)}</div>
+                          <div style={{ fontSize: 9, color: '#77746f', marginTop: 4 }}>
                             {data.purchases} purchases — ${parseFloat(data.spend).toFixed(0)} spend
                             {data.roas && <> — {parseFloat(data.roas).toFixed(2)}x ROAS</>}
                           </div>
                         </>
                       ) : (
-                        <div style={{ fontSize: 11, color: '#6e7681' }}>{data?.spend > 0 ? `$${parseFloat(data.spend).toFixed(0)} spent, 0 purchases` : 'No data'}</div>
+                        <div style={{ fontSize: 11, color: '#88857f' }}>{data?.spend > 0 ? `$${parseFloat(data.spend).toFixed(0)} spent, 0 purchases` : 'No data'}</div>
                       )}
                     </div>
                   ))}
@@ -672,12 +672,12 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
                       {cpaAnalysis.campaigns.slice(0, 6).map(c => (
                         <div key={c.campaign_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10 }}>
-                          <span style={{ color: '#c9d1d9', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.campaign_name}</span>
-                          <span style={{ color: '#8b949e', display: 'flex', gap: 16 }}>
+                          <span style={{ color: '#343330', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.campaign_name}</span>
+                          <span style={{ color: '#77746f', display: 'flex', gap: 16 }}>
                             <span>${parseFloat(c.spend).toFixed(0)} spend</span>
                             <span>{c.purchases} purch</span>
-                            <span style={{ color: c.cpa ? '#f0f4f8' : '#6e7681', fontWeight: c.cpa ? 700 : 400 }}>{c.cpa ? `$${parseFloat(c.cpa).toFixed(2)} CPA` : 'No purch'}</span>
-                            {c.roas && <span style={{ color: '#3fb950' }}>{parseFloat(c.roas).toFixed(2)}x</span>}
+                            <span style={{ color: c.cpa ? '#171717' : '#88857f', fontWeight: c.cpa ? 700 : 400 }}>{c.cpa ? `$${parseFloat(c.cpa).toFixed(2)} CPA` : 'No purch'}</span>
+                            {c.roas && <span style={{ color: '#256b35' }}>{parseFloat(c.roas).toFixed(2)}x</span>}
                           </span>
                         </div>
                       ))}
@@ -691,10 +691,10 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                   if (!baseCpa) return null;
                   const recommended = Math.ceil(parseFloat(baseCpa) * 1.2);
                   return (
-                    <div style={{ background: 'rgba(220,68,10,0.1)', border: '1px solid rgba(220,68,10,0.3)', borderRadius: 4, padding: '10px 14px', fontSize: 10, color: '#f0f4f8' }}>
-                      Recommended cost cap: <strong style={{ color: '#DC440A' }}>${recommended}</strong> (your 14d CPA of ${parseFloat(baseCpa).toFixed(2)} + 20% headroom for new creatives to exit learning)
+                    <div style={{ background: 'rgba(220,68,10,0.1)', border: '1px solid rgba(220,68,10,0.3)', borderRadius: 4, padding: '10px 14px', fontSize: 10, color: '#171717' }}>
+                      Recommended cost cap: <strong style={{ color: '#d84a17' }}>${recommended}</strong> (your 14d CPA of ${parseFloat(baseCpa).toFixed(2)} + 20% headroom for new creatives to exit learning)
                       {ctConfig.costCapTarget && parseFloat(ctConfig.costCapTarget) < parseFloat(baseCpa) && (
-                        <div style={{ color: '#f5a623', marginTop: 4, fontSize: 9 }}>
+                        <div style={{ color: '#9a6a0a', marginTop: 4, fontSize: 9 }}>
                           Warning: your cost cap (${ctConfig.costCapTarget}) is below your current CPA — new creatives may struggle to deliver.
                         </div>
                       )}
@@ -705,9 +705,9 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
             )}
 
             {ctSelectedCount > 0 && (
-              <div style={{ fontSize: 10, color: '#8b949e', marginBottom: 12, letterSpacing: 1 }}>
-                {ctSelectedCount} creative{ctSelectedCount !== 1 ? 's' : ''} selected — <span style={{ color: '#f0f4f8', fontWeight: 600 }}>${ctTotalDaily.toFixed(0)}/day</span> total spend
-                {ctConfig.costCapTarget && <> — <span style={{ color: '#DC440A', fontWeight: 600 }}>${ctConfig.costCapTarget} cost cap</span></>}
+              <div style={{ fontSize: 10, color: '#77746f', marginBottom: 12, letterSpacing: 1 }}>
+                {ctSelectedCount} creative{ctSelectedCount !== 1 ? 's' : ''} selected — <span style={{ color: '#171717', fontWeight: 600 }}>${ctTotalDaily.toFixed(0)}/day</span> total spend
+                {ctConfig.costCapTarget && <> — <span style={{ color: '#d84a17', fontWeight: 600 }}>${ctConfig.costCapTarget} cost cap</span></>}
               </div>
             )}
           </div>
@@ -729,7 +729,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
             </div>
 
             {queue.length === 0 && (
-              <div style={{ border: '2px dashed #2a3441', borderRadius: 6, padding: '32px', textAlign: 'center', color: '#6e7681', fontSize: 11 }}>
+              <div style={{ border: '2px dashed #dedbd3', borderRadius: 6, padding: '32px', textAlign: 'center', color: '#88857f', fontSize: 11 }}>
                 Add creatives from Image Ads, Review Ads, or Video Ads first.
               </div>
             )}
@@ -741,21 +741,21 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                   <div
                     key={item.id}
                     onClick={() => toggleCtItem(item.id)}
-                    style={{ ...S.card, cursor: 'pointer', border: `1px solid ${isSelected ? '#DC440A' : '#2a3441'}`, background: isSelected ? 'rgba(220,68,10,0.05)' : '#161b22' }}
+                    style={{ ...S.card, cursor: 'pointer', border: `1px solid ${isSelected ? '#d84a17' : '#dedbd3'}`, background: isSelected ? 'rgba(220,68,10,0.05)' : '#fff' }}
                   >
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => toggleCtItem(item.id)}
                       onClick={e => e.stopPropagation()}
-                      style={{ marginTop: 4, flexShrink: 0, accentColor: '#DC440A' }}
+                      style={{ marginTop: 4, flexShrink: 0, accentColor: '#d84a17' }}
                     />
                     {/* Thumbnail */}
                     <div style={{ flexShrink: 0 }}>
                       {item.type === 'video' ? (
-                        <div style={{ width: 48, height: 48, background: '#1c2330', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px solid #2a3441' }}>
+                        <div style={{ width: 48, height: 48, background: '#f4f1ea', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px solid #dedbd3' }}>
                           <span style={{ fontSize: 16 }}>▶</span>
-                          <span style={{ fontSize: 7, color: '#8b949e', letterSpacing: 1 }}>VIDEO</span>
+                          <span style={{ fontSize: 7, color: '#77746f', letterSpacing: 1 }}>VIDEO</span>
                         </div>
                       ) : item.type === 'carousel' && item.cards ? (
                         <div style={{ display: 'flex', gap: 2 }}>
@@ -769,22 +769,22 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                     </div>
                     {/* Info */}
                     <div style={{ flex: 1, minWidth: 0 }} onClick={e => e.stopPropagation()}>
-                      <div style={{ fontSize: 11, color: '#f0f4f8', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <div style={{ fontSize: 11, color: '#171717', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {item.name || 'Untitled'}
                       </div>
-                      <div style={{ fontSize: 9, color: '#8b949e', marginTop: 2, marginBottom: 6 }}>
+                      <div style={{ fontSize: 9, color: '#77746f', marginTop: 2, marginBottom: 6 }}>
                         {item.type === 'carousel' ? `Carousel (${item.cards?.length} cards)` : item.type === 'video' ? 'Video' : item.storyUrl ? '1:1 + 9:16' : '1:1'}
                       </div>
                       <div style={{ display: 'flex', gap: 6 }}>
                         <input
-                          style={{ ...S.input, fontSize: 9, padding: '5px 8px', flex: 1, borderColor: focusedItemId === item.id ? '#DC440A' : '#2a3441' }}
+                          style={{ ...S.input, fontSize: 9, padding: '5px 8px', flex: 1, borderColor: focusedItemId === item.id ? '#d84a17' : '#dedbd3' }}
                           value={item.hook || ''}
                           onChange={e => updateQueueItem(item.id, { hook: e.target.value })}
                           onFocus={() => setFocusedItemId(item.id)}
                           placeholder="Headline"
                         />
                         <input
-                          style={{ ...S.input, fontSize: 9, padding: '5px 8px', flex: 2, borderColor: focusedItemId === item.id ? '#DC440A' : '#2a3441' }}
+                          style={{ ...S.input, fontSize: 9, padding: '5px 8px', flex: 2, borderColor: focusedItemId === item.id ? '#d84a17' : '#dedbd3' }}
                           value={item.body || ''}
                           onChange={e => updateQueueItem(item.id, { body: e.target.value })}
                           onFocus={() => setFocusedItemId(item.id)}
@@ -793,7 +793,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                       </div>
                     </div>
                     {/* Per-creative budget */}
-                    <div style={{ fontSize: 10, color: '#8b949e', flexShrink: 0 }}>
+                    <div style={{ fontSize: 10, color: '#77746f', flexShrink: 0 }}>
                       ${ctConfig.budgetPerCreative}/day
                     </div>
                   </div>
@@ -825,12 +825,12 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                     Campaign created (PAUSED) — ID: {ctResult.campaignId}
                     <div style={{ marginTop: 8, fontSize: 9, lineHeight: 1.6 }}>
                       {ctResult.results?.map((r, i) => (
-                        <div key={i} style={{ color: r.success ? '#3fb950' : '#f85149' }}>
+                        <div key={i} style={{ color: r.success ? '#256b35' : '#b42318' }}>
                           {r.item}: {r.success ? `Ad ${r.adId}` : `Error: ${r.error}`}
                         </div>
                       ))}
                     </div>
-                    <div style={{ marginTop: 8, fontSize: 9, color: '#8b949e' }}>
+                    <div style={{ marginTop: 8, fontSize: 9, color: '#77746f' }}>
                       Open Ads Manager to review and activate.
                     </div>
                   </div>
@@ -860,7 +860,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
           <>
             {/* Campaign select */}
             <div style={{ ...S.col, marginBottom: 14 }}>
-              <span style={{ fontSize: 10, color: '#8b949e' }}>Campaign</span>
+              <span style={{ fontSize: 10, color: '#77746f' }}>Campaign</span>
               <div style={S.row}>
                 <select
                   style={{ ...S.select, flex: 1 }}
@@ -878,15 +878,15 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
 
             {/* New campaign form */}
             {selectedCampaignId === '__new__' && (
-              <div style={{ border: '1px solid #2a3441', borderRadius: 6, padding: 14, marginBottom: 14, background: '#0d1117' }}>
+              <div style={{ border: '1px solid #dedbd3', borderRadius: 6, padding: 14, marginBottom: 14, background: '#fff' }}>
                 <span style={{ ...S.label, marginBottom: 10 }}>New Campaign</span>
                 <div style={{ ...S.row, marginBottom: 10 }}>
                   <div style={{ ...S.col, flex: 2 }}>
-                    <span style={{ fontSize: 10, color: '#8b949e' }}>Name</span>
+                    <span style={{ fontSize: 10, color: '#77746f' }}>Name</span>
                     <input style={S.input} placeholder="HOWL — Spring 2026" value={newCampaign.name} onChange={e => setNewCampaign(p => ({ ...p, name: e.target.value }))} />
                   </div>
                   <div style={{ ...S.col, flex: 1 }}>
-                    <span style={{ fontSize: 10, color: '#8b949e' }}>Objective</span>
+                    <span style={{ fontSize: 10, color: '#77746f' }}>Objective</span>
                     <select style={S.select} value={newCampaign.objective} onChange={e => setNewCampaign(p => ({ ...p, objective: e.target.value }))}>
                       {OBJECTIVES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
@@ -894,7 +894,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                 </div>
                 {newCampaign.objective === 'OUTCOME_SALES' && (
                   <div style={{ ...S.col, marginBottom: 10 }}>
-                    <span style={{ fontSize: 10, color: '#8b949e' }}>Pixel ID (required for Sales objective)</span>
+                    <span style={{ fontSize: 10, color: '#77746f' }}>Pixel ID (required for Sales objective)</span>
                     <input style={S.input} placeholder="Pixel ID" value={newCampaign.pixelId} onChange={e => setNewCampaign(p => ({ ...p, pixelId: e.target.value }))} />
                   </div>
                 )}
@@ -911,7 +911,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
             {/* Ad set select */}
             {activeCampaignId && (
               <div style={{ ...S.col, marginBottom: 14 }}>
-                <span style={{ fontSize: 10, color: '#8b949e' }}>Ad Set</span>
+                <span style={{ fontSize: 10, color: '#77746f' }}>Ad Set</span>
                 <div style={S.row}>
                   <select
                     style={{ ...S.select, flex: 1 }}
@@ -931,19 +931,19 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
 
             {/* New ad set form */}
             {activeCampaignId && selectedAdsetId === '__new__' && (
-              <div style={{ border: '1px solid #2a3441', borderRadius: 6, padding: 14, marginBottom: 14, background: '#0d1117' }}>
+              <div style={{ border: '1px solid #dedbd3', borderRadius: 6, padding: 14, marginBottom: 14, background: '#fff' }}>
                 <span style={{ ...S.label, marginBottom: 10 }}>New Ad Set</span>
                 <div style={{ ...S.row, marginBottom: 10 }}>
                   <div style={{ ...S.col, flex: 2 }}>
-                    <span style={{ fontSize: 10, color: '#8b949e' }}>Name</span>
+                    <span style={{ fontSize: 10, color: '#77746f' }}>Name</span>
                     <input style={S.input} placeholder="Broad — US — TOF" value={newAdset.name} onChange={e => setNewAdset(p => ({ ...p, name: e.target.value }))} />
                   </div>
                   <div style={{ ...S.col, flex: 1 }}>
-                    <span style={{ fontSize: 10, color: '#8b949e' }}>Daily Budget ($)</span>
+                    <span style={{ fontSize: 10, color: '#77746f' }}>Daily Budget ($)</span>
                     <input style={S.input} type="number" min="1" placeholder="10" value={newAdset.budget} onChange={e => setNewAdset(p => ({ ...p, budget: e.target.value }))} />
                   </div>
                 </div>
-                <div style={{ fontSize: 9, color: '#6e7681', marginBottom: 10, letterSpacing: 1 }}>
+                <div style={{ fontSize: 9, color: '#88857f', marginBottom: 10, letterSpacing: 1 }}>
                   Targeting defaults to US, ages 18–65. Adjust in Ads Manager after creation.
                 </div>
                 <button
@@ -958,7 +958,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
 
             {/* Active selection summary */}
             {activeAdsetId && (
-              <div style={{ fontSize: 10, color: '#3fb950', letterSpacing: 1 }}>
+              <div style={{ fontSize: 10, color: '#256b35', letterSpacing: 1 }}>
                 Pushing to: {campaigns.find(c => c.id === activeCampaignId)?.name} → {adsets.find(a => a.id === activeAdsetId)?.name}
               </div>
             )}
@@ -1001,7 +1001,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
 
         {queue.length === 0 && (
           <div
-            style={{ border: '2px dashed #2a3441', borderRadius: 6, padding: '32px', textAlign: 'center', color: '#6e7681', fontSize: 11 }}
+            style={{ border: '2px dashed #dedbd3', borderRadius: 6, padding: '32px', textAlign: 'center', color: '#88857f', fontSize: 11 }}
             onDragOver={e => e.preventDefault()}
             onDrop={e => { e.preventDefault(); handleFileAdd(e.dataTransfer.files); }}
           >
@@ -1024,9 +1024,9 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                 {/* Thumbnails */}
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   {item.type === 'video' ? (
-                    <div style={{ width: 64, height: 64, background: '#1c2330', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px solid #2a3441' }}>
+                    <div style={{ width: 64, height: 64, background: '#f4f1ea', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px solid #dedbd3' }}>
                       <span style={{ fontSize: 20 }}>▶</span>
-                      <span style={{ fontSize: 7, color: '#8b949e', letterSpacing: 1, marginTop: 3 }}>VIDEO</span>
+                      <span style={{ fontSize: 7, color: '#77746f', letterSpacing: 1, marginTop: 3 }}>VIDEO</span>
                     </div>
                   ) : item.type === 'carousel' && item.cards ? (
                     <div style={{ display: 'flex', gap: 3 }}>
@@ -1041,8 +1041,8 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                         </div>
                       ))}
                       {item.cards.length > 4 && (
-                        <div style={{ width: 42, height: 42, background: '#1c2330', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #2a3441' }}>
-                          <span style={{ fontSize: 9, color: '#8b949e' }}>+{item.cards.length - 4}</span>
+                        <div style={{ width: 42, height: 42, background: '#f4f1ea', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #dedbd3' }}>
+                          <span style={{ fontSize: 9, color: '#77746f' }}>+{item.cards.length - 4}</span>
                         </div>
                       )}
                     </div>
@@ -1068,25 +1068,25 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div style={S.row}>
                     <div style={{ ...S.col, flex: 1 }}>
-                      <span style={{ fontSize: 9, color: '#8b949e' }}>Ad Name</span>
+                      <span style={{ fontSize: 9, color: '#77746f' }}>Ad Name</span>
                       <input style={{ ...S.input, fontSize: 10 }} value={item.name} onChange={e => updateQueueItem(item.id, { name: e.target.value })} placeholder="Ad name" />
                     </div>
                   </div>
                   <div style={{ ...S.row, alignItems: 'flex-start' }}>
                     <div style={{ ...S.col, flex: 1 }}>
-                      <span style={{ fontSize: 9, color: '#8b949e' }}>Headline</span>
-                      <textarea style={{ ...S.input, fontSize: 10, resize: 'vertical', minHeight: 56, lineHeight: 1.5, borderColor: focusedItemId === item.id ? '#DC440A' : '#2a3441' }} value={item.hook} onChange={e => updateQueueItem(item.id, { hook: e.target.value })} onFocus={() => setFocusedItemId(item.id)} placeholder="6-word hook" />
+                      <span style={{ fontSize: 9, color: '#77746f' }}>Headline</span>
+                      <textarea style={{ ...S.input, fontSize: 10, resize: 'vertical', minHeight: 56, lineHeight: 1.5, borderColor: focusedItemId === item.id ? '#d84a17' : '#dedbd3' }} value={item.hook} onChange={e => updateQueueItem(item.id, { hook: e.target.value })} onFocus={() => setFocusedItemId(item.id)} placeholder="6-word hook" />
                     </div>
                     <div style={{ ...S.col, flex: 2 }}>
-                      <span style={{ fontSize: 9, color: '#8b949e' }}>Primary Text</span>
-                      <textarea style={{ ...S.input, fontSize: 10, resize: 'vertical', minHeight: 80, lineHeight: 1.5, borderColor: focusedItemId === item.id ? '#DC440A' : '#2a3441' }} value={item.body} onChange={e => updateQueueItem(item.id, { body: e.target.value })} onFocus={() => setFocusedItemId(item.id)} placeholder="Body copy (defaults to headline if empty)" />
+                      <span style={{ fontSize: 9, color: '#77746f' }}>Primary Text</span>
+                      <textarea style={{ ...S.input, fontSize: 10, resize: 'vertical', minHeight: 80, lineHeight: 1.5, borderColor: focusedItemId === item.id ? '#d84a17' : '#dedbd3' }} value={item.body} onChange={e => updateQueueItem(item.id, { body: e.target.value })} onFocus={() => setFocusedItemId(item.id)} placeholder="Body copy (defaults to headline if empty)" />
                     </div>
                   </div>
                   <div>
                     <button
                       onClick={() => handleGenerateCopy(item)}
                       disabled={generatingCopy[item.id]}
-                      style={{ padding: '6px 12px', background: 'none', border: '1px solid #2a3441', color: generatingCopy[item.id] ? '#6e7681' : '#8b949e', fontFamily: 'inherit', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', cursor: generatingCopy[item.id] ? 'not-allowed' : 'pointer', borderRadius: 3 }}
+                      style={{ padding: '6px 12px', background: 'none', border: '1px solid #dedbd3', color: generatingCopy[item.id] ? '#88857f' : '#77746f', fontFamily: 'inherit', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', cursor: generatingCopy[item.id] ? 'not-allowed' : 'pointer', borderRadius: 3 }}
                     >
                       {generatingCopy[item.id] ? 'Generating…' : 'Generate Copy'}
                     </button>
@@ -1121,7 +1121,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
               {previewId === item.id && (item.squareUrl || item.url) && (
                 <div style={{ marginTop: 12, background: '#fff', borderRadius: 8, overflow: 'hidden', maxWidth: 480, boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
                   <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#DC440A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#d84a17', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <span style={{ color: '#fff', fontWeight: 900, fontSize: 16, fontFamily: 'system-ui' }}>H</span>
                     </div>
                     <div>

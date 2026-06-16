@@ -34,7 +34,7 @@ export default function ResultsPanel({
         <div className="sbox"><div className="sv">{uniqueProducts.length}</div><div className="sl">Products</div></div>
         <div className="sbox"><div className="sv">Overlay</div><div className="sl">Format</div></div>
         <div className="sbox" style={{ cursor: 'pointer' }} onClick={() => setShowFavoritesOnly(v => !v)}>
-          <div className="sv" style={{ color: showFavoritesOnly ? '#DC440A' : undefined }}>
+          <div className="sv" style={{ color: showFavoritesOnly ? '#d84a17' : undefined }}>
             {favorites.length} {showFavoritesOnly ? '★' : '☆'}
           </div>
           <div className="sl">Saved</div>
@@ -58,7 +58,7 @@ export default function ResultsPanel({
           <button
             className={`fbtn ${showFavoritesOnly ? 'on' : ''}`}
             onClick={() => setShowFavoritesOnly(v => !v)}
-            style={{ color: showFavoritesOnly ? '#DC440A' : undefined }}
+            style={{ color: showFavoritesOnly ? '#d84a17' : undefined }}
           >
             {showFavoritesOnly ? '★ Saved' : '☆ Saved'} ({favorites.length})
           </button>
@@ -90,7 +90,7 @@ export default function ResultsPanel({
                   title={faved ? 'Remove from saved' : 'Save this variation'}
                   style={{
                     background: 'none', border: 'none', cursor: 'pointer',
-                    fontSize: 18, color: faved ? '#DC440A' : '#c0b89a',
+                    fontSize: 18, color: faved ? '#d84a17' : '#c0b89a',
                     padding: '0 2px', lineHeight: 1,
                   }}
                 >

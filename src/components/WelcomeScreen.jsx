@@ -19,7 +19,7 @@ export default function WelcomeScreen({ setActiveTab, can = () => true }) {
       {/* Hero */}
       <div style={{
         position: 'relative',
-        border: '2px dashed #2a3441',
+        border: '2px dashed #dedbd3',
         borderRadius: 12,
         padding: '88px 32px 80px',
         textAlign: 'center',
@@ -38,13 +38,13 @@ export default function WelcomeScreen({ setActiveTab, can = () => true }) {
           animation: 'campfire-pulse 6s ease-in-out infinite',
         }} />
 
-        <div className="eyebrow" style={{ marginBottom: 18, color: '#f5a623' }}>
+        <div className="eyebrow" style={{ marginBottom: 18, color: '#9a6a0a' }}>
           {firstName ? `${greeting}, ${firstName}` : greeting}
         </div>
 
         <div className="display-italic" style={{
           fontSize: 80,
-          color: '#f0f4f8',
+          color: '#171717',
           lineHeight: 1,
           marginBottom: 18,
           letterSpacing: '-0.02em',
@@ -55,7 +55,7 @@ export default function WelcomeScreen({ setActiveTab, can = () => true }) {
 
         <div className="display-italic" style={{
           fontSize: 18,
-          color: '#8b949e',
+          color: '#77746f',
           maxWidth: 560,
           margin: '0 auto',
           lineHeight: 1.5,
@@ -68,7 +68,7 @@ export default function WelcomeScreen({ setActiveTab, can = () => true }) {
             onClick={() => setActiveTab(can('briefs.write') ? 'from-winners' : 'performance')}
             style={{
               padding: '12px 28px',
-              background: '#DC440A',
+              background: '#d84a17',
               border: 'none',
               color: '#fff',
               fontFamily: 'inherit',
@@ -88,8 +88,8 @@ export default function WelcomeScreen({ setActiveTab, can = () => true }) {
             style={{
               padding: '12px 28px',
               background: 'transparent',
-              border: '1px solid #2a3441',
-              color: '#8b949e',
+              border: '1px solid #dedbd3',
+              color: '#77746f',
               fontFamily: 'inherit',
               fontSize: 11,
               fontWeight: 600,
@@ -106,7 +106,7 @@ export default function WelcomeScreen({ setActiveTab, can = () => true }) {
 
       {/* Quick actions */}
       <div style={{ marginTop: 36 }}>
-        <div className="eyebrow" style={{ marginBottom: 14, color: '#6e7681' }}>Where the embers are</div>
+        <div className="eyebrow" style={{ marginBottom: 14, color: '#88857f' }}>Where the embers are</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
           {QUICK_ACTIONS.filter(action => can(action.permission)).map(a => (
             <button
@@ -114,8 +114,8 @@ export default function WelcomeScreen({ setActiveTab, can = () => true }) {
               onClick={() => setActiveTab(a.tab)}
               style={{
                 textAlign: 'left',
-                background: '#161b22',
-                border: '1px solid #2a3441',
+                background: '#fff',
+                border: '1px solid #dedbd3',
                 borderRadius: 6,
                 padding: '20px 22px',
                 cursor: 'pointer',
@@ -123,12 +123,12 @@ export default function WelcomeScreen({ setActiveTab, can = () => true }) {
                 color: 'inherit',
                 transition: 'all 0.15s',
               }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(220,68,10,0.4)'; e.currentTarget.style.background = '#1c2330'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a3441'; e.currentTarget.style.background = '#161b22'; }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(220,68,10,0.4)'; e.currentTarget.style.background = '#f4f1ea'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#dedbd3'; e.currentTarget.style.background = '#fff'; }}
             >
-              <div className="eyebrow" style={{ marginBottom: 8, color: '#6e7681' }}>{a.eyebrow}</div>
-              <div className="display-md" style={{ color: '#f0f4f8', marginBottom: 6 }}>{a.title}</div>
-              <div style={{ fontSize: 11, color: '#8b949e', lineHeight: 1.4 }}>{a.sub}</div>
+              <div className="eyebrow" style={{ marginBottom: 8, color: '#88857f' }}>{a.eyebrow}</div>
+              <div className="display-md" style={{ color: '#171717', marginBottom: 6 }}>{a.title}</div>
+              <div style={{ fontSize: 11, color: '#77746f', lineHeight: 1.4 }}>{a.sub}</div>
             </button>
           ))}
         </div>
@@ -136,7 +136,7 @@ export default function WelcomeScreen({ setActiveTab, can = () => true }) {
 
       {/* Tagline */}
       <div style={{ marginTop: 48, textAlign: 'center' }}>
-        <div className="display-italic" style={{ fontSize: 13, color: '#6e7681' }}>
+        <div className="display-italic" style={{ fontSize: 13, color: '#88857f' }}>
           Built in Wheat Ridge. Forged in fire.
         </div>
       </div>

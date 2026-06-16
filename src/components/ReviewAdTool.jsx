@@ -334,17 +334,17 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
     return (
       <div style={{ display: 'flex', height: 'calc(100vh - 108px)' }}>
         {/* Left */}
-        <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #2a3441', display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: 28, gap: 20 }}>
+        <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #dedbd3', display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: 28, gap: 20 }}>
           <div>
             <div style={S.label}>Import Loox CSV</div>
             <label
               onDrop={handleDrop}
               onDragOver={e => { e.preventDefault(); setDragging(true); }}
               onDragLeave={() => setDragging(false)}
-              style={{ display: 'block', padding: '14px 12px', borderRadius: 4, cursor: 'pointer', textAlign: 'center', border: `1px dashed ${dragging ? '#DC440A' : '#c0b89a'}`, background: dragging ? '#fef8f0' : 'transparent' }}
+              style={{ display: 'block', padding: '14px 12px', borderRadius: 4, cursor: 'pointer', textAlign: 'center', border: `1px dashed ${dragging ? '#d84a17' : '#c0b89a'}`, background: dragging ? '#fef8f0' : 'transparent' }}
             >
               <input type="file" accept=".csv" onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
-              <div style={{ fontSize: 10, color: dragging ? '#DC440A' : '#8b949e' }}>
+              <div style={{ fontSize: 10, color: dragging ? '#d84a17' : '#77746f' }}>
                 {dragging ? 'Drop CSV here' : 'Upload Loox CSV — bulk export'}
               </div>
             </label>
@@ -356,7 +356,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
           </div>
 
           <div>
-            <div style={S.label}>Reviewer <span style={{ color: '#8b949e', fontWeight: 400 }}>(optional)</span></div>
+            <div style={S.label}>Reviewer <span style={{ color: '#77746f', fontWeight: 400 }}>(optional)</span></div>
             <input type="text" value={manualReviewer} onChange={e => setManualReviewer(e.target.value)} placeholder="e.g. John B." style={S.input} />
           </div>
 
@@ -377,7 +377,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
             {exporting ? 'Exporting...' : 'Download PNG'}
           </button>
           {onAddToCart && (
-            <button onClick={handleAddSingleToCart} disabled={exporting || !manualQuote.trim()} style={{ ...S.exportBtn(exporting || !manualQuote.trim()), background: (exporting || !manualQuote.trim()) ? '#2a3441' : '#6e40c9', marginTop: 6 }}>
+            <button onClick={handleAddSingleToCart} disabled={exporting || !manualQuote.trim()} style={{ ...S.exportBtn(exporting || !manualQuote.trim()), background: (exporting || !manualQuote.trim()) ? '#dedbd3' : '#6e40c9', marginTop: 6 }}>
               {exporting ? 'Rendering...' : 'Add to Cart'}
             </button>
           )}
@@ -408,33 +408,33 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <div style={{ padding: '20px 28px', borderBottom: '1px solid #2a3441', flexShrink: 0 }}>
+      <div style={{ padding: '20px 28px', borderBottom: '1px solid #dedbd3', flexShrink: 0 }}>
         <div className="eyebrow" style={{ marginBottom: 4 }}>Create</div>
-        <div className="display-md" style={{ color: '#f0f4f8' }}>Review Ads</div>
+        <div className="display-md" style={{ color: '#171717' }}>Review Ads</div>
       </div>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
       {/* Left panel — flex column with fixed header/footer, scrollable list */}
-      <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #2a3441', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #dedbd3', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
 
         {/* Fixed: CSV header */}
-        <div style={{ padding: '12px 20px', borderBottom: '1px solid #2a3441', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ padding: '12px 20px', borderBottom: '1px solid #dedbd3', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 10, color: '#f0f4f8', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div style={{ fontSize: 10, color: '#171717', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {csvName || `${reviews.length} reviews`}
             </div>
-            <div style={{ fontSize: 9, color: '#8b949e', marginTop: 1 }}>{reviews.length} reviews loaded</div>
+            <div style={{ fontSize: 9, color: '#77746f', marginTop: 1 }}>{reviews.length} reviews loaded</div>
           </div>
           <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
-            <label style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#DC440A', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            <label style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#d84a17', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               <input type="file" accept=".csv" onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
               Replace
             </label>
-            <button onClick={clearCSV} style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#8b949e', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Clear</button>
+            <button onClick={clearCSV} style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#77746f', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Clear</button>
           </div>
         </div>
 
         {/* Fixed: Rating filter */}
-        <div style={{ padding: '8px 16px', borderBottom: '1px solid #2a3441', flexShrink: 0, display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ padding: '8px 16px', borderBottom: '1px solid #dedbd3', flexShrink: 0, display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
           {[0, 5, 4, 3].map(r => (
             <button key={r} onClick={() => setRatingFilter(r)} style={S.filterBtn(ratingFilter === r)}>
               {r === 0 ? 'All' : `${r}★`}
@@ -448,7 +448,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
 
         {/* Fixed: Product filter (only if multiple products) */}
         {products.length > 1 && (
-          <div style={{ padding: '8px 16px', borderBottom: '1px solid #2a3441', flexShrink: 0, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+          <div style={{ padding: '8px 16px', borderBottom: '1px solid #dedbd3', flexShrink: 0, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
             {['all', ...products].map(p => (
               <button key={p} onClick={() => setProductFilter(p)} style={{ ...S.filterBtn(productFilter === p), textTransform: 'uppercase', letterSpacing: 1 }}>
                 {p === 'all' ? 'All' : p}
@@ -460,13 +460,13 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
         {/* Scrollable: review list */}
         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
           {filtered.length === 0 && (
-            <div style={{ padding: 20, fontSize: 10, color: '#8b949e' }}>No reviews at this rating.</div>
+            <div style={{ padding: 20, fontSize: 10, color: '#77746f' }}>No reviews at this rating.</div>
           )}
           {filtered.map(r => {
             const isSelected = selected.has(r.id);
             const isPreviewing = previewId === r.id;
             return (
-              <div key={r.id} onClick={() => setPreviewId(r.id)} style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid #2a3441', background: isPreviewing ? 'rgba(220,68,10,0.1)' : 'transparent', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <div key={r.id} onClick={() => setPreviewId(r.id)} style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid #dedbd3', background: isPreviewing ? 'rgba(220,68,10,0.1)' : 'transparent', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                 <input
                   type="checkbox"
                   checked={isSelected}
@@ -479,12 +479,12 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
                     setPreviewId(r.id);
                   }}
                   onClick={e => e.stopPropagation()}
-                  style={{ marginTop: 3, flexShrink: 0, accentColor: '#DC440A' }}
+                  style={{ marginTop: 3, flexShrink: 0, accentColor: '#d84a17' }}
                 />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 9, color: '#DC440A', marginBottom: 2 }}>{'★'.repeat(r.rating)}</div>
-                  <div style={{ fontSize: 10, color: '#f0f4f8', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{r.quote}</div>
-                  <div style={{ fontSize: 9, color: '#8b949e', marginTop: 3 }}>{r.nickname}</div>
+                  <div style={{ fontSize: 9, color: '#d84a17', marginBottom: 2 }}>{'★'.repeat(r.rating)}</div>
+                  <div style={{ fontSize: 10, color: '#171717', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{r.quote}</div>
+                  <div style={{ fontSize: 9, color: '#77746f', marginTop: 3 }}>{r.nickname}</div>
                 </div>
               </div>
             );
@@ -492,7 +492,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
         </div>
 
         {/* Fixed: Format + background + export */}
-        <div style={{ flexShrink: 0, padding: '14px 16px', borderTop: '1px solid #2a3441', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ flexShrink: 0, padding: '14px 16px', borderTop: '1px solid #dedbd3', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', gap: 6 }}>
             {Object.entries(FORMATS).map(([key, f]) => (
               <button key={key} onClick={() => toggleFormat(key)} style={S.fmtBtn(formatKeys.includes(key))}>{f.label}</button>
@@ -507,17 +507,17 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
               : `Export ${exportTotal} PNG${exportTotal !== 1 ? 's' : ''}`}
           </button>
           {onAddToCart && (
-            <button onClick={handleBulkAddToCart} disabled={exporting || selectedCount === 0} style={{ ...S.exportBtn(exporting || selectedCount === 0), background: (exporting || selectedCount === 0) ? '#2a3441' : '#6e40c9', marginTop: 4 }}>
+            <button onClick={handleBulkAddToCart} disabled={exporting || selectedCount === 0} style={{ ...S.exportBtn(exporting || selectedCount === 0), background: (exporting || selectedCount === 0) ? '#dedbd3' : '#6e40c9', marginTop: 4 }}>
               {exporting ? `Rendering ${exportProgress}...` : selectedCount === 0 ? 'Select reviews' : `Add ${exportTotal} to Cart`}
             </button>
           )}
           {onAddToCart && (
-            <button onClick={handleAddCarouselToCart} disabled={exporting || selectedCount < 2} style={{ ...S.exportBtn(exporting || selectedCount < 2), background: (exporting || selectedCount < 2) ? '#2a3441' : '#1a7f37', marginTop: 4 }}>
+            <button onClick={handleAddCarouselToCart} disabled={exporting || selectedCount < 2} style={{ ...S.exportBtn(exporting || selectedCount < 2), background: (exporting || selectedCount < 2) ? '#dedbd3' : '#1a7f37', marginTop: 4 }}>
               {exporting ? `Building carousel ${exportProgress}...` : selectedCount < 2 ? 'Select 2+ for carousel' : `Add as Carousel (${selectedCount} cards)`}
             </button>
           )}
           {driveAuth?.connected && (
-            <button onClick={() => handleBulkExport({ toDrive: true })} disabled={exporting || selectedCount === 0} style={{ ...S.exportBtn(exporting || selectedCount === 0), background: exporting || selectedCount === 0 ? '#2a3441' : '#1a7f37', marginTop: 4 }}>
+            <button onClick={() => handleBulkExport({ toDrive: true })} disabled={exporting || selectedCount === 0} style={{ ...S.exportBtn(exporting || selectedCount === 0), background: exporting || selectedCount === 0 ? '#dedbd3' : '#1a7f37', marginTop: 4 }}>
               {exporting ? `Saving ${exportProgress}...` : `Save to Drive`}
             </button>
           )}
@@ -569,7 +569,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
             </PreviewCard>
           )
         ) : (
-          <div style={{ color: '#8b949e', fontSize: 12 }}>No reviews match filter</div>
+          <div style={{ color: '#77746f', fontSize: 12 }}>No reviews match filter</div>
         )}
       </div>
 
@@ -597,21 +597,21 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
 const TEXT_COLOR_OPTIONS = [
   { label: 'Dark',   value: '#333F4C' },
   { label: 'White',  value: '#ffffff' },
-  { label: 'Flame',  value: '#DC440A' },
+  { label: 'Flame',  value: '#d84a17' },
   { label: 'Black',  value: '#000000' },
 ];
 
 function TextColorPicker({ textColor, onChange }) {
   return (
     <div>
-      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8b949e', fontWeight: 600, marginBottom: 5 }}>Text Color</div>
+      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', fontWeight: 600, marginBottom: 5 }}>Text Color</div>
       <div style={{ display: 'flex', gap: 5 }}>
         {TEXT_COLOR_OPTIONS.map(o => (
           <button key={o.label} onClick={() => onChange(o.value)} style={{
             flex: 1, padding: '5px 0', borderRadius: 3, cursor: 'pointer', fontSize: 9,
-            border: `1px solid ${textColor === o.value ? '#DC440A' : '#2a3441'}`,
-            background: textColor === o.value ? 'rgba(220,68,10,0.15)' : '#1c2330',
-            color: textColor === o.value ? '#DC440A' : '#8b949e',
+            border: `1px solid ${textColor === o.value ? '#d84a17' : '#dedbd3'}`,
+            background: textColor === o.value ? 'rgba(220,68,10,0.15)' : '#f4f1ea',
+            color: textColor === o.value ? '#d84a17' : '#77746f',
             fontFamily: 'inherit', letterSpacing: 1, textTransform: 'uppercase',
           }}>{o.label}</button>
         ))}
@@ -630,35 +630,35 @@ const SCRIM_OPTIONS = [
 function BgImagePicker({ bgImage, savedImages, onSelect, onUpload, onClear, fileRef, scrimColor, onScrimChange }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8b949e', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Background Image</span>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => fileRef.current?.click()} style={{ fontSize: 9, color: '#DC440A', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' }}>+ Upload</button>
-          {bgImage && <button onClick={onClear} style={{ fontSize: 9, color: '#8b949e', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' }}>Clear</button>}
+          <button onClick={() => fileRef.current?.click()} style={{ fontSize: 9, color: '#d84a17', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' }}>+ Upload</button>
+          {bgImage && <button onClick={onClear} style={{ fontSize: 9, color: '#77746f', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' }}>Clear</button>}
         </div>
       </div>
       <input ref={fileRef} type="file" accept="image/*" onChange={e => { onUpload(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
       {savedImages.length > 0 ? (
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
           {savedImages.map(img => (
-            <div key={img.id} onClick={() => onSelect(img.url)} style={{ width: 48, height: 48, borderRadius: 3, overflow: 'hidden', border: `2px solid ${bgImage === img.url ? '#DC440A' : '#e0d9c4'}`, cursor: 'pointer', flexShrink: 0 }}>
+            <div key={img.id} onClick={() => onSelect(img.url)} style={{ width: 48, height: 48, borderRadius: 3, overflow: 'hidden', border: `2px solid ${bgImage === img.url ? '#d84a17' : '#e0d9c4'}`, cursor: 'pointer', flexShrink: 0 }}>
               <img crossOrigin="anonymous" src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
             </div>
           ))}
         </div>
       ) : (
-        <div style={{ fontSize: 9, color: '#8b949e' }}>Upload images in Image Ads tab to reuse here.</div>
+        <div style={{ fontSize: 9, color: '#77746f' }}>Upload images in Image Ads tab to reuse here.</div>
       )}
       {bgImage && (
         <div>
-          <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8b949e', fontWeight: 600, marginBottom: 5 }}>Overlay Color</div>
+          <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', fontWeight: 600, marginBottom: 5 }}>Overlay Color</div>
           <div style={{ display: 'flex', gap: 5 }}>
             {SCRIM_OPTIONS.map(o => (
               <button key={o.label} onClick={() => onScrimChange(o.value)} style={{
                 flex: 1, padding: '5px 0', borderRadius: 3, cursor: 'pointer', fontSize: 9,
-                border: `1px solid ${scrimColor === o.value ? '#DC440A' : '#e0d9c4'}`,
+                border: `1px solid ${scrimColor === o.value ? '#d84a17' : '#e0d9c4'}`,
                 background: scrimColor === o.value ? '#fef8f0' : '#fff',
-                color: scrimColor === o.value ? '#DC440A' : '#8a8270',
+                color: scrimColor === o.value ? '#d84a17' : '#8a8270',
                 fontFamily: 'inherit', letterSpacing: 1, textTransform: 'uppercase',
               }}>{o.label}</button>
             ))}
@@ -680,12 +680,12 @@ function PreviewCard({ fmt, scale, children }) {
 }
 
 const S = {
-  label: { fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8b949e', marginBottom: 8, fontWeight: 600 },
-  textarea: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #2a3441', borderRadius: 4, background: '#1c2330', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.5, resize: 'vertical', outline: 'none' },
-  input: { width: '100%', boxSizing: 'border-box', padding: '8px 12px', border: '1px solid #2a3441', borderRadius: 4, background: '#1c2330', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 12, outline: 'none' },
-  fmtBtn: (active) => ({ flex: 1, padding: '7px 0', border: `1px solid ${active ? '#DC440A' : '#2a3441'}`, background: active ? 'rgba(220,68,10,0.15)' : '#1c2330', color: active ? '#DC440A' : '#8b949e', fontFamily: 'inherit', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 }),
-  exportBtn: (disabled) => ({ width: '100%', padding: '12px 0', background: disabled ? '#2a3441' : '#DC440A', border: 'none', borderRadius: 4, color: disabled ? '#6e7681' : '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer' }),
-  filterBtn: (active) => ({ padding: '3px 8px', border: `1px solid ${active ? '#DC440A' : '#2a3441'}`, background: active ? 'rgba(220,68,10,0.15)' : '#1c2330', color: active ? '#DC440A' : '#8b949e', fontFamily: 'inherit', fontSize: 9, cursor: 'pointer', borderRadius: 3 }),
-  microBtn: { padding: '3px 7px', border: '1px solid #2a3441', background: '#1c2330', color: '#8b949e', fontFamily: 'inherit', fontSize: 8, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 3 },
-  rightPanel: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', background: '#0d1117', padding: 40, overflow: 'auto' },
+  label: { fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', marginBottom: 8, fontWeight: 600 },
+  textarea: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #dedbd3', borderRadius: 4, background: '#f4f1ea', color: '#171717', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.5, resize: 'vertical', outline: 'none' },
+  input: { width: '100%', boxSizing: 'border-box', padding: '8px 12px', border: '1px solid #dedbd3', borderRadius: 4, background: '#f4f1ea', color: '#171717', fontFamily: 'inherit', fontSize: 12, outline: 'none' },
+  fmtBtn: (active) => ({ flex: 1, padding: '7px 0', border: `1px solid ${active ? '#d84a17' : '#dedbd3'}`, background: active ? 'rgba(220,68,10,0.15)' : '#f4f1ea', color: active ? '#d84a17' : '#77746f', fontFamily: 'inherit', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 }),
+  exportBtn: (disabled) => ({ width: '100%', padding: '12px 0', background: disabled ? '#dedbd3' : '#d84a17', border: 'none', borderRadius: 4, color: disabled ? '#88857f' : '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer' }),
+  filterBtn: (active) => ({ padding: '3px 8px', border: `1px solid ${active ? '#d84a17' : '#dedbd3'}`, background: active ? 'rgba(220,68,10,0.15)' : '#f4f1ea', color: active ? '#d84a17' : '#77746f', fontFamily: 'inherit', fontSize: 9, cursor: 'pointer', borderRadius: 3 }),
+  microBtn: { padding: '3px 7px', border: '1px solid #dedbd3', background: '#f4f1ea', color: '#77746f', fontFamily: 'inherit', fontSize: 8, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 3 },
+  rightPanel: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', background: '#fff', padding: 40, overflow: 'auto' },
 };

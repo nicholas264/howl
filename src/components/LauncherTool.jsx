@@ -70,29 +70,29 @@ function destUrlFor(productId) {
 const S = {
   wrap: { padding: '28px 36px', maxWidth: 1240 },
   h1: { fontSize: 22, marginBottom: 4 },
-  sub: { color: '#8b949e', fontSize: 13, marginTop: 0, marginBottom: 16 },
-  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#8b949e', marginBottom: 6, display: 'block' },
-  input: { background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', width: '100%' },
-  select: { background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, cursor: 'pointer', width: '100%' },
-  card: { border: '1px solid #2a3441', borderRadius: 6, background: '#161b22', padding: 14, display: 'grid', gridTemplateColumns: '140px minmax(0, 1fr) auto', gap: 16, alignItems: 'center', marginBottom: 12 },
-  thumbBox: { width: 140, height: 140, borderRadius: 4, background: '#1c2330', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: '#6e7681', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700, overflow: 'hidden' },
-  fileMeta: { fontSize: 10, color: '#8b949e', marginBottom: 4 },
-  fileName: { fontSize: 12, fontWeight: 600, color: '#f0f4f8', wordBreak: 'break-all' },
+  sub: { color: '#77746f', fontSize: 13, marginTop: 0, marginBottom: 16 },
+  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#77746f', marginBottom: 6, display: 'block' },
+  input: { background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', width: '100%' },
+  select: { background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, cursor: 'pointer', width: '100%' },
+  card: { border: '1px solid #dedbd3', borderRadius: 6, background: '#fff', padding: 14, display: 'grid', gridTemplateColumns: '140px minmax(0, 1fr) auto', gap: 16, alignItems: 'center', marginBottom: 12 },
+  thumbBox: { width: 140, height: 140, borderRadius: 4, background: '#f4f1ea', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: '#88857f', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700, overflow: 'hidden' },
+  fileMeta: { fontSize: 10, color: '#77746f', marginBottom: 4 },
+  fileName: { fontSize: 12, fontWeight: 600, color: '#171717', wordBreak: 'break-all' },
   row: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginTop: 10 },
   btn: (disabled) => ({
-    padding: '9px 18px', background: disabled ? '#2a3441' : '#DC440A', border: 'none',
-    color: disabled ? '#6e7681' : '#fff', fontFamily: 'inherit', fontSize: 10,
+    padding: '9px 18px', background: disabled ? '#dedbd3' : '#d84a17', border: 'none',
+    color: disabled ? '#88857f' : '#fff', fontFamily: 'inherit', fontSize: 10,
     fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 4,
   }),
-  ghost: { padding: '8px 14px', background: 'none', border: '1px solid #2a3441', color: '#8b949e', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 },
+  ghost: { padding: '8px 14px', background: 'none', border: '1px solid #dedbd3', color: '#77746f', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 },
   badge: (color) => ({
     fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700,
     color, padding: '2px 6px', borderRadius: 3,
     border: `1px solid ${color}`, background: `${color}1a`,
   }),
-  err: { padding: '8px 12px', border: '1px solid rgba(220,68,10,0.4)', background: 'rgba(220,68,10,0.1)', color: '#DC440A', fontSize: 10, borderRadius: 4 },
-  settings: { background: '#161b22', border: '1px solid #2a3441', borderRadius: 6, padding: 16, marginBottom: 18 },
-  divider: { borderTop: '1px solid #2a3441', margin: '20px 0' },
+  err: { padding: '8px 12px', border: '1px solid rgba(220,68,10,0.4)', background: 'rgba(220,68,10,0.1)', color: '#d84a17', fontSize: 10, borderRadius: 4 },
+  settings: { background: '#fff', border: '1px solid #dedbd3', borderRadius: 6, padding: 16, marginBottom: 18 },
+  divider: { borderTop: '1px solid #dedbd3', margin: '20px 0' },
 };
 
 export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem, onRemoveCartItem }) {
@@ -592,7 +592,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         </div>
 
         {selectedCampaignId === '__new__' && (
-          <div style={{ marginTop: 12, padding: 12, border: '1px dashed #2a3441', borderRadius: 6 }}>
+          <div style={{ marginTop: 12, padding: 12, border: '1px dashed #dedbd3', borderRadius: 6 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 8, alignItems: 'flex-end' }}>
               <div>
                 <label style={S.label}>Campaign name</label>
@@ -616,11 +616,11 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         )}
 
         {selectedAdsetId === '__new__' && (
-          <div style={{ marginTop: 12, padding: 12, border: '1px dashed #2a3441', borderRadius: 6 }}>
-            <div style={{ marginBottom: 8, fontSize: 10, color: '#8b949e' }}>
-              Inherits objective <strong style={{ color: '#f0f4f8' }}>{effectiveObjective}</strong>
+          <div style={{ marginTop: 12, padding: 12, border: '1px dashed #dedbd3', borderRadius: 6 }}>
+            <div style={{ marginBottom: 8, fontSize: 10, color: '#77746f' }}>
+              Inherits objective <strong style={{ color: '#171717' }}>{effectiveObjective}</strong>
               {effectiveObjective === 'OUTCOME_SALES' && config.defaultPixelId && (
-                <> · pixel <strong style={{ color: '#f0f4f8' }}>{config.defaultPixelId}</strong> · optimizing for <strong style={{ color: '#f0f4f8' }}>PURCHASE</strong></>
+                <> · pixel <strong style={{ color: '#171717' }}>{config.defaultPixelId}</strong> · optimizing for <strong style={{ color: '#171717' }}>PURCHASE</strong></>
               )}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr auto', gap: 8, alignItems: 'flex-end' }}>
@@ -650,10 +650,10 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         <button onClick={refreshDrive} disabled={loadingDrive} style={S.ghost}>
           {loadingDrive ? 'Refreshing…' : 'Refresh from Drive'}
         </button>
-        <div style={{ fontSize: 11, color: '#8b949e' }}>
+        <div style={{ fontSize: 11, color: '#77746f' }}>
           {queue.length} item{queue.length === 1 ? '' : 's'} ·
-          <span style={{ color: '#DC440A', marginLeft: 4 }}>{driveItems.length} Drive</span> ·
-          <span style={{ color: '#3fb950', marginLeft: 4 }}>{cart.filter(c => c.metaStatus !== 'pushed').length} Cart</span>
+          <span style={{ color: '#d84a17', marginLeft: 4 }}>{driveItems.length} Drive</span> ·
+          <span style={{ color: '#256b35', marginLeft: 4 }}>{cart.filter(c => c.metaStatus !== 'pushed').length} Cart</span>
         </div>
       </div>
 
@@ -661,7 +661,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       {driveError && <div style={S.err}>Drive: {driveError}</div>}
 
       {!loadingDrive && queue.length === 0 && (
-        <div style={{ padding: '60px 20px', textAlign: 'center', color: '#6e7681', fontSize: 13 }}>
+        <div style={{ padding: '60px 20px', textAlign: 'center', color: '#88857f', fontSize: 13 }}>
           The launcher is empty. Drop assets in the Drive UGC inbox, or generate creatives that land in the cart.
         </div>
       )}
@@ -679,11 +679,11 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
               {item.source === 'drive' ? (
                 item.kind === 'pair' ? (
                   <div style={{ position: 'relative', width: 140, height: 140 }}>
-                    <DriveThumb fileId={item.feed.id} alt="feed" style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, objectFit: 'cover', borderRadius: 4, border: '2px solid #161b22', zIndex: 1 }}
-                      fallback={<div style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, borderRadius: 4, background: '#1c2330', border: '2px solid #161b22', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6e7681', fontSize: 9 }}>1:1</div>}
+                    <DriveThumb fileId={item.feed.id} alt="feed" style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, objectFit: 'cover', borderRadius: 4, border: '2px solid #fff', zIndex: 1 }}
+                      fallback={<div style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, borderRadius: 4, background: '#f4f1ea', border: '2px solid #fff', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#88857f', fontSize: 9 }}>1:1</div>}
                     />
-                    <DriveThumb fileId={item.story.id} alt="story" style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, objectFit: 'cover', borderRadius: 4, border: '2px solid #161b22', zIndex: 2 }}
-                      fallback={<div style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, borderRadius: 4, background: '#1c2330', border: '2px solid #161b22', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6e7681', fontSize: 9 }}>9:16</div>}
+                    <DriveThumb fileId={item.story.id} alt="story" style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, objectFit: 'cover', borderRadius: 4, border: '2px solid #fff', zIndex: 2 }}
+                      fallback={<div style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, borderRadius: 4, background: '#f4f1ea', border: '2px solid #fff', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#88857f', fontSize: 9 }}>9:16</div>}
                     />
                   </div>
                 ) : (
@@ -709,18 +709,18 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                   : (item.name || 'Untitled')}
                 <span style={{ marginLeft: 8 }}>
                   {item.source === 'drive'
-                    ? <span style={S.badge('#DC440A')}>Drive</span>
-                    : <span style={S.badge('#3fb950')}>Cart</span>}
+                    ? <span style={S.badge('#d84a17')}>Drive</span>
+                    : <span style={S.badge('#256b35')}>Cart</span>}
                   {item.source === 'drive' && item.kind === 'pair' && (
-                    <span style={{ marginLeft: 6, ...S.badge('#3fb950') }}>1:1 + 9:16</span>
+                    <span style={{ marginLeft: 6, ...S.badge('#256b35') }}>1:1 + 9:16</span>
                   )}
                   {(item.squareUrl || item.url) && item.storyUrl && item.type !== 'video' && (
-                    <span style={{ marginLeft: 6, ...S.badge('#3fb950') }}>4:5 + 9:16</span>
+                    <span style={{ marginLeft: 6, ...S.badge('#256b35') }}>4:5 + 9:16</span>
                   )}
                 </span>
               </div>
               {item.source === 'drive' && item.folderPath && (
-                <div style={{ fontSize: 9, color: '#DC440A', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 }}>
+                <div style={{ fontSize: 9, color: '#d84a17', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 }}>
                   📁 {item.folderPath}
                 </div>
               )}
@@ -743,7 +743,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                     {PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                   {m.productId && (
-                    <div style={{ fontSize: 9, color: '#6e7681', marginTop: 4, wordBreak: 'break-all' }}>
+                    <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, wordBreak: 'break-all' }}>
                       → {destUrlFor(m.productId) || '(no URL set)'}
                     </div>
                   )}
@@ -764,7 +764,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                 <div style={{ marginTop: 12 }}>
                   <LaunchTimeline stepDefs={stepDef} steps={status.steps || {}} currentStep={status.currentStep} />
                   {status.message && (
-                    <div style={{ marginTop: 6, fontSize: 10, color: status.status === 'error' ? '#f85149' : '#3fb950' }}>
+                    <div style={{ marginTop: 6, fontSize: 10, color: status.status === 'error' ? '#b42318' : '#256b35' }}>
                       {status.message}
                     </div>
                   )}
@@ -782,12 +782,12 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                   {item.webViewLink && (
                     <a href={item.webViewLink} target="_blank" rel="noreferrer" style={{ ...S.ghost, textDecoration: 'none' }}>Open in Drive</a>
                   )}
-                  <button onClick={() => markDriveLaunched(item)} style={{ ...S.ghost, color: '#3fb950' }}>Mark launched</button>
-                  <button onClick={() => hideDriveFile(item.kind === 'pair' ? item.feed.id : item.id)} style={{ ...S.ghost, color: '#f85149' }}>Hide</button>
+                  <button onClick={() => markDriveLaunched(item)} style={{ ...S.ghost, color: '#256b35' }}>Mark launched</button>
+                  <button onClick={() => hideDriveFile(item.kind === 'pair' ? item.feed.id : item.id)} style={{ ...S.ghost, color: '#b42318' }}>Hide</button>
                 </>
               )}
               {item.source === 'cart' && (
-                <button onClick={() => onRemoveCartItem?.(item.id)} style={{ ...S.ghost, color: '#f85149' }}>Remove</button>
+                <button onClick={() => onRemoveCartItem?.(item.id)} style={{ ...S.ghost, color: '#b42318' }}>Remove</button>
               )}
             </div>
           </div>

@@ -9,9 +9,9 @@ export default function LaunchTimeline({ stepDefs, steps, currentStep }) {
         const isCurrent = currentStep === s.key && status !== 'done' && status !== 'error';
         const done = status === 'done';
         const err = status === 'error';
-        const color = err ? '#f85149' : done ? '#3fb950' : isCurrent ? '#DC440A' : '#2a3441';
+        const color = err ? '#b42318' : done ? '#256b35' : isCurrent ? '#d84a17' : '#dedbd3';
         const nextDone = steps[stepDefs[idx + 1]?.key]?.status === 'done';
-        const lineColor = done ? (nextDone ? '#3fb950' : '#DC440A') : '#2a3441';
+        const lineColor = done ? (nextDone ? '#256b35' : '#d84a17') : '#dedbd3';
         return (
           <React.Fragment key={s.key}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0, flexShrink: 0 }}>
@@ -20,15 +20,15 @@ export default function LaunchTimeline({ stepDefs, steps, currentStep }) {
                   width: 14, height: 14, borderRadius: '50%', background: color,
                   boxShadow: isCurrent ? `0 0 0 3px rgba(220,68,10,0.2), 0 0 12px rgba(220,68,10,0.5)` : 'none',
                   animation: isCurrent ? 'pulseDot 1.2s ease-in-out infinite' : 'none',
-                  border: status === 'idle' ? '2px solid #2a3441' : 'none',
+                  border: status === 'idle' ? '2px solid #dedbd3' : 'none',
                   boxSizing: 'border-box',
                 }}
               />
-              <div style={{ fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase', color: isCurrent ? '#f0f4f8' : err ? '#f85149' : done ? '#8b949e' : '#6e7681', fontWeight: isCurrent ? 700 : 500, whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase', color: isCurrent ? '#171717' : err ? '#b42318' : done ? '#77746f' : '#88857f', fontWeight: isCurrent ? 700 : 500, whiteSpace: 'nowrap' }}>
                 {s.label}
               </div>
               {st?.detail && (
-                <div style={{ fontSize: 9, color: '#6e7681', fontFamily: "'JetBrains Mono', monospace", whiteSpace: 'nowrap' }}>{typeof st.detail === 'string' ? st.detail : JSON.stringify(st.detail)}</div>
+                <div style={{ fontSize: 9, color: '#88857f', fontFamily: "'JetBrains Mono', monospace", whiteSpace: 'nowrap' }}>{typeof st.detail === 'string' ? st.detail : JSON.stringify(st.detail)}</div>
               )}
             </div>
             {idx < stepDefs.length - 1 && (

@@ -96,24 +96,24 @@ export function useCopyLibrary() {
 }
 
 const S = {
-  wrap: { border: '1px solid #2a3441', borderRadius: 6, background: '#161b22', marginBottom: 20 },
+  wrap: { border: '1px solid #dedbd3', borderRadius: 6, background: '#fff', marginBottom: 20 },
   header: { padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' },
-  body: { padding: 16, borderTop: '1px solid #2a3441' },
-  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#8b949e', marginBottom: 6, display: 'block' },
-  input: { background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', width: '100%' },
-  textarea: { background: '#1c2330', border: '1px solid #2a3441', color: '#f0f4f8', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', width: '100%', resize: 'vertical', minHeight: 60 },
+  body: { padding: 16, borderTop: '1px solid #dedbd3' },
+  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#77746f', marginBottom: 6, display: 'block' },
+  input: { background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', width: '100%' },
+  textarea: { background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', width: '100%', resize: 'vertical', minHeight: 60 },
   addRow: { display: 'grid', gridTemplateColumns: '1fr 1fr 2fr auto', gap: 10, alignItems: 'flex-end' },
   btn: (disabled) => ({
-    padding: '8px 14px', background: disabled ? '#2a3441' : '#DC440A', border: 'none',
-    color: disabled ? '#6e7681' : '#fff', fontFamily: 'inherit', fontSize: 10,
+    padding: '8px 14px', background: disabled ? '#dedbd3' : '#d84a17', border: 'none',
+    color: disabled ? '#88857f' : '#fff', fontFamily: 'inherit', fontSize: 10,
     fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 4,
   }),
-  variantCard: { border: '1px solid #2a3441', borderRadius: 4, padding: 10, marginTop: 8, background: '#0d1117', display: 'grid', gridTemplateColumns: '1fr auto', gap: 10 },
-  vLabel: { fontSize: 10, color: '#DC440A', letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700, marginBottom: 4 },
-  vHeadline: { fontSize: 12, color: '#f0f4f8', fontWeight: 600, marginBottom: 4 },
-  vBody: { fontSize: 11, color: '#8b949e', lineHeight: 1.4 },
-  deleteBtn: { background: 'none', border: '1px solid #2a3441', color: '#8b949e', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 3, padding: '4px 8px', fontFamily: 'inherit' },
-  count: { fontSize: 10, color: '#6e7681', letterSpacing: 2, textTransform: 'uppercase' },
+  variantCard: { border: '1px solid #dedbd3', borderRadius: 4, padding: 10, marginTop: 8, background: '#fff', display: 'grid', gridTemplateColumns: '1fr auto', gap: 10 },
+  vLabel: { fontSize: 10, color: '#d84a17', letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700, marginBottom: 4 },
+  vHeadline: { fontSize: 12, color: '#171717', fontWeight: 600, marginBottom: 4 },
+  vBody: { fontSize: 11, color: '#77746f', lineHeight: 1.4 },
+  deleteBtn: { background: 'none', border: '1px solid #dedbd3', color: '#77746f', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 3, padding: '4px 8px', fontFamily: 'inherit' },
+  count: { fontSize: 10, color: '#88857f', letterSpacing: 2, textTransform: 'uppercase' },
 };
 
 export default function CopyLibrary({ library, onUse }) {
@@ -131,7 +131,7 @@ export default function CopyLibrary({ library, onUse }) {
       <div style={S.header} onClick={() => setOpen(o => !o)}>
         <div>
           <div className="eyebrow" style={{ marginBottom: 2 }}>Reusable</div>
-          <div className="display-md" style={{ color: '#f0f4f8' }}>
+          <div className="display-md" style={{ color: '#171717' }}>
             Copy Library <span style={{ ...S.count, marginLeft: 6, fontFamily: "'JetBrains Mono', monospace" }}>· {library.variants.length} saved {library.loaded ? '' : '(loading…)'}</span>
           </div>
         </div>
