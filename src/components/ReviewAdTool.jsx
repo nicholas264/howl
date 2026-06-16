@@ -373,11 +373,21 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
           <BgImagePicker bgImage={bgImage} savedImages={savedImages} onSelect={url => { setBgImage(url); try { localStorage.setItem(LS_BG, url); } catch {} }} onUpload={handleBgFile} onClear={clearBg} fileRef={bgFileRef} scrimColor={scrimColor} onScrimChange={handleScrimChange} />
           <TextColorPicker textColor={textColor} onChange={handleTextColorChange} />
 
-          <button onClick={handleSingleExport} disabled={exporting || !manualQuote.trim()} style={S.exportBtn(exporting || !manualQuote.trim())}>
+          <button
+            onClick={handleSingleExport}
+            disabled={exporting || !manualQuote.trim()}
+            style={S.exportBtn(exporting || !manualQuote.trim())}
+            title={!manualQuote.trim() ? 'Enter review text before downloading.' : ''}
+          >
             {exporting ? 'Exporting...' : 'Download PNG'}
           </button>
           {onAddToCart && (
-            <button onClick={handleAddSingleToCart} disabled={exporting || !manualQuote.trim()} style={{ ...S.exportBtn(exporting || !manualQuote.trim()), background: (exporting || !manualQuote.trim()) ? '#dedbd3' : '#6e40c9', marginTop: 6 }}>
+            <button
+              onClick={handleAddSingleToCart}
+              disabled={exporting || !manualQuote.trim()}
+              style={{ ...S.exportBtn(exporting || !manualQuote.trim()), background: (exporting || !manualQuote.trim()) ? '#dedbd3' : '#6e40c9', marginTop: 6 }}
+              title={!manualQuote.trim() ? 'Enter review text before adding to cart.' : ''}
+            >
               {exporting ? 'Rendering...' : 'Add to Cart'}
             </button>
           )}
@@ -500,24 +510,44 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
           </div>
           <BgImagePicker bgImage={bgImage} savedImages={savedImages} onSelect={url => { setBgImage(url); try { localStorage.setItem(LS_BG, url); } catch {} }} onUpload={handleBgFile} onClear={clearBg} fileRef={bgFileRef} scrimColor={scrimColor} onScrimChange={handleScrimChange} />
           <TextColorPicker textColor={textColor} onChange={handleTextColorChange} />
-          <button onClick={() => handleBulkExport()} disabled={exporting || selectedCount === 0} style={S.exportBtn(exporting || selectedCount === 0)}>
+          <button
+            onClick={() => handleBulkExport()}
+            disabled={exporting || selectedCount === 0}
+            style={S.exportBtn(exporting || selectedCount === 0)}
+            title={selectedCount === 0 ? 'Select at least one review first.' : ''}
+          >
             {exporting
               ? `Exporting ${exportProgress}...`
               : selectedCount === 0 ? 'Select reviews'
               : `Export ${exportTotal} PNG${exportTotal !== 1 ? 's' : ''}`}
           </button>
           {onAddToCart && (
-            <button onClick={handleBulkAddToCart} disabled={exporting || selectedCount === 0} style={{ ...S.exportBtn(exporting || selectedCount === 0), background: (exporting || selectedCount === 0) ? '#dedbd3' : '#6e40c9', marginTop: 4 }}>
+            <button
+              onClick={handleBulkAddToCart}
+              disabled={exporting || selectedCount === 0}
+              style={{ ...S.exportBtn(exporting || selectedCount === 0), background: (exporting || selectedCount === 0) ? '#dedbd3' : '#6e40c9', marginTop: 4 }}
+              title={selectedCount === 0 ? 'Select at least one review before adding to cart.' : ''}
+            >
               {exporting ? `Rendering ${exportProgress}...` : selectedCount === 0 ? 'Select reviews' : `Add ${exportTotal} to Cart`}
             </button>
           )}
           {onAddToCart && (
-            <button onClick={handleAddCarouselToCart} disabled={exporting || selectedCount < 2} style={{ ...S.exportBtn(exporting || selectedCount < 2), background: (exporting || selectedCount < 2) ? '#dedbd3' : '#1a7f37', marginTop: 4 }}>
+            <button
+              onClick={handleAddCarouselToCart}
+              disabled={exporting || selectedCount < 2}
+              style={{ ...S.exportBtn(exporting || selectedCount < 2), background: (exporting || selectedCount < 2) ? '#dedbd3' : '#1a7f37', marginTop: 4 }}
+              title={selectedCount < 2 ? 'Select at least two reviews to build a carousel.' : ''}
+            >
               {exporting ? `Building carousel ${exportProgress}...` : selectedCount < 2 ? 'Select 2+ for carousel' : `Add as Carousel (${selectedCount} cards)`}
             </button>
           )}
           {driveAuth?.connected && (
-            <button onClick={() => handleBulkExport({ toDrive: true })} disabled={exporting || selectedCount === 0} style={{ ...S.exportBtn(exporting || selectedCount === 0), background: exporting || selectedCount === 0 ? '#dedbd3' : '#1a7f37', marginTop: 4 }}>
+            <button
+              onClick={() => handleBulkExport({ toDrive: true })}
+              disabled={exporting || selectedCount === 0}
+              style={{ ...S.exportBtn(exporting || selectedCount === 0), background: exporting || selectedCount === 0 ? '#dedbd3' : '#1a7f37', marginTop: 4 }}
+              title={selectedCount === 0 ? 'Select at least one review before saving to Drive.' : ''}
+            >
               {exporting ? `Saving ${exportProgress}...` : `Save to Drive`}
             </button>
           )}

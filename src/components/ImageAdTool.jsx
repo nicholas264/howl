@@ -764,28 +764,53 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
           )}
           {mode === 'single' ? (
             <>
-              <button onClick={() => handleExport()} disabled={!canSingleExport} style={S.exportBtn(!canSingleExport)}>
+              <button
+                onClick={() => handleExport()}
+                disabled={!canSingleExport}
+                style={S.exportBtn(!canSingleExport)}
+                title={!activeImg ? 'Upload or choose an image first.' : !overlayText.trim() ? 'Enter hook text before exporting.' : ''}
+              >
                 {exporting ? 'Exporting…' : !activeImg ? 'Upload an image' : !overlayText.trim() ? 'Enter hook text' : `Export PNG (${fmt.label})`}
               </button>
-              <button onClick={handleQueueForPublish} disabled={!canSingleExport || exporting} style={{ ...S.exportBtn(!canSingleExport || exporting), background: (!canSingleExport || exporting) ? undefined : '#6e40c9', marginTop: 6 }}>
+              <button
+                onClick={handleQueueForPublish}
+                disabled={!canSingleExport || exporting}
+                style={{ ...S.exportBtn(!canSingleExport || exporting), background: (!canSingleExport || exporting) ? undefined : '#6e40c9', marginTop: 6 }}
+                title={!activeImg ? 'Upload or choose an image before adding to cart.' : !overlayText.trim() ? 'Enter hook text before adding to cart.' : ''}
+              >
                 {exportMsg === 'Added to cart!' ? 'Added to Cart!' : 'Add to Cart'}
               </button>
               {driveAuth?.connected && (
-                <button onClick={() => handleExport({ toDrive: true })} disabled={!canSingleExport} style={{ ...S.exportBtn(!canSingleExport), background: !canSingleExport ? undefined : '#1a7f37', marginTop: 6 }}>
+                <button
+                  onClick={() => handleExport({ toDrive: true })}
+                  disabled={!canSingleExport}
+                  style={{ ...S.exportBtn(!canSingleExport), background: !canSingleExport ? undefined : '#1a7f37', marginTop: 6 }}
+                  title={!activeImg ? 'Upload or choose an image before saving to Drive.' : !overlayText.trim() ? 'Enter hook text before saving to Drive.' : ''}
+                >
                   {exporting ? 'Saving…' : 'Save to Drive'}
                 </button>
               )}
             </>
           ) : (
             <>
-              <button onClick={handleBatchExport} disabled={!canBatchExport} style={S.exportBtn(!canBatchExport)}>
+              <button
+                onClick={handleBatchExport}
+                disabled={!canBatchExport}
+                style={S.exportBtn(!canBatchExport)}
+                title={!selImgs.length ? 'Select at least one image first.' : !batchHookList.length ? 'Enter at least one hook first.' : ''}
+              >
                 {exporting ? `Rendering ${exportMsg}…`
                   : !selImgs.length ? 'Select images'
                   : !batchHookList.length ? 'Enter hooks above'
                   : `Export ${selImgs.length * batchHookList.length} PNGs as ZIP`}
               </button>
               {onAddToCart && (
-                <button onClick={handleBatchAddToCart} disabled={!canBatchExport} style={{ ...S.exportBtn(!canBatchExport), background: !canBatchExport ? undefined : '#6e40c9', marginTop: 6 }}>
+                <button
+                  onClick={handleBatchAddToCart}
+                  disabled={!canBatchExport}
+                  style={{ ...S.exportBtn(!canBatchExport), background: !canBatchExport ? undefined : '#6e40c9', marginTop: 6 }}
+                  title={!selImgs.length ? 'Select at least one image before adding to cart.' : !batchHookList.length ? 'Enter at least one hook before adding to cart.' : ''}
+                >
                   {exporting ? `Adding ${exportMsg}…`
                     : !selImgs.length ? 'Select images'
                     : !batchHookList.length ? 'Enter hooks above'

@@ -597,7 +597,12 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
               </div>
             </div>
           )}
-          <button onClick={handleExport} disabled={!canExport} style={S.exportBtn(!canExport)}>
+          <button
+            onClick={handleExport}
+            disabled={!canExport}
+            style={S.exportBtn(!canExport)}
+            title={!videoFile ? 'Upload a video before exporting.' : !overlayText.trim() ? 'Select or enter review text before exporting.' : ''}
+          >
             {exporting ? 'Encoding…'
               : !videoFile ? 'Upload a video'
               : !overlayText.trim() ? 'Select a review'
@@ -608,6 +613,7 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
               onClick={handleAddToCart}
               disabled={!canExport || addingToCart}
               style={{ ...S.exportBtn(!canExport || addingToCart), background: (!canExport || addingToCart) ? undefined : '#6e40c9', marginTop: 6 }}
+              title={!videoFile ? 'Upload a video before adding to cart.' : !overlayText.trim() ? 'Select or enter review text before adding to cart.' : ''}
             >
               {addingToCart ? `Encoding… ${exportProgress > 0 ? exportProgress + '%' : ''}` : exportMsg === 'Added to cart!' ? 'Added to Cart!' : 'Add to Cart'}
             </button>
