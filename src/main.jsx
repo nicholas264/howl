@@ -73,7 +73,7 @@ function AuthenticatedApp() {
   if (!access.user || access.user.status !== 'active') {
     return (
       <div className="access-denied">
-        <img src="/logos/howl-horizontal-wht.png" alt="HOWL Campfires" />
+        <img src="/logos/howl-stacked-blk.png" alt="HOWL Campfires" />
         <span className="workspace-kicker">Access required</span>
         <h1>This HOWL workspace is invite-only.</h1>
         <p>Ask a workspace owner to invite this email address from Admin.</p>
