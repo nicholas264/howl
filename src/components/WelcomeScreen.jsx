@@ -10,6 +10,11 @@ const QUICK_ACTIONS = [
 export default function WelcomeScreen({ setActiveTab, can = () => true }) {
   const { user } = useUser();
   const firstName = user?.firstName || user?.username || null;
+  const availableActions = QUICK_ACTIONS.filter(action => can(action.permission));
+  const primaryAction = availableActions.find(action => action.tab === 'from-winners')
+    || availableActions.find(action => action.tab === 'launcher')
+    || availableActions[0];
+  const secondaryAction = availableActions.find(action => action.tab === 'dashboard-cfo' && action.tab !== primaryAction?.tab);
 
   const hour = new Date().getHours();
   const greeting = hour < 5 ? 'Late night' : hour < 12 ? 'Morning' : hour < 17 ? 'Afternoon' : hour < 21 ? 'Evening' : 'Late night';
@@ -64,43 +69,49 @@ export default function WelcomeScreen({ setActiveTab, can = () => true }) {
         </div>
 
         <div style={{ marginTop: 36, display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setActiveTab(can('briefs.write') ? 'from-winners' : 'performance')}
-            style={{
-              padding: '12px 28px',
-              background: '#d84a17',
-              border: 'none',
-              color: '#fff',
-              fontFamily: 'inherit',
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: 3,
-              textTransform: 'uppercase',
-              cursor: 'pointer',
-              borderRadius: 4,
-              boxShadow: '0 6px 24px rgba(220,68,10,0.35)',
-            }}
-          >
-            {can('briefs.write') ? 'Strike a spark' : 'View performance'}
-          </button>
-          <button
-            onClick={() => setActiveTab('dashboard-cfo')}
-            style={{
-              padding: '12px 28px',
-              background: 'transparent',
-              border: '1px solid #dedbd3',
-              color: '#77746f',
-              fontFamily: 'inherit',
-              fontSize: 11,
-              fontWeight: 600,
-              letterSpacing: 3,
-              textTransform: 'uppercase',
-              cursor: 'pointer',
-              borderRadius: 4,
-            }}
-          >
-            Check the books
-          </button>
+          {primaryAction ? (
+            <button
+              type="button"
+              onClick={() => setActiveTab(primaryAction.tab)}
+              style={{
+                padding: '12px 28px',
+                background: '#d84a17',
+                border: 'none',
+                color: '#fff',
+                fontFamily: 'inherit',
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: 3,
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+                borderRadius: 4,
+                boxShadow: '0 6px 24px rgba(220,68,10,0.35)',
+              }}
+            >
+              {primaryAction.tab === 'from-winners' ? 'Strike a spark' : `Open ${primaryAction.title}`}
+            </button>
+          ) : null}
+          {secondaryAction ? (
+            <button
+              type="button"
+              onClick={() => setActiveTab(secondaryAction.tab)}
+              style={{
+                padding: '12px 28px',
+                background: 'transparent',
+                border: '1px solid #dedbd3',
+                color: '#77746f',
+                fontFamily: 'inherit',
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: 3,
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+                borderRadius: 4,
+              }}
+            >
+              Check the books
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -108,9 +119,10 @@ export default function WelcomeScreen({ setActiveTab, can = () => true }) {
       <div style={{ marginTop: 36 }}>
         <div className="eyebrow" style={{ marginBottom: 14, color: '#88857f' }}>Where the embers are</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
-          {QUICK_ACTIONS.filter(action => can(action.permission)).map(a => (
+          {availableActions.map(a => (
             <button
               key={a.tab}
+              type="button"
               onClick={() => setActiveTab(a.tab)}
               style={{
                 textAlign: 'left',
@@ -131,6 +143,20 @@ export default function WelcomeScreen({ setActiveTab, can = () => true }) {
               <div style={{ fontSize: 11, color: '#77746f', lineHeight: 1.4 }}>{a.sub}</div>
             </button>
           ))}
+          {!availableActions.length && (
+            <div style={{
+              gridColumn: '1 / -1',
+              background: '#fff',
+              border: '1px solid #dedbd3',
+              borderRadius: 6,
+              padding: '20px 22px',
+              color: '#77746f',
+              fontSize: 11,
+              lineHeight: 1.5,
+            }}>
+              Your account is active, but no product areas are assigned yet. Ask an admin to add creator, launch, or analytics permissions.
+            </div>
+          )}
         </div>
       </div>
 
