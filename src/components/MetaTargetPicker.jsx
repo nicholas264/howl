@@ -70,7 +70,10 @@ export default function MetaTargetPicker({ selectedAdsetId, onAdsetChange }) {
   };
 
   const createCampaign = async () => {
-    if (!newCampaign.name.trim()) return;
+    if (!newCampaign.name.trim()) {
+      alert('Add a campaign name before creating it.');
+      return;
+    }
     setCreatingCampaign(true);
     try {
       const r = await fetch('/api/meta', {
@@ -88,7 +91,14 @@ export default function MetaTargetPicker({ selectedAdsetId, onAdsetChange }) {
   };
 
   const createAdset = async () => {
-    if (!newAdset.name.trim() || !selectedCampaignId || selectedCampaignId === '__new__') return;
+    if (!newAdset.name.trim()) {
+      alert('Add an ad set name before creating it.');
+      return;
+    }
+    if (!selectedCampaignId || selectedCampaignId === '__new__') {
+      alert('Choose an existing campaign before creating an ad set.');
+      return;
+    }
     setCreatingAdset(true);
     const campaign = campaigns.find(c => c.id === selectedCampaignId);
     try {
@@ -168,7 +178,12 @@ export default function MetaTargetPicker({ selectedAdsetId, onAdsetChange }) {
             <select style={{ ...S.select, flex: 1 }} value={newCampaign.objective} onChange={e => setNewCampaign(p => ({ ...p, objective: e.target.value }))}>
               {OBJECTIVES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
-            <button style={S.btn(creatingCampaign || !newCampaign.name.trim())} disabled={creatingCampaign || !newCampaign.name.trim()} onClick={createCampaign}>
+            <button
+              style={S.btn(creatingCampaign)}
+              disabled={creatingCampaign}
+              title={!newCampaign.name.trim() ? 'Add a campaign name before creating it.' : ''}
+              onClick={createCampaign}
+            >
               {creatingCampaign ? 'Creating…' : 'Create'}
             </button>
           </div>
@@ -182,7 +197,12 @@ export default function MetaTargetPicker({ selectedAdsetId, onAdsetChange }) {
           <div style={S.inlineRow}>
             <input style={{ ...S.input, flex: 2 }} placeholder="Ad set name" value={newAdset.name} onChange={e => setNewAdset(p => ({ ...p, name: e.target.value }))} />
             <input style={{ ...S.input, flex: 1 }} placeholder="Daily $" value={newAdset.budget} onChange={e => setNewAdset(p => ({ ...p, budget: e.target.value }))} />
-            <button style={S.btn(creatingAdset || !newAdset.name.trim())} disabled={creatingAdset || !newAdset.name.trim()} onClick={createAdset}>
+            <button
+              style={S.btn(creatingAdset)}
+              disabled={creatingAdset}
+              title={!newAdset.name.trim() ? 'Add an ad set name before creating it.' : ''}
+              onClick={createAdset}
+            >
               {creatingAdset ? 'Creating…' : 'Create'}
             </button>
           </div>

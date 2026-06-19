@@ -57,6 +57,13 @@ export default function CreatorAgreementPage() {
 
   const unavailable = ['draft', 'revoked', 'expired'].includes(status);
   const terms = agreement?.engagement;
+  const acceptDisabledReason = status === 'saving'
+    ? 'Recording your acceptance now.'
+    : !acceptedName.trim()
+      ? 'Type your full legal name before accepting.'
+      : !confirmed
+        ? 'Confirm that you reviewed and accept the agreement.'
+        : '';
 
   return (
     <main className="creator-submit-page creator-agreement-page">
@@ -112,7 +119,11 @@ export default function CreatorAgreementPage() {
                   <span>I have read this agreement and confirm my acceptance by typing my name above.</span>
                 </label>
                 {error && <div className="app-error">{error}</div>}
-                <button className="primary-action" disabled={!confirmed || !acceptedName.trim() || status === 'saving'}>
+                <button
+                  className="primary-action"
+                  disabled={!!acceptDisabledReason}
+                  title={acceptDisabledReason}
+                >
                   {status === 'saving' ? 'Recording acceptance...' : 'Accept agreement'}
                 </button>
                 <small>This electronic acceptance is recorded with the agreement version, date, and audit details.</small>

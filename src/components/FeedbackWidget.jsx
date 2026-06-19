@@ -86,6 +86,7 @@ export default function FeedbackWidget() {
   return (
     <>
       <button
+        type="button"
         style={S.fab}
         title="Report bug or feature request"
         onClick={() => { setOpen(o => !o); if (open) reset(); }}
@@ -94,19 +95,19 @@ export default function FeedbackWidget() {
       </button>
       {open && (
         <div style={S.panel}>
-          <button style={S.closeX} onClick={() => { setOpen(false); reset(); }}>×</button>
+          <button type="button" style={S.closeX} onClick={() => { setOpen(false); reset(); }}>×</button>
           <div style={S.title}>Send feedback</div>
           <div style={S.hint}>Bug, feature idea, or edge case you ran into. Goes straight to Nicholas + Claude.</div>
           {done ? (
             <>
               <div style={{ ...S.status, color: '#256b35' }}>Got it. Thanks.</div>
-              <button style={S.submit} onClick={reset}>Send another</button>
+              <button type="button" style={S.submit} onClick={reset}>Send another</button>
             </>
           ) : (
             <>
               <div style={S.row}>
                 {KINDS.map(k => (
-                  <button key={k.value} style={S.kindBtn(kind === k.value)} onClick={() => setKind(k.value)}>{k.label}</button>
+                  <button type="button" key={k.value} style={S.kindBtn(kind === k.value)} onClick={() => setKind(k.value)}>{k.label}</button>
                 ))}
               </div>
               <textarea
@@ -120,6 +121,7 @@ export default function FeedbackWidget() {
               <button
                 style={{ ...S.submit, ...(submitting || !message.trim() ? S.submitDisabled : {}) }}
                 disabled={submitting || !message.trim()}
+                title={!message.trim() ? 'Write the feedback message before sending.' : submitting ? 'Sending your feedback now.' : ''}
                 onClick={submit}
               >
                 {submitting ? 'Sending…' : 'Send'}

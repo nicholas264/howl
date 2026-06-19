@@ -154,7 +154,7 @@ export default function StaticEditor({ variation, savedImages, onAddImage, onRem
             <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8a8270', marginBottom: 8 }}>Template</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
               {TEMPLATES.map((t) => (
-                <button key={t.id} onClick={() => setTemplateId(t.id)} style={{
+                <button type="button" key={t.id} onClick={() => setTemplateId(t.id)} style={{
                   padding: '8px 14px', border: `1px solid ${templateId === t.id ? '#d84a17' : '#e0d9c4'}`,
                   background: templateId === t.id ? '#fef8f0' : '#fff',
                   color: templateId === t.id ? '#333F4C' : '#8a8270',
@@ -168,7 +168,7 @@ export default function StaticEditor({ variation, savedImages, onAddImage, onRem
             <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#8a8270', marginBottom: 8 }}>Format</div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
               {Object.entries(FORMATS).map(([key, f]) => (
-                <button key={key} onClick={() => setFormatKey(key)} style={{
+                <button type="button" key={key} onClick={() => setFormatKey(key)} style={{
                   padding: '6px 12px', border: `1px solid ${formatKey === key ? '#d84a17' : '#e0d9c4'}`,
                   background: formatKey === key ? '#fef8f0' : '#fff',
                   color: formatKey === key ? '#333F4C' : '#8a8270',
@@ -196,6 +196,7 @@ export default function StaticEditor({ variation, savedImages, onAddImage, onRem
               }}
             />
             <button
+              type="button"
               onClick={() => setHeadline(variation.headline)}
               style={{
                 background: 'none', border: 'none', padding: 0,
@@ -233,6 +234,7 @@ export default function StaticEditor({ variation, savedImages, onAddImage, onRem
                       </div>
                       {/* Remove button */}
                       <button
+                        type="button"
                         onClick={(e) => { e.stopPropagation(); onRemoveSavedImage(img.id); }}
                         style={{
                           position: 'absolute', top: 2, right: 2, width: 14, height: 14,
@@ -269,8 +271,10 @@ export default function StaticEditor({ variation, savedImages, onAddImage, onRem
           {/* Bottom buttons */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 20 }}>
             <button
+              type="button"
               onClick={handleExport}
               disabled={exporting || selectedImages.length === 0}
+              title={selectedImages.length === 0 ? 'Upload or select at least one image before exporting.' : exporting ? 'Exporting the selected image now.' : ''}
               style={{
                 padding: '12px 16px',
                 background: (exporting || selectedImages.length === 0) ? '#e0d9c4' : '#d84a17',
@@ -288,7 +292,7 @@ export default function StaticEditor({ variation, savedImages, onAddImage, onRem
                   ? `Download ${selectedImages.length} PNGs`
                   : 'Download PNG'}
             </button>
-            <button onClick={onClose} style={{
+            <button type="button" onClick={onClose} style={{
               padding: '10px 16px', background: 'none', border: '1px solid #e0d9c4',
               color: '#8a8270', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2,
               textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4,

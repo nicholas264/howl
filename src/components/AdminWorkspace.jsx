@@ -221,10 +221,21 @@ export default function AdminWorkspace({ onOpenEditor }) {
             {data.users.map(user => (
               <div className="team-row" key={user.user_id}>
                 <span><strong>{user.display_name || user.email}</strong><small>{user.display_name ? user.email : user.user_id}</small></span>
-                <select value={user.role} disabled={user.role === 'owner'} onChange={event => updateUser(user.user_id, { role: event.target.value })}>
+                <select
+                  value={user.role}
+                  disabled={user.role === 'owner'}
+                  title={user.role === 'owner' ? 'Owner access cannot be changed from this table.' : ''}
+                  onChange={event => updateUser(user.user_id, { role: event.target.value })}
+                >
                   {Object.entries(data.roles).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                 </select>
-                <button className={`account-status ${user.status}`} disabled={user.role === 'owner'} onClick={() => updateUser(user.user_id, { status: user.status === 'active' ? 'suspended' : 'active' })}>
+                <button
+                  type="button"
+                  className={`account-status ${user.status}`}
+                  disabled={user.role === 'owner'}
+                  title={user.role === 'owner' ? 'Owner access cannot be suspended from this table.' : ''}
+                  onClick={() => updateUser(user.user_id, { status: user.status === 'active' ? 'suspended' : 'active' })}
+                >
                   {user.status}
                 </button>
                 <time>{user.last_seen_at ? new Date(user.last_seen_at).toLocaleDateString() : 'Never'}</time>
@@ -240,7 +251,7 @@ export default function AdminWorkspace({ onOpenEditor }) {
             <form onSubmit={invite}>
               <label>Email<input required type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="name@company.com" /></label>
               <label>Role<select value={role} onChange={event => setRole(event.target.value)}>{Object.entries(data.roles).filter(([key]) => key !== 'owner').map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-              <button className="primary-action" disabled={saving}>{saving ? 'Sending...' : 'Send invitation'}</button>
+              <button className="primary-action" disabled={saving} title={saving ? 'Sending the invitation now.' : ''}>{saving ? 'Sending...' : 'Send invitation'}</button>
             </form>
           </section>
 
@@ -248,7 +259,7 @@ export default function AdminWorkspace({ onOpenEditor }) {
             <div className="admin-panel-head"><div><span>Pending</span><strong>{pending.length}</strong></div></div>
             <div className="pending-list">
               {pending.map(invite => (
-                <div key={invite.id}><span><strong>{invite.email}</strong><small>{data.roles[invite.role] || invite.role}</small></span><button onClick={() => revoke(invite.id)}>Revoke</button></div>
+                <div key={invite.id}><span><strong>{invite.email}</strong><small>{data.roles[invite.role] || invite.role}</small></span><button type="button" onClick={() => revoke(invite.id)}>Revoke</button></div>
               ))}
               {!pending.length && <p>No pending invitations.</p>}
             </div>
@@ -270,7 +281,7 @@ export default function AdminWorkspace({ onOpenEditor }) {
               Optional fields: {'{{creator_name}}'}, {'{{creator_email}}'}, {'{{engagement_type}}'}, {'{{start_date}}'}, {'{{end_date}}'}, {'{{asset_commitment}}'}, {'{{total_fee}}'}, {'{{usage_term_months}}'}, {'{{payment_terms}}'}, {'{{exclusivity_notes}}'}.
             </small>
             <div>
-              <button className="primary-action" disabled={saving}>{editingTemplateId ? 'Save new version' : 'Create template'}</button>
+              <button className="primary-action" disabled={saving} title={saving ? 'Saving the agreement template now.' : ''}>{editingTemplateId ? 'Save new version' : 'Create template'}</button>
               {editingTemplateId && <button type="button" onClick={() => { setEditingTemplateId(null); setTemplateForm(EMPTY_TEMPLATE); }}>Cancel</button>}
             </div>
           </form>
@@ -283,8 +294,8 @@ export default function AdminWorkspace({ onOpenEditor }) {
                   <small>{template.title} · Version {template.version}</small>
                 </div>
                 <div>
-                  <button onClick={() => editTemplate(template)}>Edit</button>
-                  <button onClick={() => setTemplateStatus(template)}>{template.status === 'active' ? 'Archive' : 'Reactivate'}</button>
+                  <button type="button" onClick={() => editTemplate(template)}>Edit</button>
+                  <button type="button" onClick={() => setTemplateStatus(template)}>{template.status === 'active' ? 'Archive' : 'Reactivate'}</button>
                 </div>
               </article>
             ))}
@@ -382,7 +393,7 @@ export default function AdminWorkspace({ onOpenEditor }) {
         {!!data.health.ugc_failures.length && (
           <div className="admin-health-failures">
             {data.health.ugc_failures.map(item => (
-              <button key={item.id} onClick={() => onOpenEditor?.(item.id)}>
+              <button key={item.id} type="button" onClick={() => onOpenEditor?.(item.id)}>
                 <span><strong>{item.title || `UGC session ${item.id}`}</strong><small>{item.creator_name || item.created_by_email || 'Unassigned creator'}</small></span>
                 <i>{item.status.replace('_', ' ')}</i>
               </button>
@@ -396,7 +407,7 @@ export default function AdminWorkspace({ onOpenEditor }) {
           <div><span>System connections</span></div>
           <div className="integration-head-action">
             {integrationsCheckedAt && <small>Checked {new Date(integrationsCheckedAt).toLocaleTimeString()}</small>}
-            <button onClick={testIntegrations} disabled={checkingIntegrations}>
+            <button type="button" onClick={testIntegrations} disabled={checkingIntegrations} title={checkingIntegrations ? 'Checking all configured integrations now.' : ''}>
               {checkingIntegrations ? 'Checking...' : 'Run checks'}
             </button>
           </div>

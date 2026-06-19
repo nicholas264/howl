@@ -75,6 +75,11 @@ export default function CreatorSubmissionPage() {
   };
 
   const unavailable = ['completed', 'revoked', 'expired'].includes(status);
+  const submitDisabledReason = status === 'uploading' || status === 'saving'
+    ? 'Submitting your footage now.'
+    : !file
+      ? 'Choose a video file before submitting.'
+      : '';
 
   return (
     <main className="creator-submit-page">
@@ -133,7 +138,11 @@ export default function CreatorSubmissionPage() {
                     <span>{status === 'saving' ? 'Connecting footage to your assignment...' : `Uploading ${progress}%`}</span>
                   </div>
                 )}
-                <button className="primary-action" disabled={!file || status === 'uploading' || status === 'saving'}>
+                <button
+                  className="primary-action"
+                  disabled={!!submitDisabledReason}
+                  title={submitDisabledReason}
+                >
                   {status === 'uploading' || status === 'saving' ? 'Submitting...' : 'Submit footage'}
                 </button>
               </form>
