@@ -42,6 +42,7 @@ export default function HowlAdEngine({ appAccess }) {
   const [imageText, setImageText] = useState(null);
   const [editorSessionId, setEditorSessionId] = useState(null);
   const [plannedCreatorId, setPlannedCreatorId] = useState(null);
+  const [plannedCreatorView, setPlannedCreatorView] = useState(null);
   const [favorites, setFavorites] = useState(() => {
     try { return JSON.parse(localStorage.getItem('howl_favorites') || '[]'); }
     catch { return []; }
@@ -235,6 +236,10 @@ export default function HowlAdEngine({ appAccess }) {
     setPlannedCreatorId(Number(creatorId) || null);
     navigate('creators');
   }, [navigate]);
+  const openCreatorWorkspace = useCallback((view = 'operations') => {
+    setPlannedCreatorView(view);
+    navigate('creators');
+  }, [navigate]);
 
   return (
     <div className="app-shell" style={{ minHeight: "100vh", background: "#f7f6f2", color: "#171717", fontFamily: "'Helvetica Neue', Helvetica, sans-serif" }}>
@@ -272,7 +277,7 @@ export default function HowlAdEngine({ appAccess }) {
         </aside>
 
         <main className="main-panel">
-      {activeTab === "welcome" && <WelcomeScreen setActiveTab={navigate} can={can} />}
+      {activeTab === "welcome" && <WelcomeScreen setActiveTab={navigate} can={can} openCreatorWorkspace={openCreatorWorkspace} />}
 
       {activeTab === "results" && (
         variations.length > 0 ? (
@@ -303,7 +308,9 @@ export default function HowlAdEngine({ appAccess }) {
             canWriteAssets={can('assets.write')}
             onOpenEditor={openEditorSession}
             initialCreatorId={plannedCreatorId}
+            initialWorkspaceView={plannedCreatorView}
             onInitialCreatorLoaded={() => setPlannedCreatorId(null)}
+            onInitialWorkspaceViewLoaded={() => setPlannedCreatorView(null)}
             setActiveTab={navigate}
           />
         )}

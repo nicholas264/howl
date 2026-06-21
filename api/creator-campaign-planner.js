@@ -1,5 +1,5 @@
 import { requirePermission } from './_lib/app-access.js';
-import { validateBrandCopy } from './_lib/brand-guardrails.js';
+import { loadBrandGuidelines, validateBrandCopy } from './_lib/brand-guardrails.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 
 const FORMATS = new Set([

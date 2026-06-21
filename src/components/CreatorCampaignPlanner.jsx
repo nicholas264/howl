@@ -58,26 +58,37 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
   const [expanded, setExpanded] = useState(null);
 
   useEffect(() => {
+    let cancelled = false;
     Promise.allSettled([
       fetch('/api/shopify-products').then(response => response.json()),
       fetch('/api/creator-campaign-planner').then(response => response.ok ? response.json() : Promise.reject()),
       fetch('/api/brand-guidelines').then(response => response.ok ? response.json() : Promise.reject()),
     ]).then(([productResult, planResult, guidelineResult]) => {
+      if (cancelled) return;
+      const setupErrors = [];
       if (productResult.status === 'fulfilled') {
         setProducts(productResult.value.products || []);
         setConnected(Boolean(productResult.value.connected));
+      } else {
+        setupErrors.push('Shopify products could not load.');
       }
       if (planResult.status === 'fulfilled') {
         setRecentPlans(planResult.value.plans || []);
         setAttribution(planResult.value.attribution || {});
         setCreatorOptions(planResult.value.creators || []);
+      } else {
+        setupErrors.push('Creator planning history could not load.');
       }
       if (guidelineResult.status === 'fulfilled') {
         setGuidelines(guidelineResult.value.guidelines || {});
         setGuidelineDraft(guidelineResult.value.guidelines || {});
+      } else {
+        setupErrors.push('Brand guidelines could not load.');
       }
+      if (setupErrors.length) setError(`${setupErrors.join(' ')} Refresh or check the Admin system connections if this keeps happening.`);
       setLoading(false);
     });
+    return () => { cancelled = true; };
   }, []);
 
   const selectedProduct = useMemo(

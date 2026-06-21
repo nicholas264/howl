@@ -88,7 +88,9 @@ export default function CreatorWorkspace({
   canWriteAssets = false,
   onOpenEditor,
   initialCreatorId,
+  initialWorkspaceView,
   onInitialCreatorLoaded,
+  onInitialWorkspaceViewLoaded,
   setActiveTab,
 }) {
   const { getToken } = useAuth();
@@ -146,6 +148,14 @@ export default function CreatorWorkspace({
     shipping_address1: '', shipping_address2: '', shipping_city: '', shipping_region: '',
     shipping_postal_code: '', shipping_country_code: 'US',
   });
+
+  useEffect(() => {
+    if (!initialWorkspaceView) return;
+    if (['database', 'operations', 'talent', 'health'].includes(initialWorkspaceView)) {
+      setWorkspaceView(initialWorkspaceView);
+    }
+    onInitialWorkspaceViewLoaded?.();
+  }, [initialWorkspaceView, onInitialWorkspaceViewLoaded]);
 
   useEffect(() => {
     fetch('/api/creator-email')

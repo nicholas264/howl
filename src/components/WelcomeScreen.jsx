@@ -1,14 +1,35 @@
+import { useEffect, useMemo, useState } from "react";
 import { useUser } from "@clerk/clerk-react";
 
 const QUICK_ACTIONS = [
+  { tab: 'campaign-planner', permission: 'briefs.write', eyebrow: 'Plan', title: 'Campaign Planner', sub: 'Pick product, allocate creators, and draft performance-led scripts.' },
   { tab: 'from-winners', permission: 'briefs.write', eyebrow: 'Create', title: 'Concept Studio', sub: 'Build creator-grounded concepts or iterate proven winners.' },
   { tab: 'launcher', permission: 'launch.write', eyebrow: 'Launch', title: 'UGC Inbox', sub: 'Whatever the team dropped in Drive, ready to ship.' },
   { tab: 'dashboard-cfo', permission: 'analytics.read', eyebrow: 'Insights', title: 'CFO View', sub: 'NCAC, CM3, OpEx coverage — real numbers.' },
   { tab: 'dashboard-meta', permission: 'analytics.read', eyebrow: 'Insights', title: 'Meta', sub: 'Live budget, format mix, monthly velocity.' },
 ];
 
-export default function WelcomeScreen({ setActiveTab, can = () => true }) {
+async function loadJson(url) {
+  const response = await fetch(url);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || `Could not load ${url}`);
+  return data;
+}
+
+function setupTarget(step) {
+  if (step.key === 'duplicates' || step.key === 'profiles') return { type: 'creator-view', value: 'health' };
+  if (step.key === 'clickup_email' || step.key === 'clickup_mapping' || step.key === 'clickup_review') return { type: 'creator-view', value: 'operations' };
+  if (step.key === 'attribution') return { type: 'tab', value: 'creative-analytics' };
+  return { type: 'creator-view', value: 'operations' };
+}
+
+export default function WelcomeScreen({ setActiveTab, can = () => true, openCreatorWorkspace = () => setActiveTab('creators') }) {
   const { user } = useUser();
+  const [operations, setOperations] = useState(null);
+  const [health, setHealth] = useState(null);
+  const [planner, setPlanner] = useState(null);
+  const [loadingActions, setLoadingActions] = useState(true);
+  const [actionError, setActionError] = useState('');
   const firstName = user?.firstName || user?.username || null;
   const availableActions = QUICK_ACTIONS.filter(action => can(action.permission));
   const primaryAction = availableActions.find(action => action.tab === 'from-winners')
@@ -18,6 +39,118 @@ export default function WelcomeScreen({ setActiveTab, can = () => true }) {
 
   const hour = new Date().getHours();
   const greeting = hour < 5 ? 'Late night' : hour < 12 ? 'Morning' : hour < 17 ? 'Afternoon' : hour < 21 ? 'Evening' : 'Late night';
+  const canSeeCreatorOps = can('creators.read');
+  const canSeePlanner = can('briefs.read') || can('briefs.write');
+
+  useEffect(() => {
+    let cancelled = false;
+    const requests = [];
+    if (canSeeCreatorOps) {
+      requests.push(['operations', loadJson('/api/creator-operations')]);
+      requests.push(['health', loadJson('/api/creator-data-health')]);
+    }
+    if (canSeePlanner) requests.push(['planner', loadJson('/api/creator-campaign-planner')]);
+    if (!requests.length) {
+      setLoadingActions(false);
+      return () => { cancelled = true; };
+    }
+    setLoadingActions(true);
+    Promise.allSettled(requests.map(([, promise]) => promise)).then(results => {
+      if (cancelled) return;
+      const failed = [];
+      results.forEach((result, index) => {
+        const key = requests[index][0];
+        if (result.status === 'fulfilled') {
+          if (key === 'operations') setOperations(result.value);
+          if (key === 'health') setHealth(result.value);
+          if (key === 'planner') setPlanner(result.value);
+        } else {
+          failed.push(key);
+        }
+      });
+      setActionError(failed.length ? `Some action data could not load: ${failed.join(', ')}.` : '');
+      setLoadingActions(false);
+    });
+    return () => { cancelled = true; };
+  }, [canSeeCreatorOps, canSeePlanner]);
+
+  const actionCards = useMemo(() => {
+    const cards = [];
+    for (const step of (operations?.setup?.steps || []).slice(0, 3)) {
+      const target = setupTarget(step);
+      cards.push({
+        key: `setup-${step.key}`,
+        eyebrow: 'Setup blocker',
+        title: step.title,
+        detail: step.detail,
+        count: step.count,
+        action: step.action,
+        target,
+        priority: step.key === 'clickup_email' || step.key === 'clickup_mapping' ? 'high' : 'medium',
+      });
+    }
+    if (Number(operations?.summary?.urgent || 0) > 0) {
+      cards.push({
+        key: 'urgent-creator-work',
+        eyebrow: 'Creator queue',
+        title: `${operations.summary.urgent} urgent creator action${operations.summary.urgent === 1 ? '' : 's'}`,
+        detail: 'Overdue deliverables, follow-ups, or blocked creator work need a decision.',
+        count: operations.summary.urgent,
+        action: 'Open operations',
+        target: { type: 'creator-view', value: 'operations' },
+        priority: 'high',
+      });
+    }
+    const duplicateGroups = Number(health?.summary?.duplicate_groups || 0);
+    if (duplicateGroups > 0 && !cards.some(card => card.key === 'setup-duplicates')) {
+      cards.push({
+        key: 'duplicate-creators',
+        eyebrow: 'Data health',
+        title: `${duplicateGroups} duplicate creator group${duplicateGroups === 1 ? '' : 's'}`,
+        detail: 'Merge duplicate records so outreach, rates, footage, and performance live in one place.',
+        count: duplicateGroups,
+        action: 'Open data health',
+        target: { type: 'creator-view', value: 'health' },
+        priority: 'medium',
+      });
+    }
+    const missingEmail = Number(health?.summary?.missing_email || 0);
+    if (missingEmail > 0 && !cards.some(card => card.key === 'setup-clickup_email')) {
+      cards.push({
+        key: 'missing-emails',
+        eyebrow: 'Data health',
+        title: `${missingEmail} creator${missingEmail === 1 ? '' : 's'} missing email`,
+        detail: 'Email is the gating field for outreach, agreements, brief sends, and follow-ups.',
+        count: missingEmail,
+        action: 'Open profile gaps',
+        target: { type: 'creator-view', value: 'health' },
+        priority: 'medium',
+      });
+    }
+    const attribution = planner?.attribution;
+    const totalLaunches = Number(attribution?.total_launches || 0);
+    const attributedLaunches = Number(attribution?.attributed_launches || 0);
+    if (totalLaunches > attributedLaunches) {
+      cards.push({
+        key: 'planner-attribution',
+        eyebrow: 'Performance loop',
+        title: `${totalLaunches - attributedLaunches} launch${totalLaunches - attributedLaunches === 1 ? '' : 'es'} need creator attribution`,
+        detail: 'Match historical labels to creators so the planner can pick proven creators using real account data.',
+        count: totalLaunches - attributedLaunches,
+        action: 'Open planner mapping',
+        target: { type: 'tab', value: 'campaign-planner' },
+        priority: 'medium',
+      });
+    }
+    return cards
+      .sort((a, b) => (a.priority === 'high' ? -1 : 1) - (b.priority === 'high' ? -1 : 1))
+      .slice(0, 5);
+  }, [operations, health, planner]);
+
+  const openAction = card => {
+    if (card.target.type === 'creator-view') openCreatorWorkspace(card.target.value);
+    else setActiveTab(card.target.value);
+  };
 
   return (
     <div style={{ padding: '60px 36px', maxWidth: 1100, margin: '0 auto' }}>
@@ -114,6 +247,86 @@ export default function WelcomeScreen({ setActiveTab, can = () => true }) {
           ) : null}
         </div>
       </div>
+
+      <section style={{ marginTop: 32 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-end', marginBottom: 14 }}>
+          <div>
+            <div className="eyebrow" style={{ color: '#88857f', marginBottom: 8 }}>Command center</div>
+            <div className="display-md" style={{ color: '#171717' }}>What needs your attention</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => openCreatorWorkspace('operations')}
+            style={{
+              padding: '9px 13px',
+              background: '#fff',
+              border: '1px solid #dedbd3',
+              color: '#77746f',
+              borderRadius: 5,
+              fontFamily: 'inherit',
+              fontSize: 9,
+              letterSpacing: 1.5,
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+            }}
+          >
+            Open operations
+          </button>
+        </div>
+        {actionError && <div className="app-error" style={{ marginBottom: 12 }}>{actionError}</div>}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 12 }}>
+          {loadingActions ? (
+            <div style={{ gridColumn: '1 / -1', padding: 18, background: '#fff', border: '1px solid #dedbd3', borderRadius: 8, color: '#77746f', fontSize: 11 }}>
+              Loading the action queue…
+            </div>
+          ) : actionCards.length ? actionCards.map(card => (
+            <button
+              key={card.key}
+              type="button"
+              onClick={() => openAction(card)}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '44px 1fr',
+                gap: 14,
+                textAlign: 'left',
+                background: card.priority === 'high' ? '#fff7f1' : '#fff',
+                border: `1px solid ${card.priority === 'high' ? 'rgba(216,74,23,0.35)' : '#dedbd3'}`,
+                borderRadius: 9,
+                padding: '18px 18px',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                color: 'inherit',
+                boxShadow: card.priority === 'high' ? '0 10px 30px rgba(216,74,23,0.08)' : 'none',
+              }}
+            >
+              <span style={{
+                display: 'grid',
+                placeItems: 'center',
+                width: 42,
+                height: 42,
+                borderRadius: 7,
+                background: card.priority === 'high' ? '#d84a17' : '#f4f1ea',
+                color: card.priority === 'high' ? '#fff' : '#171717',
+                fontSize: 15,
+                fontWeight: 800,
+              }}>
+                {card.count}
+              </span>
+              <span>
+                <i style={{ display: 'block', marginBottom: 6, color: '#88857f', fontStyle: 'normal', fontSize: 8, letterSpacing: 1.5, textTransform: 'uppercase' }}>{card.eyebrow}</i>
+                <strong style={{ display: 'block', marginBottom: 6, color: '#171717', fontSize: 14 }}>{card.title}</strong>
+                <small style={{ display: 'block', color: '#77746f', fontSize: 10, lineHeight: 1.45 }}>{card.detail}</small>
+                <b style={{ display: 'block', marginTop: 12, color: '#d84a17', fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase' }}>{card.action}</b>
+              </span>
+            </button>
+          )) : (
+            <div style={{ gridColumn: '1 / -1', padding: 20, background: '#fff', border: '1px solid #dedbd3', borderRadius: 8 }}>
+              <strong style={{ display: 'block', marginBottom: 6, color: '#171717', fontSize: 14 }}>No critical work queued.</strong>
+              <p style={{ margin: 0, color: '#77746f', fontSize: 11, lineHeight: 1.5 }}>The core action queue is clear. Next best move is planning the next creator campaign or reviewing fresh creative performance.</p>
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* Quick actions */}
       <div style={{ marginTop: 36 }}>
