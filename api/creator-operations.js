@@ -206,6 +206,38 @@ async function loadSetup(sql) {
         count: unassignedGroups,
         action: 'Open attribution',
       },
+      Number(workflow.draft_briefs || 0) > 0 && {
+        key: 'draft_briefs',
+        category: 'creative',
+        title: 'Review draft creator scripts',
+        detail: 'Scripts are editable, but they need approval before HOWL can send assignments or upload links.',
+        count: Number(workflow.draft_briefs || 0),
+        action: 'Review briefs',
+      },
+      Number(workflow.approved_unsent_briefs || 0) > 0 && {
+        key: 'approved_unsent_briefs',
+        category: 'creative',
+        title: 'Send approved creator assignments',
+        detail: 'Approved briefs are ready to become creator deliverables with footage upload links.',
+        count: Number(workflow.approved_unsent_briefs || 0),
+        action: 'Open creative queue',
+      },
+      Number(workflow.footage_needs_transcript || 0) > 0 && {
+        key: 'footage_needs_transcript',
+        category: 'production',
+        title: 'Transcribe received creator footage',
+        detail: 'Transcription unlocks captions, edit recommendations, script matching, and launch-ready exports.',
+        count: Number(workflow.footage_needs_transcript || 0),
+        action: 'Open editor',
+      },
+      Number(workflow.footage_ready_to_edit || 0) > 0 && {
+        key: 'footage_ready_to_edit',
+        category: 'production',
+        title: 'Finish creator edits',
+        detail: 'Creator footage has transcript data and needs editing, captions, render, or approval.',
+        count: Number(workflow.footage_ready_to_edit || 0),
+        action: 'Open edit queue',
+      },
     ].filter(Boolean),
   };
 }

@@ -1752,6 +1752,7 @@ export default function CreatorWorkspace({
           }}
           onNavigate={target => {
             if (target === 'creative-analytics') setActiveTab?.('creative-analytics');
+            else if (target === 'ugc-editor') setActiveTab?.('ugc-editor');
             else if (target === 'clickup-import') setShowImport(true);
             else setWorkspaceView(target);
           }}

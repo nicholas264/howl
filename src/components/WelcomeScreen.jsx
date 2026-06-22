@@ -20,6 +20,7 @@ function setupTarget(step) {
   if (step.key === 'duplicates' || step.key === 'profiles') return { type: 'creator-view', value: 'health' };
   if (step.key === 'clickup_email' || step.key === 'clickup_mapping' || step.key === 'clickup_review') return { type: 'creator-view', value: 'operations' };
   if (step.key === 'attribution') return { type: 'tab', value: 'creative-analytics' };
+  if (step.key === 'footage_needs_transcript' || step.key === 'footage_ready_to_edit') return { type: 'tab', value: 'ugc-editor' };
   return { type: 'creator-view', value: 'operations' };
 }
 
@@ -80,13 +81,13 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
       const target = setupTarget(step);
       cards.push({
         key: `setup-${step.key}`,
-        eyebrow: 'Setup blocker',
+        eyebrow: step.category === 'creative' || step.category === 'production' ? 'Workflow queue' : 'Setup blocker',
         title: step.title,
         detail: step.detail,
         count: step.count,
         action: step.action,
         target,
-        priority: step.key === 'clickup_email' || step.key === 'clickup_mapping' ? 'high' : 'medium',
+        priority: ['clickup_email', 'clickup_mapping', 'draft_briefs', 'approved_unsent_briefs'].includes(step.key) ? 'high' : 'medium',
       });
     }
     if (Number(operations?.summary?.urgent || 0) > 0) {
@@ -103,7 +104,7 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
     }
     const workflow = operations?.setup?.workflow || {};
     const draftBriefs = Number(workflow.draft_briefs || 0);
-    if (draftBriefs > 0) {
+    if (draftBriefs > 0 && !cards.some(card => card.key === 'setup-draft_briefs')) {
       cards.push({
         key: 'draft-briefs',
         eyebrow: 'Approval gate',
@@ -116,7 +117,7 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
       });
     }
     const approvedUnsent = Number(workflow.approved_unsent_briefs || 0);
-    if (approvedUnsent > 0) {
+    if (approvedUnsent > 0 && !cards.some(card => card.key === 'setup-approved_unsent_briefs')) {
       cards.push({
         key: 'approved-unsent-briefs',
         eyebrow: 'Creator handoff',
@@ -129,7 +130,7 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
       });
     }
     const needsTranscript = Number(workflow.footage_needs_transcript || 0);
-    if (needsTranscript > 0) {
+    if (needsTranscript > 0 && !cards.some(card => card.key === 'setup-footage_needs_transcript')) {
       cards.push({
         key: 'footage-transcript',
         eyebrow: 'UGC editor',
@@ -142,7 +143,7 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
       });
     }
     const readyToEdit = Number(workflow.footage_ready_to_edit || 0);
-    if (readyToEdit > 0) {
+    if (readyToEdit > 0 && !cards.some(card => card.key === 'setup-footage_ready_to_edit')) {
       cards.push({
         key: 'footage-edit',
         eyebrow: 'UGC editor',

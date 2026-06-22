@@ -82,6 +82,8 @@ export default function CreatorOperationsWorkspace({ canManage = false, onOpenCr
     if (step.key === 'clickup_email') return onNavigate?.('clickup-import');
     if (step.key === 'duplicates' || step.key === 'profiles') return onNavigate?.('health');
     if (step.key === 'attribution') return onNavigate?.('creative-analytics');
+    if (step.key === 'draft_briefs' || step.key === 'approved_unsent_briefs') return setFilter('creative');
+    if (step.key === 'footage_needs_transcript' || step.key === 'footage_ready_to_edit') return onNavigate?.('ugc-editor');
     setError(`No action is configured for "${step.title || step.key}".`);
   };
 
