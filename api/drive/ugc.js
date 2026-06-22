@@ -6,6 +6,7 @@ import { hasPermission, requireWorkspaceAccess } from '../_lib/app-access.js';
 import { assertBrandSafe } from '../_lib/brand-guardrails.js';
 import { getGoogleAccessToken } from '../_lib/gcp-auth.js';
 import { mirrorAssetToBlob } from '../_lib/blob/mirror.js';
+import { enqueueCreativeAssetAnalysis } from '../_lib/creative-analysis-queue.js';
 import { ensureCreativeAssetTables, markCreativeAssetLaunched, upsertDriveAsset } from '../_lib/creative-assets.js';
 import { ensureCreatorOpsTables } from '../_lib/creator-ops.js';
 
@@ -589,6 +590,10 @@ export default async function handler(req, res) {
                   creator, creatorId, sourceType: attributionSourceType, sourceLabel: attributionSourceLabel, briefId, deliverableId, productId, angleId,
                 }),
               ]);
+              await Promise.all([
+                enqueueCreativeAssetAnalysis(sql, feed.videoId || feed.imageHash || adData.id, 'drive_launch'),
+                enqueueCreativeAssetAnalysis(sql, story.videoId || story.imageHash || adData.id, 'drive_launch'),
+              ]);
               emit({ step: 'db_log', status: 'done' });
             } else {
               emit({ step: 'db_log', status: 'done', detail: 'no DB configured' });
@@ -825,6 +830,7 @@ export default async function handler(req, res) {
             productId,
             angleId,
           });
+          await enqueueCreativeAssetAnalysis(sql, videoId || imageHash || adData.id, 'drive_launch');
           emit({ step: 'db_log', status: 'done' });
         } else {
           emit({ step: 'db_log', status: 'done', detail: 'no DB configured' });

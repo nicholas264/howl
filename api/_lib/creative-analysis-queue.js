@@ -79,6 +79,33 @@ export async function enqueueCreativeAnalyses(sql, source = 'meta_sync') {
   return rows.length;
 }
 
+export async function enqueueCreativeAssetAnalysis(sql, groupKey, source = 'launch') {
+  if (!groupKey) return 0;
+  await ensureCreativeAnalysisQueue(sql);
+  const rows = await sql`
+    INSERT INTO creative_analysis_queue (group_key, priority, source, status, available_at, updated_at)
+    VALUES (${groupKey}, 1000000, ${source}, 'pending', now(), now())
+    ON CONFLICT (group_key) DO UPDATE SET
+      priority = GREATEST(creative_analysis_queue.priority, EXCLUDED.priority),
+      source = EXCLUDED.source,
+      status = CASE
+        WHEN creative_analysis_queue.status IN ('completed', 'failed') THEN 'pending'
+        ELSE creative_analysis_queue.status
+      END,
+      available_at = CASE
+        WHEN creative_analysis_queue.status IN ('completed', 'failed') THEN now()
+        ELSE creative_analysis_queue.available_at
+      END,
+      last_error = CASE
+        WHEN creative_analysis_queue.status = 'failed' THEN NULL
+        ELSE creative_analysis_queue.last_error
+      END,
+      updated_at = now()
+    RETURNING group_key
+  `;
+  return rows.length;
+}
+
 export async function claimCreativeAnalysisJob(sql) {
   await ensureCreativeAnalysisQueue(sql);
   await sql`

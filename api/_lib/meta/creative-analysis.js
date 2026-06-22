@@ -153,7 +153,7 @@ export async function analyzeCreativeGroup({ groupKey, manualTranscript = '', ct
   await ensureCreativeAnalysisColumns(sql);
 
   // Pick the top-spend ad in the group as the canonical asset for analysis.
-  const [topAd] = await sql`
+  let [topAd] = await sql`
     SELECT cp.ad_id, cp.ad_name, cp.video_id, cp.image_hash, cp.thumbnail_url, cp.creative_id,
       COALESCE(SUM(i.spend), 0)::float          AS spend,
       COALESCE(SUM(i.purchase_value), 0)::float AS purchase_value,
@@ -167,10 +167,32 @@ export async function analyzeCreativeGroup({ groupKey, manualTranscript = '', ct
     ORDER BY spend DESC
     LIMIT 1
   `;
-  if (!topAd) return { status: 404, body: { error: 'No ads found for group' } };
+  if (!topAd) {
+    const [assetOnly] = await sql`
+      SELECT
+        ad_id,
+        drive_file_name AS ad_name,
+        meta_video_id AS video_id,
+        meta_image_hash AS image_hash,
+        drive_thumbnail_url AS thumbnail_url,
+        NULL::text AS creative_id,
+        0::float AS spend,
+        0::float AS purchase_value,
+        0::int AS purchases,
+        0::bigint AS impressions,
+        0::bigint AS clicks
+      FROM creative_assets
+      WHERE group_key = ${groupKey}
+         OR ad_id = ${groupKey}
+         OR meta_video_id = ${groupKey}
+         OR meta_image_hash = ${groupKey}
+      ORDER BY (placement_role = 'feed') DESC, durable_url IS NULL, updated_at DESC
+      LIMIT 1
+    `;
+    if (!assetOnly) return { status: 404, body: { error: 'No ads or assets found for group' } };
+    topAd = assetOnly;
+  }
 
-  const isVideo = !!topAd.video_id;
-  const assetKind = isVideo ? 'video' : 'image';
   const debug = { asset: null, videoFieldsResolved: null, videoSourceUrl: null, whisper: null, image: null, visionFrames: 0 };
   const [sourceAsset] = await sql`
     SELECT *
@@ -184,9 +206,13 @@ export async function analyzeCreativeGroup({ groupKey, manualTranscript = '', ct
   `;
   if (sourceAsset) debug.asset = `creative_assets:${sourceAsset.id}`;
 
+  const isAssetVideo = (sourceAsset?.mime_type || '').toLowerCase().startsWith('video/')
+    || /\.(mp4|mov|m4v|webm)(\?|$)/i.test(sourceAsset?.durable_url || '');
+  const isVideo = !!topAd.video_id || isAssetVideo;
+  const assetKind = isVideo ? 'video' : 'image';
   let imageUrl = (!isVideo && sourceAsset?.durable_url) || topAd.thumbnail_url;
   let videoSource = sourceAsset?.durable_url || null;
-  if (isVideo) {
+  if (isVideo && topAd.video_id) {
     const r = await fetch(`${BASE}/${topAd.video_id}?fields=source,picture,format,permalink_url,embed_html&access_token=${accessToken}`);
     const d = await r.json();
     if (d.error) {
@@ -298,6 +324,8 @@ export async function analyzeCreativeGroup({ groupKey, manualTranscript = '', ct
         `;
       }
     }
+  } else if (isVideo) {
+    debug.videoFieldsResolved = videoSource ? 'using creative_assets durable URL' : 'no Meta video id available';
   }
 
   let imageB64 = null;

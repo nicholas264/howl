@@ -1,6 +1,6 @@
 import { mirrorVideoToBlob } from './_lib/blob/mirror.js';
 import { backfillCreativeAssetsFromLaunchHistory, ensureCreativeAssetTables } from './_lib/creative-assets.js';
-import { enqueueCreativeAnalyses, ensureCreativeAnalysisQueue } from './_lib/creative-analysis-queue.js';
+import { enqueueCreativeAnalyses, enqueueCreativeAssetAnalysis, ensureCreativeAnalysisQueue } from './_lib/creative-analysis-queue.js';
 
 // Best-effort launch logger — swallows errors so a DB outage doesn't break Meta publishes.
 async function logLaunch(row) {
@@ -19,19 +19,21 @@ async function logLaunch(row) {
     `;
     if (row.source_video_url) {
       await ensureCreativeAssetTables(sql);
+      const groupKey = row.group_key || row.meta_video_id || row.meta_image_hash || row.ad_id;
       const [asset] = await sql`
         INSERT INTO creative_assets
           (drive_file_name, mime_type, durable_url, ad_id, creator, creator_id,
-           source_type, source_label, brief_id, deliverable_id, product_id, angle_id, placement_role,
+           source_type, source_label, brief_id, deliverable_id, product_id, angle_id, placement_role, group_key,
            transcript_status, updated_at)
         VALUES
           (${row.ad_name || null}, ${row.mime_type || 'video/mp4'}, ${row.source_video_url},
            ${row.ad_id}, ${row.creator || null}, ${row.creator_id || null},
            ${row.source_type || null}, ${row.source_label || null},
            ${row.brief_id || null}, ${row.deliverable_id || null}, ${row.product_id || null},
-           ${row.angle_id || null}, 'launched', 'pending', now())
+           ${row.angle_id || null}, 'launched', ${groupKey || null}, 'pending', now())
         RETURNING id
       `;
+      await enqueueCreativeAssetAnalysis(sql, groupKey, 'launch');
       if (row.deliverable_id) {
         await sql`
           UPDATE creator_deliverables
