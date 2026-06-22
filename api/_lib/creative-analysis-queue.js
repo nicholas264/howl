@@ -197,9 +197,18 @@ export async function getCreativeAnalysisQueueStatus(sql) {
     SELECT
       q.group_key, q.status, q.priority::float, q.attempts, q.max_attempts,
       q.last_error, q.available_at, q.started_at, q.completed_at, q.updated_at,
-      (SELECT ad_name FROM creative_performance cp
-       WHERE cp.group_key = q.group_key
-       ORDER BY cp.created_time ASC LIMIT 1) AS name
+      COALESCE(
+        (SELECT ad_name FROM creative_performance cp
+         WHERE cp.group_key = q.group_key
+         ORDER BY cp.created_time ASC LIMIT 1),
+        (SELECT drive_file_name FROM creative_assets a
+         WHERE a.group_key = q.group_key
+            OR a.ad_id = q.group_key
+            OR a.meta_video_id = q.group_key
+            OR a.meta_image_hash = q.group_key
+         ORDER BY (a.placement_role = 'feed') DESC, a.updated_at DESC
+         LIMIT 1)
+      ) AS name
     FROM creative_analysis_queue q
     ORDER BY
       CASE q.status

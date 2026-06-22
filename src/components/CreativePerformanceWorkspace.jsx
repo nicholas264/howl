@@ -236,7 +236,7 @@ export default function CreativePerformanceWorkspace({
               ? 'Loading queue…'
               : `${analysisQueue?.summary?.pending || 0} waiting · ${analysisQueue?.summary?.processing || 0} running · ${analysisQueue?.summary?.failed || 0} failed`}
           </strong>
-          <p>New Meta creatives are queued automatically. The scheduled worker processes them daily, or you can run the next three now.</p>
+          <p>New launches and Meta syncs queue transcription and vision analysis automatically. The worker processes them daily, or you can run the next three now.</p>
         </div>
         <div className="motion-queue-stats">
           {[
@@ -333,9 +333,9 @@ export default function CreativePerformanceWorkspace({
                     : g.analysisQueueStatus === 'processing'
                       ? 'Analysis running'
                       : g.analysisQueueStatus === 'pending'
-                        ? 'Queued for analysis'
+                        ? 'Analyze now'
                         : g.analysisQueueStatus === 'failed'
-                          ? 'Analysis failed · retry manually'
+                          ? 'Retry analysis now'
                           : 'Analyze creative'}
                 </button>
               </div>
