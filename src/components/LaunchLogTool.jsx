@@ -14,6 +14,7 @@ const S = {
   mono: { fontFamily: "'JetBrains Mono', monospace" },
   adName: { fontSize: 12, color: '#171717', fontWeight: 500, marginBottom: 3 },
   creatorPill: { display: 'inline-block', padding: '2px 8px', borderRadius: 3, fontSize: 10, background: 'rgba(220,68,10,0.12)', color: '#d84a17', letterSpacing: 1, fontWeight: 600 },
+  sourceSub: { display: 'block', marginTop: 5, fontSize: 9, color: '#77746f', textTransform: 'capitalize' },
   copy: { fontSize: 10, color: '#77746f', lineHeight: 1.5, maxWidth: 360 },
   link: { fontSize: 10, color: '#77746f', letterSpacing: 1.5, textTransform: 'uppercase', textDecoration: 'none', borderBottom: '1px dashed #dedbd3' },
   empty: { border: '2px dashed #dedbd3', borderRadius: 6, padding: '72px 32px', textAlign: 'center', color: '#88857f' },
@@ -34,13 +35,24 @@ function fmtDate(iso) {
 
 function productName(id) { return PRODUCTS.find(p => p.id === id)?.name || id || '—'; }
 function angleName(id) { return ANGLES.find(a => a.id === id)?.label || id || '—'; }
+function sourceTypeLabel(type) {
+  return ({
+    external_creator: 'Creator UGC',
+    internal_employee: 'Internal employee',
+    founder: 'Founder',
+    tool_generated: 'Made in tool',
+  })[type] || (type ? type.replaceAll('_', ' ') : 'Unattributed');
+}
+function sourceLabel(row) {
+  return row.creator || row.source_label || sourceTypeLabel(row.source_type);
+}
 
 export default function LaunchLogTool() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
-  const [creatorFilter, setCreatorFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
   const [angleFilter, setAngleFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
 
@@ -57,17 +69,17 @@ export default function LaunchLogTool() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const creators = Array.from(new Set(rows.map(r => r.creator).filter(Boolean))).sort();
+  const sources = Array.from(new Set(rows.map(sourceLabel).filter(Boolean))).sort();
   const angles = Array.from(new Set(rows.map(r => r.angle_id).filter(Boolean)));
   const users = Array.from(new Set(rows.map(r => r.launched_by_email).filter(Boolean))).sort();
 
   const filtered = rows.filter(r => {
-    if (creatorFilter && r.creator !== creatorFilter) return false;
+    if (sourceFilter && sourceLabel(r) !== sourceFilter) return false;
     if (angleFilter && r.angle_id !== angleFilter) return false;
     if (userFilter && r.launched_by_email !== userFilter) return false;
     if (search) {
       const q = search.toLowerCase();
-      const hay = `${r.ad_name || ''} ${r.headline || ''} ${r.primary_text || ''} ${r.creator || ''}`.toLowerCase();
+      const hay = `${r.ad_name || ''} ${r.headline || ''} ${r.primary_text || ''} ${r.creator || ''} ${r.source_label || ''} ${r.source_type || ''}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -76,7 +88,8 @@ export default function LaunchLogTool() {
   // Stats (all rows, not filtered)
   const last7d = rows.filter(r => (Date.now() - new Date(r.launched_at).getTime()) < 7 * 86400 * 1000).length;
   const last24h = rows.filter(r => (Date.now() - new Date(r.launched_at).getTime()) < 86400 * 1000).length;
-  const uniqueCreators = new Set(rows.map(r => r.creator).filter(Boolean)).size;
+  const uniqueSources = new Set(rows.map(sourceLabel).filter(Boolean)).size;
+  const creatorLaunches = rows.filter(r => r.creator_id || r.source_type === 'external_creator' || (!r.source_type && r.creator)).length;
 
   return (
     <div style={S.wrap}>
@@ -109,16 +122,20 @@ export default function LaunchLogTool() {
           <div className="display-md" style={{ color: '#171717' }}>{last7d}</div>
         </div>
         <div style={S.stat}>
-          <div style={S.statLabel}>Creators used</div>
-          <div className="display-md" style={{ color: '#171717' }}>{uniqueCreators}</div>
+          <div style={S.statLabel}>Sources used</div>
+          <div className="display-md" style={{ color: '#171717' }}>{uniqueSources}</div>
+        </div>
+        <div style={S.stat}>
+          <div style={S.statLabel}>Creator UGC</div>
+          <div className="display-md" style={{ color: '#171717' }}>{creatorLaunches}</div>
         </div>
       </div>
 
       <div style={S.filters}>
-        <input style={S.input} placeholder="Search ad name, copy, creator…" value={search} onChange={e => setSearch(e.target.value)} />
-        <select style={S.select} value={creatorFilter} onChange={e => setCreatorFilter(e.target.value)}>
-          <option value="">All creators</option>
-          {creators.map(c => <option key={c} value={c}>{c}</option>)}
+        <input style={S.input} placeholder="Search ad name, copy, source…" value={search} onChange={e => setSearch(e.target.value)} />
+        <select style={S.select} value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}>
+          <option value="">All sources</option>
+          {sources.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         <select style={S.select} value={angleFilter} onChange={e => setAngleFilter(e.target.value)}>
           <option value="">All angles</option>
@@ -137,7 +154,7 @@ export default function LaunchLogTool() {
         <div style={S.empty}>
           <div className="display-lg" style={{ color: '#171717', marginBottom: 10 }}>Nothing launched yet.</div>
           <div className="display-italic" style={{ fontSize: 14, maxWidth: 400, margin: '0 auto' }}>
-            Ads you push from the UGC Inbox will appear here with full metadata — creator, angle, copy used, timestamp.
+            Ads you push from the Launcher will appear here with full metadata — source, angle, copy used, timestamp.
           </div>
         </div>
       )}
@@ -148,7 +165,7 @@ export default function LaunchLogTool() {
             <tr>
               <th style={S.th}>When</th>
               <th style={S.th}>Ad</th>
-              <th style={S.th}>Creator</th>
+              <th style={S.th}>Source</th>
               <th style={S.th}>Launched by</th>
               <th style={S.th}>Product / Angle</th>
               <th style={S.th}>Copy</th>
@@ -164,7 +181,8 @@ export default function LaunchLogTool() {
                   <div style={{ ...S.mono, fontSize: 9, color: '#88857f' }}>{r.drive_file_name}</div>
                 </td>
                 <td style={S.td}>
-                  {r.creator && <span style={S.creatorPill}>{r.creator}</span>}
+                  {sourceLabel(r) ? <span style={S.creatorPill}>{sourceLabel(r)}</span> : <span style={{ color: '#88857f' }}>—</span>}
+                  <span style={S.sourceSub}>{sourceTypeLabel(r.source_type || (r.creator_id || r.creator ? 'external_creator' : null))}</span>
                 </td>
                 <td style={{ ...S.td, fontSize: 10, color: '#77746f' }}>
                   {r.launched_by_email || <span style={{ color: '#88857f' }}>—</span>}

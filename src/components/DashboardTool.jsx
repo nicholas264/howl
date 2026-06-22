@@ -1266,6 +1266,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           if (/\|\s*(static|review|founder|image)\s*\|/.test(name)) return 'static';
           return 'other';
         };
+        const sourceTypeLabel = (type) => ({
+          external_creator: 'Creator UGC',
+          internal_employee: 'Internal',
+          founder: 'Founder',
+          tool_generated: 'Tool generated',
+        })[type] || (type ? type.replaceAll('_', ' ') : 'Unattributed');
+        const sourceName = (l) => l.creator || l.source_label || sourceTypeLabel(l.source_type);
 
         const buckets = (since) => {
           const list = launches.filter(l => new Date(l.launched_at) >= since);
@@ -1302,16 +1309,16 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         }
         const maxLaunch = Math.max(...last6.map(m => m.total), 1);
 
-        // Top creators (this month) split by format
-        const creatorMap = {};
+        // Top sources (this month) split by format
+        const sourceMap = {};
         for (const l of launches.filter(l => new Date(l.launched_at) >= startOfMonth)) {
-          const c = l.creator || 'unknown';
-          if (!creatorMap[c]) creatorMap[c] = { total: 0, video: 0, static: 0, other: 0 };
+          const c = sourceName(l) || 'unknown';
+          if (!sourceMap[c]) sourceMap[c] = { total: 0, video: 0, static: 0, other: 0 };
           const t = classify(l);
-          creatorMap[c].total++;
-          creatorMap[c][t]++;
+          sourceMap[c].total++;
+          sourceMap[c][t]++;
         }
-        const topCreators = Object.entries(creatorMap).sort((a,b) => b[1].total - a[1].total).slice(0, 5);
+        const topSources = Object.entries(sourceMap).sort((a,b) => b[1].total - a[1].total).slice(0, 5);
 
         const FMT_COLORS = { video: '#d84a17', static: '#2ea98f', other: '#77746f' };
 
@@ -1388,15 +1395,15 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                   </div>
                 </div>
 
-                {/* Top creators */}
+                {/* Top sources */}
                 <div>
-                  <span style={S.label}>Top Creators (This Month)</span>
-                  {topCreators.length === 0 ? (
+                  <span style={S.label}>Top Sources (This Month)</span>
+                  {topSources.length === 0 ? (
                     <div style={{ fontSize: 11, color: '#88857f', marginTop: 8 }}>No launches yet this month.</div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                      {topCreators.map(([c, d]) => {
-                        const max = topCreators[0][1].total;
+                      {topSources.map(([c, d]) => {
+                        const max = topSources[0][1].total;
                         const barPct = (d.total / max) * 100;
                         return (
                           <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1427,7 +1434,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
       })()}
       {view === 'creative' && launchesError && <div style={{ ...S.err, marginBottom: 20 }}>Launch log: {launchesError}</div>}
       {view === 'creative' && (!launches || launches.length === 0) && !launchesError && (
-        <div style={{ ...S.card, color: '#77746f', fontSize: 12 }}>No launches logged yet. Push an ad via UGC Inbox or Publish to populate this view.</div>
+        <div style={{ ...S.card, color: '#77746f', fontSize: 12 }}>No launches logged yet. Push an ad via Launcher to populate this view.</div>
       )}
 
       {/* Creative DNA drawer — overlay on top of Creative Analytics */}
