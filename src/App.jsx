@@ -338,6 +338,7 @@ export default function HowlAdEngine({ appAccess }) {
             initialSessionId={editorSessionId}
             onInitialSessionLoaded={clearInitialEditorSession}
             onAddToCart={addToCart}
+            onNavigate={navigate}
           />
         )}
         {activeTab === "launcher" && (

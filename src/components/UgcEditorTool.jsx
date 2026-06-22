@@ -27,7 +27,7 @@ const SOURCE_LABELS = {
   tool_generated: 'Made in tool',
 };
 
-export default function UgcEditorTool({ initialSessionId = null, onInitialSessionLoaded, onAddToCart }) {
+export default function UgcEditorTool({ initialSessionId = null, onInitialSessionLoaded, onAddToCart, onNavigate }) {
   const { getToken } = useAuth();
   const [sessions, setSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
@@ -388,7 +388,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
 
   const sendToCart = async () => {
     if (!outputUrl || !onAddToCart) return;
-    onAddToCart({
+    const cartItem = {
       id: Date.now(),
       type: 'video',
       kind: 'ugc-edit',
@@ -406,7 +406,38 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       sourceVideoUrl: outputUrl,
       originalSourceVideoUrl: activeSession?.video_url || null,
       createdAt: Date.now(),
-    });
+    };
+    await onAddToCart(cartItem);
+    if (activeSession?.creator_id && activeSession?.deliverable_id) {
+      try {
+        const response = await fetch('/api/creator-workflow', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            resource: 'deliverable',
+            creator_id: activeSession.creator_id,
+            id: activeSession.deliverable_id,
+            status: 'complete',
+            completed_asset_count: 1,
+            approved_asset_count: 1,
+          }),
+        });
+        if (!response.ok) throw new Error('Could not mark deliverable launch-ready');
+        setActiveSession(prev => prev ? {
+          ...prev,
+          deliverable_status: 'complete',
+          completed_asset_count: Math.max(Number(prev.completed_asset_count || 0), 1),
+        } : prev);
+        setSessions(prev => prev.map(session => session.id === activeSession.id ? {
+          ...session,
+          deliverable_status: 'complete',
+          completed_asset_count: Math.max(Number(session.completed_asset_count || 0), 1),
+        } : session));
+      } catch (err) {
+        console.error('deliverable launch-ready update failed', err);
+      }
+    }
+    onNavigate?.('launcher');
   };
 
   const seekTo = (t) => {
@@ -599,7 +630,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                         <video src={outputUrl} controls style={{ width: '100%', borderRadius: 8, background: '#000', marginTop: 8 }} />
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button onClick={download} style={primaryBtn}>Download</button>
-                          {onAddToCart && <button onClick={sendToCart} style={secondaryBtn}>Send to Cart</button>}
+                          {onAddToCart && <button onClick={sendToCart} style={secondaryBtn}>Send to Launcher</button>}
                         </div>
                       </>
                     )}
