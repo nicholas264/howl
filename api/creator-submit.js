@@ -67,11 +67,22 @@ export default async function handler(req, res) {
 
     const [ids] = await sql`
       SELECT
-        nextval(pg_get_serial_sequence('ugc_sessions', 'id')) AS session_id,
-        nextval(pg_get_serial_sequence('creator_deliverables', 'id')) AS deliverable_id
+        nextval(pg_get_serial_sequence('ugc_sessions', 'id')) AS session_id
     `;
     const sessionId = Number(ids.session_id);
-    const deliverableId = Number(ids.deliverable_id);
+    const [requestedDeliverable] = await sql`
+      SELECT d.id
+      FROM creator_deliverables d
+      WHERE d.creator_id = ${submission.creator_id}
+        AND d.brief_id IS NOT DISTINCT FROM ${submission.brief_id || null}
+        AND d.status IN ('requested', 'received', 'editing', 'edited', 'approved')
+        AND d.ugc_session_id IS NULL
+      ORDER BY d.created_at DESC
+      LIMIT 1
+    `;
+    const deliverableId = requestedDeliverable
+      ? Number(requestedDeliverable.id)
+      : Number((await sql`SELECT nextval(pg_get_serial_sequence('creator_deliverables', 'id')) AS deliverable_id`)[0].deliverable_id);
     const tokenHash = submissionTokenHash(token);
     const [result] = await sql`
       WITH claimed AS (
@@ -97,7 +108,7 @@ export default async function handler(req, res) {
         FROM claimed
         RETURNING creator_id, brief_id, title
       ),
-      deliverable_insert AS (
+      deliverable_upsert AS (
         INSERT INTO creator_deliverables (
           id, creator_id, brief_id, title, status, expected_asset_count,
           received_asset_count, source_url, ugc_session_id, due_at, received_at, created_by
@@ -107,6 +118,16 @@ export default async function handler(req, res) {
           'received', 1, 1, ${parsedUrl.toString()}, ${sessionId}, claimed.due_at, now(),
           ${`creator-submit:${submission.id}`}
         FROM claimed
+        ON CONFLICT (id) DO UPDATE SET
+          status = CASE
+            WHEN creator_deliverables.status = 'requested' THEN 'received'
+            ELSE creator_deliverables.status
+          END,
+          received_asset_count = GREATEST(creator_deliverables.received_asset_count, 1),
+          source_url = EXCLUDED.source_url,
+          ugc_session_id = EXCLUDED.ugc_session_id,
+          received_at = COALESCE(creator_deliverables.received_at, now()),
+          updated_at = now()
         RETURNING id
       ),
       activity_insert AS (
@@ -123,7 +144,7 @@ export default async function handler(req, res) {
         FROM claimed
       )
       SELECT id AS deliverable_id, ${sessionId}::bigint AS session_id
-      FROM deliverable_insert
+      FROM deliverable_upsert
     `;
     if (!result) {
       const [existingSession] = await sql`

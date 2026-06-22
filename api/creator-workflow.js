@@ -859,6 +859,7 @@ export default async function handler(req, res) {
         const title = clean(body.title, 300);
         if (!title) return res.status(400).json({ error: 'Submission title required' });
         const briefId = Number(body.brief_id) || null;
+        let existingDeliverable = null;
         if (briefId) {
           const [brief] = await sql`
             SELECT id, status FROM creator_briefs
@@ -868,12 +869,31 @@ export default async function handler(req, res) {
           if (brief.status !== 'approved') {
             return res.status(409).json({ error: 'Approve the brief before creating a creator upload link.' });
           }
+          [existingDeliverable] = await sql`
+            SELECT id FROM creator_deliverables
+            WHERE creator_id = ${creatorId}
+              AND brief_id = ${briefId}
+              AND status NOT IN ('cancelled', 'launched')
+            ORDER BY created_at DESC
+            LIMIT 1
+          `;
         }
         const dueAt = timestamp(body.due_at);
         if (dueAt === undefined) return res.status(400).json({ error: 'Submission due date is invalid' });
         const expiresInDays = Math.min(Math.max(Number(body.expires_in_days) || 14, 1), 60);
         const expiresAt = new Date(Date.now() + expiresInDays * 86400000).toISOString();
         const token = randomBytes(32).toString('base64url');
+        let deliverable = existingDeliverable || null;
+        if (briefId && !deliverable) {
+          [deliverable] = await sql`
+            INSERT INTO creator_deliverables (
+              creator_id, brief_id, title, status, expected_asset_count, due_at, created_by
+            ) VALUES (
+              ${creatorId}, ${briefId}, ${title}, 'requested', 1, ${dueAt}, ${access.userId}
+            )
+            RETURNING id
+          `;
+        }
         const [link] = await sql`
           INSERT INTO creator_submission_links (
             token_hash, creator_id, brief_id, title, due_at, expires_at, created_by
@@ -888,7 +908,12 @@ export default async function handler(req, res) {
           INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
           VALUES (
             ${creatorId}, 'submission_link_created', ${`Upload link created: ${title}`},
-            ${JSON.stringify({ submission_link_id: link.id, brief_id: briefId, expires_at: expiresAt })}::jsonb,
+            ${JSON.stringify({
+              submission_link_id: Number(link.id),
+              brief_id: briefId,
+              deliverable_id: deliverable?.id ? Number(deliverable.id) : null,
+              expires_at: expiresAt,
+            })}::jsonb,
             ${access.userId}
           )
         `;
