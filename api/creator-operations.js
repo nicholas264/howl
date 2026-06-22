@@ -334,6 +334,11 @@ export default async function handler(req, res) {
           EXISTS (
             SELECT 1 FROM creator_briefs b WHERE b.creator_id = c.id
           ) AS has_brief,
+          EXISTS (
+            SELECT 1 FROM creator_briefs b WHERE b.creator_id = c.id AND b.status = 'approved'
+          ) AS has_approved_brief,
+          COALESCE(brief_queue.draft_brief_count, 0) AS draft_brief_count,
+          COALESCE(brief_queue.approved_unsent_brief_count, 0) AS approved_unsent_brief_count,
           (
             c.product_seeding_required = false
             OR EXISTS (
@@ -410,6 +415,18 @@ export default async function handler(req, res) {
           ORDER BY l.created_at DESC LIMIT 1
         ) submission ON true
         LEFT JOIN LATERAL (
+          SELECT
+            count(*) FILTER (WHERE b.status = 'draft')::int AS draft_brief_count,
+            count(*) FILTER (
+              WHERE b.status = 'approved'
+                AND NOT EXISTS (
+                  SELECT 1 FROM creator_deliverables d WHERE d.brief_id = b.id
+                )
+            )::int AS approved_unsent_brief_count
+          FROM creator_briefs b
+          WHERE b.creator_id = c.id
+        ) brief_queue ON true
+        LEFT JOIN LATERAL (
           SELECT d.ugc_session_id, d.title
           FROM creator_deliverables d
           WHERE d.creator_id = c.id
@@ -433,9 +450,10 @@ export default async function handler(req, res) {
             WHEN has_live_engagement AND NOT has_accepted_agreement AND has_sent_agreement THEN 'await_agreement'
             WHEN has_live_engagement AND NOT has_accepted_agreement THEN 'send_agreement'
             WHEN has_accepted_agreement AND NOT has_brief THEN 'build_brief'
-            WHEN has_brief AND NOT product_ready AND NOT shipping_ready THEN 'add_shipping'
-            WHEN has_brief AND NOT product_ready THEN 'seed_product'
-            WHEN has_brief AND NOT has_deliverable AND NOT has_active_submission THEN 'send_assignment'
+            WHEN has_accepted_agreement AND draft_brief_count > 0 AND NOT has_approved_brief THEN 'review_draft_brief'
+            WHEN has_approved_brief AND NOT product_ready AND NOT shipping_ready THEN 'add_shipping'
+            WHEN has_approved_brief AND NOT product_ready THEN 'seed_product'
+            WHEN has_approved_brief AND approved_unsent_brief_count > 0 AND NOT has_deliverable AND NOT has_active_submission THEN 'send_assignment'
             WHEN overdue_due_at IS NOT NULL THEN 'production_overdue'
             WHEN NOT has_received THEN 'await_footage'
             WHEN NOT has_completed THEN 'finish_edit'
@@ -455,6 +473,7 @@ export default async function handler(req, res) {
           WHEN 'await_agreement' THEN 'Await agreement acceptance'
           WHEN 'send_agreement' THEN 'Prepare and send agreement'
           WHEN 'build_brief' THEN 'Build creator brief'
+          WHEN 'review_draft_brief' THEN 'Review and approve script'
           WHEN 'add_shipping' THEN 'Add shipping address'
           WHEN 'seed_product' THEN 'Seed creator product'
           WHEN 'send_assignment' THEN 'Send creator assignment'
@@ -475,14 +494,14 @@ export default async function handler(req, res) {
           WHEN action_key = 'seed_product' THEN 'products'
           WHEN action_key IN ('start_outreach', 'follow_up', 'await_reply') THEN 'outreach'
           WHEN action_key IN ('define_terms', 'approve_terms', 'await_agreement', 'send_agreement') THEN 'agreements'
-          WHEN action_key IN ('build_brief', 'send_assignment') THEN 'briefs'
+          WHEN action_key IN ('build_brief', 'review_draft_brief', 'send_assignment') THEN 'briefs'
           WHEN action_key IN ('production_overdue', 'await_footage', 'finish_edit', 'launch_asset') THEN 'deliverables'
           ELSE 'performance'
         END AS target_tab,
         CASE
           WHEN action_key IN ('start_outreach', 'follow_up', 'await_reply') THEN 'outreach'
           WHEN action_key IN ('define_terms', 'approve_terms', 'await_agreement', 'send_agreement') THEN 'contracts'
-          WHEN action_key IN ('build_brief', 'send_assignment') THEN 'creative'
+          WHEN action_key IN ('build_brief', 'review_draft_brief', 'send_assignment') THEN 'creative'
           WHEN action_key = 'seed_product' THEN 'product'
           WHEN action_key IN ('production_overdue', 'await_footage', 'finish_edit', 'launch_asset') THEN 'production'
           WHEN action_key = 'review_performance' THEN 'performance'
@@ -501,7 +520,7 @@ export default async function handler(req, res) {
           WHEN action_key = 'production_overdue' THEN 0
           WHEN action_key = 'follow_up' THEN 1
           WHEN action_key IN ('add_contact', 'add_shipping') THEN 2
-          WHEN action_key IN ('define_terms', 'approve_terms', 'send_agreement', 'build_brief', 'seed_product', 'send_assignment', 'finish_edit', 'launch_asset') THEN 3
+          WHEN action_key IN ('define_terms', 'approve_terms', 'send_agreement', 'build_brief', 'review_draft_brief', 'seed_product', 'send_assignment', 'finish_edit', 'launch_asset') THEN 3
           WHEN action_key IN ('await_reply', 'await_agreement', 'await_footage') THEN 4
           ELSE 5
         END,
