@@ -2,9 +2,9 @@ import { useState } from 'react';
 
 const INITIAL = {
   name: '', email: '', phone: '', location: '', timezone: '', niche: '', strengths: '',
-  activities: '', audience_description: '', creator_experience: '', why_howl: '',
-  rate_expectations: '', availability: '', referral_source: '', instagram: '', tiktok: '',
-  youtube: '', other_social: '', sample_urls: '', age_confirmed: false,
+  activities: '', audience_description: '', audience_psychographics: '', creator_experience: '',
+  why_howl: '', rate_expectations: '', availability: '', referral_source: '', instagram: '',
+  tiktok: '', youtube: '', other_social: '', sample_urls: '', age_confirmed: false,
   consent_confirmed: false, website: '',
 };
 
@@ -95,6 +95,7 @@ export default function CreatorApplicationPage() {
               <label className="wide">Activities<input placeholder="Comma-separated" value={form.activities} onChange={event => update('activities', event.target.value)} /></label>
               <label className="wide">What are you strongest at?<textarea required rows="3" value={form.strengths} onChange={event => update('strengths', event.target.value)} /></label>
               <label className="wide">Who follows you and what do they care about?<textarea rows="3" value={form.audience_description} onChange={event => update('audience_description', event.target.value)} /></label>
+              <label className="wide">What does your audience believe, want, avoid, or aspire to?<textarea rows="3" value={form.audience_psychographics} onChange={event => update('audience_psychographics', event.target.value)} /></label>
             </div>
           </fieldset>
 

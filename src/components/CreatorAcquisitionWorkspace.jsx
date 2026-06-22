@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
 const EMPTY_QUALIFICATION = {
   name: '', email: '', location: '', niche: '', strengths: '',
-  audience_description: '', rate_expectations: '', activities: '', fit_notes: '',
+  audience_description: '', audience_psychographics: '', rate_expectations: '', activities: '', fit_notes: '',
 };
 const EMPTY_SCORECARD = {
   brand_fit: '', creative_quality: '', audience_fit: '', reliability: '', economics: '',
@@ -43,6 +43,7 @@ function readiness(record) {
     ['Niche', record.niche],
     ['Strengths', record.strengths],
     ['Audience', record.audience_description],
+    ['Audience mindset', record.audience_psychographics],
     ['Rates', record.rate_expectations],
     ['Proof of work', record.sample_urls?.length || record.creator_experience || record.enrichment?.biography],
   ];
@@ -137,6 +138,7 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
       niche: selected.niche || '',
       strengths: selected.strengths || '',
       audience_description: selected.audience_description || '',
+      audience_psychographics: selected.audience_psychographics || '',
       rate_expectations: selected.rate_expectations || '',
       activities: Array.isArray(selected.activities) ? selected.activities.join(', ') : '',
       fit_notes: selected.fit_notes || '',
@@ -435,6 +437,7 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
               <div><dt>Niche</dt><dd>{selected.niche || 'Not provided'}</dd></div>
               <div><dt>Strengths</dt><dd>{selected.strengths || 'Not provided'}</dd></div>
               {selected.audience_description && <div><dt>Audience</dt><dd>{selected.audience_description}</dd></div>}
+              {selected.audience_psychographics && <div><dt>Audience mindset</dt><dd>{selected.audience_psychographics}</dd></div>}
               {selected.why_howl && <div><dt>Why HOWL</dt><dd>{selected.why_howl}</dd></div>}
               {selected.creator_experience && <div><dt>Experience</dt><dd>{selected.creator_experience}</dd></div>}
               {selected.fit_notes && <div><dt>Scout note</dt><dd>{selected.fit_notes}</dd></div>}
@@ -468,6 +471,7 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
                     <label className="wide">Activities<input placeholder="Camping, cooking, overlanding" value={qualification.activities} onChange={event => setQualification({ ...qualification, activities: event.target.value })} /></label>
                     <label className="wide">Strengths<textarea rows="2" value={qualification.strengths} onChange={event => setQualification({ ...qualification, strengths: event.target.value })} /></label>
                     <label className="wide">Audience<textarea rows="2" value={qualification.audience_description} onChange={event => setQualification({ ...qualification, audience_description: event.target.value })} /></label>
+                    <label className="wide">Audience mindset<textarea rows="2" value={qualification.audience_psychographics} onChange={event => setQualification({ ...qualification, audience_psychographics: event.target.value })} /></label>
                     <label className="wide">Rate expectations<input value={qualification.rate_expectations} onChange={event => setQualification({ ...qualification, rate_expectations: event.target.value })} /></label>
                     {mode === 'discovery' && <label className="wide">Scout note<textarea rows="2" value={qualification.fit_notes} onChange={event => setQualification({ ...qualification, fit_notes: event.target.value })} /></label>}
                   </div>

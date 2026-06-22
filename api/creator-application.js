@@ -90,7 +90,7 @@ export default async function handler(req, res) {
     await sql`
       INSERT INTO creator_applications (
         application_code, name, email, phone, location, timezone, niche, strengths,
-        activities, audience_description, creator_experience, why_howl,
+        activities, audience_description, audience_psychographics, creator_experience, why_howl,
         rate_expectations, availability, referral_source, socials, sample_urls,
         age_confirmed, consent_confirmed, ip_hash
       ) VALUES (
@@ -98,6 +98,7 @@ export default async function handler(req, res) {
         ${text(req.body?.location, 300)}, ${text(req.body?.timezone, 100)},
         ${text(req.body?.niche, 1000)}, ${text(req.body?.strengths, 2000)},
         ${list(req.body?.activities)}, ${text(req.body?.audience_description, 2000)},
+        ${text(req.body?.audience_psychographics, 2000)},
         ${text(req.body?.creator_experience, 3000)}, ${text(req.body?.why_howl, 3000)},
         ${text(req.body?.rate_expectations, 1000)}, ${text(req.body?.availability, 1000)},
         ${text(req.body?.referral_source, 500)}, ${JSON.stringify(socials)}::jsonb,

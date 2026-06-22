@@ -92,6 +92,7 @@ async function createCreatorOpsTables(sql) {
       strengths           TEXT,
       activities          TEXT[] NOT NULL DEFAULT '{}',
       audience_description TEXT,
+      audience_psychographics TEXT,
       creator_experience  TEXT,
       why_howl            TEXT,
       rate_expectations   TEXT,
@@ -116,6 +117,7 @@ async function createCreatorOpsTables(sql) {
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_applications_email ON creator_applications(lower(email))`;
   await sql`ALTER TABLE creator_applications ADD COLUMN IF NOT EXISTS enrichment JSONB NOT NULL DEFAULT '{}'::jsonb`;
   await sql`ALTER TABLE creator_applications ADD COLUMN IF NOT EXISTS review_scorecard JSONB NOT NULL DEFAULT '{}'::jsonb`;
+  await sql`ALTER TABLE creator_applications ADD COLUMN IF NOT EXISTS audience_psychographics TEXT`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS creator_candidates (
@@ -128,6 +130,7 @@ async function createCreatorOpsTables(sql) {
       niche               TEXT,
       strengths           TEXT,
       audience_description TEXT,
+      audience_psychographics TEXT,
       rate_expectations   TEXT,
       activities          TEXT[] NOT NULL DEFAULT '{}',
       fit_notes           TEXT,
@@ -147,6 +150,7 @@ async function createCreatorOpsTables(sql) {
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_candidates_status ON creator_candidates(status, created_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_candidates_source ON creator_candidates(source, created_at DESC)`;
   await sql`ALTER TABLE creator_candidates ADD COLUMN IF NOT EXISTS audience_description TEXT`;
+  await sql`ALTER TABLE creator_candidates ADD COLUMN IF NOT EXISTS audience_psychographics TEXT`;
   await sql`ALTER TABLE creator_candidates ADD COLUMN IF NOT EXISTS rate_expectations TEXT`;
   await sql`ALTER TABLE creator_candidates ADD COLUMN IF NOT EXISTS activities TEXT[] NOT NULL DEFAULT '{}'`;
   await sql`ALTER TABLE creator_candidates ADD COLUMN IF NOT EXISTS review_scorecard JSONB NOT NULL DEFAULT '{}'::jsonb`;

@@ -54,6 +54,7 @@ function withQualification(record, body) {
     niche: text(body?.niche, 1000) || record.niche,
     strengths: text(body?.strengths, 2000) || record.strengths,
     audience_description: text(body?.audience_description, 2000) || record.audience_description,
+    audience_psychographics: text(body?.audience_psychographics, 2000) || record.audience_psychographics,
     rate_expectations: text(body?.rate_expectations, 1000) || record.rate_expectations,
     activities: body?.activities !== undefined ? list(body.activities) : record.activities,
     fit_notes: text(body?.fit_notes, 3000) || record.fit_notes,
@@ -120,23 +121,31 @@ async function promote(sql, access, sourceType, record) {
   if (duplicate) throw new Error(`This person already exists as ${duplicate.name}.`);
 
   const activities = Array.isArray(record.activities) ? record.activities : [];
+  const sourceMetadata = {
+    acquisition_source: sourceType,
+    application_code: record.application_code || null,
+    acquisition_review: record.review_scorecard || {},
+    application_why_howl: record.why_howl || null,
+    application_availability: record.availability || null,
+    application_referral_source: record.referral_source || null,
+    application_sample_urls: Array.isArray(record.sample_urls) ? record.sample_urls : [],
+    review_notes: record.review_notes || null,
+    fit_notes: record.fit_notes || null,
+  };
   const [creator] = await sql`
     INSERT INTO creators (
       name, email, phone, location, timezone, bio, niche, strengths,
-      audience_demographics, activities, rate_notes, notes, avatar_url,
+      audience_demographics, audience_psychographics, activities, rate_notes, notes, avatar_url,
       source, source_external_id, source_metadata, stage, status, created_by
     ) VALUES (
       ${record.name || instagram?.handle || 'New creator'}, ${record.email || null}, ${record.phone || null},
       ${record.location || null}, ${record.timezone || null},
       ${record.creator_experience || record.biography || record.enrichment?.biography || null},
       ${record.niche || null}, ${record.strengths || null}, ${record.audience_description || null},
+      ${record.audience_psychographics || null},
       ${activities}, ${record.rate_expectations || null}, ${record.review_notes || record.fit_notes || null},
       ${record.avatar_url || instagram?.avatar_url || null}, ${sourceType}, ${String(record.id)},
-      ${JSON.stringify({
-        acquisition_source: sourceType,
-        application_code: record.application_code || null,
-        acquisition_review: record.review_scorecard || {},
-      })}::jsonb,
+      ${JSON.stringify(sourceMetadata)}::jsonb,
       'sourced', 'qualified', ${access.userId}
     )
     RETURNING *
@@ -287,6 +296,7 @@ export default async function handler(req, res) {
             location = ${reviewedRecord.location}, niche = ${reviewedRecord.niche},
             strengths = ${reviewedRecord.strengths},
             audience_description = ${reviewedRecord.audience_description},
+            audience_psychographics = ${reviewedRecord.audience_psychographics},
             rate_expectations = ${reviewedRecord.rate_expectations},
             activities = ${reviewedRecord.activities || []},
             review_scorecard = ${JSON.stringify(reviewedRecord.review_scorecard || {})}::jsonb,
@@ -302,6 +312,7 @@ export default async function handler(req, res) {
             location = ${reviewedRecord.location}, niche = ${reviewedRecord.niche},
             strengths = ${reviewedRecord.strengths},
             audience_description = ${reviewedRecord.audience_description},
+            audience_psychographics = ${reviewedRecord.audience_psychographics},
             rate_expectations = ${reviewedRecord.rate_expectations},
             activities = ${reviewedRecord.activities || []},
             review_scorecard = ${JSON.stringify(reviewedRecord.review_scorecard || {})}::jsonb,
@@ -326,6 +337,7 @@ export default async function handler(req, res) {
             niche = COALESCE(${text(req.body?.niche, 1000)}, niche),
             strengths = COALESCE(${text(req.body?.strengths, 2000)}, strengths),
             audience_description = COALESCE(${text(req.body?.audience_description, 2000)}, audience_description),
+            audience_psychographics = COALESCE(${text(req.body?.audience_psychographics, 2000)}, audience_psychographics),
             rate_expectations = COALESCE(${text(req.body?.rate_expectations, 1000)}, rate_expectations),
             activities = CASE WHEN ${req.body?.activities !== undefined} THEN ${list(req.body?.activities)} ELSE activities END,
             review_scorecard = ${JSON.stringify(reviewScorecard(req.body?.review_scorecard, record.review_scorecard))}::jsonb,
@@ -340,6 +352,7 @@ export default async function handler(req, res) {
             niche = COALESCE(${text(req.body?.niche, 1000)}, niche),
             strengths = COALESCE(${text(req.body?.strengths, 2000)}, strengths),
             audience_description = COALESCE(${text(req.body?.audience_description, 2000)}, audience_description),
+            audience_psychographics = COALESCE(${text(req.body?.audience_psychographics, 2000)}, audience_psychographics),
             rate_expectations = COALESCE(${text(req.body?.rate_expectations, 1000)}, rate_expectations),
             activities = CASE WHEN ${req.body?.activities !== undefined} THEN ${list(req.body?.activities)} ELSE activities END,
             review_scorecard = ${JSON.stringify(reviewScorecard(req.body?.review_scorecard, record.review_scorecard))}::jsonb,
