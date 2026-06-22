@@ -101,6 +101,59 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
         priority: 'high',
       });
     }
+    const workflow = operations?.setup?.workflow || {};
+    const draftBriefs = Number(workflow.draft_briefs || 0);
+    if (draftBriefs > 0) {
+      cards.push({
+        key: 'draft-briefs',
+        eyebrow: 'Approval gate',
+        title: `${draftBriefs} draft brief${draftBriefs === 1 ? '' : 's'} need review`,
+        detail: 'Scripts are editable and must be approved before assignments can be sent to creators.',
+        count: draftBriefs,
+        action: 'Review briefs',
+        target: { type: 'creator-view', value: 'operations' },
+        priority: 'high',
+      });
+    }
+    const approvedUnsent = Number(workflow.approved_unsent_briefs || 0);
+    if (approvedUnsent > 0) {
+      cards.push({
+        key: 'approved-unsent-briefs',
+        eyebrow: 'Creator handoff',
+        title: `${approvedUnsent} approved brief${approvedUnsent === 1 ? '' : 's'} not assigned`,
+        detail: 'Approved scripts are ready to turn into creator assignments and upload links.',
+        count: approvedUnsent,
+        action: 'Send assignments',
+        target: { type: 'creator-view', value: 'operations' },
+        priority: 'high',
+      });
+    }
+    const needsTranscript = Number(workflow.footage_needs_transcript || 0);
+    if (needsTranscript > 0) {
+      cards.push({
+        key: 'footage-transcript',
+        eyebrow: 'UGC editor',
+        title: `${needsTranscript} footage session${needsTranscript === 1 ? '' : 's'} need transcript`,
+        detail: 'Transcription unlocks captioning, AI cleanup, edit decisions, and launch-ready exports.',
+        count: needsTranscript,
+        action: 'Open editor',
+        target: { type: 'tab', value: 'ugc-editor' },
+        priority: 'medium',
+      });
+    }
+    const readyToEdit = Number(workflow.footage_ready_to_edit || 0);
+    if (readyToEdit > 0) {
+      cards.push({
+        key: 'footage-edit',
+        eyebrow: 'UGC editor',
+        title: `${readyToEdit} footage session${readyToEdit === 1 ? '' : 's'} ready to edit`,
+        detail: 'Creator footage has transcript data and needs final edit, captioning, or render approval.',
+        count: readyToEdit,
+        action: 'Open edit queue',
+        target: { type: 'tab', value: 'ugc-editor' },
+        priority: 'medium',
+      });
+    }
     const duplicateGroups = Number(health?.summary?.duplicate_groups || 0);
     if (duplicateGroups > 0 && !cards.some(card => card.key === 'setup-duplicates')) {
       cards.push({

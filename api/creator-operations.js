@@ -3,7 +3,7 @@ import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import { mapClickupStatus } from './_lib/clickup-creators.js';
 
 async function loadSetup(sql) {
-  const [statusRows, healthRows, attributionRows] = await Promise.all([
+  const [statusRows, healthRows, attributionRows, workflowRows] = await Promise.all([
     sql`
       SELECT
         source_metadata->>'clickup_status' AS raw_status,
@@ -71,6 +71,43 @@ async function loadSetup(sql) {
         )::int AS assigned_groups
       FROM live_groups
     `,
+    sql`
+      SELECT
+        (
+          SELECT count(*)::int
+          FROM creator_briefs b
+          WHERE b.status = 'draft'
+        ) AS draft_briefs,
+        (
+          SELECT count(*)::int
+          FROM creator_briefs b
+          WHERE b.status = 'approved'
+            AND NOT EXISTS (
+              SELECT 1 FROM creator_deliverables d WHERE d.brief_id = b.id
+            )
+        ) AS approved_unsent_briefs,
+        (
+          SELECT count(*)::int
+          FROM ugc_sessions u
+          WHERE u.creator_id IS NOT NULL
+            AND COALESCE(
+              CASE WHEN jsonb_typeof(u.words) = 'array' THEN jsonb_array_length(u.words) ELSE 0 END,
+              0
+            ) = 0
+            AND u.rendered_url IS NULL
+        ) AS footage_needs_transcript,
+        (
+          SELECT count(*)::int
+          FROM ugc_sessions u
+          WHERE u.creator_id IS NOT NULL
+            AND COALESCE(
+              CASE WHEN jsonb_typeof(u.words) = 'array' THEN jsonb_array_length(u.words) ELSE 0 END,
+              0
+            ) > 0
+            AND u.rendered_url IS NULL
+            AND u.status NOT IN ('rendered', 'complete', 'launched')
+        ) AS footage_ready_to_edit
+    `,
   ]);
 
   const grouped = new Map();
@@ -109,9 +146,16 @@ async function loadSetup(sql) {
     .reduce((sum, item) => sum + item.count, 0);
   const health = healthRows[0] || {};
   const attribution = attributionRows[0] || {};
+  const workflow = workflowRows[0] || {};
   const unassignedGroups = Math.max(0, Number(attribution.total_groups || 0) - Number(attribution.assigned_groups || 0));
 
   return {
+    workflow: {
+      draft_briefs: Number(workflow.draft_briefs || 0),
+      approved_unsent_briefs: Number(workflow.approved_unsent_briefs || 0),
+      footage_needs_transcript: Number(workflow.footage_needs_transcript || 0),
+      footage_ready_to_edit: Number(workflow.footage_ready_to_edit || 0),
+    },
     status_mappings: statusMappings,
     verified_mismatch_count: verifiedMismatchCount,
     review_status_count: reviewCount,
