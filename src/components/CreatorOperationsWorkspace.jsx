@@ -22,13 +22,30 @@ function actionDetail(item) {
   if (item.action_key === 'production_overdue') return item.overdue_title || 'Incomplete creator deliverable';
   if (item.action_key === 'finish_edit') return item.edit_title ? `Footage ready: ${item.edit_title}` : 'Creator footage is received and ready to edit.';
   if (item.action_key === 'follow_up') return 'Creator outreach needs a response or next step.';
+  if (item.action_key === 'start_outreach') return 'No outreach is logged yet. Start the relationship from this creator record.';
+  if (item.action_key === 'define_terms') return 'Commercial terms are missing before agreements, briefs, and production can move.';
+  if (item.action_key === 'approve_terms') return 'Draft terms exist and need approval before the usage agreement goes out.';
+  if (item.action_key === 'send_agreement') return 'Terms are approved. Prepare the usage agreement for signature.';
   if (item.action_key === 'await_agreement') return 'Agreement sent; acceptance is still outstanding.';
   if (item.action_key === 'await_footage') return 'Assignment is live; footage has not arrived yet.';
   if (item.action_key === 'add_contact') return 'Contact information is blocking the relationship.';
   if (item.action_key === 'add_shipping') return 'Shipping details are blocking product fulfillment.';
   if (item.action_key === 'seed_product') return 'The creative is defined; the creator still needs the product.';
   if (item.action_key === 'review_draft_brief') return `${item.draft_brief_count || 1} draft script${Number(item.draft_brief_count || 1) === 1 ? '' : 's'} must be edited and approved before assignment.`;
+  if (item.action_key === 'send_assignment') return `${item.approved_unsent_brief_count || 1} approved brief${Number(item.approved_unsent_brief_count || 1) === 1 ? '' : 's'} ready for upload link and creator handoff.`;
+  if (item.action_key === 'launch_asset') return 'The asset is complete. Launch it, then attribution can close the performance loop.';
+  if (item.action_key === 'review_performance') return 'Use launch results to decide whether to rebook, iterate, or retire this creator angle.';
   return `${item.stage} creator · ${item.category}`;
+}
+
+function inlineActionLabel(item) {
+  return ({
+    review_draft_brief: 'Review script',
+    send_assignment: 'Create upload link',
+    finish_edit: 'Open editor',
+    launch_asset: 'Open launch step',
+    seed_product: 'Seed product',
+  })[item.action_key];
 }
 
 export default function CreatorOperationsWorkspace({ canManage = false, onOpenCreator, onOpenEditor, onNavigate }) {
@@ -86,6 +103,18 @@ export default function CreatorOperationsWorkspace({ canManage = false, onOpenCr
     if (step.key === 'draft_briefs' || step.key === 'approved_unsent_briefs') return setFilter('creative');
     if (step.key === 'footage_needs_transcript' || step.key === 'footage_ready_to_edit') return onNavigate?.('ugc-editor');
     setError(`No action is configured for "${step.title || step.key}".`);
+  };
+
+  const handleInlineAction = (event, item) => {
+    event.stopPropagation();
+    if (item.action_key === 'finish_edit' && item.edit_session_id) return onOpenEditor?.(item.edit_session_id);
+    return onOpenCreator?.(item, item.target_tab);
+  };
+
+  const handleInlineKeyDown = (event, item) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    handleInlineAction(event, item);
   };
 
   const visible = useMemo(() => data.items.filter(item => {
@@ -194,24 +223,16 @@ export default function CreatorOperationsWorkspace({ canManage = false, onOpenCr
               <strong>{item.action_label}</strong>
               <small>{actionDetail(item)}</small>
             </span>
-            {item.action_key === 'finish_edit' && item.edit_session_id ? (
+            {inlineActionLabel(item) ? (
               <span className="operations-inline-actions">
                 <span
                   className="operations-inline-action"
                   role="button"
                   tabIndex={0}
-                  onClick={event => {
-                    event.stopPropagation();
-                    onOpenEditor?.(item.edit_session_id);
-                  }}
-                  onKeyDown={event => {
-                    if (event.key !== 'Enter' && event.key !== ' ') return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onOpenEditor?.(item.edit_session_id);
-                  }}
+                  onClick={event => handleInlineAction(event, item)}
+                  onKeyDown={event => handleInlineKeyDown(event, item)}
                 >
-                  Open editor
+                  {inlineActionLabel(item)}
                 </span>
               </span>
             ) : (
