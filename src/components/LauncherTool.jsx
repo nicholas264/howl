@@ -67,6 +67,10 @@ function destUrlFor(productId) {
   return PRODUCTS.find(p => p.id === productId)?.url || '';
 }
 
+function normalizeCreatorName(name = '') {
+  return String(name).trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
 const S = {
   wrap: { padding: '28px 36px', maxWidth: 1240 },
   h1: { fontSize: 22, marginBottom: 4 },
@@ -89,6 +93,12 @@ const S = {
     fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700,
     color, padding: '2px 6px', borderRadius: 3,
     border: `1px solid ${color}`, background: `${color}1a`,
+  }),
+  linkedHint: (linked) => ({
+    marginTop: 5,
+    fontSize: 9,
+    lineHeight: 1.35,
+    color: linked ? '#256b35' : '#b42318',
   }),
   err: { padding: '8px 12px', border: '1px solid rgba(220,68,10,0.4)', background: 'rgba(220,68,10,0.1)', color: '#d84a17', fontSize: 10, borderRadius: 4 },
   settings: { background: '#fff', border: '1px solid #dedbd3', borderRadius: 6, padding: 16, marginBottom: 18 },
@@ -253,8 +263,13 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   // Single state map keyed by unified item id (drive ids are file ids; cart ids prefixed).
   const [meta, setMeta] = useState({});
   const updateMeta = (id, patch) => setMeta(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  const findCreatorByName = useCallback((name) => {
+    const needle = normalizeCreatorName(name);
+    if (!needle) return null;
+    return creators.find(item => normalizeCreatorName(item.name) === needle) || null;
+  }, [creators]);
   const updateCreator = (id, name) => {
-    const creator = creators.find(item => item.name.toLowerCase() === name.trim().toLowerCase());
+    const creator = findCreatorByName(name);
     updateMeta(id, { creator: name, creatorId: creator?.id || null });
   };
 
@@ -267,12 +282,18 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         if (!next[id]) {
           const topFolder = f.kind === 'pair' ? f.folderName : (f.folderPath || '').split(' / ')[0];
           const filePrefix = (f.name || '').split(/[_\-\s]/)[0] || '';
+          const creatorName = topFolder || filePrefix || config.defaultCreator;
+          const creator = findCreatorByName(creatorName);
           next[id] = {
-            creator: topFolder || filePrefix || config.defaultCreator,
+            creator: creator?.name || creatorName,
+            creatorId: creator?.id || null,
             productId: config.defaultProduct,
             headline: '',
             primaryText: '',
           };
+        } else if (next[id].creator && !next[id].creatorId) {
+          const creator = findCreatorByName(next[id].creator);
+          if (creator) next[id] = { ...next[id], creator: creator.name, creatorId: creator.id };
         }
       }
       // seed cart defaults from item.hook / item.body if user hasn't edited
@@ -292,7 +313,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       }
       return next;
     });
-  }, [driveItems, cart, config.defaultCreator, config.defaultProduct]);
+  }, [driveItems, cart, config.defaultCreator, config.defaultProduct, findCreatorByName]);
 
   // ── unified queue ─────────────────────────────────────────────────────
   const queue = useMemo(() => {
@@ -323,6 +344,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     const productUrl = destUrlFor(m.productId);
     if (!productUrl) return setItemStatus(id, 'error', 'Selected product has no URL set in data/products.js');
     if (!m.creator?.trim()) return setItemStatus(id, 'error', 'Creator required');
+    if (!m.creatorId) return setItemStatus(id, 'error', 'Choose an exact creator record before launching this Drive asset');
     if (!m.headline?.trim() && !m.primaryText?.trim()) return setItemStatus(id, 'error', 'Headline or primary text required');
 
     setItemStatus(id, 'pushing', '');
@@ -671,6 +693,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         const m = meta[id] || {};
         const status = statuses[id] || { status: 'pending' };
         const stepDef = item.source === 'drive' ? DRIVE_STEPS : CART_STEPS;
+        const isCreatorLinked = Boolean(m.creatorId);
+        const launchDisabled = status.status === 'pushing' || (item.source === 'drive' && !isCreatorLinked);
 
         return (
           <div key={id} style={S.card}>
@@ -736,6 +760,11 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                   <label style={S.label}>Creator</label>
                   <input style={S.input} list="howl-creators" value={m.creator || ''} onChange={e => updateCreator(id, e.target.value)} placeholder="Search creator" />
                   <datalist id="howl-creators">{creators.map(creator => <option key={creator.id} value={creator.name} />)}</datalist>
+                  {item.source === 'drive' && (
+                    <div style={S.linkedHint(isCreatorLinked)}>
+                      {isCreatorLinked ? 'Linked to creator record.' : 'Not linked. Pick the exact creator before launch.'}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label style={S.label}>Product</label>
@@ -774,7 +803,12 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
 
             {/* ACTION COL */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-              <button onClick={() => launch(item)} disabled={status.status === 'pushing'} style={S.btn(status.status === 'pushing')}>
+              <button
+                onClick={() => launch(item)}
+                disabled={launchDisabled}
+                title={item.source === 'drive' && !isCreatorLinked ? 'Pick an exact creator record before launching.' : ''}
+                style={S.btn(launchDisabled)}
+              >
                 {status.status === 'pushing' ? 'Launching…' : status.status === 'success' ? 'Re-launch' : 'Launch'}
               </button>
               {item.source === 'drive' && (

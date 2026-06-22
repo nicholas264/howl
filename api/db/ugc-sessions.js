@@ -106,7 +106,18 @@ export default async function handler(req, res) {
       const owned = await ownRow(id);
       if (!owned) return res.status(404).json({ error: 'Not found' });
       const fields = req.body || {};
-      const allowed = ['title', 'duration', 'words', 'settings', 'audio_url', 'thumbnail_url', 'status'];
+      const allowed = [
+        'title',
+        'duration',
+        'words',
+        'settings',
+        'audio_url',
+        'thumbnail_url',
+        'status',
+        'creator_id',
+        'brief_id',
+        'deliverable_id',
+      ];
       const set = {};
       for (const k of allowed) if (k in fields) set[k] = fields[k];
       if (!Object.keys(set).length) return res.status(400).json({ error: 'no fields to update' });
@@ -118,6 +129,9 @@ export default async function handler(req, res) {
       if ('audio_url' in set) await sql`UPDATE ugc_sessions SET audio_url = ${set.audio_url}, updated_at = now() WHERE id = ${id}`;
       if ('thumbnail_url' in set) await sql`UPDATE ugc_sessions SET thumbnail_url = ${set.thumbnail_url}, updated_at = now() WHERE id = ${id}`;
       if ('status' in set) await sql`UPDATE ugc_sessions SET status = ${set.status}, updated_at = now() WHERE id = ${id}`;
+      if ('creator_id' in set) await sql`UPDATE ugc_sessions SET creator_id = ${Number(set.creator_id) || null}, updated_at = now() WHERE id = ${id}`;
+      if ('brief_id' in set) await sql`UPDATE ugc_sessions SET brief_id = ${Number(set.brief_id) || null}, updated_at = now() WHERE id = ${id}`;
+      if ('deliverable_id' in set) await sql`UPDATE ugc_sessions SET deliverable_id = ${Number(set.deliverable_id) || null}, updated_at = now() WHERE id = ${id}`;
 
       return res.json({ session: await ownRow(id) });
     }
