@@ -313,9 +313,9 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
       {attributionRate < 100 ? (
         <section className="campaign-attribution">
           <div>
-            <span>Creator performance setup</span>
-            <strong>{attributionRate}% of launch history is linked to creators</strong>
-            <p>Format and hook evidence is available now. Link historical creator labels to unlock genuine proven-creator allocation.</p>
+            <span>Source performance setup</span>
+            <strong>{attributionRate}% of launch history has source attribution</strong>
+            <p>Link external creator labels where useful. Founder, internal, and tool-generated ads count once they are source-tagged.</p>
           </div>
           <button onClick={() => setShowAttribution(current => !current)}>
             {showAttribution ? 'Hide mapping' : `Map ${(attribution.unlinked_labels || []).length} labels`}

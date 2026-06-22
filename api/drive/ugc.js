@@ -294,8 +294,10 @@ export default async function handler(req, res) {
       // Accepts EITHER a single fileId OR a pair { feedFileId, storyFileId } for placement-asset customization.
       const {
         fileId, pair, adsetId, pageId, destUrl, adName, headline, primaryText,
-        creator, creatorId, briefId, deliverableId, productId, angleId, campaignId,
+        creator, creatorId, sourceType, sourceLabel, briefId, deliverableId, productId, angleId, campaignId,
       } = req.body;
+      const attributionSourceType = sourceType || (creatorId ? 'external_creator' : null);
+      const attributionSourceLabel = sourceLabel || creator || null;
       const isPair = !!pair && pair.feedFileId && pair.storyFileId;
       await ensureCreatorOpsTables(appAccess.sql);
       await assertBrandSafe(appAccess.sql, [adName, headline, primaryText].filter(Boolean).join('\n'));
@@ -567,9 +569,9 @@ export default async function handler(req, res) {
               const sql = neon(process.env.DATABASE_URL);
               await sql`
                 INSERT INTO launch_history
-                  (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, brief_id, deliverable_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
+                  (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, source_type, source_label, brief_id, deliverable_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
                 VALUES
-                  (${adData.id}, ${adsetId}, ${campaignId || null}, ${pair.feedFileId}, ${feed.fileMeta.name + ' + ' + story.fileMeta.name}, ${creator || null}, ${creatorId || null}, ${briefId || null}, ${deliverableId || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${feed.mimeType + ' (paired)'}, ${appAccess.userId}, ${appAccess.email || null}, ${feed.blobUrl || null})
+                  (${adData.id}, ${adsetId}, ${campaignId || null}, ${pair.feedFileId}, ${feed.fileMeta.name + ' + ' + story.fileMeta.name}, ${creator || null}, ${creatorId || null}, ${attributionSourceType}, ${attributionSourceLabel}, ${briefId || null}, ${deliverableId || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${feed.mimeType + ' (paired)'}, ${appAccess.userId}, ${appAccess.email || null}, ${feed.blobUrl || null})
               `;
               await Promise.all([
                 markCreativeAssetLaunched(sql, {
@@ -577,14 +579,14 @@ export default async function handler(req, res) {
                   metaVideoId: feed.videoId, metaImageHash: feed.imageHash,
                   adId: adData.id, placementRole: 'feed',
                   groupKey: feed.videoId || feed.imageHash,
-                  creator, creatorId, briefId, deliverableId, productId, angleId,
+                  creator, creatorId, sourceType: attributionSourceType, sourceLabel: attributionSourceLabel, briefId, deliverableId, productId, angleId,
                 }),
                 markCreativeAssetLaunched(sql, {
                   driveFileId: pair.storyFileId, durableUrl: story.blobUrl,
                   metaVideoId: story.videoId, metaImageHash: story.imageHash,
                   adId: adData.id, placementRole: 'story',
                   groupKey: story.videoId || story.imageHash,
-                  creator, creatorId, briefId, deliverableId, productId, angleId,
+                  creator, creatorId, sourceType: attributionSourceType, sourceLabel: attributionSourceLabel, briefId, deliverableId, productId, angleId,
                 }),
               ]);
               emit({ step: 'db_log', status: 'done' });
@@ -802,9 +804,9 @@ export default async function handler(req, res) {
           const sql = neon(process.env.DATABASE_URL);
           await sql`
             INSERT INTO launch_history
-              (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, brief_id, deliverable_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
+              (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, source_type, source_label, brief_id, deliverable_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
             VALUES
-              (${adData.id}, ${adsetId}, ${campaignId || null}, ${fileId}, ${fileMeta.name}, ${creator || null}, ${creatorId || null}, ${briefId || null}, ${deliverableId || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${mimeType}, ${appAccess.userId}, ${appAccess.email || null}, ${sourceVideoUrl})
+              (${adData.id}, ${adsetId}, ${campaignId || null}, ${fileId}, ${fileMeta.name}, ${creator || null}, ${creatorId || null}, ${attributionSourceType}, ${attributionSourceLabel}, ${briefId || null}, ${deliverableId || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${mimeType}, ${appAccess.userId}, ${appAccess.email || null}, ${sourceVideoUrl})
           `;
           await markCreativeAssetLaunched(sql, {
             driveFileId: fileId,
@@ -816,6 +818,8 @@ export default async function handler(req, res) {
             groupKey: videoId || imageHash,
             creator,
             creatorId,
+            sourceType: attributionSourceType,
+            sourceLabel: attributionSourceLabel,
             briefId,
             deliverableId,
             productId,

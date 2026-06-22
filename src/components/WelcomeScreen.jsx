@@ -188,8 +188,8 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
       cards.push({
         key: 'planner-attribution',
         eyebrow: 'Performance loop',
-        title: `${totalLaunches - attributedLaunches} launch${totalLaunches - attributedLaunches === 1 ? '' : 'es'} need creator attribution`,
-        detail: 'Match historical labels to creators so the planner can pick proven creators using real account data.',
+        title: `${totalLaunches - attributedLaunches} launch${totalLaunches - attributedLaunches === 1 ? '' : 'es'} need source attribution`,
+        detail: 'Match external UGC to creators, or tag founder/internal/tool-generated ads so the planner learns from clean source data.',
         count: totalLaunches - attributedLaunches,
         action: 'Open planner mapping',
         target: { type: 'tab', value: 'campaign-planner' },

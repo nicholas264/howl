@@ -74,8 +74,8 @@ export default function CreativePerformanceWorkspace({
       .filter(g => !needle || (g.name || '').toLowerCase().includes(needle))
       .filter(g => status === 'All' || statusFor(g) === status)
       .filter(g => creatorFilter === 'All'
-        || (creatorFilter === 'Unassigned' ? !g.creatorId
-          : creatorFilter === 'Suggested' ? !g.creatorId && !!g.suggestedCreatorId
+        || (creatorFilter === 'Unassigned' ? !g.creatorId && !g.sourceType
+          : creatorFilter === 'Suggested' ? !g.creatorId && !g.sourceType && !!g.suggestedCreatorId
             : String(g.creatorId) === creatorFilter))
       .sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
   }, [creativeTable, creatorFilter, query, status, sortKey]);
@@ -140,7 +140,7 @@ export default function CreativePerformanceWorkspace({
   };
   const applyHighConfidenceSuggestions = async () => {
     const assignments = (creativeTable?.groups || [])
-      .filter(group => !group.creatorId && group.suggestedCreatorId && group.suggestionConfidence === 'high')
+      .filter(group => !group.creatorId && !group.sourceType && group.suggestedCreatorId && group.suggestionConfidence === 'high')
       .slice(0, 100)
       .map(group => ({ groupKey: group.groupKey, creatorId: group.suggestedCreatorId }));
     if (!assignments.length) return;
@@ -162,9 +162,9 @@ export default function CreativePerformanceWorkspace({
   const totalRevenue = groups.reduce((sum, g) => sum + (g.purchaseValue || 0), 0);
   const winners = groups.filter(g => statusFor(g) === 'Winner').length;
   const allGroups = creativeTable?.groups || [];
-  const assignedCount = allGroups.filter(group => group.creatorId).length;
-  const suggestedCount = allGroups.filter(group => !group.creatorId && group.suggestedCreatorId).length;
-  const highConfidenceCount = allGroups.filter(group => !group.creatorId && group.suggestionConfidence === 'high').length;
+  const assignedCount = allGroups.filter(group => group.creatorId || group.sourceType).length;
+  const suggestedCount = allGroups.filter(group => !group.creatorId && !group.sourceType && group.suggestedCreatorId).length;
+  const highConfidenceCount = allGroups.filter(group => !group.creatorId && !group.sourceType && group.suggestionConfidence === 'high').length;
 
   return (
     <section className="motion-workspace">
@@ -212,9 +212,9 @@ export default function CreativePerformanceWorkspace({
 
       <div className="motion-attribution">
         <div className="motion-attribution-copy">
-          <span>Creator attribution</span>
-          <strong>{assignedCount} assigned · {allGroups.length - assignedCount} need review</strong>
-          <p>HOWL matches unique creator names and social handles found in Meta creative names. Review uncertain matches individually; only high-confidence matches can be applied in bulk.</p>
+          <span>Source attribution</span>
+          <strong>{assignedCount} source-attributed · {allGroups.length - assignedCount} need review</strong>
+          <p>External UGC should map to a creator. Founder, internal employee, and in-app generated ads can be source-tagged without forcing a fake creator record.</p>
         </div>
         <div className="motion-attribution-stats">
           <div><span>Suggested</span><strong>{suggestedCount}</strong></div>
@@ -312,8 +312,11 @@ export default function CreativePerformanceWorkspace({
                     <option value="">Unassigned</option>
                     {creators.map(creator => <option key={creator.id} value={creator.id}>{creator.name}</option>)}
                   </select>
+                  {!g.creatorId && g.sourceType ? (
+                    <small>{g.sourceType.replaceAll('_', ' ')} · {g.sourceLabel || 'source tagged'}</small>
+                  ) : null}
                 </div>
-                {canManageCreators && !g.creatorId && g.suggestedCreatorId ? (
+                {canManageCreators && !g.creatorId && !g.sourceType && g.suggestedCreatorId ? (
                   <button className="motion-creator-suggestion" title={g.suggestionReason} onClick={() => assignCreator(g, g.suggestedCreatorId)}>
                     <span>{g.suggestionConfidence === 'high' ? 'High confidence' : 'Review match'}</span>
                     Use {g.suggestedCreatorName}
@@ -386,7 +389,10 @@ export default function CreativePerformanceWorkspace({
                     <option value="">Unassigned</option>
                     {creators.map(creator => <option key={creator.id} value={creator.id}>{creator.name}</option>)}
                   </select>
-                  {canManageCreators && !g.creatorId && g.suggestedCreatorId ? (
+                  {!g.creatorId && g.sourceType ? (
+                    <small className="motion-source-tag">{g.sourceType.replaceAll('_', ' ')} · {g.sourceLabel || 'source tagged'}</small>
+                  ) : null}
+                  {canManageCreators && !g.creatorId && !g.sourceType && g.suggestedCreatorId ? (
                     <button className="motion-table-suggestion" title={g.suggestionReason} onClick={() => assignCreator(g, g.suggestedCreatorId)}>
                       Use {g.suggestedCreatorName}
                     </button>

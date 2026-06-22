@@ -20,6 +20,8 @@ export async function ensureCreativeAssetTables(sql) {
       placement_role       TEXT,
       group_key            TEXT,
       creator              TEXT,
+      source_type          TEXT,
+      source_label         TEXT,
       product_id           TEXT,
       angle_id             TEXT,
       transcript           TEXT,
@@ -37,6 +39,8 @@ export async function ensureCreativeAssetTables(sql) {
   await sql`ALTER TABLE creative_assets ADD COLUMN IF NOT EXISTS creator_id BIGINT`;
   await sql`ALTER TABLE creative_assets ADD COLUMN IF NOT EXISTS brief_id BIGINT`;
   await sql`ALTER TABLE creative_assets ADD COLUMN IF NOT EXISTS deliverable_id BIGINT`;
+  await sql`ALTER TABLE creative_assets ADD COLUMN IF NOT EXISTS source_type TEXT`;
+  await sql`ALTER TABLE creative_assets ADD COLUMN IF NOT EXISTS source_label TEXT`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creative_assets_creator_id ON creative_assets(creator_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creative_assets_brief_id ON creative_assets(brief_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creative_assets_deliverable_id ON creative_assets(deliverable_id)`;
@@ -76,6 +80,8 @@ export async function backfillCreativeAssetsFromLaunchHistory(sql) {
       meta_image_hash = COALESCE(EXCLUDED.meta_image_hash, creative_assets.meta_image_hash),
       group_key = COALESCE(EXCLUDED.group_key, creative_assets.group_key),
       creator = COALESCE(EXCLUDED.creator, creative_assets.creator),
+      source_type = COALESCE(EXCLUDED.source_type, creative_assets.source_type),
+      source_label = COALESCE(EXCLUDED.source_label, creative_assets.source_label),
       product_id = COALESCE(EXCLUDED.product_id, creative_assets.product_id),
       angle_id = COALESCE(EXCLUDED.angle_id, creative_assets.angle_id),
       updated_at = now()
@@ -124,6 +130,8 @@ export async function markCreativeAssetLaunched(sql, {
   groupKey,
   creator,
   creatorId,
+  sourceType,
+  sourceLabel,
   briefId,
   deliverableId,
   productId,
@@ -140,6 +148,8 @@ export async function markCreativeAssetLaunched(sql, {
       group_key = COALESCE(${groupKey || metaVideoId || metaImageHash || null}, group_key),
       creator = COALESCE(${creator || null}, creator),
       creator_id = COALESCE(${creatorId || null}, creator_id),
+      source_type = COALESCE(${sourceType || null}, source_type),
+      source_label = COALESCE(${sourceLabel || null}, source_label),
       brief_id = COALESCE(${briefId || null}, brief_id),
       deliverable_id = COALESCE(${deliverableId || null}, deliverable_id),
       product_id = COALESCE(${productId || null}, product_id),

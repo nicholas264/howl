@@ -8,11 +8,13 @@ async function logLaunch(row) {
     if (!process.env.DATABASE_URL) return;
     const { neon } = await import('@neondatabase/serverless');
     const sql = neon(process.env.DATABASE_URL);
+    await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS source_type TEXT`;
+    await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS source_label TEXT`;
     const [launch] = await sql`
       INSERT INTO launch_history
-        (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, brief_id, deliverable_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
+        (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, source_type, source_label, brief_id, deliverable_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
       VALUES
-        (${row.ad_id}, ${row.adset_id || null}, ${row.campaign_id || null}, ${row.drive_file_id || null}, ${row.drive_file_name || null}, ${row.creator || null}, ${row.creator_id || null}, ${row.brief_id || null}, ${row.deliverable_id || null}, ${row.product_id || null}, ${row.angle_id || null}, ${row.ad_name || null}, ${row.headline || null}, ${row.primary_text || null}, ${row.dest_url || null}, ${row.mime_type || null}, ${row.launched_by_user_id || null}, ${row.launched_by_email || null}, ${row.source_video_url || null})
+        (${row.ad_id}, ${row.adset_id || null}, ${row.campaign_id || null}, ${row.drive_file_id || null}, ${row.drive_file_name || null}, ${row.creator || null}, ${row.creator_id || null}, ${row.source_type || null}, ${row.source_label || null}, ${row.brief_id || null}, ${row.deliverable_id || null}, ${row.product_id || null}, ${row.angle_id || null}, ${row.ad_name || null}, ${row.headline || null}, ${row.primary_text || null}, ${row.dest_url || null}, ${row.mime_type || null}, ${row.launched_by_user_id || null}, ${row.launched_by_email || null}, ${row.source_video_url || null})
       RETURNING id
     `;
     if (row.source_video_url) {
@@ -20,11 +22,12 @@ async function logLaunch(row) {
       const [asset] = await sql`
         INSERT INTO creative_assets
           (drive_file_name, mime_type, durable_url, ad_id, creator, creator_id,
-           brief_id, deliverable_id, product_id, angle_id, placement_role,
+           source_type, source_label, brief_id, deliverable_id, product_id, angle_id, placement_role,
            transcript_status, updated_at)
         VALUES
           (${row.ad_name || null}, ${row.mime_type || 'video/mp4'}, ${row.source_video_url},
            ${row.ad_id}, ${row.creator || null}, ${row.creator_id || null},
+           ${row.source_type || null}, ${row.source_label || null},
            ${row.brief_id || null}, ${row.deliverable_id || null}, ${row.product_id || null},
            ${row.angle_id || null}, 'launched', 'pending', now())
         RETURNING id
@@ -627,6 +630,8 @@ export default async function handler(req, res) {
           mime_type: mimeType || 'image',
           creator: req.body.creator || 'Static Builder',
           creator_id: req.body.creatorId || null,
+          source_type: req.body.sourceType || 'tool_generated',
+          source_label: req.body.sourceLabel || req.body.creator || 'In-app builder',
           brief_id: req.body.briefId || null,
           deliverable_id: req.body.deliverableId || null,
           source_video_url: req.body.sourceVideoUrl || null,
@@ -712,6 +717,8 @@ export default async function handler(req, res) {
           mime_type: 'image (paired)',
           creator: req.body.creator || 'Static Builder',
           creator_id: req.body.creatorId || null,
+          source_type: req.body.sourceType || 'tool_generated',
+          source_label: req.body.sourceLabel || req.body.creator || 'In-app builder',
           brief_id: req.body.briefId || null,
           deliverable_id: req.body.deliverableId || null,
           source_video_url: req.body.sourceVideoUrl || null,
@@ -805,6 +812,8 @@ export default async function handler(req, res) {
           mime_type: preUploadedVideoId ? 'video/mp4' : 'image',
           creator: req.body.creator || 'Static Builder',
           creator_id: req.body.creatorId || null,
+          source_type: req.body.sourceType || 'tool_generated',
+          source_label: req.body.sourceLabel || req.body.creator || 'In-app builder',
           brief_id: req.body.briefId || null,
           deliverable_id: req.body.deliverableId || null,
           source_video_url: req.body.sourceVideoUrl || null,
@@ -888,6 +897,8 @@ export default async function handler(req, res) {
           mime_type: 'carousel',
           creator: req.body.creator || 'Static Builder',
           creator_id: req.body.creatorId || null,
+          source_type: req.body.sourceType || 'tool_generated',
+          source_label: req.body.sourceLabel || req.body.creator || 'In-app builder',
           brief_id: req.body.briefId || null,
           deliverable_id: req.body.deliverableId || null,
           ...actor,
@@ -1116,6 +1127,8 @@ export default async function handler(req, res) {
             mime_type: item.type || 'static',
             creator: item.creator || req.body.creator || 'Static Builder',
             creator_id: item.creatorId || req.body.creatorId || null,
+            source_type: item.sourceType || req.body.sourceType || 'tool_generated',
+            source_label: item.sourceLabel || req.body.sourceLabel || item.creator || req.body.creator || 'In-app builder',
             brief_id: item.briefId || req.body.briefId || null,
             deliverable_id: item.deliverableId || req.body.deliverableId || null,
             source_video_url: item.sourceVideoUrl || null,
@@ -1419,6 +1432,8 @@ export default async function handler(req, res) {
             COALESCE(a.video_thruplays, 0)    AS video_thruplays,
             attribution.creator_id,
             attribution.creator_name,
+            attribution.source_type,
+            attribution.source_label,
             COALESCE(attribution.creator_count, 0)::int AS creator_count,
             EXISTS (SELECT 1 FROM creative_analysis ca WHERE ca.group_key = m.group_key) AS is_analyzed,
             (SELECT q.status FROM creative_analysis_queue q WHERE q.group_key = m.group_key) AS analysis_queue_status
@@ -1428,17 +1443,20 @@ export default async function handler(req, res) {
             SELECT
               min(linked.creator_id) AS creator_id,
               min(c.name) AS creator_name,
+              min(linked.source_type) FILTER (WHERE linked.source_type IS NOT NULL) AS source_type,
+              min(linked.source_label) FILTER (WHERE linked.source_label IS NOT NULL) AS source_label,
               count(DISTINCT linked.creator_id) FILTER (WHERE linked.creator_id IS NOT NULL) AS creator_count
             FROM (
-              SELECT assignment.creator_id
+              SELECT assignment.creator_id, 'external_creator'::text AS source_type, c.name AS source_label
               FROM creative_creator_assignments assignment
+              LEFT JOIN creators c ON c.id = assignment.creator_id
               WHERE assignment.group_key = m.group_key
               UNION ALL
-              SELECT asset.creator_id
+              SELECT asset.creator_id, asset.source_type, asset.source_label
               FROM creative_assets asset
               WHERE asset.group_key = m.group_key
               UNION ALL
-              SELECT launch.creator_id
+              SELECT launch.creator_id, launch.source_type, launch.source_label
               FROM launch_history launch
               JOIN creative_performance linked_cp ON linked_cp.ad_id = launch.ad_id
               WHERE linked_cp.group_key = m.group_key
@@ -1466,7 +1484,7 @@ export default async function handler(req, res) {
           const impressions = Number(r.impressions) || 0;
           const v3s = Number(r.video_3s_views) || 0;
           const vThru = Number(r.video_thruplays) || 0;
-          const suggestion = !r.creator_id ? suggestCreator(r.name, matchIndex) : null;
+          const suggestion = !r.creator_id && !r.source_type ? suggestCreator(r.name, matchIndex) : null;
           return {
             groupKey: r.group_key,
             name: r.name,
@@ -1486,6 +1504,8 @@ export default async function handler(req, res) {
             clicks,
             creatorId: r.creator_id ? Number(r.creator_id) : null,
             creatorName: r.creator_name || null,
+            sourceType: r.source_type || null,
+            sourceLabel: r.source_label || null,
             creatorConflict: Number(r.creator_count || 0) > 1,
             suggestedCreatorId: suggestion?.creatorId || null,
             suggestedCreatorName: suggestion?.creatorName || null,
@@ -1522,13 +1542,20 @@ export default async function handler(req, res) {
         }
         const assets = await sql`
           UPDATE creative_assets
-          SET creator_id = ${creatorId}, creator = ${creator?.name || null}, updated_at = now()
+          SET creator_id = ${creatorId},
+              creator = ${creator?.name || null},
+              source_type = ${creatorId ? 'external_creator' : null},
+              source_label = ${creator?.name || null},
+              updated_at = now()
           WHERE group_key = ${groupKey}
           RETURNING id
         `;
         const launches = await sql`
           UPDATE launch_history launch
-          SET creator_id = ${creatorId}, creator = ${creator?.name || null}
+          SET creator_id = ${creatorId},
+              creator = ${creator?.name || null},
+              source_type = ${creatorId ? 'external_creator' : null},
+              source_label = ${creator?.name || null}
           WHERE launch.ad_id IN (
             SELECT ad_id FROM creative_performance WHERE group_key = ${groupKey}
           )
@@ -1583,12 +1610,19 @@ export default async function handler(req, res) {
           `;
           await sql`
             UPDATE creative_assets
-            SET creator_id = ${assignment.creatorId}, creator = ${creator.name}, updated_at = now()
+            SET creator_id = ${assignment.creatorId},
+                creator = ${creator.name},
+                source_type = 'external_creator',
+                source_label = ${creator.name},
+                updated_at = now()
             WHERE group_key = ${assignment.groupKey}
           `;
           await sql`
             UPDATE launch_history launch
-            SET creator_id = ${assignment.creatorId}, creator = ${creator.name}
+            SET creator_id = ${assignment.creatorId},
+                creator = ${creator.name},
+                source_type = 'external_creator',
+                source_label = ${creator.name}
             WHERE launch.ad_id IN (
               SELECT ad_id FROM creative_performance WHERE group_key = ${assignment.groupKey}
             )

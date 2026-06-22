@@ -589,14 +589,20 @@ export default async function handler(req, res) {
         sql`
           SELECT
             count(*)::int AS total_launches,
-            count(*) FILTER (WHERE creator_id IS NOT NULL)::int AS attributed_launches,
+            count(*) FILTER (
+              WHERE creator_id IS NOT NULL
+                OR source_type IN ('internal_employee', 'founder', 'tool_generated')
+            )::int AS attributed_launches,
             count(DISTINCT creator_id) FILTER (WHERE creator_id IS NOT NULL)::int AS attributed_creators
           FROM launch_history
         `,
         sql`
           SELECT creator AS label, count(*)::int AS launches
           FROM launch_history
-          WHERE creator_id IS NULL AND creator IS NOT NULL AND btrim(creator) <> ''
+          WHERE creator_id IS NULL
+            AND source_type IS NULL
+            AND creator IS NOT NULL
+            AND btrim(creator) <> ''
           GROUP BY creator
           ORDER BY launches DESC, creator
         `,

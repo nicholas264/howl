@@ -21,6 +21,8 @@ export default async function handler(req, res) {
         drive_file_id TEXT,
         drive_file_name TEXT,
         creator      TEXT,
+        source_type  TEXT,
+        source_label TEXT,
         product_id   TEXT,
         angle_id     TEXT,
         ad_name      TEXT,
@@ -243,6 +245,8 @@ export default async function handler(req, res) {
     await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS creator_id BIGINT`;
     await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS brief_id BIGINT`;
     await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS deliverable_id BIGINT`;
+    await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS source_type TEXT`;
+    await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS source_label TEXT`;
     await sql`CREATE INDEX IF NOT EXISTS idx_launch_history_launched_by ON launch_history(launched_by_user_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_launch_history_creator_id ON launch_history(creator_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_launch_history_brief_id ON launch_history(brief_id)`;

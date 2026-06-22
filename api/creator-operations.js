@@ -61,12 +61,20 @@ async function loadSetup(sql) {
             WHERE a.group_key = live_groups.group_key
           ) OR EXISTS (
             SELECT 1 FROM creative_assets asset
-            WHERE asset.group_key = live_groups.group_key AND asset.creator_id IS NOT NULL
+            WHERE asset.group_key = live_groups.group_key
+              AND (
+                asset.creator_id IS NOT NULL
+                OR asset.source_type IN ('internal_employee', 'founder', 'tool_generated')
+              )
           ) OR EXISTS (
             SELECT 1
             FROM launch_history launch
             JOIN creative_performance cp ON cp.ad_id = launch.ad_id
-            WHERE cp.group_key = live_groups.group_key AND launch.creator_id IS NOT NULL
+            WHERE cp.group_key = live_groups.group_key
+              AND (
+                launch.creator_id IS NOT NULL
+                OR launch.source_type IN ('internal_employee', 'founder', 'tool_generated')
+              )
           )
         )::int AS assigned_groups
       FROM live_groups
@@ -201,8 +209,8 @@ async function loadSetup(sql) {
       },
       unassignedGroups > 0 && {
         key: 'attribution',
-        title: 'Match live creative to creators',
-        detail: 'Connect current Meta performance to creator records so planning can learn from what actually worked.',
+        title: 'Add source attribution to live creative',
+        detail: 'Map external UGC to creator records, or tag founder, internal, and tool-generated ads so planning learns from clean source data.',
         count: unassignedGroups,
         action: 'Open attribution',
       },

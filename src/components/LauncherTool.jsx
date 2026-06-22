@@ -52,6 +52,13 @@ const OBJECTIVES = [
   { value: 'OUTCOME_LEADS',     label: 'Leads' },
 ];
 
+const SOURCE_ATTRIBUTIONS = [
+  { value: 'external_creator', label: 'Creator UGC', requiresCreator: true, hint: 'Use for paid/inbound creator footage that should feed creator performance.' },
+  { value: 'internal_employee', label: 'Internal employee', requiresLabel: true, hint: 'Use for HOWL team footage without an external creator record.' },
+  { value: 'founder', label: 'Founder', requiresLabel: true, hint: 'Use for founder-led creative or founder voiceover.' },
+  { value: 'tool_generated', label: 'Made in tool', hint: 'Use for static, callout, review, or other in-app generated ads.' },
+];
+
 function todayISO() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -69,6 +76,10 @@ function destUrlFor(productId) {
 
 function normalizeCreatorName(name = '') {
   return String(name).trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function sourceConfig(value) {
+  return SOURCE_ATTRIBUTIONS.find(item => item.value === value) || SOURCE_ATTRIBUTIONS[0];
 }
 
 const S = {
@@ -270,7 +281,12 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   }, [creators]);
   const updateCreator = (id, name) => {
     const creator = findCreatorByName(name);
-    updateMeta(id, { creator: name, creatorId: creator?.id || null });
+    updateMeta(id, {
+      creator: name,
+      creatorId: creator?.id || null,
+      sourceType: 'external_creator',
+      sourceLabel: creator?.name || name,
+    });
   };
 
   // Seed defaults for new drive files using folder-aware creator extraction.
@@ -287,6 +303,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           next[id] = {
             creator: creator?.name || creatorName,
             creatorId: creator?.id || null,
+            sourceType: 'external_creator',
+            sourceLabel: creator?.name || creatorName,
             productId: config.defaultProduct,
             headline: '',
             primaryText: '',
@@ -303,6 +321,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           next[id] = {
             creator: c.creator || config.defaultCreator || 'Static Builder',
             creatorId: c.creatorId || null,
+            sourceType: c.creatorId ? 'external_creator' : (c.sourceType || 'tool_generated'),
+            sourceLabel: c.sourceLabel || c.creator || 'In-app builder',
             briefId: c.briefId || null,
             deliverableId: c.deliverableId || null,
             productId: config.defaultProduct,
@@ -340,11 +360,12 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   const launchDriveItem = async (item) => {
     const id = item.unifiedId;
     const m = meta[id] || {};
+    const attribution = sourceConfig(m.sourceType || 'external_creator');
     if (!selectedAdsetId || selectedAdsetId === '__new__') return setGlobalError('Pick an ad set first.');
     const productUrl = destUrlFor(m.productId);
     if (!productUrl) return setItemStatus(id, 'error', 'Selected product has no URL set in data/products.js');
-    if (!m.creator?.trim()) return setItemStatus(id, 'error', 'Creator required');
-    if (!m.creatorId) return setItemStatus(id, 'error', 'Choose an exact creator record before launching this Drive asset');
+    if (attribution.requiresCreator && !m.creatorId) return setItemStatus(id, 'error', 'Choose an exact creator record before launching creator UGC');
+    if (attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim()) return setItemStatus(id, 'error', 'Add the internal/founder name before launching');
     if (!m.headline?.trim() && !m.primaryText?.trim()) return setItemStatus(id, 'error', 'Headline or primary text required');
 
     setItemStatus(id, 'pushing', '');
@@ -360,8 +381,10 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       adName,
       headline: m.headline?.trim() || '',
       primaryText: m.primaryText?.trim() || '',
-      creator: m.creator.trim(),
-      creatorId: m.creatorId || null,
+      creator: (m.creator || m.sourceLabel || attribution.label).trim(),
+      creatorId: attribution.requiresCreator ? (m.creatorId || null) : null,
+      sourceType: m.sourceType || 'external_creator',
+      sourceLabel: (m.sourceLabel || m.creator || attribution.label).trim(),
       productId: m.productId || '',
       campaignId: selectedCampaignId,
     };
@@ -411,6 +434,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   const launchCartItem = async (item) => {
     const id = item.unifiedId;
     const m = meta[id] || {};
+    const attribution = sourceConfig(m.sourceType || (m.creatorId ? 'external_creator' : 'tool_generated'));
     if (!selectedAdsetId || selectedAdsetId === '__new__') return setGlobalError('Pick an ad set first.');
     if (!config.pageId.trim()) return setGlobalError('Pick a Facebook Page.');
     const productUrl = destUrlFor(m.productId);
@@ -448,7 +472,9 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           pageId: config.pageId,
           instagramUserId: (config.instagramUserId || '').trim() || undefined,
           creator: m.creator || 'Static Builder',
-          creatorId: m.creatorId || null,
+          creatorId: attribution.requiresCreator ? (m.creatorId || null) : null,
+          sourceType: attribution.value,
+          sourceLabel: m.sourceLabel || m.creator || attribution.label,
           briefId: m.briefId || item.briefId || null,
           deliverableId: m.deliverableId || item.deliverableId || null,
           sourceVideoUrl: item.sourceVideoUrl || null,
@@ -503,7 +529,27 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
 
       // 3. Create ad
       setStep(id, 'meta_ad', 'running');
-      const ar = await fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_ad_from_creative', creativeId: cd.creativeId, adName, adsetId: selectedAdsetId, headline: m.headline, primaryText: m.primaryText || m.headline, destUrl: productUrl, mimeType, creator: m.creator || 'Static Builder', creatorId: m.creatorId || null, briefId: m.briefId || item.briefId || null, deliverableId: m.deliverableId || item.deliverableId || null, sourceVideoUrl: item.sourceVideoUrl || null }) });
+      const ar = await fetch('/api/meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_ad_from_creative',
+          creativeId: cd.creativeId,
+          adName,
+          adsetId: selectedAdsetId,
+          headline: m.headline,
+          primaryText: m.primaryText || m.headline,
+          destUrl: productUrl,
+          mimeType,
+          creator: m.creator || 'Static Builder',
+          creatorId: attribution.requiresCreator ? (m.creatorId || null) : null,
+          sourceType: attribution.value,
+          sourceLabel: m.sourceLabel || m.creator || attribution.label,
+          briefId: m.briefId || item.briefId || null,
+          deliverableId: m.deliverableId || item.deliverableId || null,
+          sourceVideoUrl: item.sourceVideoUrl || null,
+        }),
+      });
       const ad = await ar.json();
       if (ad.error) { setStep(id, 'meta_ad', 'error', ad.error); throw new Error(ad.error); }
       setStep(id, 'meta_ad', 'done', ad.adId);
@@ -693,8 +739,12 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         const m = meta[id] || {};
         const status = statuses[id] || { status: 'pending' };
         const stepDef = item.source === 'drive' ? DRIVE_STEPS : CART_STEPS;
+        const attribution = sourceConfig(m.sourceType || (item.source === 'drive' ? 'external_creator' : (m.creatorId ? 'external_creator' : 'tool_generated')));
         const isCreatorLinked = Boolean(m.creatorId);
-        const launchDisabled = status.status === 'pushing' || (item.source === 'drive' && !isCreatorLinked);
+        const missingExternalCreator = attribution.requiresCreator && !isCreatorLinked;
+        const missingSourceLabel = attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim();
+        const launchDisabled = status.status === 'pushing'
+          || (item.source === 'drive' && (missingExternalCreator || missingSourceLabel));
 
         return (
           <div key={id} style={S.card}>
@@ -757,15 +807,40 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
               </div>
               <div style={S.row}>
                 <div>
-                  <label style={S.label}>Creator</label>
-                  <input style={S.input} list="howl-creators" value={m.creator || ''} onChange={e => updateCreator(id, e.target.value)} placeholder="Search creator" />
-                  <datalist id="howl-creators">{creators.map(creator => <option key={creator.id} value={creator.name} />)}</datalist>
-                  {item.source === 'drive' && (
-                    <div style={S.linkedHint(isCreatorLinked)}>
-                      {isCreatorLinked ? 'Linked to creator record.' : 'Not linked. Pick the exact creator before launch.'}
-                    </div>
-                  )}
+                  <label style={S.label}>Source</label>
+                  <select
+                    style={S.select}
+                    value={attribution.value}
+                    onChange={e => {
+                      const nextSource = sourceConfig(e.target.value);
+                      updateMeta(id, {
+                        sourceType: nextSource.value,
+                        creatorId: nextSource.requiresCreator ? m.creatorId : null,
+                        sourceLabel: nextSource.value === 'tool_generated' ? 'In-app builder' : (m.sourceLabel || m.creator || ''),
+                      });
+                    }}
+                  >
+                    {SOURCE_ATTRIBUTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                  <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, lineHeight: 1.35 }}>{attribution.hint}</div>
                 </div>
+                {attribution.requiresCreator ? (
+                  <div>
+                    <label style={S.label}>Creator</label>
+                    <input style={S.input} list="howl-creators" value={m.creator || ''} onChange={e => updateCreator(id, e.target.value)} placeholder="Search creator" />
+                    <datalist id="howl-creators">{creators.map(creator => <option key={creator.id} value={creator.name} />)}</datalist>
+                    {item.source === 'drive' && (
+                      <div style={S.linkedHint(isCreatorLinked)}>
+                        {isCreatorLinked ? 'Linked to creator record.' : 'Not linked. Pick the exact creator before launch.'}
+                      </div>
+                    )}
+                  </div>
+                ) : attribution.requiresLabel ? (
+                  <div>
+                    <label style={S.label}>Person tag</label>
+                    <input style={S.input} value={m.sourceLabel || ''} onChange={e => updateMeta(id, { sourceLabel: e.target.value, creator: e.target.value })} placeholder={attribution.value === 'founder' ? 'Founder name' : 'Team member name'} />
+                  </div>
+                ) : null}
                 <div>
                   <label style={S.label}>Product</label>
                   <select style={S.select} value={m.productId || ''} onChange={e => updateMeta(id, { productId: e.target.value })}>
@@ -806,7 +881,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
               <button
                 onClick={() => launch(item)}
                 disabled={launchDisabled}
-                title={item.source === 'drive' && !isCreatorLinked ? 'Pick an exact creator record before launching.' : ''}
+                title={missingExternalCreator ? 'Pick an exact creator record before launching creator UGC.' : missingSourceLabel ? 'Add the internal/founder name before launching.' : ''}
                 style={S.btn(launchDisabled)}
               >
                 {status.status === 'pushing' ? 'Launching…' : status.status === 'success' ? 'Re-launch' : 'Launch'}
