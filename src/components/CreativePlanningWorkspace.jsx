@@ -125,6 +125,27 @@ export default function CreativePlanningWorkspace({ onOpenCreator }) {
         <div className={summary.overdue ? 'risk' : ''}><span>Overdue</span><strong>{summary.overdue || 0}</strong><small>assets remaining past due</small></div>
       </section>
 
+      {!!data?.recommendations?.length && (
+        <section className="planning-panel planning-actions">
+          <div className="planning-panel-head">
+            <span>Planning actions</span>
+            <small>What to do with this forecast</small>
+          </div>
+          <div>
+            {data.recommendations.map(item => (
+              <article key={item.key} className={item.severity}>
+                <i>{item.count ?? '!'}</i>
+                <span>
+                  <strong>{item.title}</strong>
+                  <small>{item.detail}</small>
+                </span>
+                <b>{item.action}</b>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className="planning-demand-grid">
         <section className="planning-panel planning-demand-result">
           <div className="planning-panel-head">

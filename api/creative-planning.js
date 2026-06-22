@@ -290,6 +290,59 @@ export default async function handler(req, res) {
       surplus_shortfall: newAssetsRequired == null ? null : summary.forecast - newAssetsRequired,
     };
 
+    const recommendations = [];
+    if (summary.overdue > 0) {
+      recommendations.push({
+        key: 'overdue',
+        severity: 'risk',
+        title: 'Recover overdue creator assets',
+        detail: `${summary.overdue} expected asset${summary.overdue === 1 ? '' : 's'} are past due and not complete. Open the deadline risk queue before adding more demand.`,
+        count: summary.overdue,
+        action: 'Resolve overdue deliverables',
+      });
+    }
+    if (summary.unscheduled > 0) {
+      recommendations.push({
+        key: 'unscheduled',
+        severity: 'warning',
+        title: 'Put contracted supply on the calendar',
+        detail: `${summary.unscheduled} committed asset${summary.unscheduled === 1 ? '' : 's'} are not tied to due dates yet. Schedule deliverables so the forecast becomes real capacity.`,
+        count: summary.unscheduled,
+        action: 'Schedule commitments',
+      });
+    }
+    if (demand.surplus_shortfall != null && demand.surplus_shortfall < 0) {
+      const shortage = Math.abs(demand.surplus_shortfall);
+      recommendations.push({
+        key: 'demand_shortfall',
+        severity: 'risk',
+        title: 'Source more creator output for spend goals',
+        detail: `This scenario needs ${demand.new_assets_required} new assets, but current supply forecasts ${summary.forecast}. Add ${shortage} more planned assets or lower the spend/win-rate assumptions.`,
+        count: shortage,
+        action: 'Close asset gap',
+      });
+    }
+    if (demand.ready && demand.surplus_shortfall >= 0 && summary.overdue === 0 && summary.unscheduled === 0) {
+      recommendations.push({
+        key: 'healthy',
+        severity: 'success',
+        title: 'Creative supply covers the current scenario',
+        detail: `Forecast supply covers required new assets by ${demand.surplus_shortfall}. Keep launch attribution current so the demand model stays trustworthy.`,
+        count: demand.surplus_shortfall,
+        action: 'Monitor performance loop',
+      });
+    }
+    if (!demand.ready) {
+      recommendations.push({
+        key: 'missing_assumptions',
+        severity: 'warning',
+        title: 'Finish demand assumptions',
+        detail: 'Add spend capacity per winner, expected win rate, and useful lifespan to calculate required monthly asset volume.',
+        count: null,
+        action: 'Save scenario assumptions',
+      });
+    }
+
     const byType = ['retainer', 'one_off', 'unassigned'].map(type => {
       const typeDeliverables = deliverables.filter(item => item.engagement_type === type);
       const typeCommitments = commitments.filter(item => item.engagement_type === type);
@@ -348,6 +401,7 @@ export default async function handler(req, res) {
       commitments,
       deliverables,
       risks,
+      recommendations,
       benchmarks: {
         ...rawBenchmarks,
         win_rate_at_target: historicalWinRate,
