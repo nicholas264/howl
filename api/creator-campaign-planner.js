@@ -58,12 +58,61 @@ function creatorScore(creator, productTitle) {
   };
 }
 
+function creatorFitSignals(creator) {
+  const signals = [];
+  const spend = Number(creator.spend || 0);
+  const revenue = Number(creator.revenue || 0);
+  const purchases = Number(creator.purchases || 0);
+  const roas = spend > 0 ? revenue / spend : 0;
+  const productSpend = Number(creator.product_spend || 0);
+  const productRevenue = Number(creator.product_revenue || 0);
+  const productRoas = productSpend > 0 ? productRevenue / productSpend : 0;
+  if (spend > 0) {
+    signals.push(`Creator history: $${Math.round(spend).toLocaleString()} spend, ${roas.toFixed(2)}x ROAS${purchases ? `, ${purchases} purchases` : ''}.`);
+  }
+  if (productSpend > 0) {
+    signals.push(`Product-adjacent history: $${Math.round(productSpend).toLocaleString()} spend, ${productRoas.toFixed(2)}x ROAS.`);
+  }
+  if (creator.niche) signals.push(`Niche: ${creator.niche}.`);
+  if (creator.strengths) signals.push(`Creator strengths: ${creator.strengths}.`);
+  if (creator.audience_demographics) signals.push(`Audience: ${creator.audience_demographics}.`);
+  if (creator.audience_psychographics) signals.push(`Audience mindset: ${creator.audience_psychographics}.`);
+  if (Array.isArray(creator.activities) && creator.activities.length) {
+    signals.push(`Native activities: ${creator.activities.slice(0, 6).join(', ')}.`);
+  }
+  if (creator.source_metadata?.application_why_howl) {
+    signals.push(`Inbound intent: ${creator.source_metadata.application_why_howl}`);
+  }
+  const social = Array.isArray(creator.socials) ? creator.socials.find(item => Number(item.followers) > 0) : null;
+  if (social) {
+    signals.push(`${social.platform}: ${Number(social.followers).toLocaleString()} followers${social.engagement_rate ? `, ${Number(social.engagement_rate).toFixed(1)}% engagement` : ''}.`);
+  }
+  return signals.slice(0, 8);
+}
+
+function creatorSnapshot(creator) {
+  return {
+    niche: creator.niche || null,
+    strengths: creator.strengths || null,
+    audience_demographics: creator.audience_demographics || null,
+    audience_psychographics: creator.audience_psychographics || null,
+    activities: Array.isArray(creator.activities) ? creator.activities.slice(0, 8) : [],
+    rate_notes: creator.rate_notes || null,
+    spend: Number(creator.spend || 0),
+    revenue: Number(creator.revenue || 0),
+    purchases: Number(creator.purchases || 0),
+    roas: Number(creator.roas || 0),
+    product_roas: Number(creator.product_roas || 0),
+    fit_signals: creatorFitSignals(creator),
+  };
+}
+
 async function loadEvidence(sql, windowDays, productTitle) {
   const creators = await sql`
     SELECT
       c.id, c.name, c.stage, c.status, c.niche, c.strengths,
       c.audience_demographics, c.audience_psychographics, c.activities,
-      c.rate_notes, c.location, c.bio,
+      c.rate_notes, c.location, c.bio, c.source_metadata,
       COALESCE(metrics.spend, 0)::float AS spend,
       COALESCE(metrics.revenue, 0)::float AS revenue,
       COALESCE(metrics.purchases, 0)::int AS purchases,
@@ -73,7 +122,7 @@ async function loadEvidence(sql, windowDays, productTitle) {
       COALESCE(metrics.product_titles, ARRAY[]::text[]) AS product_titles,
       COALESCE((
         SELECT json_agg(json_build_object(
-          'platform', s.platform, 'followers', s.followers,
+          'platform', s.platform, 'handle', s.handle, 'followers', s.followers,
           'avg_views', s.avg_views, 'engagement_rate', s.engagement_rate
         ))
         FROM creator_social_accounts s WHERE s.creator_id = c.id
@@ -159,6 +208,10 @@ function sanitizeAssignments(assignments, creators, count) {
     const creator = creatorMap.get(Number(assignment.creator_id));
     if (!creator) return [];
     const format = FORMATS.has(assignment.format) ? assignment.format : 'talking_head';
+    const generatedSignals = Array.isArray(assignment.creator_fit_signals)
+      ? assignment.creator_fit_signals.slice(0, 5).map(item => clean(item, 500)).filter(Boolean)
+      : [];
+    const fitSignals = generatedSignals.length ? generatedSignals : creatorFitSignals(creator).slice(0, 5);
     return [{
       slot: index + 1,
       creator_id: Number(creator.id),
@@ -169,6 +222,8 @@ function sanitizeAssignments(assignments, creators, count) {
       angle: clean(assignment.angle, 500),
       hypothesis: clean(assignment.hypothesis, 1500),
       creator_match: clean(assignment.creator_match, 1500),
+      creator_fit_signals: fitSignals,
+      creator_snapshot: creatorSnapshot(creator),
       performance_logic: clean(assignment.performance_logic, 2000),
       evidence: Array.isArray(assignment.evidence) ? assignment.evidence.slice(0, 4).map(item => clean(item, 500)).filter(Boolean) : [],
       opening_visual: clean(assignment.opening_visual, 1500),
@@ -311,6 +366,9 @@ Creative quality rules:
 - "High production" still needs direct-response clarity. Cinematic footage is support, not the idea.
 - Hooks, body, and CTA must work as one argument. Do not write interchangeable hook lists.
 - Explain every creator and concept choice with concrete supplied metrics. State limitations when evidence is thin.
+- Creator fit must use the supplied creator intelligence: strengths, niche, audience demographics, audience psychographics, activities, social metrics, application intent, and prior attributed performance.
+- If audience psychographics are supplied, use them to shape the hook/body/CTA argument. Do not ignore them.
+- Every assignment must include creator_fit_signals: short bullets that explain why this creator should be matched to this concept.
 - Preserve proven mechanisms while allocating net-new slots to genuinely informative tests.
 - Treat the supplied brand guidelines as hard constraints. Never use prohibited language or unsupported claims.
 - Return only valid JSON.`;
@@ -348,6 +406,7 @@ Return:
     "angle": "specific persuasion angle",
     "hypothesis": "falsifiable expected result",
     "creator_match": "why this creator is right",
+    "creator_fit_signals": ["creator-specific signal used in this decision"],
     "performance_logic": "plain-English explanation of the account evidence",
     "evidence": ["metric statement with timeframe and sample size"],
     "opening_visual": "exact first 0-3 second visual",
@@ -428,6 +487,9 @@ async function saveBriefs(sql, access, planId, assignmentOverride = null) {
     const briefText = [
       `FORMAT\n${assignment.format?.replaceAll('_', ' ')}`,
       `WHY THIS CREATOR\n${assignment.creator_match}`,
+      assignment.creator_fit_signals?.length
+        ? `CREATOR FIT SIGNALS\n${assignment.creator_fit_signals.map((item, index) => `${index + 1}. ${item}`).join('\n')}`
+        : null,
       `PERFORMANCE LOGIC\n${assignment.performance_logic}`,
       `HYPOTHESIS\n${assignment.hypothesis}`,
       `OPENING VISUAL\n${assignment.opening_visual}`,

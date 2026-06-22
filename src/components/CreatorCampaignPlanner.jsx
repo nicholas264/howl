@@ -420,6 +420,7 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
                   <span>Recommended portfolio</span>
                   <h2>{plan.product_title}</h2>
                   <p>{plan.strategy_summary || 'Performance-led creator allocation.'}</p>
+                  {plan.evidence?.allocation_logic ? <small>{plan.evidence.allocation_logic}</small> : null}
                 </div>
                 <div className="campaign-plan-stats">
                   <div><strong>{assignments.length}</strong><span>assets</span></div>
@@ -466,8 +467,24 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
                           <span>Why HOWL chose this</span>
                           <p>{assignment.performance_logic}</p>
                           <p>{assignment.creator_match}</p>
+                          {(assignment.creator_fit_signals || []).length ? (
+                            <div>{assignment.creator_fit_signals.map(item => <i key={item}>{item}</i>)}</div>
+                          ) : null}
                           <div>{(assignment.evidence || []).map(item => <i key={item}>{item}</i>)}</div>
                         </section>
+                        {assignment.creator_snapshot ? (
+                          <section className="campaign-creator-snapshot">
+                            <span>Creator intelligence used</span>
+                            <div>
+                              <p><b>Niche</b>{assignment.creator_snapshot.niche || 'Not set'}</p>
+                              <p><b>Strengths</b>{assignment.creator_snapshot.strengths || 'Not set'}</p>
+                              <p><b>Audience</b>{assignment.creator_snapshot.audience_demographics || 'Not set'}</p>
+                              <p><b>Mindset</b>{assignment.creator_snapshot.audience_psychographics || 'Not set'}</p>
+                              <p><b>Creator ROAS</b>{Number(assignment.creator_snapshot.roas || 0).toFixed(2)}x</p>
+                              <p><b>Product ROAS</b>{Number(assignment.creator_snapshot.product_roas || 0).toFixed(2)}x</p>
+                            </div>
+                          </section>
+                        ) : null}
                         <div className="campaign-creative-grid">
                           <section><span>Hypothesis</span><p>{assignment.hypothesis}</p></section>
                           <section><span>Opening frame</span><p>{assignment.opening_visual}</p></section>
