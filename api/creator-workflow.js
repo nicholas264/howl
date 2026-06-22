@@ -872,7 +872,10 @@ export default async function handler(req, res) {
           await sql`
             UPDATE ugc_sessions
             SET creator_id = ${creatorId}, brief_id = ${deliverable.brief_id || null},
-                deliverable_id = ${deliverable.id}, updated_at = now()
+                deliverable_id = ${deliverable.id},
+                source_type = 'external_creator',
+                source_label = null,
+                updated_at = now()
             WHERE id = ${deliverable.ugc_session_id}
           `;
         }
@@ -916,11 +919,11 @@ export default async function handler(req, res) {
             transaction`
               INSERT INTO ugc_sessions (
                 id, user_id, title, file_name, file_size, video_url, settings, status,
-                creator_id, brief_id, deliverable_id
+                creator_id, source_type, source_label, brief_id, deliverable_id
               ) VALUES (
                 ${sessionId}, ${access.userId}, ${title}, ${clean(body.file_name, 500)},
                 ${Number(body.file_size) || null}, ${parsedUrl.toString()}, '{}'::jsonb, 'uploaded',
-                ${creatorId}, ${briefId}, ${deliverableId}
+                ${creatorId}, 'external_creator', null, ${briefId}, ${deliverableId}
               )
             `,
             transaction`

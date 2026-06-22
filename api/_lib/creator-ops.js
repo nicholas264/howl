@@ -465,6 +465,8 @@ async function createCreatorOpsTables(sql) {
   await sql`ALTER TABLE ugc_sessions ADD COLUMN IF NOT EXISTS creator_id BIGINT`;
   await sql`ALTER TABLE ugc_sessions ADD COLUMN IF NOT EXISTS brief_id BIGINT`;
   await sql`ALTER TABLE ugc_sessions ADD COLUMN IF NOT EXISTS deliverable_id BIGINT`;
+  await sql`ALTER TABLE ugc_sessions ADD COLUMN IF NOT EXISTS source_type TEXT`;
+  await sql`ALTER TABLE ugc_sessions ADD COLUMN IF NOT EXISTS source_label TEXT`;
   await sql`ALTER TABLE ugc_sessions ADD COLUMN IF NOT EXISTS rendered_url TEXT`;
   await sql`ALTER TABLE ugc_sessions ADD COLUMN IF NOT EXISTS last_error TEXT`;
   await sql`ALTER TABLE creator_deliverables ADD COLUMN IF NOT EXISTS output_url TEXT`;

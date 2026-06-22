@@ -14,10 +14,18 @@ const DEFAULT_SETTINGS = {
 const SESSION_FILTERS = [
   ['needs_edit', 'Needs edit'],
   ['creator', 'Creator footage'],
+  ['internal', 'Internal'],
   ['untranscribed', 'Needs transcript'],
   ['rendered', 'Rendered'],
   ['all', 'All'],
 ];
+
+const SOURCE_LABELS = {
+  external_creator: 'Creator upload',
+  internal_employee: 'Internal footage',
+  founder: 'Founder footage',
+  tool_generated: 'Made in tool',
+};
 
 export default function UgcEditorTool({ initialSessionId = null, onInitialSessionLoaded, onAddToCart }) {
   const { getToken } = useAuth();
@@ -83,15 +91,17 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   const sessionStats = useMemo(() => sessions.reduce((stats, session) => {
     stats.all += 1;
     if (session.creator_id) stats.creator += 1;
+    if (!session.creator_id && ['internal_employee', 'founder'].includes(session.source_type)) stats.internal += 1;
     if (!Number(session.word_count || 0) && !session.rendered_url) stats.untranscribed += 1;
     if (session.rendered_url || session.status === 'rendered') stats.rendered += 1;
     if (session.creator_id && !(session.rendered_url || session.status === 'rendered')) stats.needs_edit += 1;
     return stats;
-  }, { all: 0, creator: 0, untranscribed: 0, rendered: 0, needs_edit: 0 }), [sessions]);
+  }, { all: 0, creator: 0, internal: 0, untranscribed: 0, rendered: 0, needs_edit: 0 }), [sessions]);
 
   const filteredSessions = useMemo(() => sessions.filter(session => {
     if (sessionFilter === 'all') return true;
     if (sessionFilter === 'creator') return Boolean(session.creator_id);
+    if (sessionFilter === 'internal') return !session.creator_id && ['internal_employee', 'founder'].includes(session.source_type);
     if (sessionFilter === 'untranscribed') return !Number(session.word_count || 0) && !session.rendered_url;
     if (sessionFilter === 'rendered') return Boolean(session.rendered_url) || session.status === 'rendered';
     if (sessionFilter === 'needs_edit') return Boolean(session.creator_id) && !(session.rendered_url || session.status === 'rendered');
@@ -150,6 +160,8 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
           video_url: blob.url,
           settings: DEFAULT_SETTINGS,
           status: 'uploaded',
+          source_type: 'internal_employee',
+          source_label: 'Manual editor upload',
         }),
       });
       const sessData = await sessRes.json();
@@ -387,6 +399,8 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         : `UGC edit ${new Date().toLocaleString()}`,
       creator: activeSession?.creator_name || null,
       creatorId: activeSession?.creator_id || null,
+      sourceType: activeSession?.source_type || (activeSession?.creator_id ? 'external_creator' : 'internal_employee'),
+      sourceLabel: activeSession?.source_label || activeSession?.creator_name || 'UGC editor',
       briefId: activeSession?.brief_id || null,
       deliverableId: activeSession?.deliverable_id || null,
       sourceVideoUrl: outputUrl,
@@ -452,7 +466,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
               <div style={{ fontSize: 10, color: '#77746f', marginTop: 4 }}>
                 {s.file_size ? `${(s.file_size / 1024 / 1024).toFixed(1)} MB · ` : ''}
                 {s.duration ? `${parseFloat(s.duration).toFixed(1)}s · ` : ''}
-                {s.creator_id ? 'Creator upload · ' : 'Manual upload · '}
+                {SOURCE_LABELS[s.source_type] || (s.creator_id ? 'Creator upload' : 'Manual upload')} ·
                 {s.rendered_url ? 'rendered' : s.status}
               </div>
               <button
@@ -505,7 +519,9 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
               <video ref={videoRef} src={videoUrl} controls crossOrigin="anonymous" style={{ width: '100%', borderRadius: 8, background: '#000', maxHeight: 320 }} />
               <div style={{ fontSize: 12, color: '#77746f', marginTop: 6 }}>
                 {activeSession?.creator_name && <strong style={{ display: 'block', color: '#171717', marginBottom: 3 }}>{activeSession.creator_name}</strong>}
+                {!activeSession?.creator_name && activeSession?.source_label && <strong style={{ display: 'block', color: '#171717', marginBottom: 3 }}>{activeSession.source_label}</strong>}
                 {activeSession?.deliverable_title && <span style={{ display: 'block', color: '#b84418', marginBottom: 3 }}>{activeSession.deliverable_title}</span>}
+                {activeSession?.source_type && <span style={{ display: 'block', color: '#77746f', marginBottom: 3 }}>{SOURCE_LABELS[activeSession.source_type] || activeSession.source_type.replaceAll('_', ' ')}</span>}
                 {activeSession?.file_name || file?.name}
                 {activeSession?.file_size ? ` · ${(activeSession.file_size / 1024 / 1024).toFixed(1)} MB` : (file ? ` · ${(file.size / 1024 / 1024).toFixed(1)} MB` : '')}
               </div>

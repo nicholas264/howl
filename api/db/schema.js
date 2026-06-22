@@ -69,12 +69,16 @@ export default async function handler(req, res) {
         settings      JSONB,
         thumbnail_url TEXT,
         status        TEXT NOT NULL DEFAULT 'uploaded',
+        source_type   TEXT,
+        source_label  TEXT,
         created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
       )
     `;
     await sql`CREATE INDEX IF NOT EXISTS idx_ugc_sessions_updated_at ON ugc_sessions(updated_at DESC)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_ugc_sessions_user_id ON ugc_sessions(user_id)`;
+    await sql`ALTER TABLE ugc_sessions ADD COLUMN IF NOT EXISTS source_type TEXT`;
+    await sql`ALTER TABLE ugc_sessions ADD COLUMN IF NOT EXISTS source_label TEXT`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS callout_layouts (

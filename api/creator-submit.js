@@ -99,12 +99,12 @@ export default async function handler(req, res) {
       session_insert AS (
         INSERT INTO ugc_sessions (
           id, user_id, title, file_name, file_size, video_url, settings, status,
-          creator_id, brief_id, deliverable_id
+          creator_id, source_type, source_label, brief_id, deliverable_id
         )
         SELECT
           ${sessionId}, ${`creator-submit:${submission.id}`}, title,
           ${fileName || null}, ${fileSize}, ${parsedUrl.toString()}, '{}'::jsonb, 'uploaded',
-          creator_id, brief_id, ${deliverableId}
+          creator_id, 'external_creator', null, brief_id, ${deliverableId}
         FROM claimed
         RETURNING creator_id, brief_id, title
       ),

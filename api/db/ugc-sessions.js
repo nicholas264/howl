@@ -43,6 +43,7 @@ export default async function handler(req, res) {
       const rows = await sql`
         SELECT u.id, u.title, u.file_name, u.file_size, u.duration, u.video_url,
           u.thumbnail_url, u.status, u.last_error, u.creator_id, u.brief_id, u.deliverable_id, u.rendered_url,
+          u.source_type, u.source_label,
           u.created_at, u.updated_at, c.name AS creator_name,
           CASE WHEN jsonb_typeof(u.words) = 'array' THEN jsonb_array_length(u.words) ELSE 0 END AS word_count,
           b.title AS brief_title,
@@ -74,12 +75,14 @@ export default async function handler(req, res) {
         thumbnail_url,
         status,
         creator_id,
+        source_type,
+        source_label,
         brief_id,
         deliverable_id,
       } = req.body || {};
       if (!video_url) return res.status(400).json({ error: 'video_url required' });
       const rows = await sql`
-        INSERT INTO ugc_sessions (user_id, title, file_name, file_size, duration, video_url, words, settings, thumbnail_url, status, creator_id, brief_id, deliverable_id)
+        INSERT INTO ugc_sessions (user_id, title, file_name, file_size, duration, video_url, words, settings, thumbnail_url, status, creator_id, source_type, source_label, brief_id, deliverable_id)
         VALUES (
           ${auth.userId},
           ${title || file_name || 'Untitled session'},
@@ -92,6 +95,8 @@ export default async function handler(req, res) {
           ${thumbnail_url || null},
           ${status || 'uploaded'},
           ${Number(creator_id) || null},
+          ${source_type || (creator_id ? 'external_creator' : 'internal_employee')},
+          ${source_label || (creator_id ? null : auth.email) || null},
           ${Number(brief_id) || null},
           ${Number(deliverable_id) || null}
         )
@@ -115,6 +120,8 @@ export default async function handler(req, res) {
         'thumbnail_url',
         'status',
         'creator_id',
+        'source_type',
+        'source_label',
         'brief_id',
         'deliverable_id',
       ];
@@ -130,6 +137,8 @@ export default async function handler(req, res) {
       if ('thumbnail_url' in set) await sql`UPDATE ugc_sessions SET thumbnail_url = ${set.thumbnail_url}, updated_at = now() WHERE id = ${id}`;
       if ('status' in set) await sql`UPDATE ugc_sessions SET status = ${set.status}, updated_at = now() WHERE id = ${id}`;
       if ('creator_id' in set) await sql`UPDATE ugc_sessions SET creator_id = ${Number(set.creator_id) || null}, updated_at = now() WHERE id = ${id}`;
+      if ('source_type' in set) await sql`UPDATE ugc_sessions SET source_type = ${set.source_type || null}, updated_at = now() WHERE id = ${id}`;
+      if ('source_label' in set) await sql`UPDATE ugc_sessions SET source_label = ${set.source_label || null}, updated_at = now() WHERE id = ${id}`;
       if ('brief_id' in set) await sql`UPDATE ugc_sessions SET brief_id = ${Number(set.brief_id) || null}, updated_at = now() WHERE id = ${id}`;
       if ('deliverable_id' in set) await sql`UPDATE ugc_sessions SET deliverable_id = ${Number(set.deliverable_id) || null}, updated_at = now() WHERE id = ${id}`;
 
