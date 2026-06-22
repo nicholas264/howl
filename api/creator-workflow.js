@@ -36,6 +36,14 @@ function assertBriefBrandSafe(candidate, guidelines) {
     candidate?.brief,
     candidate?.script,
     ...(Array.isArray(candidate?.deliverables) ? candidate.deliverables : []),
+    ...(Array.isArray(candidate?.hooks) ? candidate.hooks : []),
+    ...(Array.isArray(candidate?.body_beats) ? candidate.body_beats : []),
+    ...(Array.isArray(candidate?.proof_sequence) ? candidate.proof_sequence : []),
+    ...(Array.isArray(candidate?.shot_list) ? candidate.shot_list : []),
+    ...(Array.isArray(candidate?.ctas) ? candidate.ctas : []),
+    ...(Array.isArray(candidate?.guardrails) ? candidate.guardrails : []),
+    candidate?.hook,
+    candidate?.cta,
   ].filter(Boolean).join('\n');
   const violations = validateBrandCopy(content, guidelines);
   if (violations.length) {
@@ -44,6 +52,31 @@ function assertBriefBrandSafe(candidate, guidelines) {
     error.violations = violations;
     throw error;
   }
+}
+
+function listBlock(title, items) {
+  if (!Array.isArray(items) || !items.length) return null;
+  const cleanItems = items.map(item => clean(item, 1000)).filter(Boolean);
+  if (!cleanItems.length) return null;
+  return `${title}\n${cleanItems.map((item, index) => `${index + 1}. ${item}`).join('\n')}`;
+}
+
+function buildProductionBriefText(candidate = {}) {
+  return [
+    candidate.format ? `FORMAT\n${clean(candidate.format, 120).replaceAll('_', ' ')}` : null,
+    candidate.creator_fit ? `WHY THIS CREATOR\n${clean(candidate.creator_fit, 2000)}` : null,
+    candidate.performance_logic ? `PERFORMANCE LOGIC\n${clean(candidate.performance_logic, 2000)}` : null,
+    candidate.hypothesis ? `HYPOTHESIS\n${clean(candidate.hypothesis, 1500)}` : null,
+    candidate.opening_visual ? `OPENING VISUAL\n${clean(candidate.opening_visual, 1500)}` : null,
+    candidate.hook ? `PRIMARY HOOK\n${clean(candidate.hook, 500)}` : null,
+    listBlock('HOOK OPTIONS', candidate.hooks),
+    listBlock('BODY BEATS', candidate.body_beats || candidate.proof_sequence),
+    candidate.brief ? `CREATIVE BRIEF\n${clean(candidate.brief)}` : null,
+    listBlock('SHOT LIST', candidate.shot_list),
+    candidate.cta ? `PRIMARY CTA\n${clean(candidate.cta, 500)}` : null,
+    listBlock('CTA OPTIONS', candidate.ctas),
+    listBlock('GUARDRAILS', candidate.guardrails),
+  ].filter(Boolean).join('\n\n');
 }
 
 function buildWorkflowGuidance({
@@ -356,7 +389,7 @@ async function generateBrief(sql, creatorId, input) {
   const system = `You are the creator strategist for HOWL Campfires. Write practical, filmable UGC briefs and scripts.
 Use the creator's real activities, audience, and history. Do not invent personal facts. Keep the concept direct and product-grounded.
 Treat the supplied brand guidelines as hard constraints. Never use prohibited language, unsupported claims, or missing required disclosures.
-Return only valid JSON with: title, objective, angle, brief, script, deliverables (array of strings).`;
+Return only valid JSON with: title, product, objective, angle, format, creator_fit, performance_logic, hypothesis, opening_visual, hook, hooks (array), body_beats (array), brief, script, shot_list (array), cta, ctas (array), deliverables (array), guardrails (array).`;
   const prompt = `CREATOR
 ${JSON.stringify(creator, null, 2)}
 
@@ -370,8 +403,9 @@ Angle: ${clean(input.angle, 500) || 'Choose an authentic angle based on this cre
 Additional direction: ${clean(input.direction, 3000) || 'None'}
 Strategy mode: ${input.strategy_mode === 'net_new' ? 'NET NEW - build a fresh concept from the creator profile and activities' : 'PAST PERFORMERS - preserve proven patterns when useful, without copying'}
 
-The brief must explain the premise, filming environment, hook, proof, product moments, CTA, and exact deliverables.
-The script should sound natural for this creator and be usable as a shot-by-shot production guide.`;
+The brief must explain the premise, filming environment, hook, proof, product moments, CTA, exact deliverables, and what to avoid.
+The script should sound natural for this creator and be usable as a shot-by-shot production guide.
+Return at least 3 hook options, 4 body beats, 4 shots, and 2 CTA options.`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -498,6 +532,11 @@ Return an array where each item has exactly:
     brief: concept.brief,
     script: concept.script,
     deliverables: concept.deliverables,
+    hook: concept.hook,
+    proof_sequence: concept.proof_sequence,
+    shot_list: concept.shot_list,
+    cta: concept.cta,
+    guardrails: concept.guardrails,
   }, guidelines));
   return selected;
 }
@@ -564,15 +603,16 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       if (body.action === 'generate_brief') {
         const generated = await generateBrief(sql, creatorId, body);
+        const briefText = buildProductionBriefText(generated);
         const [brief] = await sql`
           INSERT INTO creator_briefs (
             creator_id, title, product, objective, angle, deliverables,
             brief, script, status, generation_source, created_by
           ) VALUES (
-            ${creatorId}, ${clean(generated.title, 300) || 'Creator brief'}, ${clean(body.product, 200)},
+            ${creatorId}, ${clean(generated.title, 300) || 'Creator brief'}, ${clean(generated.product, 300) || clean(body.product, 200)},
             ${clean(generated.objective, 2000)}, ${clean(generated.angle, 1000)},
             ${JSON.stringify(Array.isArray(generated.deliverables) ? generated.deliverables : [])}::jsonb,
-            ${clean(generated.brief)}, ${clean(generated.script)}, 'draft', 'ai_creator_context', ${access.userId}
+            ${clean(briefText) || clean(generated.brief)}, ${clean(generated.script)}, 'draft', 'ai_creator_context', ${access.userId}
           )
           RETURNING *
         `;
@@ -587,6 +627,13 @@ export default async function handler(req, res) {
         const concepts = await generateConceptSet(sql, creatorId, body);
         const briefs = [];
         for (const concept of concepts) {
+          const briefText = buildProductionBriefText({
+            ...concept,
+            title: concept.concept_name,
+            body_beats: concept.proof_sequence,
+            hooks: concept.hook ? [concept.hook] : [],
+            ctas: concept.cta ? [concept.cta] : [],
+          });
           const [brief] = await sql`
             INSERT INTO creator_briefs (
               creator_id, title, product, objective, angle, deliverables,
@@ -597,7 +644,7 @@ export default async function handler(req, res) {
               ${clean(concept.objective, 2000) || clean(body.objective, 2000)},
               ${clean(concept.angle, 1000)},
               ${JSON.stringify(Array.isArray(concept.deliverables) ? concept.deliverables : [])}::jsonb,
-              ${clean(concept.brief)}, ${clean(concept.script)}, 'draft',
+              ${clean(briefText) || clean(concept.brief)}, ${clean(concept.script)}, 'draft',
               'ai_net_new_creator_concept', ${access.userId}
             )
             RETURNING *
