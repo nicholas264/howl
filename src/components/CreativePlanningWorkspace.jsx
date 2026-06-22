@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 const currentMonth = () => new Date().toISOString().slice(0, 7);
 const labelType = value => value === 'one_off' ? 'One-off' : value === 'retainer' ? 'Retainer' : 'Unassigned';
@@ -38,6 +38,10 @@ export default function CreativePlanningWorkspace({ onOpenCreator }) {
     win_rate_pct: '',
     useful_lifespan_days: '',
   });
+  const demandRef = useRef(null);
+  const assumptionsRef = useRef(null);
+  const riskRef = useRef(null);
+  const commitmentsRef = useRef(null);
 
   useEffect(() => {
     let active = true;
@@ -104,6 +108,17 @@ export default function CreativePlanningWorkspace({ onOpenCreator }) {
     setError('Creator navigation is not available from this view.');
   };
 
+  const jumpToPlanningAction = key => {
+    const target = {
+      overdue: riskRef,
+      unscheduled: commitmentsRef,
+      demand_shortfall: demandRef,
+      healthy: demandRef,
+      missing_assumptions: assumptionsRef,
+    }[key];
+    target?.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
     <div className="creator-workspace planning-workspace">
       <header className="creator-head">
@@ -133,21 +148,21 @@ export default function CreativePlanningWorkspace({ onOpenCreator }) {
           </div>
           <div>
             {data.recommendations.map(item => (
-              <article key={item.key} className={item.severity}>
+              <button key={item.key} type="button" className={item.severity} onClick={() => jumpToPlanningAction(item.key)}>
                 <i>{item.count ?? '!'}</i>
                 <span>
                   <strong>{item.title}</strong>
                   <small>{item.detail}</small>
                 </span>
                 <b>{item.action}</b>
-              </article>
+              </button>
             ))}
           </div>
         </section>
       )}
 
       <div className="planning-demand-grid">
-        <section className="planning-panel planning-demand-result">
+        <section className="planning-panel planning-demand-result" ref={demandRef}>
           <div className="planning-panel-head">
             <span>Monthly creative demand</span>
             <small>{demand.ready ? 'Steady-state replacement model' : 'Add assumptions to calculate'}</small>
@@ -173,7 +188,7 @@ export default function CreativePlanningWorkspace({ onOpenCreator }) {
           )}
         </section>
 
-        <form className="planning-panel planning-assumptions" onSubmit={saveScenario}>
+        <form className="planning-panel planning-assumptions" onSubmit={saveScenario} ref={assumptionsRef}>
           <div className="planning-panel-head"><span>Demand assumptions</span><small>{data?.scenario?.source === 'cfo_forecast' ? 'Started from CFO forecast' : 'Saved scenario'}</small></div>
           <div className="planning-assumption-grid">
             <label>Monthly spend target<input type="number" min="0" step="100" value={scenario.spend_target} onChange={event => setScenario({ ...scenario, spend_target: event.target.value })} /></label>
@@ -235,7 +250,7 @@ export default function CreativePlanningWorkspace({ onOpenCreator }) {
         </section>
       </div>
 
-      <section className="planning-panel planning-risk-panel">
+      <section className="planning-panel planning-risk-panel" ref={riskRef}>
         <div className="planning-panel-head"><span>Deadline risk</span><small>{data?.risks?.length || 0} incomplete deliverables</small></div>
         <div className="planning-table">
           <div className="planning-table-head"><span>Creator / deliverable</span><span>Type</span><span>Due</span><span>Remaining</span><span>State</span></div>
@@ -253,7 +268,7 @@ export default function CreativePlanningWorkspace({ onOpenCreator }) {
       </section>
 
       {!!data?.commitments?.filter(item => item.unscheduled_assets > 0).length && (
-        <section className="planning-panel">
+        <section className="planning-panel" ref={commitmentsRef}>
           <div className="planning-panel-head"><span>Commitments needing deadlines</span><small>Contracted supply not yet placed on the calendar</small></div>
           <div className="planning-commitments">
             {data.commitments.filter(item => item.unscheduled_assets > 0).map(item => (
