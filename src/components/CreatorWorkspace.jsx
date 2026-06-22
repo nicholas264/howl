@@ -102,6 +102,7 @@ export default function CreatorWorkspace({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importResult, setImportResult] = useState(null);
@@ -847,11 +848,12 @@ export default function CreatorWorkspace({
   };
 
   const sendBriefAssignment = async brief => {
-    if (brief.status !== 'approved') return setError('Approve the brief before sending it to the creator.');
-    if (!selected?.email) return setError('Add the creator email before sending an assignment.');
-    if (!gmailConnected) return connectGmail();
+    if (brief.status !== 'approved') return setError('Approve the brief before preparing the creator handoff.');
+    if (!canWriteAssets) return setError('You need asset write access to create creator upload links.');
+    if (!selected?.email) return setError('Add the creator email before preparing an assignment.');
     setSaving(true);
     setError('');
+    setNotice('');
     try {
       const linkResponse = await fetch('/api/creator-workflow', {
         method: 'POST',
@@ -867,19 +869,25 @@ export default function CreatorWorkspace({
       const linkData = await linkResponse.json();
       if (!linkResponse.ok) throw new Error(linkData.error || 'Could not create assignment link');
       const url = `${window.location.origin}${linkData.submission_path}`;
-      const emailResponse = await fetch('/api/creator-email', {
+      const draft = {
+        channel: 'email',
+        subject: `${brief.title} - HOWL creator assignment`,
+        body: `Hi ${selected.name},\n\nYour next HOWL assignment is ready. The concept, script, deliverables, and footage upload are here:\n\n${url}\n\nPlease review the direction before filming and reply with any questions.\n\nThank you,\nHOWL Campfires`,
+        status: 'draft',
+        next_follow_up_at: defaultFollowUpDate(),
+      };
+      const outreachResponse = await fetch('/api/creator-workflow', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          creator_id: selected.id,
-          to: selected.email,
-          subject: `${brief.title} - HOWL creator assignment`,
-          body: `Hi ${selected.name},\n\nYour next HOWL assignment is ready. The concept, script, deliverables, and footage upload are here:\n\n${url}\n\nPlease review the direction before filming and reply with any questions.\n\nThank you,\nHOWL Campfires`,
-        }),
+        body: JSON.stringify({ action: 'outreach', creator_id: selected.id, ...draft }),
       });
-      const emailData = await emailResponse.json();
-      if (!emailResponse.ok) throw new Error(emailData.error || 'Could not send assignment');
-      setWorkflow(linkData.workflow);
+      const outreachData = await outreachResponse.json();
+      if (!outreachResponse.ok) throw new Error(outreachData.error || 'Could not draft assignment email');
+      setWorkflow(outreachData.workflow || linkData.workflow);
+      setOutreach(draft);
+      setSubmissionLink(url);
+      setDetailTab('outreach');
+      setNotice('Assignment upload link created and email drafted. Review the message, then send with Gmail when ready.');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1019,6 +1027,7 @@ export default function CreatorWorkspace({
       </div>
 
       {error && <div className="app-error">{error}</div>}
+      {notice && <div className="app-notice">{notice}</div>}
 
       <div className={`creator-layout ${selected ? 'detail-open' : ''}`}>
         <section className="creator-list-panel">
@@ -1501,8 +1510,16 @@ export default function CreatorWorkspace({
                           <div className="brief-actions">
                             <button type="button" onClick={() => editBrief(brief)}>Edit script</button>
                             <button type="button" onClick={() => editBrief(brief)}>Review / approve</button>
-                            <button type="button" className="brief-send" disabled={saving || brief.status !== 'approved'} onClick={() => sendBriefAssignment(brief)}>
-                              {brief.status === 'approved' ? 'Send assignment to creator' : 'Approval required before sending'}
+                            <button
+                              type="button"
+                              className="brief-send"
+                              disabled={saving || brief.status !== 'approved' || !canWriteAssets}
+                              onClick={() => sendBriefAssignment(brief)}
+                              title={!canWriteAssets ? 'Asset write access is required to create creator upload links.' : brief.status !== 'approved' ? 'Approve the brief before preparing the creator handoff.' : ''}
+                            >
+                              {brief.status === 'approved'
+                                ? (canWriteAssets ? 'Prepare assignment email' : 'Asset access required')
+                                : 'Approval required before handoff'}
                             </button>
                           </div>
                         )}
