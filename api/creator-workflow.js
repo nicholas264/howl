@@ -4,6 +4,7 @@ import { del } from '@vercel/blob';
 import { randomBytes } from 'node:crypto';
 import { submissionTokenHash } from './_lib/creator-submissions.js';
 import { agreementTokenHash, renderAgreementTemplate } from './_lib/creator-agreements.js';
+import { loadBrandGuidelines, validateBrandCopy } from './_lib/brand-guardrails.js';
 
 function clean(value, max = 10000) {
   const result = (value ?? '').toString().trim();
@@ -14,6 +15,35 @@ function timestamp(value) {
   if (!value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+}
+
+function guidelineText(guidelines = {}) {
+  return [
+    `Brand: ${guidelines.brand_name || 'HOWL Campfires'}`,
+    guidelines.voice_guidance ? `Voice: ${guidelines.voice_guidance}` : null,
+    guidelines.approved_claims?.length ? `Approved claims:\n- ${guidelines.approved_claims.join('\n- ')}` : null,
+    guidelines.prohibited_phrases?.length ? `Never use these phrases:\n- ${guidelines.prohibited_phrases.join('\n- ')}` : null,
+    guidelines.prohibited_claims?.length ? `Never make these claims:\n- ${guidelines.prohibited_claims.join('\n- ')}` : null,
+    guidelines.required_disclosures?.length ? `Required disclosures:\n- ${guidelines.required_disclosures.join('\n- ')}` : null,
+  ].filter(Boolean).join('\n\n');
+}
+
+function assertBriefBrandSafe(candidate, guidelines) {
+  const content = [
+    candidate?.title,
+    candidate?.objective,
+    candidate?.angle,
+    candidate?.brief,
+    candidate?.script,
+    ...(Array.isArray(candidate?.deliverables) ? candidate.deliverables : []),
+  ].filter(Boolean).join('\n');
+  const violations = validateBrandCopy(content, guidelines);
+  if (violations.length) {
+    const error = new Error(`Brand guardrails blocked creator script: ${violations.slice(0, 5).join(', ')}`);
+    error.code = 'BRAND_GUARDRAIL';
+    error.violations = violations;
+    throw error;
+  }
 }
 
 function buildWorkflowGuidance({
@@ -290,6 +320,7 @@ async function getWorkflow(sql, creatorId) {
 }
 
 async function generateBrief(sql, creatorId, input) {
+  const guidelines = await loadBrandGuidelines(sql);
   const [creator] = await sql`
     SELECT c.*,
       COALESCE((SELECT json_agg(s) FROM creator_social_accounts s WHERE s.creator_id = c.id), '[]'::json) AS social_accounts,
@@ -324,9 +355,13 @@ async function generateBrief(sql, creatorId, input) {
 
   const system = `You are the creator strategist for HOWL Campfires. Write practical, filmable UGC briefs and scripts.
 Use the creator's real activities, audience, and history. Do not invent personal facts. Keep the concept direct and product-grounded.
+Treat the supplied brand guidelines as hard constraints. Never use prohibited language, unsupported claims, or missing required disclosures.
 Return only valid JSON with: title, objective, angle, brief, script, deliverables (array of strings).`;
   const prompt = `CREATOR
 ${JSON.stringify(creator, null, 2)}
+
+BRAND GUIDELINES
+${guidelineText(guidelines) || 'No additional guidelines saved.'}
 
 REQUEST
 Product: ${clean(input.product, 200) || 'Choose the strongest HOWL product fit'}
@@ -357,10 +392,12 @@ The script should sound natural for this creator and be usable as a shot-by-shot
   if (!response.ok) throw new Error(data.error?.message || 'Brief generation failed');
   const text = data.content?.filter(block => block.type === 'text').map(block => block.text).join('') || '';
   const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+  assertBriefBrandSafe(parsed, guidelines);
   return parsed;
 }
 
 async function generateConceptSet(sql, creatorId, input) {
+  const guidelines = await loadBrandGuidelines(sql);
   const [creator] = await sql`
     SELECT c.*,
       COALESCE((SELECT json_agg(s) FROM creator_social_accounts s WHERE s.creator_id = c.id), '[]'::json) AS social_accounts,
@@ -399,13 +436,16 @@ async function generateConceptSet(sql, creatorId, input) {
       model: 'claude-sonnet-4-6',
       max_tokens: 10000,
       temperature: 0.65,
-      system: `You are HOWL Campfires' senior creator strategist. Build distinct, filmable direct-response UGC concepts grounded in the creator's real niche, strengths, audience demographics, audience psychographics, activities, social metrics, and performance history. Never invent personal facts or product claims. Return only a valid JSON array.`,
+      system: `You are HOWL Campfires' senior creator strategist. Build distinct, filmable direct-response UGC concepts grounded in the creator's real niche, strengths, audience demographics, audience psychographics, activities, social metrics, and performance history. Never invent personal facts or product claims. Treat the supplied brand guidelines as hard constraints. Return only a valid JSON array.`,
       messages: [{
         role: 'user',
         content: `Create exactly ${count} net-new UGC video concepts for this creator.
 
 CREATOR
 ${JSON.stringify(creator, null, 2)}
+
+BRAND GUIDELINES
+${guidelineText(guidelines) || 'No additional guidelines saved.'}
 
 SHOPIFY PRODUCT
 ${JSON.stringify(product, null, 2)}
@@ -450,7 +490,16 @@ Return an array where each item has exactly:
   if (start < 0 || end < start) throw new Error('Concept response was not a JSON array');
   const concepts = JSON.parse(cleaned.slice(start, end + 1));
   if (!Array.isArray(concepts)) throw new Error('Concept response was not an array');
-  return concepts.slice(0, count);
+  const selected = concepts.slice(0, count);
+  selected.forEach(concept => assertBriefBrandSafe({
+    title: concept.concept_name,
+    objective: concept.objective,
+    angle: concept.angle,
+    brief: concept.brief,
+    script: concept.script,
+    deliverables: concept.deliverables,
+  }, guidelines));
+  return selected;
 }
 
 async function generateOutreach(sql, creatorId, input) {
@@ -951,6 +1000,20 @@ export default async function handler(req, res) {
         if (status && !['draft', 'approved', 'sent', 'archived'].includes(status)) {
           return res.status(400).json({ error: 'Unsupported brief status' });
         }
+        const [existingBrief] = await sql`
+          SELECT * FROM creator_briefs
+          WHERE id = ${Number(body.id)} AND creator_id = ${creatorId}
+        `;
+        if (!existingBrief) return res.status(404).json({ error: 'Brief not found' });
+        const candidate = {
+          title: clean(body.title, 300) || existingBrief.title,
+          objective: clean(body.objective, 2000) || existingBrief.objective,
+          angle: clean(body.angle, 1000) || existingBrief.angle,
+          brief: clean(body.brief) || existingBrief.brief,
+          script: clean(body.script) || existingBrief.script,
+          deliverables: existingBrief.deliverables,
+        };
+        assertBriefBrandSafe(candidate, await loadBrandGuidelines(sql));
         const [brief] = await sql`
           UPDATE creator_briefs SET
             title = COALESCE(${clean(body.title, 300)}, title),
