@@ -5,6 +5,7 @@ import { useAuth } from '@clerk/clerk-react';
 import CreatorAcquisitionWorkspace from './CreatorAcquisitionWorkspace';
 import CreatorDataHealthWorkspace from './CreatorDataHealthWorkspace';
 import CreatorOperationsWorkspace from './CreatorOperationsWorkspace';
+import CreatorPipelineFunnel from './CreatorPipelineFunnel';
 
 const STAGES = [
   ['all', 'All'],
@@ -1027,6 +1028,7 @@ export default function CreatorWorkspace({
 
       <div className="creator-view-tabs">
         <button className={workspaceView === 'database' ? 'active' : ''} onClick={() => setWorkspaceView('database')}>Database</button>
+        <button className={workspaceView === 'pipeline' ? 'active' : ''} onClick={() => setWorkspaceView('pipeline')}>Pipeline</button>
         <button className={workspaceView === 'operations' ? 'active' : ''} onClick={() => setWorkspaceView('operations')}>Operations</button>
         <button className={workspaceView === 'talent' ? 'active' : ''} onClick={() => setWorkspaceView('talent')}>Talent inbox</button>
         <button className={workspaceView === 'health' ? 'active' : ''} onClick={() => setWorkspaceView('health')}>Data health</button>
@@ -1805,6 +1807,8 @@ export default function CreatorWorkspace({
         )}
       </div>
       </>
+      ) : workspaceView === 'pipeline' ? (
+        <CreatorPipelineFunnel />
       ) : workspaceView === 'operations' ? (
         <CreatorOperationsWorkspace
           canManage={canManageCreators}

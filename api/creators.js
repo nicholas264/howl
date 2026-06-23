@@ -180,6 +180,56 @@ export default async function handler(req, res) {
         const creator = await creatorDetail(sql, id);
         return creator ? res.json({ creator }) : res.status(404).json({ error: 'Creator not found' });
       }
+      if (req.query.summary === 'funnel') {
+        // Per-stage creator counts plus expected monthly asset throughput from
+        // active/approved contracts. Monthly commitments count directly; total
+        // commitments are amortized across the contract's date span.
+        const rows = await sql`
+          SELECT
+            c.stage,
+            count(*)::int AS creator_count,
+            count(eng.creator_id)::int AS contracted_count,
+            COALESCE(SUM(eng.monthly_assets), 0)::float AS monthly_assets
+          FROM creators c
+          LEFT JOIN LATERAL (
+            SELECT
+              e.creator_id,
+              SUM(
+                CASE
+                  WHEN e.asset_commitment IS NULL OR e.asset_commitment <= 0 THEN 0
+                  WHEN e.commitment_period = 'monthly' THEN e.asset_commitment
+                  WHEN e.starts_on IS NOT NULL AND e.ends_on IS NOT NULL AND e.ends_on > e.starts_on
+                    THEN e.asset_commitment::float / GREATEST(
+                      EXTRACT(YEAR FROM age(e.ends_on, e.starts_on)) * 12
+                      + EXTRACT(MONTH FROM age(e.ends_on, e.starts_on)), 1)
+                  ELSE 0
+                END
+              ) AS monthly_assets
+            FROM creator_engagements e
+            WHERE e.creator_id = c.id AND e.status IN ('approved', 'active')
+            GROUP BY e.creator_id
+          ) eng ON true
+          GROUP BY c.stage
+        `;
+        const STAGE_ORDER = ['sourced', 'contacted', 'interested', 'briefing', 'producing', 'active', 'alumni'];
+        const byStage = Object.fromEntries(rows.map(r => [r.stage, r]));
+        const funnel = STAGE_ORDER.map(stageKey => {
+          const row = byStage[stageKey] || {};
+          return {
+            stage: stageKey,
+            creatorCount: row.creator_count || 0,
+            contractedCount: row.contracted_count || 0,
+            monthlyAssets: Math.round((row.monthly_assets || 0) * 10) / 10,
+          };
+        });
+        const totals = funnel.reduce((acc, s) => ({
+          creatorCount: acc.creatorCount + s.creatorCount,
+          contractedCount: acc.contractedCount + s.contractedCount,
+          monthlyAssets: acc.monthlyAssets + s.monthlyAssets,
+        }), { creatorCount: 0, contractedCount: 0, monthlyAssets: 0 });
+        totals.monthlyAssets = Math.round(totals.monthlyAssets * 10) / 10;
+        return res.json({ funnel, totals });
+      }
       const search = text(req.query.search, 200);
       const stage = STAGES.has(req.query.stage) ? req.query.stage : null;
       const rows = await sql`
