@@ -503,3 +503,19 @@ input, textarea, select, button { font-family: inherit; }
 .flow-result-signals{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
 .flow-score{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.5px;color:var(--muted2);text-transform:uppercase;white-space:nowrap;margin-bottom:7px;text-align:right}
 .flow-empty{padding:40px 20px;text-align:center;color:var(--muted)}
+.flow-col.drop{background:var(--flame-dim);border-color:var(--flame-border)}
+.flow-card[draggable="true"]{cursor:grab}
+.flow-card[draggable="true"]:active{cursor:grabbing}
+.flow-card.dragging{opacity:.4}
+
+/* attribution autopilot on Flow board */
+.flow-attrib{margin-top:18px;border:1px solid var(--flame-border);border-radius:14px;background:var(--flame-dim);overflow:hidden}
+.flow-attrib-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 18px;flex-wrap:wrap}
+.flow-attrib-head{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--flame);margin-right:12px}
+.flow-attrib-sub{font-size:12px;color:var(--text)}
+.flow-attrib-list{border-top:1px solid var(--flame-border);background:var(--surface);max-height:440px;overflow-y:auto}
+.flow-attrib-row{display:grid;grid-template-columns:1fr 84px 70px 200px auto;gap:12px;align-items:center;padding:9px 18px;border-bottom:1px solid var(--border)}
+.flow-attrib-row:last-child{border-bottom:0}
+.flow-attrib-ad{font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.flow-attrib-spend{font-family:'Instrument Serif',Georgia,serif;font-size:15px;text-align:right;font-variant-numeric:tabular-nums}
+.flow-attrib-row select{padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:#fff;max-width:200px}

@@ -19,6 +19,12 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
   const [results, setResults] = useState(null);
   const [matching, setMatching] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  const [draggingId, setDraggingId] = useState(null);
+  const [dragOverStage, setDragOverStage] = useState(null);
+  const [attrib, setAttrib] = useState(null);
+  const [attribOpen, setAttribOpen] = useState(false);
+  const [attribBusy, setAttribBusy] = useState(false);
+  const [overrides, setOverrides] = useState({});
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -32,7 +38,29 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
       setLoading(false);
     }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  const loadAttrib = useCallback(async () => {
+    try {
+      const res = await fetch('/api/attribution-autopilot');
+      if (res.ok) setAttrib(await res.json());
+    } catch { /* non-fatal */ }
+  }, []);
+  useEffect(() => { load(); loadAttrib(); }, [load, loadAttrib]);
+
+  async function applyAutoHigh() {
+    setAttribBusy(true);
+    try {
+      await fetch('/api/attribution-autopilot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apply_high_confidence: true }) });
+      await Promise.all([loadAttrib(), load()]);
+    } finally { setAttribBusy(false); }
+  }
+  async function applyOne(groupKey, creatorId) {
+    if (!creatorId) return;
+    setAttribBusy(true);
+    try {
+      await fetch('/api/attribution-autopilot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignments: [{ group_key: groupKey, creator_id: creatorId }] }) });
+      await loadAttrib();
+    } finally { setAttribBusy(false); }
+  }
 
   function openMatcher(card) {
     setSeedCard(card || null);
@@ -205,12 +233,69 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
         </div>
       )}
 
+      {/* attribution autopilot */}
+      {attrib?.summary?.groups > 0 && (
+        <div className="flow-attrib">
+          <div className="flow-attrib-bar">
+            <div>
+              <span className="flow-attrib-head">Attribution</span>
+              <span className="flow-attrib-sub">
+                {attrib.summary.groups} ads · ${attrib.summary.spend.toLocaleString()} spend unattributed ·{' '}
+                {attrib.summary.high} ready to auto-link (${attrib.summary.high_spend.toLocaleString()})
+              </span>
+            </div>
+            {canManage && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                {attrib.summary.high > 0 && (
+                  <button type="button" className="flow-btn primary" disabled={attribBusy} onClick={applyAutoHigh}>
+                    {attribBusy ? 'Linking…' : `Auto-link ${attrib.summary.high} high-confidence`}
+                  </button>
+                )}
+                <button type="button" className="flow-btn" onClick={() => setAttribOpen(v => !v)}>{attribOpen ? 'Hide' : 'Review all'}</button>
+              </div>
+            )}
+          </div>
+          {attribOpen && (
+            <div className="flow-attrib-list">
+              {attrib.suggestions.slice(0, 60).map(s => {
+                const sel = overrides[s.group_key] ?? s.match?.creator_id ?? '';
+                return (
+                  <div className="flow-attrib-row" key={s.group_key}>
+                    <div className="flow-attrib-ad" title={s.ad_name}>{s.ad_name || '(no name)'}</div>
+                    <div className="flow-attrib-spend">${Math.round(s.spend).toLocaleString()}</div>
+                    <span className={`flow-tag ${s.match?.confidence === 'high' ? 'flame' : ''}`}>{s.match?.confidence || 'no match'}</span>
+                    <select value={sel} onChange={e => setOverrides({ ...overrides, [s.group_key]: e.target.value })}>
+                      <option value="">Unassigned…</option>
+                      {(attrib.creators || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    {canManage && <button type="button" className="flow-btn primary" disabled={attribBusy || !sel} onClick={() => applyOne(s.group_key, Number(sel))}>Link</button>}
+                  </div>
+                );
+              })}
+              {attrib.suggestions.length > 60 && <div className="flow-col-empty">Showing top 60 by spend of {attrib.suggestions.length}.</div>}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* board */}
       <div className="flow-board">
         {STAGE_ORDER.map(stage => {
           const cards = cols[stage] || [];
+          const onDrop = e => {
+            e.preventDefault();
+            const id = Number(e.dataTransfer.getData('text/plain'));
+            setDragOverStage(null); setDraggingId(null);
+            if (id) patchCard(id, { stage });
+          };
           return (
-            <div className="flow-col" key={stage}>
+            <div
+              className={`flow-col${dragOverStage === stage ? ' drop' : ''}`}
+              key={stage}
+              onDragOver={canManage ? (e => { e.preventDefault(); setDragOverStage(stage); }) : undefined}
+              onDragLeave={canManage ? (() => setDragOverStage(s => s === stage ? null : s)) : undefined}
+              onDrop={canManage ? onDrop : undefined}
+            >
               <div className="flow-col-head">
                 <span className="k">{STAGE_LABELS[stage]}</span>
                 <span className="n">{counts[stage] || 0}</span>
@@ -234,7 +319,13 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
                 {cards.map(card => {
                   const action = cardAction(card);
                   return (
-                    <div className="flow-card" key={card.id}>
+                    <div
+                      className={`flow-card${draggingId === card.id ? ' dragging' : ''}`}
+                      key={card.id}
+                      draggable={canManage}
+                      onDragStart={canManage ? (e => { e.dataTransfer.setData('text/plain', String(card.id)); e.dataTransfer.effectAllowed = 'move'; setDraggingId(card.id); }) : undefined}
+                      onDragEnd={canManage ? (() => { setDraggingId(null); setDragOverStage(null); }) : undefined}
+                    >
                       <div className="flow-card-title">{card.title || card.angle || 'Untitled concept'}</div>
                       <div className="flow-card-meta">
                         {card.format && <span className="flow-tag">{card.format}</span>}
