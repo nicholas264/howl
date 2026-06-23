@@ -979,6 +979,9 @@ export default async function handler(req, res) {
         }
         const dueAt = timestamp(body.due_at);
         if (dueAt === undefined) return res.status(400).json({ error: 'Submission due date is invalid' });
+        if (briefId && !dueAt) {
+          return res.status(400).json({ error: 'Content due date is required before sending a brief assignment.' });
+        }
         const expiresInDays = Math.min(Math.max(Number(body.expires_in_days) || 14, 1), 60);
         const expiresAt = new Date(Date.now() + expiresInDays * 86400000).toISOString();
         const token = randomBytes(32).toString('base64url');

@@ -51,6 +51,12 @@ function defaultFollowUpDate(days = 5) {
   return local.toISOString().slice(0, 16);
 }
 
+function defaultAssignmentDueDate(days = 10) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function agreementPreview(value, creator, engagement) {
   const currency = engagement?.fee_currency || 'USD';
   const values = {
@@ -118,6 +124,7 @@ export default function CreatorWorkspace({
   });
   const [briefForm, setBriefForm] = useState({ product: '', objective: '', angle: '', direction: '', strategy_mode: 'past_performers' });
   const [briefDraft, setBriefDraft] = useState(null);
+  const [briefDueDates, setBriefDueDates] = useState({});
   const [outreach, setOutreach] = useState({
     channel: 'email', subject: '', body: '', status: 'draft', next_follow_up_at: defaultFollowUpDate(),
   });
@@ -860,6 +867,8 @@ export default function CreatorWorkspace({
     if (brief.status !== 'approved') return setError('Approve the brief before preparing the creator handoff.');
     if (!canWriteAssets) return setError('You need asset write access to create creator upload links.');
     if (!selected?.email) return setError('Add the creator email before preparing an assignment.');
+    const dueAt = briefDueDates[brief.id] || defaultAssignmentDueDate();
+    if (!dueAt) return setError('Choose a content due date before preparing the creator assignment.');
     setSaving(true);
     setError('');
     setNotice('');
@@ -872,6 +881,7 @@ export default function CreatorWorkspace({
           creator_id: selected.id,
           brief_id: brief.id,
           title: brief.title,
+          due_at: dueAt,
           expires_in_days: 30,
         }),
       });
@@ -881,7 +891,7 @@ export default function CreatorWorkspace({
       const draft = {
         channel: 'email',
         subject: `${brief.title} - HOWL creator assignment`,
-        body: `Hi ${selected.name},\n\nYour next HOWL assignment is ready. The concept, script, deliverables, and footage upload are here:\n\n${url}\n\nPlease review the direction before filming and reply with any questions.\n\nThank you,\nHOWL Campfires`,
+        body: `Hi ${selected.name},\n\nYour next HOWL assignment is ready. The concept, script, deliverables, and footage upload are here:\n\n${url}\n\nContent due date: ${new Date(`${dueAt}T12:00:00`).toLocaleDateString()}.\n\nPlease review the direction before filming and reply with any questions.\n\nThank you,\nHOWL Campfires`,
         status: 'draft',
         next_follow_up_at: defaultFollowUpDate(),
       };
@@ -1519,15 +1529,25 @@ export default function CreatorWorkspace({
                           <div className="brief-actions">
                             <button type="button" onClick={() => editBrief(brief)}>Edit script</button>
                             <button type="button" onClick={() => editBrief(brief)}>Review / approve</button>
+                            {brief.status === 'approved' && (
+                              <label className="brief-due-date">
+                                Content due
+                                <input
+                                  type="date"
+                                  value={briefDueDates[brief.id] || defaultAssignmentDueDate()}
+                                  onChange={event => setBriefDueDates(current => ({ ...current, [brief.id]: event.target.value }))}
+                                />
+                              </label>
+                            )}
                             <button
                               type="button"
                               className="brief-send"
-                              disabled={saving || brief.status !== 'approved' || !canWriteAssets}
+                              disabled={saving || brief.status !== 'approved' || !canWriteAssets || !selected.email}
                               onClick={() => sendBriefAssignment(brief)}
-                              title={!canWriteAssets ? 'Asset write access is required to create creator upload links.' : brief.status !== 'approved' ? 'Approve the brief before preparing the creator handoff.' : ''}
+                              title={!selected.email ? 'Add the creator email before preparing an assignment.' : !canWriteAssets ? 'Asset write access is required to create creator upload links.' : brief.status !== 'approved' ? 'Approve the brief before preparing the creator handoff.' : ''}
                             >
                               {brief.status === 'approved'
-                                ? (canWriteAssets ? 'Prepare assignment email' : 'Asset access required')
+                                ? (!selected.email ? 'Creator email required' : canWriteAssets ? 'Prepare assignment email' : 'Asset access required')
                                 : 'Approval required before handoff'}
                             </button>
                           </div>
