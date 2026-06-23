@@ -266,6 +266,10 @@ export default function CreatorWorkspace({
     () => workflow.engagements?.find(item => String(item.id) === String(agreement.engagement_id)),
     [agreement.engagement_id, workflow.engagements],
   );
+  const selectedDeliverableBrief = useMemo(
+    () => workflow.briefs?.find(item => String(item.id) === String(deliverable.brief_id)),
+    [deliverable.brief_id, workflow.briefs],
+  );
   const renderedAgreement = useMemo(() => ({
     title: agreementPreview(agreement.title, selected, selectedEngagement),
     body: agreementPreview(agreement.agreement_body, selected, selectedEngagement),
@@ -601,6 +605,10 @@ export default function CreatorWorkspace({
   const createSubmissionLink = async () => {
     if (!deliverable.title.trim()) {
       setError('Add a deliverable title before creating an upload link.');
+      return;
+    }
+    if (selectedDeliverableBrief && selectedDeliverableBrief.status !== 'approved') {
+      setError('Approve the linked brief before creating a creator upload link.');
       return;
     }
     setSaving(true);
@@ -1620,9 +1628,16 @@ export default function CreatorWorkspace({
                         <option value="">No linked engagement</option>
                         {workflow.engagements.map(item => <option key={item.id} value={item.id}>{item.engagement_type === 'retainer' ? 'Retainer' : 'One-off'} · {item.asset_commitment || '—'} assets</option>)}
                       </select>
-                      <select value={deliverable.brief_id} onChange={event => setDeliverable({ ...deliverable, brief_id: event.target.value })}>
+                      <select value={deliverable.brief_id} onChange={event => {
+                        const brief = workflow.briefs.find(item => String(item.id) === event.target.value);
+                        setDeliverable({
+                          ...deliverable,
+                          brief_id: event.target.value,
+                          title: deliverable.title || brief?.title || '',
+                        });
+                      }}>
                         <option value="">No linked brief</option>
-                        {workflow.briefs.map(brief => <option key={brief.id} value={brief.id}>{brief.title}</option>)}
+                        {workflow.briefs.map(brief => <option key={brief.id} value={brief.id}>{brief.title} · {brief.status}</option>)}
                       </select>
                     </div>
                     <div className="workflow-two">
@@ -1632,8 +1647,18 @@ export default function CreatorWorkspace({
                     <input placeholder="Drive or asset URL" value={deliverable.source_url} onChange={event => setDeliverable({ ...deliverable, source_url: event.target.value })} />
                     <div className="deliverable-actions">
                       <button className="primary-action" disabled={saving}>Add deliverable</button>
-                      <button type="button" disabled={saving} onClick={createSubmissionLink}>Create creator upload link</button>
+                      <button
+                        type="button"
+                        disabled={saving || (selectedDeliverableBrief && selectedDeliverableBrief.status !== 'approved')}
+                        title={selectedDeliverableBrief && selectedDeliverableBrief.status !== 'approved' ? 'Approve the linked brief before creating a creator upload link.' : ''}
+                        onClick={createSubmissionLink}
+                      >
+                        Create creator upload link
+                      </button>
                     </div>
+                    {selectedDeliverableBrief && selectedDeliverableBrief.status !== 'approved' && (
+                      <small className="workflow-form-note">Linked brief is {selectedDeliverableBrief.status}. Approve it in Briefs before sending footage instructions.</small>
+                    )}
                     {submissionLink && (
                       <div className="submission-link-created">
                         <span>Copied to clipboard</span>
