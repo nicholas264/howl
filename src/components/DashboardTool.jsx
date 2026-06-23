@@ -270,21 +270,33 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
     finally { setCreativeSyncing(false); }
   }, [creativeWindowDays, loadAnalysisQueue, loadCreativeTable]);
 
-  const assignCreativeCreator = useCallback(async (groupKey, creatorId) => {
+  const assignCreativeCreator = useCallback(async (groupKey, creatorId, source = {}) => {
     const r = await fetch('/api/meta', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'assign_creative_creator', groupKey, creatorId: creatorId || null }),
+      body: JSON.stringify({
+        action: 'assign_creative_creator',
+        groupKey,
+        creatorId: creatorId || null,
+        sourceType: source.sourceType || null,
+        sourceLabel: source.sourceLabel || null,
+      }),
     });
     const d = await r.json();
-    if (!r.ok || d.error) throw new Error(d.error || 'Could not assign creator');
+    if (!r.ok || d.error) throw new Error(d.error || 'Could not assign creative source');
     setCreativeTable(prev => prev ? {
       ...prev,
       groups: prev.groups.map(group => group.groupKey === groupKey ? {
         ...group,
         creatorId: d.creator?.id ? Number(d.creator.id) : null,
         creatorName: d.creator?.name || null,
+        sourceType: d.sourceType || null,
+        sourceLabel: d.sourceLabel || null,
         creatorConflict: false,
+        suggestedCreatorId: d.creator?.id ? null : group.suggestedCreatorId,
+        suggestedCreatorName: d.creator?.id ? null : group.suggestedCreatorName,
+        suggestionConfidence: d.creator?.id ? null : group.suggestionConfidence,
+        suggestionReason: d.creator?.id ? null : group.suggestionReason,
       } : group),
     } : prev);
     return d;
@@ -307,6 +319,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           ...group,
           creatorId: Number(update.creatorId),
           creatorName: update.creatorName,
+          sourceType: 'external_creator',
+          sourceLabel: update.creatorName,
           creatorConflict: false,
           suggestedCreatorId: null,
           suggestedCreatorName: null,

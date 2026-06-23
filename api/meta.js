@@ -1449,7 +1449,10 @@ export default async function handler(req, res) {
               min(linked.source_label) FILTER (WHERE linked.source_label IS NOT NULL) AS source_label,
               count(DISTINCT linked.creator_id) FILTER (WHERE linked.creator_id IS NOT NULL) AS creator_count
             FROM (
-              SELECT assignment.creator_id, 'external_creator'::text AS source_type, c.name AS source_label
+              SELECT
+                assignment.creator_id,
+                COALESCE(assignment.source_type, CASE WHEN assignment.creator_id IS NOT NULL THEN 'external_creator' END) AS source_type,
+                COALESCE(assignment.source_label, c.name) AS source_label
               FROM creative_creator_assignments assignment
               LEFT JOIN creators c ON c.id = assignment.creator_id
               WHERE assignment.group_key = m.group_key
@@ -1524,18 +1527,39 @@ export default async function handler(req, res) {
       case 'assign_creative_creator': {
         const groupKey = (req.body.groupKey || '').toString().trim();
         const creatorId = req.body.creatorId ? Number(req.body.creatorId) : null;
+        const allowedSourceTypes = new Set(['internal_employee', 'founder', 'tool_generated']);
+        const requestedSourceType = (req.body.sourceType || '').toString().trim();
+        const sourceType = creatorId ? 'external_creator' : (allowedSourceTypes.has(requestedSourceType) ? requestedSourceType : null);
+        const sourceLabel = (req.body.sourceLabel || '').toString().trim() || null;
         if (!groupKey) return res.status(400).json({ error: 'groupKey required' });
+        if (sourceType && sourceType !== 'external_creator' && ['internal_employee', 'founder'].includes(sourceType) && !sourceLabel) {
+          return res.status(400).json({ error: 'sourceLabel required for founder or internal source tags' });
+        }
         const sql = appAccess.sql;
         await ensureCreatorOpsTables(sql);
         let creator = null;
+        const resolvedSourceLabel = creatorId ? null : (sourceLabel || (sourceType === 'tool_generated' ? 'Made in HOWL' : null));
         if (creatorId) {
           [creator] = await sql`SELECT id, name FROM creators WHERE id = ${creatorId}`;
           if (!creator) return res.status(404).json({ error: 'Creator not found' });
           await sql`
-            INSERT INTO creative_creator_assignments (group_key, creator_id, assigned_by)
-            VALUES (${groupKey}, ${creatorId}, ${appAccess.userId})
+            INSERT INTO creative_creator_assignments (group_key, creator_id, source_type, source_label, assigned_by)
+            VALUES (${groupKey}, ${creatorId}, 'external_creator', ${creator.name}, ${appAccess.userId})
             ON CONFLICT (group_key) DO UPDATE SET
               creator_id = EXCLUDED.creator_id,
+              source_type = EXCLUDED.source_type,
+              source_label = EXCLUDED.source_label,
+              assigned_by = EXCLUDED.assigned_by,
+              updated_at = now()
+          `;
+        } else if (sourceType) {
+          await sql`
+            INSERT INTO creative_creator_assignments (group_key, creator_id, source_type, source_label, assigned_by)
+            VALUES (${groupKey}, null, ${sourceType}, ${resolvedSourceLabel}, ${appAccess.userId})
+            ON CONFLICT (group_key) DO UPDATE SET
+              creator_id = null,
+              source_type = EXCLUDED.source_type,
+              source_label = EXCLUDED.source_label,
               assigned_by = EXCLUDED.assigned_by,
               updated_at = now()
           `;
@@ -1546,8 +1570,8 @@ export default async function handler(req, res) {
           UPDATE creative_assets
           SET creator_id = ${creatorId},
               creator = ${creator?.name || null},
-              source_type = ${creatorId ? 'external_creator' : null},
-              source_label = ${creator?.name || null},
+              source_type = ${creatorId ? 'external_creator' : sourceType},
+              source_label = ${creator?.name || resolvedSourceLabel},
               updated_at = now()
           WHERE group_key = ${groupKey}
           RETURNING id
@@ -1556,8 +1580,8 @@ export default async function handler(req, res) {
           UPDATE launch_history launch
           SET creator_id = ${creatorId},
               creator = ${creator?.name || null},
-              source_type = ${creatorId ? 'external_creator' : null},
-              source_label = ${creator?.name || null}
+              source_type = ${creatorId ? 'external_creator' : sourceType},
+              source_label = ${creator?.name || resolvedSourceLabel}
           WHERE launch.ad_id IN (
             SELECT ad_id FROM creative_performance WHERE group_key = ${groupKey}
           )
@@ -1576,6 +1600,8 @@ export default async function handler(req, res) {
         }
         return res.json({
           creator: creator || null,
+          sourceType: creatorId ? 'external_creator' : sourceType,
+          sourceLabel: creator?.name || resolvedSourceLabel,
           groupKey,
           assetsUpdated: assets.length,
           launchesUpdated: launches.length,

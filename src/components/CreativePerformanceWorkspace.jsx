@@ -10,6 +10,21 @@ const METRICS = {
   hookRate: { label: 'Hook rate', format: v => `${((v || 0) * 100).toFixed(1)}%`, better: 'high' },
 };
 
+const SOURCE_TAGS = [
+  { value: 'founder', label: 'Founder', placeholder: 'Founder name' },
+  { value: 'internal_employee', label: 'Internal', placeholder: 'Team member name' },
+  { value: 'tool_generated', label: 'Made in tool', placeholder: 'Made in HOWL' },
+];
+
+function sourceTypeLabel(type) {
+  return ({
+    external_creator: 'Creator UGC',
+    internal_employee: 'Internal',
+    founder: 'Founder',
+    tool_generated: 'Made in tool',
+  })[type] || (type ? type.replaceAll('_', ' ') : 'Unattributed');
+}
+
 function statusFor(g) {
   if ((g.spend || 0) < 50 && !(g.purchases > 0)) return 'Learning';
   if ((g.roas || 0) >= 2 && (g.purchases || 0) >= 2) return 'Winner';
@@ -60,6 +75,7 @@ export default function CreativePerformanceWorkspace({
   const [assignmentError, setAssignmentError] = useState(false);
   const [batchAssigning, setBatchAssigning] = useState(false);
   const [conceptMessage, setConceptMessage] = useState('');
+  const [sourceDrafts, setSourceDrafts] = useState({});
 
   useEffect(() => {
     fetch('/api/creators')
@@ -76,7 +92,9 @@ export default function CreativePerformanceWorkspace({
       .filter(g => creatorFilter === 'All'
         || (creatorFilter === 'Unassigned' ? !g.creatorId && !g.sourceType
           : creatorFilter === 'Suggested' ? !g.creatorId && !g.sourceType && !!g.suggestedCreatorId
-            : String(g.creatorId) === creatorFilter))
+            : creatorFilter.startsWith('source:')
+              ? g.sourceType === creatorFilter.replace('source:', '')
+              : String(g.creatorId) === creatorFilter))
       .sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
   }, [creativeTable, creatorFilter, query, status, sortKey]);
 
@@ -138,6 +156,31 @@ export default function CreativePerformanceWorkspace({
       setAssigning('');
     }
   };
+  const assignSourceTag = async (group, sourceType) => {
+    const tag = SOURCE_TAGS.find(item => item.value === sourceType);
+    if (!tag) return;
+    const draftKey = `${group.groupKey}:${sourceType}`;
+    const sourceLabel = sourceType === 'tool_generated'
+      ? 'Made in HOWL'
+      : (sourceDrafts[draftKey] || group.sourceLabel || '').trim();
+    if (sourceType !== 'tool_generated' && !sourceLabel) {
+      setAssignmentMessage(`Add a ${tag.placeholder.toLowerCase()} before marking ${group.name || 'this creative'} as ${tag.label}.`);
+      setAssignmentError(true);
+      return;
+    }
+    setAssigning(group.groupKey);
+    setAssignmentMessage('');
+    setAssignmentError(false);
+    try {
+      const result = await onAssignCreator(group.groupKey, null, { sourceType, sourceLabel });
+      setAssignmentMessage(`Marked ${group.name || 'creative'} as ${sourceTypeLabel(result.sourceType)}${result.sourceLabel ? ` · ${result.sourceLabel}` : ''}.`);
+    } catch (err) {
+      setAssignmentMessage(err.message);
+      setAssignmentError(true);
+    } finally {
+      setAssigning('');
+    }
+  };
   const applyHighConfidenceSuggestions = async () => {
     const assignments = (creativeTable?.groups || [])
       .filter(group => !group.creatorId && !group.sourceType && group.suggestedCreatorId && group.suggestionConfidence === 'high')
@@ -165,6 +208,35 @@ export default function CreativePerformanceWorkspace({
   const assignedCount = allGroups.filter(group => group.creatorId || group.sourceType).length;
   const suggestedCount = allGroups.filter(group => !group.creatorId && !group.sourceType && group.suggestedCreatorId).length;
   const highConfidenceCount = allGroups.filter(group => !group.creatorId && !group.sourceType && group.suggestionConfidence === 'high').length;
+  const renderSourceControls = (group) => (
+    <div className="motion-source-controls">
+      <span>Other source</span>
+      {SOURCE_TAGS.map(tag => {
+        const draftKey = `${group.groupKey}:${tag.value}`;
+        const value = sourceDrafts[draftKey] ?? (group.sourceType === tag.value ? group.sourceLabel || '' : '');
+        return (
+          <div className={group.sourceType === tag.value ? 'active' : ''} key={tag.value}>
+            {tag.value !== 'tool_generated' ? (
+              <input
+                aria-label={`${tag.label} label for ${group.name || 'creative'}`}
+                placeholder={tag.placeholder}
+                value={value}
+                disabled={!canManageCreators || assigning === group.groupKey}
+                onChange={event => setSourceDrafts(prev => ({ ...prev, [draftKey]: event.target.value }))}
+              />
+            ) : null}
+            <button
+              type="button"
+              disabled={!canManageCreators || assigning === group.groupKey}
+              onClick={() => assignSourceTag(group, tag.value)}
+            >
+              {tag.label}
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   return (
     <section className="motion-workspace">
@@ -194,6 +266,9 @@ export default function CreativePerformanceWorkspace({
             <option>All</option>
             <option>Unassigned</option>
             <option>Suggested</option>
+            <option value="source:founder">Founder</option>
+            <option value="source:internal_employee">Internal</option>
+            <option value="source:tool_generated">Made in tool</option>
             {creators.map(creator => <option key={creator.id} value={creator.id}>{creator.name}</option>)}
           </select>
         </div>
@@ -313,9 +388,10 @@ export default function CreativePerformanceWorkspace({
                     {creators.map(creator => <option key={creator.id} value={creator.id}>{creator.name}</option>)}
                   </select>
                   {!g.creatorId && g.sourceType ? (
-                    <small>{g.sourceType.replaceAll('_', ' ')} · {g.sourceLabel || 'source tagged'}</small>
+                    <small>{sourceTypeLabel(g.sourceType)} · {g.sourceLabel || 'source tagged'}</small>
                   ) : null}
                 </div>
+                {renderSourceControls(g)}
                 {canManageCreators && !g.creatorId && !g.sourceType && g.suggestedCreatorId ? (
                   <button className="motion-creator-suggestion" title={g.suggestionReason} onClick={() => assignCreator(g, g.suggestedCreatorId)}>
                     <span>{g.suggestionConfidence === 'high' ? 'High confidence' : 'Review match'}</span>
@@ -390,8 +466,9 @@ export default function CreativePerformanceWorkspace({
                     {creators.map(creator => <option key={creator.id} value={creator.id}>{creator.name}</option>)}
                   </select>
                   {!g.creatorId && g.sourceType ? (
-                    <small className="motion-source-tag">{g.sourceType.replaceAll('_', ' ')} · {g.sourceLabel || 'source tagged'}</small>
+                    <small className="motion-source-tag">{sourceTypeLabel(g.sourceType)} · {g.sourceLabel || 'source tagged'}</small>
                   ) : null}
+                  {renderSourceControls(g)}
                   {canManageCreators && !g.creatorId && !g.sourceType && g.suggestedCreatorId ? (
                     <button className="motion-table-suggestion" title={g.suggestionReason} onClick={() => assignCreator(g, g.suggestedCreatorId)}>
                       Use {g.suggestedCreatorName}

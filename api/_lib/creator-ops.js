@@ -455,12 +455,17 @@ async function createCreatorOpsTables(sql) {
   await sql`
     CREATE TABLE IF NOT EXISTS creative_creator_assignments (
       group_key    TEXT PRIMARY KEY,
-      creator_id   BIGINT NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+      creator_id   BIGINT REFERENCES creators(id) ON DELETE CASCADE,
+      source_type  TEXT,
+      source_label TEXT,
       assigned_by  TEXT,
       created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+  await sql`ALTER TABLE creative_creator_assignments ALTER COLUMN creator_id DROP NOT NULL`;
+  await sql`ALTER TABLE creative_creator_assignments ADD COLUMN IF NOT EXISTS source_type TEXT`;
+  await sql`ALTER TABLE creative_creator_assignments ADD COLUMN IF NOT EXISTS source_label TEXT`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creative_creator_assignments_creator ON creative_creator_assignments(creator_id)`;
   await sql`ALTER TABLE ugc_sessions ADD COLUMN IF NOT EXISTS creator_id BIGINT`;
   await sql`ALTER TABLE ugc_sessions ADD COLUMN IF NOT EXISTS brief_id BIGINT`;
