@@ -622,14 +622,17 @@ export default async function handler(req, res) {
           FROM launch_history
         `,
         sql`
-          SELECT creator AS label, count(*)::int AS launches
-          FROM launch_history
-          WHERE creator_id IS NULL
-            AND source_type IS NULL
-            AND creator IS NOT NULL
-            AND btrim(creator) <> ''
-          GROUP BY creator
-          ORDER BY launches DESC, creator
+          WITH repairable_labels AS (
+            SELECT COALESCE(NULLIF(btrim(creator), ''), NULLIF(btrim(source_label), '')) AS label
+            FROM launch_history
+            WHERE creator_id IS NULL
+              AND (source_type IS NULL OR source_type = 'external_creator')
+          )
+          SELECT label, count(*)::int AS launches
+          FROM repairable_labels
+          WHERE label IS NOT NULL
+          GROUP BY label
+          ORDER BY launches DESC, label
         `,
       ]);
       const outcomesByBrief = new Map(assignmentOutcomes.map(item => [Number(item.brief_id), item]));
@@ -659,13 +662,17 @@ export default async function handler(req, res) {
       const launches = await sql`
         UPDATE launch_history
         SET creator_id = ${creatorId}
-        WHERE creator_id IS NULL AND lower(creator) = lower(${label})
+        WHERE creator_id IS NULL
+          AND (source_type IS NULL OR source_type = 'external_creator')
+          AND lower(COALESCE(NULLIF(btrim(creator), ''), NULLIF(btrim(source_label), ''))) = lower(${label})
         RETURNING id
       `;
       await sql`
         UPDATE creative_assets
         SET creator_id = ${creatorId}, updated_at = now()
-        WHERE creator_id IS NULL AND lower(creator) = lower(${label})
+        WHERE creator_id IS NULL
+          AND (source_type IS NULL OR source_type = 'external_creator')
+          AND lower(COALESCE(NULLIF(btrim(creator), ''), NULLIF(btrim(source_label), ''))) = lower(${label})
       `;
       await sql`
         INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
