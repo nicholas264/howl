@@ -375,7 +375,7 @@ input, textarea, select, button { font-family: inherit; }
 @media(max-width:760px){.app-shell .shell{background:#f7f6f2}.app-shell .sidebar{box-shadow:0 8px 28px rgba(45,40,30,.08)}.app-shell .sidebar-top{min-height:0;padding:8px 11px}.app-shell .sidebar-top img{width:96px}.app-shell .sidebar-sub{display:none}}
 
 /* ── Creative Pipeline · The Forge ───────────────────────────────────────── */
-.forge{max-width:1500px;margin:0 auto}
+.forge{max-width:1500px;margin:0 auto;padding:40px 42px 72px}
 .forge-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:6px}
 .forge-eyebrow{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:var(--flame)}
 .forge h1{font-family:'Instrument Serif',Georgia,serif;font-weight:400;font-size:46px;line-height:1;letter-spacing:-.015em;margin:6px 0 0}
