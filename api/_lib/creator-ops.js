@@ -373,6 +373,50 @@ async function createCreatorOpsTables(sql) {
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_product_seeds_status ON creator_product_seeds(status, requested_at DESC)`;
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_creator_product_seeds_request_key ON creator_product_seeds(request_key) WHERE request_key IS NOT NULL`;
 
+  // Unit cost catalog for product seeding (COGS by unit type).
+  await sql`
+    CREATE TABLE IF NOT EXISTS seeding_units (
+      unit_type   TEXT PRIMARY KEY,
+      cogs        NUMERIC(12,2) NOT NULL DEFAULT 0,
+      active      BOOLEAN NOT NULL DEFAULT true,
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  // Seed the known HOWL unit costs without overwriting any edits.
+  await sql`
+    INSERT INTO seeding_units (unit_type, cogs) VALUES
+      ('R1', 169.25), ('R4', 750.00), ('R1 + Bag', 244.25), ('R4 + Bag', 840.00)
+    ON CONFLICT (unit_type) DO NOTHING
+  `;
+
+  // Product seeding cost ledger (one row per seeding event). Mirrors the
+  // external "HOWL UGC Seeding Tracker" spreadsheet so it can replace it.
+  await sql`
+    CREATE TABLE IF NOT EXISTS creator_seeding_log (
+      id                  BIGSERIAL PRIMARY KEY,
+      creator_id          BIGINT NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+      seeded_on           DATE,
+      product_label       TEXT,
+      unit_type           TEXT,
+      quantity            INTEGER NOT NULL DEFAULT 1,
+      unit_cogs           NUMERIC(12,2) NOT NULL DEFAULT 0,
+      shipping_cost       NUMERIC(12,2) NOT NULL DEFAULT 0,
+      creator_fee         NUMERIC(12,2) NOT NULL DEFAULT 0,
+      agreed_deliverables INTEGER,
+      deliverable_due     DATE,
+      usage_rights        TEXT,
+      notes               TEXT,
+      source              TEXT NOT NULL DEFAULT 'manual',
+      import_key          TEXT,
+      created_by          TEXT,
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_seeding_log_creator ON creator_seeding_log(creator_id, seeded_on DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_seeding_log_seeded ON creator_seeding_log(seeded_on DESC)`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_creator_seeding_log_import_key ON creator_seeding_log(import_key) WHERE import_key IS NOT NULL`;
+
   await sql`
     CREATE TABLE IF NOT EXISTS creator_deliverables (
       id              BIGSERIAL PRIMARY KEY,

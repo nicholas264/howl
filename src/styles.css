@@ -424,3 +424,41 @@ input, textarea, select, button { font-family: inherit; }
 .forge-detail-row .v{font-family:'Instrument Serif',Georgia,serif;font-size:22px}
 .forge-hint{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted2);margin-top:14px;text-align:center}
 .forge-empty{padding:60px 24px;text-align:center;color:var(--muted)}
+
+/* ── Seeding Ledger ──────────────────────────────────────────────────────── */
+.seed-page{max-width:1500px;margin:0 auto;padding:40px 42px 72px}
+.seed-section{margin-top:26px}
+.seed-section-label{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:2.5px;text-transform:uppercase;color:var(--muted2);margin-bottom:12px}
+.seed-rollup{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.seed-rollup th{font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted2);text-align:right;padding:11px 14px;border-bottom:1px solid var(--border)}
+.seed-rollup th:first-child{text-align:left}
+.seed-rollup td{font-size:13px;text-align:right;padding:11px 14px;border-bottom:1px solid var(--border)}
+.seed-rollup td:first-child{text-align:left;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
+.seed-rollup tr:last-child td{border-bottom:0}
+.seed-rollup .seed-total{font-family:'Instrument Serif',Georgia,serif;font-size:17px}
+.seed-rollup tfoot td{background:var(--surface2);font-weight:700;border-top:2px solid var(--border)}
+
+.seed-catalog{display:flex;flex-wrap:wrap;gap:10px}
+.seed-unit{display:flex;align-items:center;gap:8px;padding:9px 13px;background:var(--surface);border:1px solid var(--border);border-radius:999px}
+.seed-unit b{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text)}
+.seed-unit input{width:74px;padding:4px 7px;border:1px solid var(--border);border-radius:6px;font-size:12px;text-align:right}
+
+.seed-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.seed-table{width:100%;border-collapse:collapse;min-width:880px}
+.seed-table th{font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted2);text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;background:var(--surface)}
+.seed-table td{font-size:12px;padding:9px 12px;border-bottom:1px solid var(--border);white-space:nowrap}
+.seed-table tr:last-child td{border-bottom:0}
+.seed-table tr:hover td{background:var(--surface2)}
+.seed-table .num{text-align:right;font-variant-numeric:tabular-nums}
+.seed-table .seed-creator{font-weight:600;color:var(--text)}
+.seed-table .seed-money{font-family:'Instrument Serif',Georgia,serif;font-size:14px}
+.seed-del{border:0;background:none;color:var(--muted2);cursor:pointer;font-size:14px;line-height:1;padding:2px 6px;border-radius:5px}
+.seed-del:hover{background:var(--flame-dim);color:var(--flame)}
+.seed-unit-pill{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--surface2);border:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.5px}
+.seed-add{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-top:14px;padding:16px;background:var(--surface2);border:1px solid var(--border);border-radius:12px}
+.seed-add input,.seed-add select{padding:8px;border:1px solid var(--border);border-radius:7px;font-size:12px;background:#fff}
+.seed-add .wide{grid-column:span 2}
+.seed-add-actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:10px;align-items:center}
+.seed-flag{margin-top:14px;padding:16px 18px;border:1px solid var(--flame-border);border-radius:12px;background:var(--flame-dim)}
+.seed-flag b{font-family:'Instrument Serif',Georgia,serif;font-size:17px;font-weight:400}
+.seed-flag ul{margin:8px 0 0;padding-left:18px;columns:2;font-size:11px;color:var(--muted);line-height:1.7}
