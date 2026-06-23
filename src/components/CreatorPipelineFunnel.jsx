@@ -1,17 +1,23 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-const STAGE_META = [
-  ['sourced', 'Sourced', '#b9b4a8'],
-  ['contacted', 'Contacted', '#c79a6b'],
-  ['interested', 'Interested', '#d4923f'],
-  ['briefing', 'Briefing', '#e07b2e'],
-  ['producing', 'Producing', '#d84a17'],
-  ['active', 'Active', '#2ea98f'],
-  ['alumni', 'Alumni', '#9a958c'],
+// Heat ramp: cool ash at the top of the pipeline, hot flame where creators ship.
+const STAGES = [
+  { key: 'sourced', label: 'Sourced', color: '#8d8a82' },
+  { key: 'contacted', label: 'Contacted', color: '#c98a4e' },
+  { key: 'interested', label: 'Interested', color: '#d9772f' },
+  { key: 'briefing', label: 'Briefing', color: '#e05f1f' },
+  { key: 'producing', label: 'Producing', color: '#df4d12' },
+  { key: 'active', label: 'Active', color: '#f24405' },
 ];
-
-// Stages where signed creators are actively shipping creative.
+const ALUMNI = { key: 'alumni', label: 'Graduated', color: '#5f5b54' };
 const PRODUCTION_STAGES = new Set(['producing', 'active']);
+
+// SVG geometry.
+const BAND_H = 64;
+const TOP_PAD = 10;
+const CX = 210;
+const MAX_HALF = 165;
+const SPOUT_HALF = 13;
 
 function fmtAssets(value) {
   if (!value) return '0';
@@ -22,6 +28,7 @@ export default function CreatorPipelineFunnel() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [selected, setSelected] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -29,8 +36,7 @@ export default function CreatorPipelineFunnel() {
     try {
       const res = await fetch('/api/creators?summary=funnel');
       if (!res.ok) throw new Error(`Request failed (${res.status})`);
-      const json = await res.json();
-      setData(json);
+      setData(await res.json());
     } catch (err) {
       setError(err.message || 'Failed to load pipeline');
     } finally {
@@ -40,93 +46,210 @@ export default function CreatorPipelineFunnel() {
 
   useEffect(() => { load(); }, [load]);
 
-  if (loading && !data) return <div className="creator-empty">Loading pipeline…</div>;
-  if (error) return <div className="creator-empty">{error}</div>;
-  if (!data) return null;
+  const model = useMemo(() => {
+    if (!data) return null;
+    const find = key => data.funnel.find(f => f.stage === key) || { creatorCount: 0, contractedCount: 0, monthlyAssets: 0 };
+    const stages = STAGES.map(s => ({ ...s, ...find(s.key) }));
+    const alumni = { ...ALUMNI, ...find(ALUMNI.key) };
+    const maxCount = Math.max(1, ...stages.map(s => s.creatorCount));
 
-  const { funnel, totals } = data;
-  const rows = STAGE_META.map(([key, label, color]) => {
-    const row = funnel.find(f => f.stage === key) || { creatorCount: 0, contractedCount: 0, monthlyAssets: 0 };
-    return { key, label, color, ...row };
-  });
-  const maxCount = Math.max(1, ...rows.map(r => r.creatorCount));
+    // Half-widths per band, with a floor so empty stages still render a sliver.
+    const half = stages.map(s => Math.max((s.creatorCount / maxCount) * MAX_HALF, 9));
+    const yTop = i => TOP_PAD + i * BAND_H;
+    const spoutBottomY = yTop(stages.length) + 30;
+    const tipY = spoutBottomY + 14;
 
-  // Expected monthly assets from creators currently in production-bearing stages.
-  const producingAssets = rows
-    .filter(r => PRODUCTION_STAGES.has(r.key))
-    .reduce((sum, r) => sum + r.monthlyAssets, 0);
+    const bands = stages.map((s, i) => {
+      const topH = half[i];
+      const botH = i < stages.length - 1 ? half[i + 1] : SPOUT_HALF;
+      const yt = yTop(i);
+      const yb = yTop(i + 1);
+      return {
+        ...s,
+        topH, botH, yt, yb,
+        points: `${CX - topH},${yt} ${CX + topH},${yt} ${CX + botH},${yb} ${CX - botH},${yb}`,
+        labelY: yt + BAND_H / 2,
+      };
+    });
 
-  const headline = [
-    { label: 'Creators in pipeline', value: totals.creatorCount.toLocaleString() },
-    { label: 'Under contract', value: totals.contractedCount.toLocaleString() },
-    { label: 'Expected assets / mo (producing + active)', value: fmtAssets(Math.round(producingAssets * 10) / 10), accent: true },
-    { label: 'Contracted run rate / mo (all stages)', value: fmtAssets(totals.monthlyAssets) },
-  ];
+    // Funnel silhouette for clipping the flow + embers.
+    const left = bands.map(b => `${CX - b.topH},${b.yt}`);
+    left.push(`${CX - SPOUT_HALF},${yTop(stages.length)}`, `${CX - SPOUT_HALF},${spoutBottomY}`, `${CX},${tipY}`);
+    const right = [`${CX + SPOUT_HALF},${spoutBottomY}`, `${CX + SPOUT_HALF},${yTop(stages.length)}`];
+    bands.slice().reverse().forEach(b => right.push(`${CX + b.topH},${b.yt}`));
+    const silhouette = `M ${left.join(' L ')} L ${right.join(' L ')} Z`;
+
+    const totals = data.totals;
+    const producingAssets = stages
+      .filter(s => PRODUCTION_STAGES.has(s.key))
+      .reduce((sum, s) => sum + s.monthlyAssets, 0);
+
+    return { stages, alumni, bands, silhouette, spoutBottomY, tipY, totals, producingAssets, maxCount };
+  }, [data]);
+
+  if (loading && !data) return <div className="forge"><div className="forge-empty">Stoking the pipeline…</div></div>;
+  if (error) return <div className="forge"><div className="forge-empty">{error}</div></div>;
+  if (!model) return null;
+
+  const { stages, alumni, bands, silhouette, spoutBottomY, tipY, totals, producingAssets } = model;
+  const totalForShare = stages.reduce((sum, s) => sum + s.creatorCount, 0) || 1;
+  const sel = selected ? [...stages, alumni].find(s => s.key === selected) : null;
+
+  const embers = Array.from({ length: 8 }, (_, i) => i);
+  const sparks = Array.from({ length: 6 }, (_, i) => i);
 
   return (
-    <div className="creator-pipeline-funnel">
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
-        {headline.map(({ label, value, accent }) => (
-          <div key={label} style={{ background: '#fff', border: '1px solid #e7e3da', borderRadius: 8, padding: '14px 16px' }}>
-            <span style={{ fontSize: 9, color: '#88857f', letterSpacing: 1, textTransform: 'uppercase' }}>{label}</span>
-            <div style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.1, marginTop: 6, color: accent ? '#d84a17' : '#171717' }}>{value}</div>
-          </div>
-        ))}
+    <div className="forge">
+      <div className="forge-head">
+        <div>
+          <div className="forge-eyebrow">Creative Production Pipeline</div>
+          <h1>The Forge</h1>
+          <p className="forge-sub">
+            Where creators sit in the pipeline, and what the fire produces. Each contracted creator feeds an
+            expected number of new assets per month. Tap a stage to inspect it.
+          </p>
+        </div>
+        <button type="button" className="primary-action" onClick={load} disabled={loading}>
+          {loading ? 'Refreshing' : 'Refresh'}
+        </button>
       </div>
 
-      <div style={{ background: '#fff', border: '1px solid #e7e3da', borderRadius: 8, padding: '18px 20px' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14 }}>
-          <span style={{ fontSize: 10, color: '#77746f', letterSpacing: 1.5, textTransform: 'uppercase', fontWeight: 700 }}>Creative Production Pipeline</span>
-          <span style={{ fontSize: 9, color: '#a8a39a', letterSpacing: 1 }}>creators per stage · expected assets / month</span>
+      <div className="forge-grid">
+        {/* ── Flame funnel ─────────────────────────────────────────────── */}
+        <div>
+          <svg className="forge-stage-svg" viewBox="-112 0 644 476" role="img" aria-label="Creator pipeline funnel">
+            <defs>
+              <clipPath id="forge-clip"><path d={silhouette} /></clipPath>
+              <linearGradient id="forge-shade" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="rgba(255,255,255,0.10)" />
+                <stop offset="1" stopColor="rgba(0,0,0,0.22)" />
+              </linearGradient>
+              <radialGradient id="forge-heat" cx="0.5" cy="0.5" r="0.5">
+                <stop offset="0" stopColor="rgba(242,68,5,0.42)" />
+                <stop offset="1" stopColor="rgba(242,68,5,0)" />
+              </radialGradient>
+            </defs>
+
+            {/* heat glow behind the hot end */}
+            <ellipse className="forge-glow" cx={CX} cy={spoutBottomY - 30} rx="150" ry="120" fill="url(#forge-heat)" />
+
+            {/* stage bands */}
+            {bands.map(b => (
+              <g
+                key={b.key}
+                className={`forge-band${selected && selected !== b.key ? ' dim' : ''}`}
+                onClick={() => setSelected(selected === b.key ? null : b.key)}
+                style={{ animationDelay: `${bands.indexOf(b) * 70}ms` }}
+              >
+                <polygon points={b.points} fill={b.color} />
+                <polygon points={b.points} fill="url(#forge-shade)" />
+                {selected === b.key && (
+                  <polygon points={b.points} fill="none" stroke="#fff8ef" strokeWidth="1.5" />
+                )}
+                <text className="forge-band-label" x={-14} y={b.labelY + 1} textAnchor="end">{b.label}</text>
+                <text className="forge-band-count" x={CX} y={b.labelY + 9} textAnchor="middle">{b.creatorCount}</text>
+                <text className="forge-band-assets" x={434} y={b.labelY + 1} textAnchor="start">
+                  {b.monthlyAssets > 0 ? `${fmtAssets(b.monthlyAssets)}/mo` : b.contractedCount ? `${b.contractedCount} signed` : '·'}
+                </text>
+              </g>
+            ))}
+
+            {/* flowing arrows + embers down the throat */}
+            <g clipPath="url(#forge-clip)">
+              {[-20, 0, 20].map(dx => (
+                <path
+                  key={dx}
+                  className="forge-flow-line"
+                  d={`M ${CX + dx},${TOP_PAD + 6} L ${CX + dx * 0.2},${spoutBottomY}`}
+                  style={{ animationDelay: `${(dx + 20) * 12}ms` }}
+                />
+              ))}
+              {embers.map(i => {
+                const startX = CX + (i % 4 - 1.5) * 22;
+                return (
+                  <circle
+                    key={i}
+                    className="forge-ember"
+                    cx={startX}
+                    cy={TOP_PAD + 14}
+                    r={2 + (i % 3)}
+                    fill={i % 2 ? '#ffb347' : '#f24405'}
+                    style={{ '--fall': `${tipY - TOP_PAD - 14}px`, '--dur': `${2.8 + (i % 4) * 0.5}s`, '--delay': `${i * 0.42}s` }}
+                  />
+                );
+              })}
+            </g>
+
+            {/* sparks pouring out of the spout = assets produced */}
+            {sparks.map(i => (
+              <circle
+                key={i}
+                className="forge-spark"
+                cx={CX}
+                cy={tipY}
+                r={1.6 + (i % 2)}
+                fill={i % 2 ? '#ffce6b' : '#f2670a'}
+                style={{ '--sx': `${(i % 3 - 1) * 26}px`, '--sy': `${30 + (i % 3) * 10}px`, '--dur': `${1.4 + (i % 3) * 0.3}s`, '--delay': `${i * 0.26}s` }}
+              />
+            ))}
+          </svg>
+
+          {/* graduated / cooled embers, kept out of the active taper */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 6 }}>
+            <button
+              type="button"
+              onClick={() => setSelected(selected === alumni.key ? null : alumni.key)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 9, padding: '7px 14px', cursor: 'pointer',
+                background: selected === alumni.key ? '#efece6' : 'transparent',
+                border: '1px solid var(--border)', borderRadius: 999, color: 'var(--muted)',
+                fontFamily: "'JetBrains Mono', monospace", fontSize: 9, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase',
+              }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: alumni.color }} />
+              Graduated · {alumni.creatorCount} creators
+            </button>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {rows.map(r => {
-            const widthPct = (r.creatorCount / maxCount) * 100;
-            return (
-              <div key={r.key} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 11, color: '#57544f', width: 88, flexShrink: 0, textAlign: 'right', fontWeight: 600 }}>{r.label}</span>
-                <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-                  <div
-                    title={`${r.creatorCount} creators · ${r.contractedCount} contracted`}
-                    style={{
-                      width: `${Math.max(widthPct, r.creatorCount ? 8 : 2)}%`,
-                      minWidth: r.creatorCount ? 36 : 6,
-                      height: 30,
-                      background: r.color,
-                      borderRadius: 4,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#fff',
-                      fontSize: 13,
-                      fontWeight: 700,
-                      transition: 'width 0.4s',
-                    }}
-                  >
-                    {r.creatorCount || ''}
-                  </div>
-                </div>
-                <div style={{ width: 150, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                  {r.monthlyAssets > 0 ? (
-                    <>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: PRODUCTION_STAGES.has(r.key) ? '#d84a17' : '#57544f' }}>{fmtAssets(r.monthlyAssets)} assets/mo</span>
-                      <span style={{ fontSize: 9, color: '#a8a39a', letterSpacing: 1 }}>{r.contractedCount} contracted</span>
-                    </>
-                  ) : (
-                    <span style={{ fontSize: 11, color: '#c4bfb5' }}>{r.contractedCount ? `${r.contractedCount} contracted` : '—'}</span>
-                  )}
-                </div>
+        {/* ── Right rail ───────────────────────────────────────────────── */}
+        <div>
+          <div className="forge-hero">
+            <div className="forge-hero-label">Expected assets / month</div>
+            <div className="forge-hero-num">{fmtAssets(Math.round(producingAssets * 10) / 10)}</div>
+            <div className="forge-hero-unit">from producing + active creators</div>
+            <p className="forge-hero-note">
+              Derived from each creator's active or approved contract. Monthly commitments count directly; fixed
+              total commitments are spread across the contract window.
+            </p>
+          </div>
+
+          <div className="forge-stats">
+            <div className="forge-stat"><div className="k">In pipeline</div><div className="v">{totals.creatorCount.toLocaleString()}</div></div>
+            <div className="forge-stat"><div className="k">Under contract</div><div className="v">{totals.contractedCount.toLocaleString()}</div></div>
+            <div className="forge-stat"><div className="k">Run rate / mo</div><div className="v">{fmtAssets(totals.monthlyAssets)}</div></div>
+            <div className="forge-stat"><div className="k">Shipping now</div><div className="v">{stages.filter(s => PRODUCTION_STAGES.has(s.key)).reduce((n, s) => n + s.creatorCount, 0)}</div></div>
+          </div>
+
+          {sel ? (
+            <div className="forge-detail" key={sel.key}>
+              <div className="forge-detail-stage">
+                <span className="forge-detail-dot" style={{ background: sel.color }} />
+                <h3>{sel.label}</h3>
               </div>
-            );
-          })}
+              <div className="forge-detail-rows">
+                <div className="forge-detail-row"><span className="k">Creators</span><span className="v">{sel.creatorCount}</span></div>
+                <div className="forge-detail-row"><span className="k">Under contract</span><span className="v">{sel.contractedCount}</span></div>
+                <div className="forge-detail-row"><span className="k">Expected assets / mo</span><span className="v" style={{ color: sel.monthlyAssets ? 'var(--flame)' : 'inherit' }}>{fmtAssets(sel.monthlyAssets)}</span></div>
+                {sel.key !== 'alumni' && (
+                  <div className="forge-detail-row"><span className="k">Share of pipeline</span><span className="v">{Math.round((sel.creatorCount / totalForShare) * 100)}%</span></div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="forge-hint">Tap a stage to focus it</div>
+          )}
         </div>
-
-        <p style={{ fontSize: 10, color: '#a8a39a', marginTop: 16, lineHeight: 1.5 }}>
-          Expected assets/month is derived from each creator's active or approved contract. Monthly commitments count
-          directly; fixed total commitments are amortized across the contract's start–end span. Headline “producing + active”
-          reflects creators who are currently shipping.
-        </p>
       </div>
     </div>
   );

@@ -18,6 +18,7 @@ const GalleryTab = lazy(() => import("./components/GalleryTab"));
 const FromWinnersTool = lazy(() => import("./components/FromWinnersTool"));
 const LauncherTool = lazy(() => import("./components/LauncherTool"));
 const CreatorWorkspace = lazy(() => import("./components/CreatorWorkspace"));
+const CreatorPipelineFunnel = lazy(() => import("./components/CreatorPipelineFunnel"));
 const CreativePlanningWorkspace = lazy(() => import("./components/CreativePlanningWorkspace"));
 const CreatorCampaignPlanner = lazy(() => import("./components/CreatorCampaignPlanner"));
 const AdminWorkspace = lazy(() => import("./components/AdminWorkspace"));
@@ -166,6 +167,7 @@ export default function HowlAdEngine({ appAccess }) {
     {
       label: 'Creative',
       items: [
+        { key: 'creative-pipeline', label: 'Pipeline', permission: 'creators.read' },
         { key: 'creative-analytics', label: 'Creative Analytics', permission: 'analytics.read' },
         { key: 'from-winners', label: 'Concept Studio', permission: 'briefs.write' },
         { key: 'ugc-editor', label: 'UGC Editor', permission: 'assets.write' },
@@ -320,6 +322,7 @@ export default function HowlAdEngine({ appAccess }) {
             setActiveTab={navigate}
           />
         )}
+        {activeTab === "creative-pipeline" && <CreatorPipelineFunnel />}
         {activeTab === "creative-plan" && <CreativePlanningWorkspace onOpenCreator={openPlannedCreator} />}
         {activeTab === "campaign-planner" && <CreatorCampaignPlanner onOpenCreator={openPlannedCreator} />}
         {activeTab === "creative" && <WorkspaceHub type="creative" setActiveTab={navigate} can={can} />}
