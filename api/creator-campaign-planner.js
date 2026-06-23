@@ -281,6 +281,27 @@ function guidelineViolations(assignments, guidelines) {
   return [...new Set(violations)];
 }
 
+function assignmentApprovalProblems(assignments) {
+  const problems = [];
+  for (const assignment of assignments) {
+    const label = assignment.creator_name || assignment.concept_name || `Assignment ${assignment.slot || ''}`.trim() || 'Assignment';
+    const hooks = Array.isArray(assignment.hooks) ? assignment.hooks.filter(Boolean) : [];
+    const ctas = Array.isArray(assignment.ctas) ? assignment.ctas.filter(Boolean) : [];
+    const shots = Array.isArray(assignment.shot_list) ? assignment.shot_list.filter(Boolean) : [];
+    if (!assignment.approved_for_brief) problems.push(`${label}: approve the final concept before creating a creator brief`);
+    if (!assignment.creator_id) problems.push(`${label}: missing creator`);
+    if (!clean(assignment.concept_name, 200)) problems.push(`${label}: missing concept name`);
+    if (!clean(assignment.creator_match, 500)) problems.push(`${label}: missing creator match logic`);
+    if (!clean(assignment.performance_logic, 500)) problems.push(`${label}: missing performance logic`);
+    if (!clean(assignment.opening_visual, 500)) problems.push(`${label}: missing opening visual`);
+    if (hooks.length < 3) problems.push(`${label}: needs at least 3 hook options`);
+    if (!clean(assignment.full_script, 5000) || clean(assignment.full_script, 5000).length < 120) problems.push(`${label}: script is too thin`);
+    if (ctas.length < 1) problems.push(`${label}: needs at least 1 CTA`);
+    if (shots.length < 2) problems.push(`${label}: needs at least 2 shots`);
+  }
+  return problems;
+}
+
 function validateAssignments(assignments, { assetCount, provenSlots, netNewSlots, totalBudget, guidelines }) {
   const proven = assignments.filter(item => item.cohort === 'proven').length;
   const netNew = assignments.filter(item => item.cohort === 'net_new').length;
@@ -476,6 +497,10 @@ async function saveBriefs(sql, access, planId, assignmentOverride = null) {
   const assignments = Array.isArray(assignmentOverride) && assignmentOverride.length
     ? assignmentOverride.map((assignment, index) => ({ ...assignment, slot: index + 1 }))
     : plan.assignments || [];
+  const approvalProblems = assignmentApprovalProblems(assignments);
+  if (approvalProblems.length) {
+    throw new Error(`Approve complete final scripts before creating briefs: ${approvalProblems.slice(0, 6).join(', ')}`);
+  }
   const guidelines = await loadBrandGuidelines(sql);
   const violations = guidelineViolations(assignments, guidelines);
   if (violations.length) {

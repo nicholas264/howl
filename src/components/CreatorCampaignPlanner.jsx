@@ -23,6 +23,20 @@ function lines(value) {
   return Array.isArray(value) ? value.join('\n') : '';
 }
 
+function assignmentReadiness(assignment) {
+  const missing = [];
+  if (!assignment.creator_id) missing.push('creator');
+  if (!assignment.concept_name?.trim()) missing.push('concept name');
+  if (!assignment.creator_match?.trim()) missing.push('creator match');
+  if (!assignment.performance_logic?.trim()) missing.push('performance logic');
+  if (!assignment.opening_visual?.trim()) missing.push('opening visual');
+  if ((assignment.hooks || []).filter(Boolean).length < 3) missing.push('3 hooks');
+  if (!assignment.full_script?.trim() || assignment.full_script.trim().length < 120) missing.push('full script');
+  if ((assignment.ctas || []).filter(Boolean).length < 1) missing.push('CTA');
+  if ((assignment.shot_list || []).filter(Boolean).length < 2) missing.push('2 shots');
+  return { ready: missing.length === 0, missing };
+}
+
 export default function CreatorCampaignPlanner({ onOpenCreator }) {
   const [products, setProducts] = useState([]);
   const [connected, setConnected] = useState(false);
@@ -96,6 +110,8 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
     [productId, products],
   );
   const assignments = plan?.assignments || [];
+  const approvedCount = assignments.filter(assignment => assignment.approved_for_brief).length;
+  const allAssignmentsApproved = assignments.length > 0 && approvedCount === assignments.length;
   const allocation = useMemo(() => assignments.reduce((result, assignment) => {
     result[assignment.cohort] = (result[assignment.cohort] || 0) + 1;
     return result;
@@ -149,6 +165,10 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
 
   const saveBriefs = async () => {
     if (!plan?.id) return;
+    if (!allAssignmentsApproved) {
+      setError('Approve every final assignment before creating creator briefs.');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -172,7 +192,12 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
     setPlan(current => {
       if (!current) return current;
       const nextAssignments = [...(current.assignments || [])];
-      nextAssignments[index] = { ...nextAssignments[index], ...patch };
+      const edited = !Object.prototype.hasOwnProperty.call(patch, 'approved_for_brief');
+      nextAssignments[index] = {
+        ...nextAssignments[index],
+        ...patch,
+        approved_for_brief: edited ? false : Boolean(patch.approved_for_brief),
+      };
       return { ...current, assignments: nextAssignments };
     });
   };
@@ -424,6 +449,7 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
                 </div>
                 <div className="campaign-plan-stats">
                   <div><strong>{assignments.length}</strong><span>assets</span></div>
+                  <div><strong>{approvedCount}</strong><span>approved</span></div>
                   <div><strong>{allocation.proven || 0}</strong><span>proven</span></div>
                   <div><strong>{allocation.net_new || 0}</strong><span>net new</span></div>
                   {plan.total_budget ? <div><strong>{money(plan.total_budget)}</strong><span>budget</span></div> : null}
@@ -442,7 +468,7 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
 
               <div className="campaign-assignment-list">
                 {assignments.map((assignment, index) => (
-                  <article className={`campaign-assignment ${expanded === index ? 'open' : ''}`} key={`${assignment.creator_id}-${index}`}>
+                  <article className={`campaign-assignment ${expanded === index ? 'open' : ''} ${assignment.approved_for_brief ? 'approved' : ''}`} key={`${assignment.creator_id}-${index}`}>
                     <button className="campaign-assignment-summary" onClick={() => setExpanded(expanded === index ? null : index)}>
                       <span className="campaign-slot">{String(index + 1).padStart(2, '0')}</span>
                       <span className="campaign-person">
@@ -458,6 +484,7 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
                             {money(assignment.outcome.spend)} spent · {(Number(assignment.outcome.revenue || 0) / Number(assignment.outcome.spend)).toFixed(2)}x ROAS
                           </small>
                         ) : null}
+                        {assignment.approved_for_brief ? <small>Approved for brief handoff</small> : null}
                       </span>
                       <span className="campaign-expand">{expanded === index ? '−' : '+'}</span>
                     </button>
@@ -515,6 +542,26 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
                             onChange={event => updateAssignmentList(index, 'shot_list', event.target.value)}
                           />
                         </section>
+                        {(() => {
+                          const readiness = assignmentReadiness(assignment);
+                          return (
+                            <section className={`campaign-approval-card ${assignment.approved_for_brief ? 'approved' : ''}`}>
+                              <div>
+                                <span>Approval gate</span>
+                                <strong>{assignment.approved_for_brief ? 'Approved for draft brief creation' : readiness.ready ? 'Ready for your approval' : 'Needs cleanup before approval'}</strong>
+                                <p>{readiness.ready ? 'This concept has creator fit, performance logic, hooks, script, CTA, and shot list.' : `Missing: ${readiness.missing.join(', ')}.`}</p>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={!readiness.ready}
+                                title={!readiness.ready ? `Missing: ${readiness.missing.join(', ')}` : ''}
+                                onClick={() => updateAssignment(index, { approved_for_brief: !assignment.approved_for_brief })}
+                              >
+                                {assignment.approved_for_brief ? 'Unapprove' : 'Approve final'}
+                              </button>
+                            </section>
+                          );
+                        })()}
                         <footer>
                           <button type="button" onClick={() => openCreator(assignment.creator_id)}>Open creator</button>
                           <small>{(assignment.shot_list || []).length} planned shots · {(assignment.hooks || []).length} hooks</small>
@@ -526,11 +573,11 @@ export default function CreatorCampaignPlanner({ onOpenCreator }) {
               </div>
 
               <div className="campaign-approve">
-                <div><span>Ready to operationalize?</span><strong>Create draft briefs. Review and approve each one before sending.</strong></div>
+                <div><span>Ready to operationalize?</span><strong>{approvedCount}/{assignments.length} final concepts approved. Create draft briefs only after review.</strong></div>
                 <button
                   onClick={saveBriefs}
-                  disabled={saving || plan.status === 'briefed'}
-                  title={plan.status === 'briefed' ? 'Draft briefs have already been created for this plan.' : ''}
+                  disabled={saving || plan.status === 'briefed' || !allAssignmentsApproved}
+                  title={plan.status === 'briefed' ? 'Draft briefs have already been created for this plan.' : !allAssignmentsApproved ? 'Approve every assignment before creating briefs.' : ''}
                 >
                   {plan.status === 'briefed' ? 'Briefs created' : saving ? 'Creating briefs…' : 'Create editable draft briefs'}
                 </button>
