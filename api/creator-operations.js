@@ -114,7 +114,15 @@ async function loadSetup(sql) {
             ) > 0
             AND u.rendered_url IS NULL
             AND u.status NOT IN ('rendered', 'complete', 'launched')
-        ) AS footage_ready_to_edit
+        ) AS footage_ready_to_edit,
+        (
+          SELECT count(*)::int
+          FROM ugc_sessions u
+          LEFT JOIN creator_deliverables d ON d.id = u.deliverable_id
+          WHERE u.creator_id IS NOT NULL
+            AND u.rendered_url IS NOT NULL
+            AND COALESCE(d.status, u.status) NOT IN ('complete', 'launched', 'cancelled')
+        ) AS footage_ready_to_launch
     `,
   ]);
 
@@ -163,6 +171,7 @@ async function loadSetup(sql) {
       approved_unsent_briefs: Number(workflow.approved_unsent_briefs || 0),
       footage_needs_transcript: Number(workflow.footage_needs_transcript || 0),
       footage_ready_to_edit: Number(workflow.footage_ready_to_edit || 0),
+      footage_ready_to_launch: Number(workflow.footage_ready_to_launch || 0),
     },
     status_mappings: statusMappings,
     verified_mismatch_count: verifiedMismatchCount,
@@ -246,6 +255,14 @@ async function loadSetup(sql) {
         count: Number(workflow.footage_ready_to_edit || 0),
         action: 'Open edit queue',
       },
+      Number(workflow.footage_ready_to_launch || 0) > 0 && {
+        key: 'footage_ready_to_launch',
+        category: 'production',
+        title: 'Launch rendered creator edits',
+        detail: 'Rendered creator assets are ready to move from the UGC editor into the launcher with source attribution intact.',
+        count: Number(workflow.footage_ready_to_launch || 0),
+        action: 'Open launch-ready edits',
+      },
     ].filter(Boolean),
   };
 }
@@ -309,6 +326,8 @@ export default async function handler(req, res) {
           submission.expires_at AS submission_expires_at,
           edit_queue.ugc_session_id AS edit_session_id,
           edit_queue.title AS edit_title,
+          launch_queue.ugc_session_id AS launch_session_id,
+          launch_queue.title AS launch_title,
           EXISTS (
             SELECT 1 FROM creator_outreach o
             WHERE o.creator_id = c.id
@@ -444,6 +463,18 @@ export default async function handler(req, res) {
           ORDER BY d.received_at DESC NULLS LAST, d.updated_at DESC
           LIMIT 1
         ) edit_queue ON true
+        LEFT JOIN LATERAL (
+          SELECT d.ugc_session_id, d.title
+          FROM creator_deliverables d
+          JOIN ugc_sessions u ON u.id = d.ugc_session_id
+          WHERE d.creator_id = c.id
+            AND d.ugc_session_id IS NOT NULL
+            AND u.rendered_url IS NOT NULL
+            AND d.status NOT IN ('complete', 'launched', 'cancelled')
+            AND d.completed_asset_count >= d.expected_asset_count
+          ORDER BY d.completed_at DESC NULLS LAST, d.updated_at DESC
+          LIMIT 1
+        ) launch_queue ON true
         WHERE c.status <> 'inactive' AND c.stage <> 'alumni'
       ),
       classified AS (

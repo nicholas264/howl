@@ -33,7 +33,7 @@ function actionDetail(item) {
   if (item.action_key === 'seed_product') return 'The creative is defined; the creator still needs the product.';
   if (item.action_key === 'review_draft_brief') return `${item.draft_brief_count || 1} draft script${Number(item.draft_brief_count || 1) === 1 ? '' : 's'} must be edited and approved before assignment.`;
   if (item.action_key === 'send_assignment') return `${item.approved_unsent_brief_count || 1} approved brief${Number(item.approved_unsent_brief_count || 1) === 1 ? '' : 's'} ready for upload link and creator handoff.`;
-  if (item.action_key === 'launch_asset') return 'The asset is complete. Launch it, then attribution can close the performance loop.';
+  if (item.action_key === 'launch_asset') return item.launch_title ? `Rendered edit ready: ${item.launch_title}` : 'The asset is rendered. Send it through Launcher so attribution can close the performance loop.';
   if (item.action_key === 'review_performance') return 'Use launch results to decide whether to rebook, iterate, or retire this creator angle.';
   return `${item.stage} creator · ${item.category}`;
 }
@@ -43,7 +43,7 @@ function inlineActionLabel(item) {
     review_draft_brief: 'Review script',
     send_assignment: 'Create upload link',
     finish_edit: 'Open editor',
-    launch_asset: 'Open launch step',
+    launch_asset: 'Open editor',
     seed_product: 'Seed product',
   })[item.action_key];
 }
@@ -101,13 +101,14 @@ export default function CreatorOperationsWorkspace({ canManage = false, onOpenCr
     if (step.key === 'duplicates' || step.key === 'profiles') return onNavigate?.('health');
     if (step.key === 'attribution') return onNavigate?.('creative-analytics');
     if (step.key === 'draft_briefs' || step.key === 'approved_unsent_briefs') return setFilter('creative');
-    if (step.key === 'footage_needs_transcript' || step.key === 'footage_ready_to_edit') return onNavigate?.('ugc-editor');
+    if (step.key === 'footage_needs_transcript' || step.key === 'footage_ready_to_edit' || step.key === 'footage_ready_to_launch') return onNavigate?.('ugc-editor');
     setError(`No action is configured for "${step.title || step.key}".`);
   };
 
   const handleInlineAction = (event, item) => {
     event.stopPropagation();
     if (item.action_key === 'finish_edit' && item.edit_session_id) return onOpenEditor?.(item.edit_session_id);
+    if (item.action_key === 'launch_asset' && item.launch_session_id) return onOpenEditor?.(item.launch_session_id);
     return onOpenCreator?.(item, item.target_tab);
   };
 

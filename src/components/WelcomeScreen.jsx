@@ -20,7 +20,7 @@ function setupTarget(step) {
   if (step.key === 'duplicates' || step.key === 'profiles') return { type: 'creator-view', value: 'health' };
   if (step.key === 'clickup_email' || step.key === 'clickup_mapping' || step.key === 'clickup_review') return { type: 'creator-view', value: 'operations' };
   if (step.key === 'attribution') return { type: 'tab', value: 'creative-analytics' };
-  if (step.key === 'footage_needs_transcript' || step.key === 'footage_ready_to_edit') return { type: 'tab', value: 'ugc-editor' };
+  if (step.key === 'footage_needs_transcript' || step.key === 'footage_ready_to_edit' || step.key === 'footage_ready_to_launch') return { type: 'tab', value: 'ugc-editor' };
   return { type: 'creator-view', value: 'operations' };
 }
 
@@ -153,6 +153,19 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
         action: 'Open edit queue',
         target: { type: 'tab', value: 'ugc-editor' },
         priority: 'medium',
+      });
+    }
+    const readyToLaunch = Number(workflow.footage_ready_to_launch || 0);
+    if (readyToLaunch > 0 && !cards.some(card => card.key === 'setup-footage_ready_to_launch')) {
+      cards.push({
+        key: 'footage-launch-ready',
+        eyebrow: 'Launch queue',
+        title: `${readyToLaunch} rendered creator edit${readyToLaunch === 1 ? '' : 's'} ready to launch`,
+        detail: 'Rendered UGC edits are ready to move into Launcher with creator, brief, and source attribution attached.',
+        count: readyToLaunch,
+        action: 'Open launch-ready edits',
+        target: { type: 'tab', value: 'ugc-editor' },
+        priority: 'high',
       });
     }
     const duplicateGroups = Number(health?.summary?.duplicate_groups || 0);
