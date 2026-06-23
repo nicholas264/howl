@@ -181,36 +181,57 @@ export default async function handler(req, res) {
         return creator ? res.json({ creator }) : res.status(404).json({ error: 'Creator not found' });
       }
       if (req.query.summary === 'funnel') {
-        // Per-stage creator counts plus expected monthly asset throughput from
-        // active/approved contracts. Monthly commitments count directly; total
-        // commitments are amortized across the contract's date span.
+        // Per-stage view of the creative pipeline. Two distinct asset signals:
+        //   retainerMonthly  — recurring assets/month from active retainer contracts
+        //   committedAssets  — one-off agreed deliverables (a fixed backlog). When a
+        //                      creator has no recurring retainer and no one-off
+        //                      engagement, we fall back to their agreed deliverables
+        //                      recorded in creator_deliverables.
         const rows = await sql`
-          SELECT
-            c.stage,
-            count(*)::int AS creator_count,
-            count(eng.creator_id)::int AS contracted_count,
-            COALESCE(SUM(eng.monthly_assets), 0)::float AS monthly_assets
-          FROM creators c
-          LEFT JOIN LATERAL (
+          WITH eng AS (
             SELECT
-              e.creator_id,
-              SUM(
-                CASE
-                  WHEN e.asset_commitment IS NULL OR e.asset_commitment <= 0 THEN 0
-                  WHEN e.commitment_period = 'monthly' THEN e.asset_commitment
-                  WHEN e.starts_on IS NOT NULL AND e.ends_on IS NOT NULL AND e.ends_on > e.starts_on
-                    THEN e.asset_commitment::float / GREATEST(
-                      EXTRACT(YEAR FROM age(e.ends_on, e.starts_on)) * 12
-                      + EXTRACT(MONTH FROM age(e.ends_on, e.starts_on)), 1)
-                  ELSE 0
-                END
-              ) AS monthly_assets
-            FROM creator_engagements e
-            WHERE e.creator_id = c.id AND e.status IN ('approved', 'active')
-            GROUP BY e.creator_id
-          ) eng ON true
-          GROUP BY c.stage
+              c.id, c.stage,
+              COALESCE(SUM(CASE
+                WHEN e.status IN ('approved', 'active') AND e.engagement_type = 'retainer'
+                  AND e.commitment_period = 'monthly' AND e.asset_commitment > 0
+                THEN e.asset_commitment ELSE 0 END), 0)::float AS retainer_monthly,
+              COALESCE(SUM(CASE
+                WHEN e.status IN ('approved', 'active') AND e.engagement_type = 'one_off'
+                  AND e.asset_commitment > 0
+                THEN e.asset_commitment ELSE 0 END), 0)::float AS oneoff_assets
+            FROM creators c
+            LEFT JOIN creator_engagements e ON e.creator_id = c.id
+            GROUP BY c.id, c.stage
+          ),
+          deliv AS (
+            SELECT creator_id, COALESCE(SUM(expected_asset_count), 0)::float AS expected
+            FROM creator_deliverables
+            WHERE status <> 'cancelled'
+            GROUP BY creator_id
+          ),
+          per_creator AS (
+            SELECT
+              eng.stage,
+              eng.retainer_monthly,
+              CASE
+                WHEN eng.oneoff_assets > 0 THEN eng.oneoff_assets
+                WHEN eng.retainer_monthly > 0 THEN 0
+                ELSE COALESCE(deliv.expected, 0)
+              END AS committed_assets,
+              (eng.retainer_monthly > 0 OR eng.oneoff_assets > 0) AS under_contract
+            FROM eng
+            LEFT JOIN deliv ON deliv.creator_id = eng.id
+          )
+          SELECT
+            stage,
+            count(*)::int AS creator_count,
+            count(*) FILTER (WHERE under_contract)::int AS contracted_count,
+            COALESCE(SUM(retainer_monthly), 0)::float AS retainer_monthly,
+            COALESCE(SUM(committed_assets), 0)::float AS committed_assets
+          FROM per_creator
+          GROUP BY stage
         `;
+        const round1 = n => Math.round((n || 0) * 10) / 10;
         const STAGE_ORDER = ['sourced', 'contacted', 'interested', 'briefing', 'producing', 'active', 'alumni'];
         const byStage = Object.fromEntries(rows.map(r => [r.stage, r]));
         const funnel = STAGE_ORDER.map(stageKey => {
@@ -219,15 +240,18 @@ export default async function handler(req, res) {
             stage: stageKey,
             creatorCount: row.creator_count || 0,
             contractedCount: row.contracted_count || 0,
-            monthlyAssets: Math.round((row.monthly_assets || 0) * 10) / 10,
+            retainerMonthly: round1(row.retainer_monthly),
+            committedAssets: round1(row.committed_assets),
           };
         });
         const totals = funnel.reduce((acc, s) => ({
           creatorCount: acc.creatorCount + s.creatorCount,
           contractedCount: acc.contractedCount + s.contractedCount,
-          monthlyAssets: acc.monthlyAssets + s.monthlyAssets,
-        }), { creatorCount: 0, contractedCount: 0, monthlyAssets: 0 });
-        totals.monthlyAssets = Math.round(totals.monthlyAssets * 10) / 10;
+          retainerMonthly: acc.retainerMonthly + s.retainerMonthly,
+          committedAssets: acc.committedAssets + s.committedAssets,
+        }), { creatorCount: 0, contractedCount: 0, retainerMonthly: 0, committedAssets: 0 });
+        totals.retainerMonthly = round1(totals.retainerMonthly);
+        totals.committedAssets = round1(totals.committedAssets);
         return res.json({ funnel, totals });
       }
       const search = text(req.query.search, 200);

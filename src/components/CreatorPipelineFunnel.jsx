@@ -48,7 +48,7 @@ export default function CreatorPipelineFunnel() {
 
   const model = useMemo(() => {
     if (!data) return null;
-    const find = key => data.funnel.find(f => f.stage === key) || { creatorCount: 0, contractedCount: 0, monthlyAssets: 0 };
+    const find = key => data.funnel.find(f => f.stage === key) || { creatorCount: 0, contractedCount: 0, retainerMonthly: 0, committedAssets: 0 };
     const stages = STAGES.map(s => ({ ...s, ...find(s.key) }));
     const alumni = { ...ALUMNI, ...find(ALUMNI.key) };
     const maxCount = Math.max(1, ...stages.map(s => s.creatorCount));
@@ -80,18 +80,15 @@ export default function CreatorPipelineFunnel() {
     const silhouette = `M ${left.join(' L ')} L ${right.join(' L ')} Z`;
 
     const totals = data.totals;
-    const producingAssets = stages
-      .filter(s => PRODUCTION_STAGES.has(s.key))
-      .reduce((sum, s) => sum + s.monthlyAssets, 0);
 
-    return { stages, alumni, bands, silhouette, spoutBottomY, tipY, totals, producingAssets, maxCount };
+    return { stages, alumni, bands, silhouette, spoutBottomY, tipY, totals, maxCount };
   }, [data]);
 
   if (loading && !data) return <div className="forge"><div className="forge-empty">Stoking the pipeline…</div></div>;
   if (error) return <div className="forge"><div className="forge-empty">{error}</div></div>;
   if (!model) return null;
 
-  const { stages, alumni, bands, silhouette, spoutBottomY, tipY, totals, producingAssets } = model;
+  const { stages, alumni, bands, silhouette, spoutBottomY, tipY, totals } = model;
   const totalForShare = stages.reduce((sum, s) => sum + s.creatorCount, 0) || 1;
   const sel = selected ? [...stages, alumni].find(s => s.key === selected) : null;
 
@@ -149,7 +146,11 @@ export default function CreatorPipelineFunnel() {
                 <text className="forge-band-label" x={-14} y={b.labelY + 1} textAnchor="end">{b.label}</text>
                 <text className="forge-band-count" x={CX} y={b.labelY + 9} textAnchor="middle">{b.creatorCount}</text>
                 <text className="forge-band-assets" x={434} y={b.labelY + 1} textAnchor="start">
-                  {b.monthlyAssets > 0 ? `${fmtAssets(b.monthlyAssets)}/mo` : b.contractedCount ? `${b.contractedCount} signed` : '·'}
+                  {b.retainerMonthly > 0
+                    ? `${fmtAssets(b.retainerMonthly)}/mo`
+                    : b.committedAssets > 0
+                      ? `${fmtAssets(b.committedAssets)} due`
+                      : b.contractedCount ? `${b.contractedCount} signed` : '·'}
                 </text>
               </g>
             ))}
@@ -215,20 +216,20 @@ export default function CreatorPipelineFunnel() {
         {/* ── Right rail ───────────────────────────────────────────────── */}
         <div>
           <div className="forge-hero">
-            <div className="forge-hero-label">Expected assets / month</div>
-            <div className="forge-hero-num">{fmtAssets(Math.round(producingAssets * 10) / 10)}</div>
-            <div className="forge-hero-unit">from producing + active creators</div>
+            <div className="forge-hero-label">Recurring assets / month</div>
+            <div className="forge-hero-num">{fmtAssets(totals.retainerMonthly)}</div>
+            <div className="forge-hero-unit">from retainer creators</div>
             <p className="forge-hero-note">
-              Derived from each creator's active or approved contract. Monthly commitments count directly; fixed
-              total commitments are spread across the contract window.
+              Retainers contribute their monthly commitment. One-off creators add {fmtAssets(totals.committedAssets)} committed
+              deliverables on top. When no contract is recorded, the funnel falls back to a creator's agreed deliverables.
             </p>
           </div>
 
           <div className="forge-stats">
             <div className="forge-stat"><div className="k">In pipeline</div><div className="v">{totals.creatorCount.toLocaleString()}</div></div>
             <div className="forge-stat"><div className="k">Under contract</div><div className="v">{totals.contractedCount.toLocaleString()}</div></div>
-            <div className="forge-stat"><div className="k">Run rate / mo</div><div className="v">{fmtAssets(totals.monthlyAssets)}</div></div>
-            <div className="forge-stat"><div className="k">Shipping now</div><div className="v">{stages.filter(s => PRODUCTION_STAGES.has(s.key)).reduce((n, s) => n + s.creatorCount, 0)}</div></div>
+            <div className="forge-stat"><div className="k">Recurring / mo</div><div className="v" style={{ color: totals.retainerMonthly ? 'var(--flame)' : 'inherit' }}>{fmtAssets(totals.retainerMonthly)}</div></div>
+            <div className="forge-stat"><div className="k">Committed deliverables</div><div className="v">{fmtAssets(totals.committedAssets)}</div></div>
           </div>
 
           {sel ? (
@@ -240,7 +241,8 @@ export default function CreatorPipelineFunnel() {
               <div className="forge-detail-rows">
                 <div className="forge-detail-row"><span className="k">Creators</span><span className="v">{sel.creatorCount}</span></div>
                 <div className="forge-detail-row"><span className="k">Under contract</span><span className="v">{sel.contractedCount}</span></div>
-                <div className="forge-detail-row"><span className="k">Expected assets / mo</span><span className="v" style={{ color: sel.monthlyAssets ? 'var(--flame)' : 'inherit' }}>{fmtAssets(sel.monthlyAssets)}</span></div>
+                <div className="forge-detail-row"><span className="k">Recurring / mo</span><span className="v" style={{ color: sel.retainerMonthly ? 'var(--flame)' : 'inherit' }}>{fmtAssets(sel.retainerMonthly)}</span></div>
+                <div className="forge-detail-row"><span className="k">Committed deliverables</span><span className="v">{fmtAssets(sel.committedAssets)}</span></div>
                 {sel.key !== 'alumni' && (
                   <div className="forge-detail-row"><span className="k">Share of pipeline</span><span className="v">{Math.round((sel.creatorCount / totalForShare) * 100)}%</span></div>
                 )}
