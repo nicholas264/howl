@@ -46,6 +46,11 @@ function sourceTypeLabel(type) {
 function sourceLabel(row) {
   return row.creator || row.source_label || sourceTypeLabel(row.source_type);
 }
+function sourceTypeKey(row) {
+  if (row.source_type) return row.source_type;
+  if (row.creator_id || row.creator) return 'external_creator';
+  return 'unattributed';
+}
 
 export default function LaunchLogTool() {
   const [rows, setRows] = useState([]);
@@ -53,6 +58,7 @@ export default function LaunchLogTool() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
+  const [sourceTypeFilter, setSourceTypeFilter] = useState('');
   const [angleFilter, setAngleFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
 
@@ -75,6 +81,7 @@ export default function LaunchLogTool() {
 
   const filtered = rows.filter(r => {
     if (sourceFilter && sourceLabel(r) !== sourceFilter) return false;
+    if (sourceTypeFilter && sourceTypeKey(r) !== sourceTypeFilter) return false;
     if (angleFilter && r.angle_id !== angleFilter) return false;
     if (userFilter && r.launched_by_email !== userFilter) return false;
     if (search) {
@@ -89,7 +96,12 @@ export default function LaunchLogTool() {
   const last7d = rows.filter(r => (Date.now() - new Date(r.launched_at).getTime()) < 7 * 86400 * 1000).length;
   const last24h = rows.filter(r => (Date.now() - new Date(r.launched_at).getTime()) < 86400 * 1000).length;
   const uniqueSources = new Set(rows.map(sourceLabel).filter(Boolean)).size;
-  const creatorLaunches = rows.filter(r => r.creator_id || r.source_type === 'external_creator' || (!r.source_type && r.creator)).length;
+  const sourceCounts = rows.reduce((acc, row) => {
+    const key = sourceTypeKey(row);
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+  const creatorLaunches = sourceCounts.external_creator || 0;
 
   return (
     <div style={S.wrap}>
@@ -129,6 +141,14 @@ export default function LaunchLogTool() {
           <div style={S.statLabel}>Creator UGC</div>
           <div className="display-md" style={{ color: '#171717' }}>{creatorLaunches}</div>
         </div>
+        <div style={S.stat}>
+          <div style={S.statLabel}>Founder / internal</div>
+          <div className="display-md" style={{ color: '#171717' }}>{(sourceCounts.founder || 0) + (sourceCounts.internal_employee || 0)}</div>
+        </div>
+        <div style={S.stat}>
+          <div style={S.statLabel}>Needs source</div>
+          <div className="display-md" style={{ color: sourceCounts.unattributed ? '#b42318' : '#171717' }}>{sourceCounts.unattributed || 0}</div>
+        </div>
       </div>
 
       <div style={S.filters}>
@@ -136,6 +156,14 @@ export default function LaunchLogTool() {
         <select style={S.select} value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}>
           <option value="">All sources</option>
           {sources.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select style={S.select} value={sourceTypeFilter} onChange={e => setSourceTypeFilter(e.target.value)}>
+          <option value="">All source types</option>
+          <option value="external_creator">Creator UGC</option>
+          <option value="founder">Founder</option>
+          <option value="internal_employee">Internal employee</option>
+          <option value="tool_generated">Made in tool</option>
+          <option value="unattributed">Needs source</option>
         </select>
         <select style={S.select} value={angleFilter} onChange={e => setAngleFilter(e.target.value)}>
           <option value="">All angles</option>
