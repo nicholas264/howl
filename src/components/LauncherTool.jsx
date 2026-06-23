@@ -440,6 +440,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     const productUrl = destUrlFor(m.productId);
     if (!productUrl) return setItemStatus(id, 'error', 'Selected product has no URL set in data/products.js');
     if (!m.headline?.trim()) return setItemStatus(id, 'error', 'Headline required');
+    if (attribution.requiresCreator && !m.creatorId) return setItemStatus(id, 'error', 'Choose an exact creator record before launching creator UGC');
+    if (attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim()) return setItemStatus(id, 'error', 'Add the internal/founder name before launching');
 
     setStatuses(prev => ({ ...prev, [id]: { status: 'pushing', steps: {}, currentStep: null } }));
     const adName = buildAdName({ creator: m.creator || 'Static Builder', productId: m.productId });
@@ -744,7 +746,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         const missingExternalCreator = attribution.requiresCreator && !isCreatorLinked;
         const missingSourceLabel = attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim();
         const launchDisabled = status.status === 'pushing'
-          || (item.source === 'drive' && (missingExternalCreator || missingSourceLabel));
+          || missingExternalCreator
+          || missingSourceLabel;
 
         return (
           <div key={id} style={S.card}>
