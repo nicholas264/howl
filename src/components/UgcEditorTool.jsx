@@ -13,6 +13,7 @@ const DEFAULT_SETTINGS = {
 
 const SESSION_FILTERS = [
   ['needs_edit', 'Needs edit'],
+  ['launch_ready', 'Launch ready'],
   ['creator', 'Creator footage'],
   ['internal', 'Internal'],
   ['untranscribed', 'Needs transcript'],
@@ -26,6 +27,24 @@ const SOURCE_LABELS = {
   founder: 'Founder footage',
   tool_generated: 'Made in tool',
 };
+
+function dueStatus(session) {
+  if (!session?.deliverable_due_at) return null;
+  const due = new Date(session.deliverable_due_at);
+  if (Number.isNaN(due.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dueDay = new Date(due);
+  dueDay.setHours(0, 0, 0, 0);
+  const days = Math.round((dueDay.getTime() - today.getTime()) / 86400000);
+  return {
+    date: due,
+    days,
+    label: days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? 'Due today' : `Due in ${days}d`,
+    urgent: days <= 2,
+    overdue: days < 0,
+  };
+}
 
 export default function UgcEditorTool({ initialSessionId = null, onInitialSessionLoaded, onAddToCart, onNavigate }) {
   const { getToken } = useAuth();
@@ -94,9 +113,11 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     if (!session.creator_id && ['internal_employee', 'founder'].includes(session.source_type)) stats.internal += 1;
     if (!Number(session.word_count || 0) && !session.rendered_url) stats.untranscribed += 1;
     if (session.rendered_url || session.status === 'rendered') stats.rendered += 1;
+    if (session.creator_id && session.rendered_url && !['complete', 'launched'].includes(session.deliverable_status)) stats.launch_ready += 1;
     if (session.creator_id && !(session.rendered_url || session.status === 'rendered')) stats.needs_edit += 1;
+    if (dueStatus(session)?.overdue && !(session.rendered_url || session.status === 'rendered')) stats.overdue += 1;
     return stats;
-  }, { all: 0, creator: 0, internal: 0, untranscribed: 0, rendered: 0, needs_edit: 0 }), [sessions]);
+  }, { all: 0, creator: 0, internal: 0, untranscribed: 0, rendered: 0, needs_edit: 0, launch_ready: 0, overdue: 0 }), [sessions]);
 
   const filteredSessions = useMemo(() => sessions.filter(session => {
     if (sessionFilter === 'all') return true;
@@ -104,6 +125,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     if (sessionFilter === 'internal') return !session.creator_id && ['internal_employee', 'founder'].includes(session.source_type);
     if (sessionFilter === 'untranscribed') return !Number(session.word_count || 0) && !session.rendered_url;
     if (sessionFilter === 'rendered') return Boolean(session.rendered_url) || session.status === 'rendered';
+    if (sessionFilter === 'launch_ready') return Boolean(session.creator_id && session.rendered_url && !['complete', 'launched'].includes(session.deliverable_status));
     if (sessionFilter === 'needs_edit') return Boolean(session.creator_id) && !(session.rendered_url || session.status === 'rendered');
     return true;
   }), [sessions, sessionFilter]);
@@ -458,6 +480,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         <div style={queueSummary}>
           <strong>{sessionStats.needs_edit}</strong>
           <span>creator uploads need editing</span>
+          {sessionStats.overdue ? <small style={{ color: '#b42318' }}>{sessionStats.overdue} overdue</small> : null}
         </div>
         <div style={filterRow}>
           {SESSION_FILTERS.map(([key, label]) => (
@@ -482,6 +505,9 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {filteredSessions.map(s => (
+            (() => {
+              const due = dueStatus(s);
+              return (
             <div
               key={s.id}
               onClick={() => loadSession(s.id)}
@@ -500,6 +526,14 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                 {SOURCE_LABELS[s.source_type] || (s.creator_id ? 'Creator upload' : 'Manual upload')} ·
                 {s.rendered_url ? 'rendered' : s.status}
               </div>
+              {due && (
+                <div style={{
+                  ...duePill,
+                  ...(due.overdue ? { background: 'rgba(180,35,24,.08)', color: '#b42318', borderColor: 'rgba(180,35,24,.25)' } : due.urgent ? { background: 'rgba(210,153,34,.09)', color: '#9a6a0a', borderColor: 'rgba(210,153,34,.25)' } : {}),
+                }}>
+                  {due.label} · {due.date.toLocaleDateString()}
+                </div>
+              )}
               <button
                 onClick={(e) => { e.stopPropagation(); deleteSession(s.id); }}
                 style={{ ...ghostBtn, marginTop: 6, fontSize: 9, padding: '3px 6px', color: '#b42318', borderColor: 'rgba(248,81,73,0.3)' }}
@@ -507,6 +541,8 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                 Delete
               </button>
             </div>
+              );
+            })()
           ))}
         </div>
       </aside>
@@ -518,6 +554,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         </p>
         <div style={editorStats}>
           <div><span>Needs edit</span><strong>{sessionStats.needs_edit}</strong></div>
+          <div><span>Launch ready</span><strong>{sessionStats.launch_ready}</strong></div>
           <div><span>Needs transcript</span><strong>{sessionStats.untranscribed}</strong></div>
           <div><span>Rendered</span><strong>{sessionStats.rendered}</strong></div>
           <div><span>Total sessions</span><strong>{sessionStats.all}</strong></div>
@@ -560,7 +597,17 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                 <div style={contextBox}>
                   <span>Brief</span>
                   <strong>{activeSession.brief_title}</strong>
-                  <small>{activeSession.deliverable_status || activeSession.status}</small>
+                  <small>
+                    {activeSession.deliverable_status || activeSession.status}
+                    {dueStatus(activeSession) ? ` · ${dueStatus(activeSession).label}` : ''}
+                  </small>
+                </div>
+              )}
+              {stage === 'done' && outputUrl && activeSession?.creator_id && activeSession?.deliverable_id && !['complete', 'launched'].includes(activeSession?.deliverable_status) && (
+                <div style={launchReadyBox}>
+                  <span>Launch handoff</span>
+                  <strong>Rendered and ready for Launcher</strong>
+                  <p>Send this edit to Launcher to mark the deliverable complete and carry creator, brief, and source attribution into Meta.</p>
                 </div>
               )}
 
@@ -732,7 +779,7 @@ const filterBtn = {
   color: '#6f6d68', cursor: 'pointer', fontSize: 9, fontWeight: 700,
 };
 const editorStats = {
-  display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8,
+  display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 8,
   margin: '18px 0 8px',
 };
 const contextBox = {
@@ -742,6 +789,14 @@ const contextBox = {
 const sessionCard = {
   border: '1px solid #dedbd3', borderRadius: 6, padding: 10, cursor: 'pointer',
   background: '#fff',
+};
+const duePill = {
+  display: 'inline-block', marginTop: 7, padding: '4px 7px', border: '1px solid #dedbd3',
+  borderRadius: 999, background: '#faf9f6', color: '#6f6d68', fontSize: 9, fontWeight: 700,
+};
+const launchReadyBox = {
+  display: 'grid', gap: 4, marginTop: 10, padding: 10, background: 'rgba(63,185,80,.07)',
+  border: '1px solid rgba(63,185,80,.28)', borderRadius: 8, color: '#256b35',
 };
 const uploadBox = {
   display: 'flex', alignItems: 'center', justifyContent: 'center',
