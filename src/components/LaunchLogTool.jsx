@@ -38,6 +38,7 @@ function angleName(id) { return ANGLES.find(a => a.id === id)?.label || id || '�
 function sourceTypeLabel(type) {
   return ({
     external_creator: 'Creator UGC',
+    unlinked_creator: 'Creator UGC needs match',
     internal_employee: 'Internal employee',
     founder: 'Founder',
     tool_generated: 'Made in tool',
@@ -47,8 +48,9 @@ function sourceLabel(row) {
   return row.creator || row.source_label || sourceTypeLabel(row.source_type);
 }
 function sourceTypeKey(row) {
+  if (row.creator_id) return 'external_creator';
+  if (row.source_type === 'external_creator' || (!row.source_type && (row.creator || row.source_label))) return 'unlinked_creator';
   if (row.source_type) return row.source_type;
-  if (row.creator_id || row.creator) return 'external_creator';
   return 'unattributed';
 }
 
@@ -102,6 +104,7 @@ export default function LaunchLogTool() {
     return acc;
   }, {});
   const creatorLaunches = sourceCounts.external_creator || 0;
+  const needsSourceCount = (sourceCounts.unlinked_creator || 0) + (sourceCounts.unattributed || 0);
 
   return (
     <div style={S.wrap}>
@@ -147,7 +150,7 @@ export default function LaunchLogTool() {
         </div>
         <div style={S.stat}>
           <div style={S.statLabel}>Needs source</div>
-          <div className="display-md" style={{ color: sourceCounts.unattributed ? '#b42318' : '#171717' }}>{sourceCounts.unattributed || 0}</div>
+          <div className="display-md" style={{ color: needsSourceCount ? '#b42318' : '#171717' }}>{needsSourceCount}</div>
         </div>
       </div>
 
@@ -160,6 +163,7 @@ export default function LaunchLogTool() {
         <select style={S.select} value={sourceTypeFilter} onChange={e => setSourceTypeFilter(e.target.value)}>
           <option value="">All source types</option>
           <option value="external_creator">Creator UGC</option>
+          <option value="unlinked_creator">Creator UGC needs match</option>
           <option value="founder">Founder</option>
           <option value="internal_employee">Internal employee</option>
           <option value="tool_generated">Made in tool</option>
@@ -210,7 +214,7 @@ export default function LaunchLogTool() {
                 </td>
                 <td style={S.td}>
                   {sourceLabel(r) ? <span style={S.creatorPill}>{sourceLabel(r)}</span> : <span style={{ color: '#88857f' }}>—</span>}
-                  <span style={S.sourceSub}>{sourceTypeLabel(r.source_type || (r.creator_id || r.creator ? 'external_creator' : null))}</span>
+                  <span style={S.sourceSub}>{sourceTypeLabel(sourceTypeKey(r))}</span>
                 </td>
                 <td style={{ ...S.td, fontSize: 10, color: '#77746f' }}>
                   {r.launched_by_email || <span style={{ color: '#88857f' }}>—</span>}
