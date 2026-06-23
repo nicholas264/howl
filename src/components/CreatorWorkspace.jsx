@@ -88,6 +88,7 @@ export default function CreatorWorkspace({
   canWriteAssets = false,
   onOpenEditor,
   initialCreatorId,
+  initialCreatorTab,
   initialWorkspaceView,
   onInitialCreatorLoaded,
   onInitialWorkspaceViewLoaded,
@@ -292,8 +293,8 @@ export default function CreatorWorkspace({
 
   useEffect(() => {
     if (!initialCreatorId) return;
-    openCreator({ id: initialCreatorId }).finally(() => onInitialCreatorLoaded?.());
-  }, [initialCreatorId]);
+    openCreator({ id: initialCreatorId }, initialCreatorTab || 'profile').finally(() => onInitialCreatorLoaded?.());
+  }, [initialCreatorId, initialCreatorTab]);
 
   const refreshWorkflow = async (creatorId = selected?.id) => {
     if (!creatorId) return;

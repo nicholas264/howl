@@ -42,6 +42,7 @@ export default function HowlAdEngine({ appAccess }) {
   const [imageText, setImageText] = useState(null);
   const [editorSessionId, setEditorSessionId] = useState(null);
   const [plannedCreatorId, setPlannedCreatorId] = useState(null);
+  const [plannedCreatorTab, setPlannedCreatorTab] = useState(null);
   const [plannedCreatorView, setPlannedCreatorView] = useState(null);
   const [favorites, setFavorites] = useState(() => {
     try { return JSON.parse(localStorage.getItem('howl_favorites') || '[]'); }
@@ -232,8 +233,9 @@ export default function HowlAdEngine({ appAccess }) {
     setEditorSessionId(Number(sessionId) || null);
     navigate('ugc-editor');
   }, [navigate]);
-  const openPlannedCreator = useCallback((creatorId) => {
+  const openPlannedCreator = useCallback((creatorId, detailTab = 'profile') => {
     setPlannedCreatorId(Number(creatorId) || null);
+    setPlannedCreatorTab(detailTab || 'profile');
     navigate('creators');
   }, [navigate]);
   const openCreatorWorkspace = useCallback((view = 'operations') => {
@@ -308,8 +310,12 @@ export default function HowlAdEngine({ appAccess }) {
             canWriteAssets={can('assets.write')}
             onOpenEditor={openEditorSession}
             initialCreatorId={plannedCreatorId}
+            initialCreatorTab={plannedCreatorTab}
             initialWorkspaceView={plannedCreatorView}
-            onInitialCreatorLoaded={() => setPlannedCreatorId(null)}
+            onInitialCreatorLoaded={() => {
+              setPlannedCreatorId(null);
+              setPlannedCreatorTab(null);
+            }}
             onInitialWorkspaceViewLoaded={() => setPlannedCreatorView(null)}
             setActiveTab={navigate}
           />

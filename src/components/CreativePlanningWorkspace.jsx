@@ -103,8 +103,8 @@ export default function CreativePlanningWorkspace({ onOpenCreator }) {
     }
   };
 
-  const openCreator = creatorId => {
-    if (onOpenCreator) return onOpenCreator(Number(creatorId));
+  const openCreator = (creatorId, targetTab = 'profile') => {
+    if (onOpenCreator) return onOpenCreator(Number(creatorId), targetTab);
     setError('Creator navigation is not available from this view.');
   };
 
@@ -255,7 +255,7 @@ export default function CreativePlanningWorkspace({ onOpenCreator }) {
         <div className="planning-table">
           <div className="planning-table-head"><span>Creator / deliverable</span><span>Type</span><span>Due</span><span>Remaining</span><span>State</span></div>
           {(data?.risks || []).map(item => (
-            <button key={item.id} type="button" onClick={() => openCreator(item.creator_id)}>
+            <button key={item.id} type="button" onClick={() => openCreator(item.creator_id, 'deliverables')}>
               <span><strong>{item.creator_name}</strong><small>{item.title}</small></span>
               <span>{labelType(item.engagement_type)}</span>
               <time>{dateLabel(item.due_at)}</time>
@@ -272,7 +272,7 @@ export default function CreativePlanningWorkspace({ onOpenCreator }) {
           <div className="planning-panel-head"><span>Commitments needing deadlines</span><small>Contracted supply not yet placed on the calendar</small></div>
           <div className="planning-commitments">
             {data.commitments.filter(item => item.unscheduled_assets > 0).map(item => (
-              <button key={item.id} type="button" onClick={() => openCreator(item.creator_id)}>
+              <button key={item.id} type="button" onClick={() => openCreator(item.creator_id, 'deliverables')}>
                 <span><strong>{item.creator_name}</strong><small>{labelType(item.engagement_type)} · {item.commitment_period === 'monthly' ? 'monthly commitment' : 'engagement commitment'}{item.cadence ? ` · ${item.cadence}` : ''}</small></span>
                 <b>{item.unscheduled_assets} unscheduled</b>
               </button>
