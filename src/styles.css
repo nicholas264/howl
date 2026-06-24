@@ -480,6 +480,7 @@ input, textarea, select, button { font-family: inherit; }
 .flow-tag.flame{background:var(--flame-dim);border-color:var(--flame-border);color:var(--flame)}
 .flow-card-creator{font-size:11px;color:var(--muted);margin-bottom:8px}
 .flow-card-creator b{color:var(--text);font-weight:600}
+.flow-card-reason{margin:-2px 0 9px;color:var(--muted2);font-size:9px;line-height:1.45}
 .flow-card-actions{display:flex;gap:6px;flex-wrap:wrap}
 .flow-btn{font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:#fff;color:var(--text);cursor:pointer}
 .flow-btn.primary{background:var(--flame);border-color:var(--flame);color:#fff}

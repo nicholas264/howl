@@ -444,6 +444,12 @@ async function createCreatorOpsTables(sql) {
       updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+  await sql`ALTER TABLE flow_cards ADD COLUMN IF NOT EXISTS deliverable_id BIGINT`;
+  await sql`ALTER TABLE flow_cards ADD COLUMN IF NOT EXISTS ad_id TEXT`;
+  await sql`ALTER TABLE flow_cards ADD COLUMN IF NOT EXISTS group_key TEXT`;
+  await sql`ALTER TABLE flow_cards ADD COLUMN IF NOT EXISTS source_winner_group_key TEXT`;
+  await sql`ALTER TABLE flow_cards ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'open'`;
+  await sql`ALTER TABLE flow_cards ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT false`;
   await sql`CREATE INDEX IF NOT EXISTS idx_flow_cards_stage ON flow_cards(stage) WHERE NOT archived`;
   await sql`CREATE INDEX IF NOT EXISTS idx_flow_cards_creator ON flow_cards(creator_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_flow_cards_winner ON flow_cards(source_winner_group_key) WHERE source_winner_group_key IS NOT NULL`;

@@ -331,10 +331,14 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
                         {card.format && <span className="flow-tag">{card.format}</span>}
                         {card.brief_status && <span className="flow-tag">brief: {card.brief_status}</span>}
                         {card.deliverable_status && <span className="flow-tag">{card.deliverable_status}</span>}
+                        {card.manual_stage && card.manual_stage !== card.stage && <span className="flow-tag flame">synced</span>}
                       </div>
                       <div className="flow-card-creator">
                         {card.creator_name ? <>Creator: <b>{card.creator_name}</b></> : <span style={{ color: 'var(--muted2)' }}>Unmatched</span>}
                       </div>
+                      {card.stage_reason && (
+                        <div className="flow-card-reason">{card.stage_reason}</div>
+                      )}
                       {canManage && (
                         <div className="flow-card-actions">
                           {action && <button type="button" className="flow-btn primary" onClick={action.fn}>{action.label}</button>}

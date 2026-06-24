@@ -12,23 +12,86 @@ function text(value, max = 2000) {
 // Enriched view of a flow card: joins creator name and live status of the
 // linked brief / deliverable so the board reflects reality without forking data.
 async function loadCards(sql) {
-  return sql`
+  const rows = await sql`
     SELECT
       f.*,
       c.name AS creator_name,
       c.stage AS creator_stage,
       b.title AS brief_title,
       b.status AS brief_status,
+      d.id AS resolved_deliverable_id,
+      d.title AS deliverable_title,
       d.status AS deliverable_status,
       d.expected_asset_count,
-      d.received_asset_count
+      d.received_asset_count,
+      d.completed_asset_count,
+      d.shipped_asset_count,
+      launched.ad_id AS launched_ad_id,
+      launched.launched_at AS launched_at
     FROM flow_cards f
     LEFT JOIN creators c ON c.id = f.creator_id
     LEFT JOIN creator_briefs b ON b.id = f.brief_id
-    LEFT JOIN creator_deliverables d ON d.id = f.deliverable_id
+    LEFT JOIN LATERAL (
+      SELECT *
+      FROM creator_deliverables d
+      WHERE d.id = f.deliverable_id
+        OR (
+          f.deliverable_id IS NULL
+          AND f.brief_id IS NOT NULL
+          AND d.brief_id = f.brief_id
+        )
+      ORDER BY
+        CASE WHEN d.id = f.deliverable_id THEN 0 ELSE 1 END,
+        d.updated_at DESC
+      LIMIT 1
+    ) d ON true
+    LEFT JOIN LATERAL (
+      SELECT l.ad_id, l.launched_at
+      FROM launch_history l
+      WHERE (f.ad_id IS NOT NULL AND l.ad_id = f.ad_id)
+        OR (d.id IS NOT NULL AND l.deliverable_id = d.id)
+        OR (f.brief_id IS NOT NULL AND l.brief_id = f.brief_id)
+        OR (
+          f.group_key IS NOT NULL
+          AND l.ad_id IN (SELECT cp.ad_id FROM creative_performance cp WHERE cp.group_key = f.group_key)
+        )
+      ORDER BY l.launched_at DESC
+      LIMIT 1
+    ) launched ON true
     WHERE NOT f.archived
     ORDER BY f.updated_at DESC
   `;
+  return rows.map(card => {
+    const delivered = card.resolved_deliverable_id ? Number(card.resolved_deliverable_id) : null;
+    const shipped = Number(card.shipped_asset_count || 0) > 0;
+    const completed = Number(card.completed_asset_count || 0) > 0;
+    const deliverableStatus = card.deliverable_status;
+    let computedStage = card.stage;
+    let stageReason = 'Manual stage';
+    if (card.launched_ad_id || shipped || deliverableStatus === 'launched') {
+      computedStage = 'analyze';
+      stageReason = card.launched_ad_id ? `Launched as ${card.launched_ad_id}` : 'Deliverable shipped';
+    } else if (delivered && (completed || ['approved', 'complete'].includes(deliverableStatus))) {
+      computedStage = 'launch';
+      stageReason = 'Finished creator asset is ready to launch';
+    } else if (delivered || card.brief_status === 'approved') {
+      computedStage = 'produce';
+      stageReason = delivered ? `Deliverable ${deliverableStatus || 'created'}` : 'Approved brief is ready for production';
+    } else if (card.brief_id || card.brief_status) {
+      computedStage = 'brief';
+      stageReason = card.brief_status ? `Brief ${card.brief_status}` : 'Brief linked';
+    } else if (card.creator_id) {
+      computedStage = 'brief';
+      stageReason = 'Creator matched';
+    }
+    return {
+      ...card,
+      manual_stage: card.stage,
+      stage: computedStage,
+      stage_reason: stageReason,
+      deliverable_id: card.deliverable_id || delivered,
+    };
+  });
 }
 
 export default async function handler(req, res) {
