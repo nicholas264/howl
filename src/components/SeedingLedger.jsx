@@ -7,16 +7,6 @@ const fmtMo = m => {
   return new Date(Number(y), Number(mo) - 1, 1).toLocaleString('en-US', { month: 'short', year: 'numeric' });
 };
 
-// Creator-fee / retainer notes that lived at the bottom of the spreadsheet and
-// need formalizing as engagements (they were never part of the cost totals).
-const FEES_TO_FORMALIZE = [
-  'Dominique — $1,415 retainer + whitelisting', 'Talon — $1,500 partner retainer',
-  'Meesh — $1,000 R1 UGC', 'Kingston — $1,000', 'Fargone — $1,000', 'Kenneth Bauer — $1,500 UGC',
-  'Maija — $600', 'Javaris — $500 Haul Bag R4 UGC', 'RyRoams — $450 whitelisting',
-  'Hippiesnap — $400 trade', 'Bodyworkbae — $300 single UGC', 'Jessica (bodywork) — $300',
-  'Will — TBD', 'Dana — awaiting invoice',
-];
-
 const EMPTY_ADD = { creator_id: '', seeded_on: '', product_label: '', unit_type: '', quantity: '1', shipping_cost: '', creator_fee: '' };
 
 export default function SeedingLedger({ canManage = false }) {
@@ -27,6 +17,15 @@ export default function SeedingLedger({ canManage = false }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState(EMPTY_ADD);
   const [busy, setBusy] = useState(false);
+  const [fees, setFees] = useState(null);
+  const [feeBusy, setFeeBusy] = useState(null);
+
+  const loadFees = useCallback(async () => {
+    try {
+      const res = await fetch('/api/creator-fees');
+      if (res.ok) setFees(await res.json());
+    } catch { /* non-fatal */ }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -43,7 +42,23 @@ export default function SeedingLedger({ canManage = false }) {
       setLoading(false);
     }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); loadFees(); }, [load, loadFees]);
+
+  async function convertFee(intent) {
+    setFeeBusy(intent.creator_name);
+    try {
+      await fetch('/api/creator-fees', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          creator_id: intent.suggested_creator_id, creator_name: intent.creator_name,
+          amount: intent.amount, type: intent.type, note: intent.note,
+        }),
+      });
+      await loadFees();
+    } finally {
+      setFeeBusy(null);
+    }
+  }
 
   const totals = useMemo(() => {
     if (!data?.rollup) return null;
@@ -215,18 +230,44 @@ export default function SeedingLedger({ canManage = false }) {
         </div>
       </div>
 
-      {/* creator fees to formalize */}
-      <div className="seed-section">
-        <div className="seed-flag">
-          <b>Creator fees to formalize ({FEES_TO_FORMALIZE.length})</b>
-          <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
-            These fee and retainer notes were tracked separately at the bottom of the spreadsheet and were never part
-            of the seeding cost totals. Enter them as engagements on each creator's Agreements tab so they flow into
-            the pipeline funnel and future cost reporting.
+      {/* creator fees to formalize -> engagements */}
+      {fees?.intents?.length > 0 && (
+        <div className="seed-section">
+          <div className="seed-section-label">
+            Creator fees to formalize ({fees.intents.filter(i => !i.converted).length} open)
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--muted)', margin: '0 0 12px', lineHeight: 1.5, maxWidth: 760 }}>
+            Fee and retainer notes from the bottom of the spreadsheet. Converting one creates a structured engagement
+            on that creator so the fee + commitment flow into the Pipeline funnel. Retainers count monthly; one-offs
+            count as committed deliverables.
           </p>
-          <ul>{FEES_TO_FORMALIZE.map(f => <li key={f}>{f}</li>)}</ul>
+          <div className="seed-fee-list">
+            {fees.intents.map(intent => (
+              <div className={`seed-fee${intent.converted ? ' done' : ''}`} key={intent.creator_name}>
+                <div>
+                  <span className="seed-fee-name">{intent.creator_name}</span>
+                  <span className="seed-fee-note">{intent.note}</span>
+                  {intent.suggested_creator_name && intent.suggested_creator_name.toLowerCase() !== intent.creator_name.toLowerCase() && (
+                    <span className="seed-fee-match">→ {intent.suggested_creator_name}</span>
+                  )}
+                  {!intent.suggested_creator_id && <span className="seed-fee-match">→ will create creator</span>}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className="flow-tag">{intent.type === 'retainer' ? 'retainer /mo' : 'one-off'}</span>
+                  <span className="seed-fee-amt">{intent.amount ? `$${intent.amount.toLocaleString()}` : 'TBD'}</span>
+                  {intent.converted ? (
+                    <span className="flow-tag flame">linked</span>
+                  ) : canManage ? (
+                    <button type="button" className="flow-btn primary" disabled={feeBusy === intent.creator_name} onClick={() => convertFee(intent)}>
+                      {feeBusy === intent.creator_name ? 'Linking…' : 'Create engagement'}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
