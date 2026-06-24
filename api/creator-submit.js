@@ -45,6 +45,7 @@ export default async function handler(req, res) {
     const videoUrl = (req.body?.video_url || '').toString();
     const fileName = (req.body?.file_name || '').toString().trim().slice(0, 500);
     const fileSize = Number(req.body?.file_size) || null;
+    const notes = (req.body?.notes || '').toString().trim().slice(0, 1200);
     let parsedUrl;
     try {
       parsedUrl = new URL(videoUrl);
@@ -103,7 +104,8 @@ export default async function handler(req, res) {
         )
         SELECT
           ${sessionId}, ${`creator-submit:${submission.id}`}, title,
-          ${fileName || null}, ${fileSize}, ${parsedUrl.toString()}, '{}'::jsonb, 'uploaded',
+          ${fileName || null}, ${fileSize}, ${parsedUrl.toString()},
+          ${JSON.stringify(notes ? { creator_notes: notes } : {})}::jsonb, 'uploaded',
           creator_id, 'external_creator', null, brief_id, ${deliverableId}
         FROM claimed
         RETURNING creator_id, brief_id, title
@@ -139,6 +141,7 @@ export default async function handler(req, res) {
             deliverable_id: deliverableId,
             ugc_session_id: sessionId,
             brief_id: submission.brief_id ? Number(submission.brief_id) : null,
+            creator_notes: notes || null,
           })}::jsonb,
           ${`creator-submit:${submission.id}`}
         FROM claimed

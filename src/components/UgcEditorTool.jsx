@@ -603,6 +603,14 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                   </small>
                 </div>
               )}
+              {activeSession?.settings?.creator_notes && (
+                <div style={contextBox}>
+                  <span>Creator notes</span>
+                  <p style={{ margin: '6px 0 0', color: '#343330', fontSize: 11, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+                    {activeSession.settings.creator_notes}
+                  </p>
+                </div>
+              )}
               {stage === 'done' && outputUrl && activeSession?.creator_id && activeSession?.deliverable_id && !['complete', 'launched'].includes(activeSession?.deliverable_status) && (
                 <div style={launchReadyBox}>
                   <span>Launch handoff</span>

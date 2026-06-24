@@ -5,6 +5,7 @@ export default function CreatorSubmissionPage() {
   const token = new URLSearchParams(window.location.search).get('token') || '';
   const [submission, setSubmission] = useState(null);
   const [file, setFile] = useState(null);
+  const [notes, setNotes] = useState('');
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('loading');
   const [error, setError] = useState('');
@@ -62,6 +63,7 @@ export default function CreatorSubmissionPage() {
           video_url: blob.url,
           file_name: file.name,
           file_size: file.size,
+          notes,
         }),
       });
       const data = await response.json();
@@ -130,6 +132,16 @@ export default function CreatorSubmissionPage() {
                   <input type="file" accept="video/*" onChange={event => setFile(event.target.files?.[0] || null)} />
                   <strong>{file ? file.name : 'Choose your final footage'}</strong>
                   <span>Video files up to 10 GB</span>
+                </label>
+                <label className="creator-submit-notes">
+                  <span>Notes for HOWL</span>
+                  <textarea
+                    rows="4"
+                    value={notes}
+                    onChange={event => setNotes(event.target.value)}
+                    placeholder="Optional: best takes, what you want us to know, product claims you made, issues with audio/lighting, or alternate hook ideas."
+                    maxLength={1200}
+                  />
                 </label>
                 {error && <div className="app-error">{error}</div>}
                 {(status === 'uploading' || status === 'saving') && (
