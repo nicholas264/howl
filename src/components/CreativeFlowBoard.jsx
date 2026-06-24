@@ -31,6 +31,8 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
   const [attribOpen, setAttribOpen] = useState(false);
   const [attribBusy, setAttribBusy] = useState(false);
   const [overrides, setOverrides] = useState({});
+  const [ops, setOps] = useState(null);
+  const [opsOpen, setOpsOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -50,7 +52,13 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
       if (res.ok) setAttrib(await res.json());
     } catch { /* non-fatal */ }
   }, []);
-  useEffect(() => { load(); loadAttrib(); }, [load, loadAttrib]);
+  const loadOps = useCallback(async () => {
+    try {
+      const res = await fetch('/api/creator-operations');
+      if (res.ok) setOps(await res.json());
+    } catch { /* non-fatal */ }
+  }, []);
+  useEffect(() => { load(); loadAttrib(); loadOps(); }, [load, loadAttrib, loadOps]);
 
   async function applyAutoHigh() {
     setAttribBusy(true);
@@ -206,6 +214,36 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
       </div>
 
       {error && <div className="seed-flag" style={{ marginTop: 14 }}>{error}</div>}
+
+      {/* guided next-step rail */}
+      {ops?.items?.length > 0 && (() => {
+        const dot = { urgent: '#d84a17', waiting: '#9a958c', blocked: '#b42318', action: '#2ea98f' };
+        const shown = (opsOpen ? ops.items.slice(0, 24) : ops.items.slice(0, 6));
+        const route = it => (it.creator_id ? onOpenCreator?.(it.creator_id, it.target_tab || 'profile') : null);
+        return (
+          <div className="flow-rail">
+            <div className="flow-rail-head">
+              <span className="flow-rail-title">Up next</span>
+              <span className="flow-rail-sub">
+                {ops.summary.urgent ? <b style={{ color: '#d84a17' }}>{ops.summary.urgent} urgent</b> : null}
+                {ops.summary.urgent ? ' · ' : ''}{ops.summary.action || 0} ready · {ops.summary.waiting || 0} waiting
+              </span>
+              {ops.items.length > 6 && (
+                <button type="button" className="flow-btn" onClick={() => setOpsOpen(v => !v)}>{opsOpen ? 'Less' : `All ${ops.items.length}`}</button>
+              )}
+            </div>
+            <div className="flow-rail-chips">
+              {shown.map(it => (
+                <button type="button" className="flow-rail-chip" key={`${it.creator_id}-${it.action_key}`} onClick={() => route(it)} title={`${it.name} · ${it.stage}`}>
+                  <span className="flow-rail-dot" style={{ background: dot[it.action_state] || '#9a958c' }} />
+                  <span className="flow-rail-name">{it.name}</span>
+                  <span className="flow-rail-act">{it.action_label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* matcher */}
       {matcherOpen && (
