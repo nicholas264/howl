@@ -9,6 +9,12 @@ const NEXT = { ideate: 'match', match: 'brief', brief: 'produce', produce: 'laun
 
 const EMPTY_CONCEPT = { product: '', angle: '', format: '', objective: '' };
 
+function money(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  return `$${Math.round(amount).toLocaleString()}`;
+}
+
 export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canManage = false }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -318,6 +324,9 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
 
                 {cards.map(card => {
                   const action = cardAction(card);
+                  const conceptJson = card.concept_json || {};
+                  const budget = money(conceptJson.allocated_budget);
+                  const strategyLine = conceptJson.performance_logic || conceptJson.creator_match || conceptJson.hypothesis || null;
                   return (
                     <div
                       className={`flow-card${draggingId === card.id ? ' dragging' : ''}`}
@@ -329,6 +338,8 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
                       <div className="flow-card-title">{card.title || card.angle || 'Untitled concept'}</div>
                       <div className="flow-card-meta">
                         {card.format && <span className="flow-tag">{card.format}</span>}
+                        {conceptJson.cohort && <span className="flow-tag">{conceptJson.cohort.replace('_', ' ')}</span>}
+                        {budget && <span className="flow-tag flame">{budget}</span>}
                         {card.brief_status && <span className="flow-tag">brief: {card.brief_status}</span>}
                         {card.deliverable_status && <span className="flow-tag">{card.deliverable_status}</span>}
                         {card.manual_stage && card.manual_stage !== card.stage && <span className="flow-tag flame">synced</span>}
@@ -338,6 +349,17 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
                       </div>
                       {card.stage_reason && (
                         <div className="flow-card-reason">{card.stage_reason}</div>
+                      )}
+                      {strategyLine && (
+                        <div className="flow-card-strategy">
+                          <span>Why this exists</span>
+                          <p>{strategyLine}</p>
+                        </div>
+                      )}
+                      {!!conceptJson.hooks?.length && (
+                        <div className="flow-card-hooks">
+                          {conceptJson.hooks.slice(0, 2).map((hook, index) => <span key={index}>{hook}</span>)}
+                        </div>
                       )}
                       {canManage && (
                         <div className="flow-card-actions">

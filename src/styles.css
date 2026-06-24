@@ -481,6 +481,11 @@ input, textarea, select, button { font-family: inherit; }
 .flow-card-creator{font-size:11px;color:var(--muted);margin-bottom:8px}
 .flow-card-creator b{color:var(--text);font-weight:600}
 .flow-card-reason{margin:-2px 0 9px;color:var(--muted2);font-size:9px;line-height:1.45}
+.flow-card-strategy{padding:8px 9px;margin:0 0 9px;background:#fff;border:1px solid var(--border);border-radius:7px}
+.flow-card-strategy span{display:block;margin-bottom:4px;color:var(--flame);font-family:'JetBrains Mono',monospace;font-size:7px;font-weight:700;letter-spacing:.8px;text-transform:uppercase}
+.flow-card-strategy p{margin:0;color:var(--muted);font-size:10px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.flow-card-hooks{display:grid;gap:5px;margin:-1px 0 9px}
+.flow-card-hooks span{padding:6px 8px;background:var(--surface2);border-left:2px solid var(--flame);border-radius:5px;color:var(--text);font-size:10px;line-height:1.35}
 .flow-card-actions{display:flex;gap:6px;flex-wrap:wrap}
 .flow-btn{font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:#fff;color:var(--text);cursor:pointer}
 .flow-btn.primary{background:var(--flame);border-color:var(--flame);color:#fff}
