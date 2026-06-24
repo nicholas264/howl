@@ -2,6 +2,28 @@ import { mirrorVideoToBlob } from './_lib/blob/mirror.js';
 import { backfillCreativeAssetsFromLaunchHistory, ensureCreativeAssetTables } from './_lib/creative-assets.js';
 import { enqueueCreativeAnalyses, enqueueCreativeAssetAnalysis, ensureCreativeAnalysisQueue } from './_lib/creative-analysis-queue.js';
 
+async function stampFlowLaunched(sql, { adId, groupKey, briefId, deliverableId }) {
+  if (!briefId && !deliverableId) return;
+  try {
+    await ensureCreatorOpsTables(sql);
+    await sql`
+      UPDATE flow_cards
+      SET stage = 'analyze',
+          ad_id = ${adId},
+          group_key = COALESCE(group_key, ${groupKey || adId || null}),
+          deliverable_id = COALESCE(deliverable_id, ${deliverableId || null}),
+          updated_at = now()
+      WHERE NOT archived
+        AND (
+          (${deliverableId || null}::bigint IS NOT NULL AND deliverable_id = ${deliverableId || null})
+          OR (${briefId || null}::bigint IS NOT NULL AND brief_id = ${briefId || null})
+        )
+    `;
+  } catch (err) {
+    console.error('flow launch stamp failed:', err.message);
+  }
+}
+
 // Best-effort launch logger — swallows errors so a DB outage doesn't break Meta publishes.
 async function logLaunch(row) {
   try {
@@ -17,9 +39,15 @@ async function logLaunch(row) {
         (${row.ad_id}, ${row.adset_id || null}, ${row.campaign_id || null}, ${row.drive_file_id || null}, ${row.drive_file_name || null}, ${row.creator || null}, ${row.creator_id || null}, ${row.source_type || null}, ${row.source_label || null}, ${row.brief_id || null}, ${row.deliverable_id || null}, ${row.product_id || null}, ${row.angle_id || null}, ${row.ad_name || null}, ${row.headline || null}, ${row.primary_text || null}, ${row.dest_url || null}, ${row.mime_type || null}, ${row.launched_by_user_id || null}, ${row.launched_by_email || null}, ${row.source_video_url || null})
       RETURNING id
     `;
+    const groupKey = row.group_key || row.meta_video_id || row.meta_image_hash || row.ad_id;
+    await stampFlowLaunched(sql, {
+      adId: row.ad_id,
+      groupKey,
+      briefId: row.brief_id,
+      deliverableId: row.deliverable_id,
+    });
     if (row.source_video_url) {
       await ensureCreativeAssetTables(sql);
-      const groupKey = row.group_key || row.meta_video_id || row.meta_image_hash || row.ad_id;
       const [asset] = await sql`
         INSERT INTO creative_assets
           (drive_file_name, mime_type, durable_url, ad_id, creator, creator_id,

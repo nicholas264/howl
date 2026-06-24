@@ -26,6 +26,28 @@ async function driveFetch(token, path, init = {}) {
   return d;
 }
 
+async function stampFlowLaunched(sql, { adId, groupKey, briefId, deliverableId }) {
+  if (!briefId && !deliverableId) return;
+  try {
+    await ensureCreatorOpsTables(sql);
+    await sql`
+      UPDATE flow_cards
+      SET stage = 'analyze',
+          ad_id = ${adId},
+          group_key = COALESCE(group_key, ${groupKey || adId || null}),
+          deliverable_id = COALESCE(deliverable_id, ${deliverableId || null}),
+          updated_at = now()
+      WHERE NOT archived
+        AND (
+          (${deliverableId || null}::bigint IS NOT NULL AND deliverable_id = ${deliverableId || null})
+          OR (${briefId || null}::bigint IS NOT NULL AND brief_id = ${briefId || null})
+        )
+    `;
+  } catch (err) {
+    console.error('flow launch stamp failed:', err.message);
+  }
+}
+
 async function findChildFolder(token, parentId, name) {
   const q = encodeURIComponent(`'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and name='${name}' and trashed=false`);
   const d = await driveFetch(token, `/files?q=${q}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
@@ -590,6 +612,12 @@ export default async function handler(req, res) {
                   creator, creatorId, sourceType: attributionSourceType, sourceLabel: attributionSourceLabel, briefId, deliverableId, productId, angleId,
                 }),
               ]);
+              await stampFlowLaunched(sql, {
+                adId: adData.id,
+                groupKey: feed.videoId || feed.imageHash || story.videoId || story.imageHash || adData.id,
+                briefId,
+                deliverableId,
+              });
               await Promise.all([
                 enqueueCreativeAssetAnalysis(sql, feed.videoId || feed.imageHash || adData.id, 'drive_launch'),
                 enqueueCreativeAssetAnalysis(sql, story.videoId || story.imageHash || adData.id, 'drive_launch'),
@@ -829,6 +857,12 @@ export default async function handler(req, res) {
             deliverableId,
             productId,
             angleId,
+          });
+          await stampFlowLaunched(sql, {
+            adId: adData.id,
+            groupKey: videoId || imageHash || adData.id,
+            briefId,
+            deliverableId,
           });
           await enqueueCreativeAssetAnalysis(sql, videoId || imageHash || adData.id, 'drive_launch');
           emit({ step: 'db_log', status: 'done' });
