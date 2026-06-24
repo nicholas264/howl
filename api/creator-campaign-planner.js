@@ -131,6 +131,59 @@ function assignmentApprovalProblems(assignments) {
   return problems;
 }
 
+async function ensureCampaignFlowCard(sql, access, plan, assignment, brief) {
+  const sourceKey = `campaign_plan:${plan.id}:slot:${assignment.slot || assignment.creator_id || brief.id}`;
+  const title = assignment.concept_name || brief.title || `${assignment.creator_name || 'Creator'} concept`;
+  const concept = {
+    plan_id: Number(plan.id),
+    slot: assignment.slot || null,
+    cohort: assignment.cohort || null,
+    allocated_budget: assignment.allocated_budget ?? null,
+    creator_match: assignment.creator_match || null,
+    performance_logic: assignment.performance_logic || null,
+    hypothesis: assignment.hypothesis || null,
+    hooks: assignment.hooks || [],
+    ctas: assignment.ctas || [],
+  };
+  const [existing] = await sql`
+    SELECT id
+    FROM flow_cards
+    WHERE source_winner_group_key = ${sourceKey}
+      AND NOT archived
+    ORDER BY updated_at DESC
+    LIMIT 1
+  `;
+  if (existing) {
+    await sql`
+      UPDATE flow_cards
+      SET stage = 'brief',
+          title = ${title},
+          product_label = ${plan.product_title},
+          angle = ${assignment.angle || plan.objective || null},
+          format = ${assignment.format || null},
+          objective = ${plan.objective || null},
+          concept_json = ${JSON.stringify(concept)}::jsonb,
+          creator_id = ${assignment.creator_id},
+          brief_id = ${brief.id},
+          updated_at = now()
+      WHERE id = ${existing.id}
+    `;
+    return existing.id;
+  }
+  const [created] = await sql`
+    INSERT INTO flow_cards (
+      stage, title, product_label, angle, format, objective, concept_json,
+      creator_id, brief_id, source_winner_group_key, created_by
+    ) VALUES (
+      'brief', ${title}, ${plan.product_title}, ${assignment.angle || plan.objective || null},
+      ${assignment.format || null}, ${plan.objective || null}, ${JSON.stringify(concept)}::jsonb,
+      ${assignment.creator_id}, ${brief.id}, ${sourceKey}, ${access.userId}
+    )
+    RETURNING id
+  `;
+  return created.id;
+}
+
 function validateAssignments(assignments, { assetCount, provenSlots, netNewSlots, totalBudget, guidelines }) {
   const proven = assignments.filter(item => item.cohort === 'proven').length;
   const netNew = assignments.filter(item => item.cohort === 'net_new').length;
@@ -321,7 +374,13 @@ async function saveBriefs(sql, access, planId, assignmentOverride = null) {
   const [plan] = await sql`SELECT * FROM creator_campaign_plans WHERE id = ${planId}`;
   if (!plan) throw new Error('Campaign plan not found');
   if (plan.status === 'briefed') {
-    return sql`SELECT * FROM creator_briefs WHERE generation_source = ${`campaign_plan:${planId}`} ORDER BY id`;
+    const existingBriefs = await sql`SELECT * FROM creator_briefs WHERE generation_source = ${`campaign_plan:${planId}`} ORDER BY id`;
+    const briefById = new Map(existingBriefs.map(brief => [Number(brief.id), brief]));
+    for (const assignment of (plan.assignments || [])) {
+      const brief = briefById.get(Number(assignment.brief_id));
+      if (brief && assignment.creator_id) await ensureCampaignFlowCard(sql, access, plan, assignment, brief);
+    }
+    return existingBriefs;
   }
   const assignments = Array.isArray(assignmentOverride) && assignmentOverride.length
     ? assignmentOverride.map((assignment, index) => ({ ...assignment, slot: index + 1 }))
@@ -367,6 +426,7 @@ async function saveBriefs(sql, access, planId, assignmentOverride = null) {
     `;
     briefs.push(brief);
     updatedAssignments.push({ ...assignment, brief_id: Number(brief.id) });
+    await ensureCampaignFlowCard(sql, access, plan, assignment, brief);
     await sql`
       INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
       VALUES (

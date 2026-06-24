@@ -444,6 +444,14 @@ async function createCreatorOpsTables(sql) {
       updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+  await sql`ALTER TABLE flow_cards ADD COLUMN IF NOT EXISTS title TEXT`;
+  await sql`ALTER TABLE flow_cards ADD COLUMN IF NOT EXISTS product_label TEXT`;
+  await sql`ALTER TABLE flow_cards ADD COLUMN IF NOT EXISTS angle TEXT`;
+  await sql`ALTER TABLE flow_cards ADD COLUMN IF NOT EXISTS format TEXT`;
+  await sql`ALTER TABLE flow_cards ADD COLUMN IF NOT EXISTS objective TEXT`;
+  await sql`ALTER TABLE flow_cards ADD COLUMN IF NOT EXISTS concept_json JSONB`;
+  await sql`ALTER TABLE flow_cards ADD COLUMN IF NOT EXISTS creator_id BIGINT REFERENCES creators(id) ON DELETE SET NULL`;
+  await sql`ALTER TABLE flow_cards ADD COLUMN IF NOT EXISTS brief_id BIGINT`;
   await sql`ALTER TABLE flow_cards ADD COLUMN IF NOT EXISTS deliverable_id BIGINT`;
   await sql`ALTER TABLE flow_cards ADD COLUMN IF NOT EXISTS ad_id TEXT`;
   await sql`ALTER TABLE flow_cards ADD COLUMN IF NOT EXISTS group_key TEXT`;
