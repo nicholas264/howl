@@ -107,6 +107,54 @@ async function ensureBriefFlowCard(sql, access, creatorId, brief, source, concep
   `;
 }
 
+async function ensureDeliverableFlowCard(sql, access, creatorId, deliverable) {
+  if (!deliverable?.id) return null;
+  const [brief] = deliverable.brief_id
+    ? await sql`SELECT * FROM creator_briefs WHERE id = ${deliverable.brief_id} AND creator_id = ${creatorId}`
+    : [];
+  const [existing] = await sql`
+    SELECT id
+    FROM flow_cards
+    WHERE NOT archived
+      AND (
+        deliverable_id = ${deliverable.id}
+        OR (${deliverable.brief_id || null}::bigint IS NOT NULL AND brief_id = ${deliverable.brief_id || null})
+      )
+    ORDER BY updated_at DESC
+    LIMIT 1
+  `;
+  if (existing) {
+    await sql`
+      UPDATE flow_cards
+      SET stage = 'produce',
+          title = COALESCE(title, ${brief?.title || deliverable.title}),
+          product_label = COALESCE(product_label, ${brief?.product || null}),
+          angle = COALESCE(angle, ${brief?.angle || null}),
+          objective = COALESCE(objective, ${brief?.objective || null}),
+          creator_id = ${creatorId},
+          brief_id = COALESCE(brief_id, ${deliverable.brief_id || null}),
+          deliverable_id = ${deliverable.id},
+          updated_at = now()
+      WHERE id = ${existing.id}
+    `;
+    return existing.id;
+  }
+  const sourceKey = `creator_deliverable:${deliverable.id}`;
+  const [created] = await sql`
+    INSERT INTO flow_cards (
+      stage, title, product_label, angle, objective, concept_json,
+      creator_id, brief_id, deliverable_id, source_winner_group_key, created_by
+    ) VALUES (
+      'produce', ${brief?.title || deliverable.title || 'Creator deliverable'},
+      ${brief?.product || null}, ${brief?.angle || null}, ${brief?.objective || null},
+      ${JSON.stringify({ source: 'creator_deliverable', deliverable_id: Number(deliverable.id) })}::jsonb,
+      ${creatorId}, ${deliverable.brief_id || null}, ${deliverable.id}, ${sourceKey}, ${access.userId}
+    )
+    RETURNING id
+  `;
+  return created.id;
+}
+
 function buildWorkflowGuidance({
   creator, outreach, engagements, agreements, briefs, seeds, deliverables, submissionLinks,
 }) {
@@ -909,6 +957,7 @@ export default async function handler(req, res) {
             WHERE id = ${deliverable.ugc_session_id}
           `;
         }
+        await ensureDeliverableFlowCard(sql, access, creatorId, deliverable);
         return res.status(201).json({ deliverable, workflow: await getWorkflow(sql, creatorId) });
       }
       if (body.action === 'ingest_footage') {
@@ -982,6 +1031,7 @@ export default async function handler(req, res) {
           SELECT * FROM creator_deliverables
           WHERE id = ${deliverableId} AND creator_id = ${creatorId}
         `;
+        await ensureDeliverableFlowCard(sql, access, creatorId, linked);
         return res.status(201).json({ deliverable: linked, workflow: await getWorkflow(sql, creatorId) });
       }
       if (body.action === 'create_submission_link') {
@@ -1026,6 +1076,7 @@ export default async function handler(req, res) {
             RETURNING id
           `;
         }
+        if (deliverable) await ensureDeliverableFlowCard(sql, access, creatorId, deliverable);
         const [link] = await sql`
           INSERT INTO creator_submission_links (
             token_hash, creator_id, brief_id, title, due_at, expires_at, created_by
@@ -1197,6 +1248,7 @@ export default async function handler(req, res) {
           WHERE id = ${Number(body.id)} AND creator_id = ${creatorId}
           RETURNING *
         `;
+        if (deliverable) await ensureDeliverableFlowCard(sql, access, creatorId, deliverable);
         return deliverable ? res.json({ deliverable }) : res.status(404).json({ error: 'Deliverable not found' });
       }
       return res.status(400).json({ error: 'Unknown resource' });
