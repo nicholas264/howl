@@ -79,6 +79,34 @@ function buildProductionBriefText(candidate = {}) {
   ].filter(Boolean).join('\n\n');
 }
 
+async function ensureBriefFlowCard(sql, access, creatorId, brief, source, concept = {}) {
+  const sourceKey = `${source}:brief:${brief.id}`;
+  const cardConcept = {
+    source,
+    hook: concept.hook || null,
+    hooks: concept.hooks || (concept.hook ? [concept.hook] : []),
+    ctas: concept.ctas || (concept.cta ? [concept.cta] : []),
+    creator_match: concept.creator_fit || concept.creator_match || null,
+    performance_logic: concept.performance_logic || null,
+    hypothesis: concept.hypothesis || null,
+    shot_list: concept.shot_list || [],
+  };
+  await sql`
+    INSERT INTO flow_cards (
+      stage, title, product_label, angle, format, objective, concept_json,
+      creator_id, brief_id, source_winner_group_key, created_by
+    ) VALUES (
+      'brief', ${brief.title || concept.concept_name || 'Creator concept'},
+      ${brief.product || concept.product || null},
+      ${brief.angle || concept.angle || null},
+      ${concept.format || null},
+      ${brief.objective || concept.objective || null},
+      ${JSON.stringify(cardConcept)}::jsonb,
+      ${creatorId}, ${brief.id}, ${sourceKey}, ${access.userId}
+    )
+  `;
+}
+
 function buildWorkflowGuidance({
   creator, outreach, engagements, agreements, briefs, seeds, deliverables, submissionLinks,
 }) {
@@ -616,6 +644,7 @@ export default async function handler(req, res) {
           )
           RETURNING *
         `;
+        await ensureBriefFlowCard(sql, access, creatorId, brief, 'creator_workflow', generated);
         await sql`
           INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
           VALUES (${creatorId}, 'brief_created', ${`Brief created: ${brief.title}`}, ${JSON.stringify({ brief_id: brief.id })}::jsonb, ${access.userId})
@@ -650,6 +679,7 @@ export default async function handler(req, res) {
             RETURNING *
           `;
           briefs.push(brief);
+          await ensureBriefFlowCard(sql, access, creatorId, brief, 'creator_concept_set', concept);
         }
         await sql`
           INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
