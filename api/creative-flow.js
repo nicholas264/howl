@@ -105,8 +105,67 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const cards = await loadCards(sql);
       const byStage = Object.fromEntries(STAGES.map(s => [s, []]));
+
+      // Provenance: resolve each card's source winner to a readable label.
+      const winnerKeys = [...new Set(cards.map(c => c.source_winner_group_key).filter(Boolean))];
+      let provenance = {};
+      if (winnerKeys.length) {
+        const rows = await sql`
+          SELECT cp.group_key,
+            COALESCE(ca.angle, min(cp.ad_name)) AS label
+          FROM creative_performance cp
+          LEFT JOIN creative_analysis ca ON ca.group_key = cp.group_key
+          WHERE cp.group_key = ANY(${winnerKeys})
+          GROUP BY cp.group_key, ca.angle
+        `;
+        provenance = Object.fromEntries(rows.map(r => [r.group_key, r.label]));
+      }
       for (const card of cards) {
+        card.from_winner_label = card.source_winner_group_key ? (provenance[card.source_winner_group_key] || null) : null;
         (byStage[card.stage] || byStage.ideate).push(card);
+      }
+
+      // Derive the feedback half of the loop from REAL attributed creative:
+      // launched ads tied to a creator (Launch), and analyzed ones (Analyze).
+      // Skip group_keys already represented by a persisted card.
+      const onCards = new Set(cards.map(c => c.group_key).filter(Boolean));
+      try {
+        const live = await sql`
+          SELECT cp.group_key, min(cp.ad_name) AS ad_name, min(cp.thumbnail_url) AS thumbnail_url,
+            a.creator_id, c.name AS creator_name,
+            ca.angle AS analysis_angle, ca.why_it_worked,
+            (ca.group_key IS NOT NULL) AS analyzed,
+            COALESCE(SUM(i.spend), 0)::float AS spend,
+            COALESCE(SUM(i.purchases), 0)::int AS purchases,
+            COALESCE(SUM(i.purchase_value), 0)::float AS revenue
+          FROM creative_creator_assignments a
+          JOIN creative_performance cp ON cp.group_key = a.group_key
+          LEFT JOIN creative_insights_daily i ON i.ad_id = cp.ad_id
+          LEFT JOIN creators c ON c.id = a.creator_id
+          LEFT JOIN creative_analysis ca ON ca.group_key = a.group_key
+          WHERE a.creator_id IS NOT NULL
+          GROUP BY cp.group_key, a.creator_id, c.name, ca.angle, ca.why_it_worked, ca.group_key
+          HAVING COALESCE(SUM(i.spend), 0) > 0
+          ORDER BY spend DESC
+          LIMIT 60
+        `;
+        for (const row of live) {
+          if (onCards.has(row.group_key)) continue;
+          const roas = row.spend > 0 ? row.revenue / row.spend : 0;
+          byStage[row.analyzed ? 'analyze' : 'launch'].push({
+            derived: true,
+            group_key: row.group_key,
+            title: row.analysis_angle || row.ad_name || 'Launched creative',
+            creator_id: row.creator_id,
+            creator_name: row.creator_name,
+            ad_name: row.ad_name,
+            why_it_worked: row.why_it_worked,
+            spend: row.spend, purchases: row.purchases, roas,
+            stage: row.analyzed ? 'analyze' : 'launch',
+          });
+        }
+      } catch (err) {
+        console.error('flow derived cards failed', err.message);
       }
 
       // Analyzed winners not yet pulled into the flow — available to iterate from.

@@ -141,6 +141,19 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
     load();
   }
 
+  // Iterate a real launched/analyzed creative into a fresh cycle, carrying its
+  // group_key as provenance so the loop's lineage is preserved.
+  async function iterateDerived(card) {
+    await fetch('/api/creative-flow', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        stage: 'match', title: card.title, angle: card.title,
+        source_winner_group_key: card.group_key,
+      }),
+    });
+    load();
+  }
+
   async function patchCard(id, body) {
     await fetch('/api/creative-flow', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, ...body }) });
     load();
@@ -322,7 +335,27 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
                   </div>
                 ))}
 
-                {cards.map(card => {
+                {/* Derived cards from real launched/analyzed creative (read-only) */}
+                {cards.filter(c => c.derived).map(card => (
+                  <div className="flow-card derived" key={`d-${card.group_key}`}>
+                    <div className="flow-card-title">{card.title}</div>
+                    <div className="flow-card-meta">
+                      {card.spend > 0 && <span className="flow-tag">${Math.round(card.spend).toLocaleString()} spend</span>}
+                      {card.roas > 0 && <span className={`flow-tag ${card.roas >= 2 ? 'flame' : ''}`}>{card.roas.toFixed(2)}x</span>}
+                    </div>
+                    <div className="flow-card-creator">
+                      {card.creator_name ? <>Creator: <b>{card.creator_name}</b></> : <span style={{ color: 'var(--muted2)' }}>Unattributed</span>}
+                    </div>
+                    {canManage && (
+                      <div className="flow-card-actions">
+                        <button type="button" className="flow-btn primary" onClick={() => iterateDerived(card)}>Iterate this</button>
+                        {card.creator_id && <button type="button" className="flow-btn" onClick={() => setActiveTab?.('creative-analytics')}>Analytics</button>}
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {cards.filter(c => !c.derived).map(card => {
                   const action = cardAction(card);
                   const conceptJson = card.concept_json || {};
                   const budget = money(conceptJson.allocated_budget);
@@ -336,6 +369,7 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
                       onDragEnd={canManage ? (() => { setDraggingId(null); setDragOverStage(null); }) : undefined}
                     >
                       <div className="flow-card-title">{card.title || card.angle || 'Untitled concept'}</div>
+                      {card.from_winner_label && <div className="flow-card-prov">↺ from “{card.from_winner_label}”</div>}
                       <div className="flow-card-meta">
                         {card.format && <span className="flow-tag">{card.format}</span>}
                         {conceptJson.cohort && <span className="flow-tag">{conceptJson.cohort.replace('_', ' ')}</span>}
