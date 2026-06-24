@@ -118,6 +118,8 @@ export default function CreatorWorkspace({
   const [note, setNote] = useState('');
   const [social, setSocial] = useState({ platform: 'instagram', handle: '', profile_url: '', followers: '', avg_views: '', engagement_rate: '' });
   const [detailTab, setDetailTab] = useState('profile');
+  const [draggingCreatorId, setDraggingCreatorId] = useState(null);
+  const [dragOverStage, setDragOverStage] = useState(null);
   const [workflow, setWorkflow] = useState({
     briefs: [], outreach: [], engagements: [], agreements: [], deliverables: [],
     submission_links: [], production_summary: {}, guidance: { milestones: [], next_action: null },
@@ -269,6 +271,11 @@ export default function CreatorWorkspace({
     result[creator.stage] = (result[creator.stage] || 0) + 1;
     return result;
   }, {}), [creators]);
+
+  // The board needs every creator regardless of the active stage filter.
+  useEffect(() => {
+    if (workspaceView === 'board' && stage !== 'all') setStage('all');
+  }, [workspaceView, stage]);
   const selectedEngagement = useMemo(
     () => workflow.engagements?.find(item => String(item.id) === String(agreement.engagement_id)),
     [agreement.engagement_id, workflow.engagements],
@@ -803,6 +810,25 @@ export default function CreatorWorkspace({
     }
   };
 
+  // Move any creator to a new stage (board drag-and-drop). Optimistic so the
+  // card jumps columns immediately, then persists and re-syncs.
+  const setCreatorStage = async (creator, newStage) => {
+    if (!creator || creator.stage === newStage || !canManageCreators) return;
+    setCreators(prev => prev.map(c => (c.id === creator.id ? { ...c, stage: newStage } : c)));
+    if (selected?.id === creator.id) setSelected(s => ({ ...s, stage: newStage }));
+    try {
+      const response = await fetch('/api/creators', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: creator.id, stage: newStage }),
+      });
+      if (!response.ok) throw new Error((await response.json()).error || 'Could not move creator');
+      await loadCreators();
+    } catch (err) {
+      setError(err.message);
+      await loadCreators();
+    }
+  };
+
   const saveCreatorIntel = async event => {
     event.preventDefault();
     setSaving(true);
@@ -1027,6 +1053,7 @@ export default function CreatorWorkspace({
 
       <div className="creator-view-tabs">
         <button className={workspaceView === 'database' ? 'active' : ''} onClick={() => setWorkspaceView('database')}>Database</button>
+        <button className={workspaceView === 'board' ? 'active' : ''} onClick={() => setWorkspaceView('board')}>Board</button>
         <button className={workspaceView === 'operations' ? 'active' : ''} onClick={() => setWorkspaceView('operations')}>Operations</button>
         <button className={workspaceView === 'talent' ? 'active' : ''} onClick={() => setWorkspaceView('talent')}>Talent inbox</button>
         <button className={workspaceView === 'health' ? 'active' : ''} onClick={() => setWorkspaceView('health')}>Data health</button>
@@ -1805,6 +1832,76 @@ export default function CreatorWorkspace({
         )}
       </div>
       </>
+      ) : workspaceView === 'board' ? (
+        <div className="creator-board">
+          {loading && !creators.length ? (
+            <div className="creator-empty"><strong>Loading board…</strong></div>
+          ) : (
+            <div className="cboard">
+              {STAGES.slice(1).map(([key, label]) => {
+                const inStage = creators.filter(c => c.stage === key);
+                return (
+                  <div
+                    key={key}
+                    className={`cboard-col${dragOverStage === key ? ' drop' : ''}`}
+                    onDragOver={canManageCreators ? (event => { event.preventDefault(); setDragOverStage(key); }) : undefined}
+                    onDragLeave={canManageCreators ? (() => setDragOverStage(current => (current === key ? null : current))) : undefined}
+                    onDrop={canManageCreators ? (event => {
+                      event.preventDefault();
+                      const id = Number(event.dataTransfer.getData('text/plain'));
+                      setDragOverStage(null); setDraggingCreatorId(null);
+                      const cr = creators.find(c => c.id === id);
+                      if (cr) setCreatorStage(cr, key);
+                    }) : undefined}
+                  >
+                    <div className="cboard-col-head">
+                      <span className={`creator-stage stage-${key}`}>{label}</span>
+                      <span className="cboard-count">{inStage.length}</span>
+                    </div>
+                    <div className="cboard-col-body">
+                      {inStage.map(creator => {
+                        const social = strongestSocial(creator.social_accounts);
+                        const focus = creator.activities?.length ? creator.activities : creator.tags;
+                        const due = creator.next_follow_up_at && new Date(creator.next_follow_up_at) <= new Date();
+                        return (
+                          <div
+                            key={creator.id}
+                            className={`cboard-card${draggingCreatorId === creator.id ? ' dragging' : ''}`}
+                            draggable={canManageCreators}
+                            onDragStart={canManageCreators ? (event => { event.dataTransfer.setData('text/plain', String(creator.id)); event.dataTransfer.effectAllowed = 'move'; setDraggingCreatorId(creator.id); }) : undefined}
+                            onDragEnd={canManageCreators ? (() => { setDraggingCreatorId(null); setDragOverStage(null); }) : undefined}
+                            onClick={() => { openCreator(creator); setWorkspaceView('database'); }}
+                            role="button"
+                          >
+                            <div className="cboard-card-top">
+                              <CreatorAvatar creator={creator} />
+                              <div className="cboard-card-id">
+                                <strong>{creator.name}</strong>
+                                <small>{creator.niche || creator.email || creator.phone || 'No details yet'}</small>
+                              </div>
+                            </div>
+                            <div className="cboard-card-attrs">
+                              {social?.followers ? <span className="cboard-attr">{displayMetric(social.followers)} foll.</span> : null}
+                              {creator.launch_count ? <span className="cboard-attr">{creator.launch_count} launches</span> : null}
+                              {focus?.length ? <span className="cboard-attr">{compactText(focus)}</span> : null}
+                              {creator.location ? <span className="cboard-attr">{creator.location}</span> : null}
+                            </div>
+                            {creator.next_follow_up_at && (
+                              <div className={`cboard-card-foot${due ? ' due' : ''}`}>
+                                {due ? 'Follow up due' : 'Follow up'} {new Date(creator.next_follow_up_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {!inStage.length && <div className="cboard-empty">Drop a creator here</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       ) : workspaceView === 'operations' ? (
         <CreatorOperationsWorkspace
           canManage={canManageCreators}

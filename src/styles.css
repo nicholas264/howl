@@ -549,3 +549,25 @@ input, textarea, select, button { font-family: inherit; }
 .flow-rail-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .flow-rail-name{font-size:11px;font-weight:600;color:var(--text)}
 .flow-rail-act{font-size:11px;color:var(--muted)}
+
+/* ── Creator Kanban board ────────────────────────────────────────────────── */
+.creator-board{margin-top:18px}
+.cboard{display:flex;gap:12px;overflow-x:auto;padding-bottom:14px;align-items:flex-start}
+.cboard-col{flex:0 0 232px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;display:flex;flex-direction:column;max-height:calc(100vh - 230px)}
+.cboard-col.drop{background:var(--flame-dim);border-color:var(--flame-border)}
+.cboard-col-head{display:flex;align-items:center;justify-content:space-between;padding:11px 13px;border-bottom:1px solid var(--border);position:sticky;top:0}
+.cboard-count{font-family:'Instrument Serif',Georgia,serif;font-size:17px;color:var(--muted)}
+.cboard-col-body{display:flex;flex-direction:column;gap:8px;padding:9px;overflow-y:auto}
+.cboard-card{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px;cursor:grab;text-align:left;transition:border-color .15s,box-shadow .15s}
+.cboard-card:hover{border-color:var(--flame);box-shadow:0 2px 10px rgba(45,40,30,.06)}
+.cboard-card:active{cursor:grabbing}
+.cboard-card.dragging{opacity:.4}
+.cboard-card-top{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.cboard-card-id{min-width:0}
+.cboard-card-id strong{display:block;font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cboard-card-id small{display:block;font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cboard-card-attrs{display:flex;flex-wrap:wrap;gap:4px}
+.cboard-attr{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:.3px;text-transform:uppercase;padding:2px 6px;border-radius:5px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cboard-card-foot{margin-top:8px;font-size:9px;letter-spacing:.5px;color:var(--muted2)}
+.cboard-card-foot.due{color:var(--flame);font-weight:600}
+.cboard-empty{font-size:10px;color:var(--muted2);text-align:center;padding:16px 8px;font-style:italic;border:1px dashed var(--border);border-radius:8px}
