@@ -417,6 +417,37 @@ async function createCreatorOpsTables(sql) {
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_seeding_log_seeded ON creator_seeding_log(seeded_on DESC)`;
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_creator_seeding_log_import_key ON creator_seeding_log(import_key) WHERE import_key IS NOT NULL`;
 
+  // Creative Flow board spine. One row per creative cycle moving through the
+  // loop (ideate -> match -> brief -> produce -> launch -> analyze -> iterate).
+  // Additive orchestration layer that links existing objects together; the
+  // underlying tools (briefs, deliverables, launches, analysis) are untouched.
+  await sql`
+    CREATE TABLE IF NOT EXISTS flow_cards (
+      id                       BIGSERIAL PRIMARY KEY,
+      stage                    TEXT NOT NULL DEFAULT 'ideate',
+      title                    TEXT,
+      product_label            TEXT,
+      angle                    TEXT,
+      format                   TEXT,
+      objective                TEXT,
+      concept_json             JSONB,
+      creator_id               BIGINT REFERENCES creators(id) ON DELETE SET NULL,
+      brief_id                 BIGINT,
+      deliverable_id           BIGINT,
+      ad_id                    TEXT,
+      group_key                TEXT,
+      source_winner_group_key  TEXT,
+      status                   TEXT NOT NULL DEFAULT 'open',
+      archived                 BOOLEAN NOT NULL DEFAULT false,
+      created_by               TEXT,
+      created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_flow_cards_stage ON flow_cards(stage) WHERE NOT archived`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_flow_cards_creator ON flow_cards(creator_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_flow_cards_winner ON flow_cards(source_winner_group_key) WHERE source_winner_group_key IS NOT NULL`;
+
   await sql`
     CREATE TABLE IF NOT EXISTS creator_deliverables (
       id              BIGSERIAL PRIMARY KEY,

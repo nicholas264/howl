@@ -462,3 +462,60 @@ input, textarea, select, button { font-family: inherit; }
 .seed-flag{margin-top:14px;padding:16px 18px;border:1px solid var(--flame-border);border-radius:12px;background:var(--flame-dim)}
 .seed-flag b{font-family:'Instrument Serif',Georgia,serif;font-size:17px;font-weight:400}
 .seed-flag ul{margin:8px 0 0;padding-left:18px;columns:2;font-size:11px;color:var(--muted);line-height:1.7}
+
+/* ── Creative Flow Board ─────────────────────────────────────────────────── */
+.flow-page{max-width:1640px;margin:0 auto;padding:40px 42px 72px}
+.flow-board{display:flex;gap:14px;margin-top:24px;overflow-x:auto;padding-bottom:14px}
+.flow-col{flex:0 0 240px;display:flex;flex-direction:column;background:var(--surface2);border:1px solid var(--border);border-radius:12px;min-height:160px}
+.flow-col-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border)}
+.flow-col-head .k{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text)}
+.flow-col-head .n{font-family:'Instrument Serif',Georgia,serif;font-size:18px;color:var(--muted)}
+.flow-col-body{display:flex;flex-direction:column;gap:8px;padding:10px;overflow-y:auto;flex:1}
+.flow-card{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:11px 12px;cursor:default}
+.flow-card.win{border-style:dashed;background:transparent}
+.flow-card-title{font-size:12px;font-weight:600;color:var(--text);line-height:1.35;margin-bottom:6px}
+.flow-card-meta{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.flow-tag{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:.5px;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:var(--surface2);border:1px solid var(--border);color:var(--muted)}
+.flow-tag.flame{background:var(--flame-dim);border-color:var(--flame-border);color:var(--flame)}
+.flow-card-creator{font-size:11px;color:var(--muted);margin-bottom:8px}
+.flow-card-creator b{color:var(--text);font-weight:600}
+.flow-card-actions{display:flex;gap:6px;flex-wrap:wrap}
+.flow-btn{font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;padding:6px 9px;border-radius:6px;border:1px solid var(--border);background:#fff;color:var(--text);cursor:pointer}
+.flow-btn.primary{background:var(--flame);border-color:var(--flame);color:#fff}
+.flow-btn:hover{border-color:var(--flame)}
+.flow-btn:disabled{opacity:.5;cursor:default}
+.flow-col-empty{font-size:10px;color:var(--muted2);text-align:center;padding:18px 8px;font-style:italic}
+
+/* matcher panel */
+.flow-matcher{margin-top:22px;border:1px solid var(--flame-border);border-radius:16px;background:radial-gradient(120% 140% at 85% 0%,rgba(216,74,23,.10),rgba(216,74,23,.015) 60%),var(--surface);padding:22px 24px}
+.flow-matcher-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:16px;flex-wrap:wrap}
+.flow-mode{display:inline-flex;border:1px solid var(--border);border-radius:999px;overflow:hidden}
+.flow-mode button{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;padding:7px 14px;border:0;background:#fff;color:var(--muted);cursor:pointer}
+.flow-mode button.on{background:var(--flame);color:#fff}
+.flow-matcher-form{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.flow-matcher-form input,.flow-matcher-form select{padding:9px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:#fff}
+.flow-matcher-form .wide{grid-column:span 2}
+.flow-results{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.flow-result{display:grid;grid-template-columns:34px 1fr auto;gap:14px;align-items:center;padding:13px 15px;border:1px solid var(--border);border-radius:11px;background:var(--surface)}
+.flow-rank{font-family:'Instrument Serif',Georgia,serif;font-size:22px;color:var(--muted2);text-align:center}
+.flow-result-name{font-size:14px;font-weight:600;color:var(--text)}
+.flow-result-rationale{font-size:11px;color:var(--muted);line-height:1.5;margin-top:3px}
+.flow-result-signals{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.flow-score{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.5px;color:var(--muted2);text-transform:uppercase;white-space:nowrap;margin-bottom:7px;text-align:right}
+.flow-empty{padding:40px 20px;text-align:center;color:var(--muted)}
+.flow-col.drop{background:var(--flame-dim);border-color:var(--flame-border)}
+.flow-card[draggable="true"]{cursor:grab}
+.flow-card[draggable="true"]:active{cursor:grabbing}
+.flow-card.dragging{opacity:.4}
+
+/* attribution autopilot on Flow board */
+.flow-attrib{margin-top:18px;border:1px solid var(--flame-border);border-radius:14px;background:var(--flame-dim);overflow:hidden}
+.flow-attrib-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 18px;flex-wrap:wrap}
+.flow-attrib-head{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--flame);margin-right:12px}
+.flow-attrib-sub{font-size:12px;color:var(--text)}
+.flow-attrib-list{border-top:1px solid var(--flame-border);background:var(--surface);max-height:440px;overflow-y:auto}
+.flow-attrib-row{display:grid;grid-template-columns:1fr 84px 70px 200px auto;gap:12px;align-items:center;padding:9px 18px;border-bottom:1px solid var(--border)}
+.flow-attrib-row:last-child{border-bottom:0}
+.flow-attrib-ad{font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.flow-attrib-spend{font-family:'Instrument Serif',Georgia,serif;font-size:15px;text-align:right;font-variant-numeric:tabular-nums}
+.flow-attrib-row select{padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:#fff;max-width:200px}
