@@ -18,6 +18,7 @@ export const UgcVideo = ({
   segments = [],
   words = [],
   showCaptions = true,
+  captionStyle = 'pop',
   showIntro = true,
   showOutro = true,
   intro = { title: 'HOWL', subtitle: "World's hottest fire pit" },
@@ -58,7 +59,7 @@ export const UgcVideo = ({
                 endAt={Math.round(seg.end * fps)}
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
-              {showCaptions && <AnimatedCaptions words={seg.segWords} />}
+              {showCaptions && <AnimatedCaptions words={seg.segWords} style={captionStyle} />}
             </AbsoluteFill>
           </Series.Sequence>
         ))}

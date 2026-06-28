@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { upload } from '@vercel/blob/client';
 import { useAuth } from '@clerk/clerk-react';
+import { Player } from '@remotion/player';
 import { buildSrtFromWords } from '../utils/ffmpegClient';
+import { UgcVideo, calcDurationInFrames } from '../remotion/UgcVideo';
 
 const SILENCE_THRESHOLD_S = 0.6;
 const AUTOSAVE_DEBOUNCE_MS = 1200;
@@ -9,7 +11,36 @@ const AUTOSAVE_DEBOUNCE_MS = 1200;
 const DEFAULT_SETTINGS = {
   burnCaptions: true,
   autoCutSilences: true,
+  captionStyle: 'pop',
+  showIntro: true,
+  showOutro: true,
+  variantIntent: 'direct_response',
+  introTitle: 'HOWL',
+  introSubtitle: "World's hottest smokeless fire pit",
+  outroHeadline: 'Feel the heat.',
+  outroCta: 'howlcampfires.com',
 };
+
+const WORKFLOW_STEPS = [
+  ['uploaded', 'Source'],
+  ['transcribing', 'Transcript'],
+  ['ready', 'Edit'],
+  ['rendering', 'Render'],
+  ['done', 'Launch'],
+];
+
+const CAPTION_STYLES = [
+  ['pop', 'Kinetic pop'],
+  ['clean', 'Clean proof'],
+  ['raw', 'Raw creator'],
+];
+
+const VARIANT_INTENTS = [
+  ['direct_response', 'Direct response'],
+  ['testimonial', 'Testimonial'],
+  ['demo', 'Product demo'],
+  ['problem_solution', 'Problem/solution'],
+];
 
 const PLAYBACK_ERROR = 'The browser could not play this source. Try reloading the session; if it still fails, re-upload as MP4/MOV so the server can proxy it.';
 
@@ -532,6 +563,41 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     }
   };
 
+  const activeStepIndex = stage === 'idle'
+    ? 0
+    : WORKFLOW_STEPS.findIndex(([key]) => key === stage);
+  const stepIndex = Math.max(0, activeStepIndex);
+  const remotionDuration = useMemo(() => (
+    segments.length
+      ? calcDurationInFrames({
+          segments,
+          fps: 30,
+          showIntro: settings.showIntro,
+          showOutro: settings.showOutro,
+        })
+      : 120
+  ), [segments, settings.showIntro, settings.showOutro]);
+  const remotionInput = useMemo(() => ({
+    videoSrc: playbackUrl || videoUrl || '',
+    segments,
+    words: keptWords,
+    showCaptions: settings.burnCaptions,
+    captionStyle: settings.captionStyle || 'pop',
+    showIntro: settings.showIntro,
+    showOutro: settings.showOutro,
+    intro: {
+      title: settings.introTitle || 'HOWL',
+      subtitle: settings.introSubtitle || "World's hottest smokeless fire pit",
+    },
+    outro: {
+      headline: settings.outroHeadline || 'Feel the heat.',
+      cta: settings.outroCta || 'howlcampfires.com',
+    },
+  }), [playbackUrl, videoUrl, segments, keptWords, settings]);
+  const cutPercent = duration ? Math.max(0, Math.min(100, (cutDuration / duration) * 100)) : 0;
+  const keepPercent = duration ? Math.max(0, Math.min(100, (keptDuration / duration) * 100)) : 0;
+  const firstHook = keptWords.slice(0, 9).map(word => word.word).join(' ');
+
   // ── Layout ─────────────────────────────────────────────────────────────────
   return (
     <div style={shellStyle}>
@@ -576,14 +642,14 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
               onClick={() => loadSession(s.id)}
               style={{
                 ...sessionCard,
-                ...(activeSession?.id === s.id ? { borderColor: '#d84a17', background: '#fff0e9' } : {}),
+                ...(activeSession?.id === s.id ? { borderColor: '#ff6a2a', background: '#21140e' } : {}),
               }}
             >
-              <div style={{ fontSize: 12, color: '#171717', fontWeight: 600, wordBreak: 'break-all' }}>
+              <div style={{ fontSize: 12, color: '#f7efe2', fontWeight: 600, wordBreak: 'break-all' }}>
                 {sessionTitle(s)}
                 {sessionContext(s) && <span style={{ display: 'block', color: '#b84418', fontSize: 8, marginTop: 3 }}>{sessionContext(s)}</span>}
               </div>
-              <div style={{ fontSize: 10, color: '#77746f', marginTop: 4 }}>
+              <div style={{ fontSize: 10, color: '#aaa29a', marginTop: 4 }}>
                 {s.file_size ? `${(s.file_size / 1024 / 1024).toFixed(1)} MB · ` : ''}
                 {s.duration ? `${parseFloat(s.duration).toFixed(1)}s · ` : ''}
                 {SOURCE_LABELS[s.source_type] || (s.creator_id ? 'Creator upload' : 'Manual upload')} ·
@@ -610,28 +676,35 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         </div>
       </aside>
 
-      <div style={mainStyle}>
-        <h1 style={{ fontSize: 28, marginBottom: 4 }}>UGC Editor</h1>
-        <p style={{ color: '#77746f', marginTop: 0, fontSize: 13 }}>
-          Creator uploads land here automatically from assignment links. Cut silences and bad takes from the transcript, burn captions, render, then send the finished asset to launch.
-        </p>
-        <div style={editorStats}>
-          <div><span>Needs edit</span><strong>{sessionStats.needs_edit}</strong></div>
-          <div><span>Launch ready</span><strong>{sessionStats.launch_ready}</strong></div>
-          <div><span>Needs transcript</span><strong>{sessionStats.untranscribed}</strong></div>
-          <div><span>Rendered</span><strong>{sessionStats.rendered}</strong></div>
-          <div><span>Total sessions</span><strong>{sessionStats.all}</strong></div>
-        </div>
+      <main style={mainStyle}>
+        <section style={heroPanel}>
+          <div>
+            <span style={eyebrow}>HOWL edit desk</span>
+            <h1 style={heroTitle}>UGC Editor</h1>
+            <p style={heroCopy}>
+              Turn raw creator footage into launch-ready cuts: transcript cleanup, silence removal, caption styling, and ad variants from one source clip.
+            </p>
+          </div>
+          <div style={editorStats}>
+            <div style={statCard}><span>Needs edit</span><strong>{sessionStats.needs_edit}</strong></div>
+            <div style={statCard}><span>Launch ready</span><strong>{sessionStats.launch_ready}</strong></div>
+            <div style={statCard}><span>Transcript</span><strong>{sessionStats.untranscribed}</strong></div>
+            <div style={statCard}><span>Rendered</span><strong>{sessionStats.rendered}</strong></div>
+          </div>
+        </section>
 
         {!videoUrl && stage !== 'uploading' && (
           <label
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
-            style={{ ...uploadBox, borderColor: dragOver ? '#d84a17' : '#dedbd3', background: dragOver ? '#fff0e9' : '#fff' }}
+            style={{ ...uploadBox, borderColor: dragOver ? '#ff6a2a' : 'rgba(255,255,255,.18)', background: dragOver ? 'rgba(255,106,42,.12)' : '#101010' }}
           >
             <input type="file" accept="video/*" onChange={handleFile} style={{ display: 'none' }} />
-            <div style={{ fontSize: 14 }}>Click or drag a video here (mp4, mov, webm)</div>
+            <div>
+              <strong>Drop creator footage</strong>
+              <span>MP4, MOV, or WebM. We’ll store the source, transcribe it, and build an editable ad recipe.</span>
+            </div>
           </label>
         )}
 
@@ -646,7 +719,14 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
 
         {videoUrl && stage !== 'uploading' && (
           <div style={editorGrid}>
-            <div style={{ position: 'sticky', top: 16 }}>
+            <section style={sourcePanel}>
+              <div style={panelHead}>
+                <div>
+                  <span style={eyebrow}>Source monitor</span>
+                  <strong>{activeSession?.creator_name || activeSession?.source_label || 'Manual upload'}</strong>
+                </div>
+                <span style={statusPill}>{stage.replaceAll('_', ' ')}</span>
+              </div>
               <video
                 ref={videoRef}
                 src={playbackUrl}
@@ -660,160 +740,221 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                 }}
                 onError={() => setError(PLAYBACK_ERROR)}
               />
-              <div style={{ fontSize: 12, color: '#77746f', marginTop: 6 }}>
-                {activeSession?.creator_name && <strong style={{ display: 'block', color: '#171717', marginBottom: 3 }}>{activeSession.creator_name}</strong>}
-                {!activeSession?.creator_name && activeSession?.source_label && <strong style={{ display: 'block', color: '#171717', marginBottom: 3 }}>{activeSession.source_label}</strong>}
-                {activeSession?.deliverable_title && <span style={{ display: 'block', color: '#b84418', marginBottom: 3 }}>{activeSession.deliverable_title}</span>}
-                {activeSession?.source_type && <span style={{ display: 'block', color: '#77746f', marginBottom: 3 }}>{SOURCE_LABELS[activeSession.source_type] || activeSession.source_type.replaceAll('_', ' ')}</span>}
-                {activeSession?.file_name || file?.name}
-                {activeSession?.file_size ? ` · ${(activeSession.file_size / 1024 / 1024).toFixed(1)} MB` : (file ? ` · ${(file.size / 1024 / 1024).toFixed(1)} MB` : '')}
+              <div style={sourceMeta}>
+                <strong>{activeSession?.deliverable_title || activeSession?.file_name || file?.name}</strong>
+                <span>
+                  {activeSession?.file_size ? `${(activeSession.file_size / 1024 / 1024).toFixed(1)} MB` : file ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : 'Stored source'}
+                  {activeSession?.source_type ? ` · ${SOURCE_LABELS[activeSession.source_type] || activeSession.source_type.replaceAll('_', ' ')}` : ''}
+                </span>
               </div>
               {activeSession?.brief_title && (
                 <div style={contextBox}>
                   <span>Brief</span>
                   <strong>{activeSession.brief_title}</strong>
-                  <small>
-                    {activeSession.deliverable_status || activeSession.status}
-                    {dueStatus(activeSession) ? ` · ${dueStatus(activeSession).label}` : ''}
-                  </small>
+                  <small>{activeSession.deliverable_status || activeSession.status}{dueStatus(activeSession) ? ` · ${dueStatus(activeSession).label}` : ''}</small>
                 </div>
               )}
-              {activeSession?.settings?.creator_notes && (
-                <div style={contextBox}>
-                  <span>Creator notes</span>
-                  <p style={{ margin: '6px 0 0', color: '#343330', fontSize: 11, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
-                    {activeSession.settings.creator_notes}
-                  </p>
-                </div>
-              )}
-              {stage === 'done' && outputUrl && activeSession?.creator_id && activeSession?.deliverable_id && !['complete', 'launched'].includes(activeSession?.deliverable_status) && (
-                <div style={launchReadyBox}>
-                  <span>Launch handoff</span>
-                  <strong>Rendered and ready for Launcher</strong>
-                  <p>Send this edit to Launcher to mark the deliverable complete and carry creator, brief, and source attribution into Meta.</p>
-                </div>
-              )}
+              {error && <div style={errorBox}>{error}</div>}
+            </section>
 
-              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {(stage === 'uploaded' || stage === 'idle') && activeSession && (
-                  <div style={actionStack}>
-                    <button onClick={autoEdit} style={primaryBtn} disabled={autoEditing}>Auto edit</button>
-                    <button onClick={transcribe} style={secondaryBtn}>Transcribe only</button>
+            <section style={workPanel}>
+              <div style={workflowRail}>
+                {WORKFLOW_STEPS.map(([key, label], index) => (
+                  <div key={key} style={{ ...workflowStep, ...(index <= stepIndex ? workflowStepActive : {}) }}>
+                    <i>{index + 1}</i>
+                    <span>{label}</span>
                   </div>
-                )}
-                {stage === 'transcribing' && (
-                  <div style={statusBox}>Extracting audio + transcribing on the server…</div>
-                )}
-
-                {(stage === 'ready' || stage === 'done' || stage === 'rendering') && (
-                  <>
-                    <label style={checkboxRow}>
-                      <input type="checkbox" checked={settings.autoCutSilences} onChange={(e) => updateSetting('autoCutSilences', e.target.checked)} />
-                      Auto-cut silences {`>`} {SILENCE_THRESHOLD_S}s
-                    </label>
-                    <label style={checkboxRow}>
-                      <input type="checkbox" checked={settings.burnCaptions} onChange={(e) => updateSetting('burnCaptions', e.target.checked)} />
-                      Burn captions
-                    </label>
-
-                    <div style={{ fontSize: 12, color: '#77746f' }}>
-                      {duration ? `${duration.toFixed(1)}s raw · ${keptDuration.toFixed(1)}s kept · ${cutDuration.toFixed(1)}s removed` : null}
-                    </div>
-
-                    {stage !== 'rendering' && (
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <button
-                          onClick={render}
-                          style={primaryBtn}
-                          disabled={!segments.length}
-                          title={!segments.length ? 'Transcribe the asset before rendering an edited cut.' : ''}
-                        >
-                          {stage === 'done' ? 'Re-render' : 'Render'}
-                        </button>
-                        <button
-                          onClick={autoEdit}
-                          style={secondaryBtn}
-                          disabled={autoEditing || !activeSession}
-                        >
-                          {autoEditing ? 'Auto editing...' : 'Auto edit'}
-                        </button>
-                        <button
-                          onClick={suggestCleanup}
-                          style={secondaryBtn}
-                          disabled={aiCleaning || !words.length}
-                          title={!words.length ? 'Transcribe the asset before using AI cleanup.' : ''}
-                        >
-                          {aiCleaning ? 'Reviewing...' : 'AI cleanup'}
-                        </button>
-                        <button onClick={resetWords} style={secondaryBtn}>Reset cuts</button>
-                      </div>
-                    )}
-                    {aiCleanupMessage && (
-                      <div style={{ fontSize: 11, color: '#343330', lineHeight: 1.5 }}>
-                        {aiCleanupMessage}
-                      </div>
-                    )}
-                    <div style={{ fontSize: 11, color: '#77746f' }}>
-                      Rendering uses the saved source and keeps the finished edit available after reload.
-                    </div>
-                    {stage === 'rendering' && (
-                      <div style={statusBox}>
-                        Rendering… {Math.round(progress * 100)}%
-                        <div style={{ fontSize: 10, color: '#88857f', marginTop: 4, fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {logTail}
-                        </div>
-                      </div>
-                    )}
-
-                    {stage === 'done' && outputUrl && (
-                      <>
-                        <video src={outputUrl} controls playsInline style={{ width: '100%', borderRadius: 8, background: '#000', marginTop: 8 }} />
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <button onClick={download} style={primaryBtn}>Download</button>
-                          {onAddToCart && <button onClick={sendToCart} style={secondaryBtn}>Send to Launcher</button>}
-                        </div>
-                      </>
-                    )}
-                  </>
-                )}
-
-                {error && <div style={{ color: '#b42318', fontSize: 13 }}>{error}</div>}
-              </div>
-            </div>
-
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 12 }}>
-                <div style={{ fontSize: 11, textTransform: 'uppercase', color: '#88857f', letterSpacing: 1 }}>
-                  Transcript {words.length ? `· click words to cut` : ''}
-                </div>
-                {words.length ? <div style={{ fontSize: 11, color: '#77746f' }}>{segments.length} cuts · {keptWords.length}/{words.length} words kept</div> : null}
-              </div>
-              <div style={transcriptBox}>
-                {!words.length && <div style={{ color: '#88857f', fontSize: 13 }}>Transcript will appear here.</div>}
-                {words.map((w, i) => (
-                  <span
-                    key={i}
-                    onClick={() => toggleWord(i)}
-                    onDoubleClick={() => seekTo(w.start)}
-                    style={{
-                      cursor: 'pointer',
-                      padding: '1px 4px',
-                      borderRadius: 3,
-                      color: w.kept ? '#171717' : '#88857f',
-                      textDecoration: w.kept ? 'none' : 'line-through',
-                      background: w.kept ? 'transparent' : '#1f2630',
-                      flex: '0 0 auto',
-                    }}
-                    title={`${w.start.toFixed(2)}s · double-click to seek`}
-                  >
-                    {w.word}
-                  </span>
                 ))}
               </div>
-            </div>
+
+              <div style={timelineCard}>
+                <div style={panelHead}>
+                  <div>
+                    <span style={eyebrow}>Cut map</span>
+                    <strong>{duration ? `${duration.toFixed(1)}s raw · ${keptDuration.toFixed(1)}s kept` : 'Waiting for transcript'}</strong>
+                  </div>
+                  <span style={statusPill}>{Math.round(cutPercent)}% removed</span>
+                </div>
+                <div style={timelineTrack}>
+                  {segments.length ? segments.map((segment, index) => {
+                    const left = duration ? (segment.start / duration) * 100 : 0;
+                    const width = duration ? ((segment.end - segment.start) / duration) * 100 : 0;
+                    return (
+                      <button
+                        key={`${segment.start}-${segment.end}-${index}`}
+                        onClick={() => seekTo(segment.start)}
+                        style={{ ...timelineSegment, left: `${left}%`, width: `${Math.max(width, 1)}%` }}
+                        title={`${segment.start.toFixed(1)}s-${segment.end.toFixed(1)}s`}
+                      />
+                    );
+                  }) : <span style={timelineEmpty}>Transcribe to build the cut map</span>}
+                </div>
+                <div style={metricGrid}>
+                  <div style={metricCard}><span>Segments</span><strong>{segments.length}</strong></div>
+                  <div style={metricCard}><span>Words kept</span><strong>{words.length ? `${keptWords.length}/${words.length}` : '-'}</strong></div>
+                  <div style={metricCard}><span>Cut time</span><strong>{duration ? `${cutDuration.toFixed(1)}s` : '-'}</strong></div>
+                  <div style={metricCard}><span>Keep rate</span><strong>{duration ? `${Math.round(keepPercent)}%` : '-'}</strong></div>
+                </div>
+              </div>
+
+              <div style={transcriptPanel}>
+                <div style={panelHead}>
+                  <div>
+                    <span style={eyebrow}>Transcript editor</span>
+                    <strong>{words.length ? 'Click words to cut, double-click to seek' : 'Transcript will appear here'}</strong>
+                  </div>
+                  {firstHook ? <span style={hookPill}>{firstHook}</span> : null}
+                </div>
+                <div style={transcriptBox}>
+                  {!words.length && <div style={{ color: '#aaa29a', fontSize: 13 }}>Use Transcribe or Auto edit to generate word-level cuts.</div>}
+                  {words.map((w, i) => (
+                    <span
+                      key={i}
+                      onClick={() => toggleWord(i)}
+                      onDoubleClick={() => seekTo(w.start)}
+                      style={{
+                        cursor: 'pointer',
+                        padding: '2px 5px',
+                        borderRadius: 4,
+                        color: w.kept ? '#f7efe2' : '#766d63',
+                        textDecoration: w.kept ? 'none' : 'line-through',
+                        background: w.kept ? 'rgba(255,255,255,.06)' : 'rgba(255,106,42,.16)',
+                        flex: '0 0 auto',
+                      }}
+                      title={`${w.start.toFixed(2)}s · double-click to seek`}
+                    >
+                      {w.word}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <aside style={recipePanel}>
+              <div style={panelHead}>
+                <div>
+                  <span style={eyebrow}>Ad recipe</span>
+                  <strong>Variant controls</strong>
+                </div>
+              </div>
+
+              <div style={actionStack}>
+                {(stage === 'uploaded' || stage === 'idle') && activeSession && (
+                  <>
+                    <button onClick={autoEdit} style={primaryBtn} disabled={autoEditing}>Auto edit full ad</button>
+                    <button onClick={transcribe} style={secondaryBtn}>Transcribe only</button>
+                  </>
+                )}
+                {(stage === 'ready' || stage === 'done' || stage === 'rendering') && (
+                  <>
+                    <button onClick={render} style={primaryBtn} disabled={!segments.length || stage === 'rendering'}>
+                      {stage === 'done' ? 'Render again' : 'Render cut'}
+                    </button>
+                    <button onClick={autoEdit} style={secondaryBtn} disabled={autoEditing || !activeSession}>
+                      {autoEditing ? 'Auto editing...' : 'Auto edit full ad'}
+                    </button>
+                    <button onClick={suggestCleanup} style={secondaryBtn} disabled={aiCleaning || !words.length}>
+                      {aiCleaning ? 'Reviewing...' : 'AI cleanup'}
+                    </button>
+                    <button onClick={resetWords} style={secondaryBtn}>Reset cuts</button>
+                  </>
+                )}
+              </div>
+
+              <div style={controlGroup}>
+                <label style={checkboxRow}>
+                  <input type="checkbox" checked={settings.autoCutSilences} onChange={(e) => updateSetting('autoCutSilences', e.target.checked)} />
+                  Auto-cut silence over {SILENCE_THRESHOLD_S}s
+                </label>
+                <label style={checkboxRow}>
+                  <input type="checkbox" checked={settings.burnCaptions} onChange={(e) => updateSetting('burnCaptions', e.target.checked)} />
+                  Captions on render
+                </label>
+                <label style={checkboxRow}>
+                  <input type="checkbox" checked={settings.showIntro} onChange={(e) => updateSetting('showIntro', e.target.checked)} />
+                  Remotion intro card
+                </label>
+                <label style={checkboxRow}>
+                  <input type="checkbox" checked={settings.showOutro} onChange={(e) => updateSetting('showOutro', e.target.checked)} />
+                  CTA outro card
+                </label>
+              </div>
+
+              <label style={fieldLabel}>
+                Variant angle
+                <select value={settings.variantIntent || 'direct_response'} onChange={(e) => updateSetting('variantIntent', e.target.value)} style={selectStyle}>
+                  {VARIANT_INTENTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+              <label style={fieldLabel}>
+                Caption style
+                <select value={settings.captionStyle || 'pop'} onChange={(e) => updateSetting('captionStyle', e.target.value)} style={selectStyle}>
+                  {CAPTION_STYLES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+              <label style={fieldLabel}>
+                Intro headline
+                <input value={settings.introTitle || ''} onChange={(e) => updateSetting('introTitle', e.target.value)} style={inputStyle} />
+              </label>
+              <label style={fieldLabel}>
+                Intro subhead
+                <input value={settings.introSubtitle || ''} onChange={(e) => updateSetting('introSubtitle', e.target.value)} style={inputStyle} />
+              </label>
+              <label style={fieldLabel}>
+                Outro headline
+                <input value={settings.outroHeadline || ''} onChange={(e) => updateSetting('outroHeadline', e.target.value)} style={inputStyle} />
+              </label>
+              <label style={fieldLabel}>
+                CTA
+                <input value={settings.outroCta || ''} onChange={(e) => updateSetting('outroCta', e.target.value)} style={inputStyle} />
+              </label>
+
+              {aiCleanupMessage && <div style={statusBox}>{aiCleanupMessage}</div>}
+              {stage === 'transcribing' && <div style={statusBox}>Extracting audio and building word-level captions...</div>}
+              {stage === 'rendering' && (
+                <div style={statusBox}>
+                  Rendering... {Math.round(progress * 100)}%
+                  <small>{logTail}</small>
+                </div>
+              )}
+              {stage === 'done' && outputUrl && (
+                <div style={outputPanel}>
+                  <span style={eyebrow}>Finished render</span>
+                  <video src={outputUrl} controls playsInline style={{ width: '100%', borderRadius: 8, background: '#000' }} />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={download} style={primaryBtn}>Download</button>
+                    {onAddToCart && <button onClick={sendToCart} style={secondaryBtn}>Send to Launcher</button>}
+                  </div>
+                </div>
+              )}
+            </aside>
+
+            {segments.length && playbackUrl ? (
+              <section style={remotionPanel}>
+                <div style={panelHead}>
+                  <div>
+                    <span style={eyebrow}>Remotion ad preview</span>
+                    <strong>{VARIANT_INTENTS.find(([value]) => value === settings.variantIntent)?.[1] || 'Ad variant'} · 9:16 composition</strong>
+                  </div>
+                  <span style={statusPill}>{Math.ceil(remotionDuration / 30)}s</span>
+                </div>
+                <div style={playerShell}>
+                  <Player
+                    component={UgcVideo}
+                    inputProps={remotionInput}
+                    durationInFrames={remotionDuration}
+                    fps={30}
+                    compositionWidth={1080}
+                    compositionHeight={1920}
+                    style={{ width: '100%', aspectRatio: '9 / 16', background: '#000' }}
+                    controls
+                  />
+                </div>
+              </section>
+            ) : null}
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }
@@ -903,21 +1044,63 @@ function remapWordsToOutput(keptWords, segments) {
 
 const shellStyle = {
   display: 'grid',
-  gridTemplateColumns: '280px minmax(0, 1fr)',
+  gridTemplateColumns: '282px minmax(0, 1fr)',
   minHeight: 'calc(100vh - 60px)',
-  background: '#f5f2eb',
+  background: '#0b0b0b',
+  color: '#f7efe2',
 };
 const mainStyle = {
-  padding: 24,
-  maxWidth: 1240,
+  padding: 22,
+  maxWidth: 1500,
   width: '100%',
+};
+const heroPanel = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr) 520px',
+  gap: 18,
+  alignItems: 'end',
+  padding: 22,
+  background: '#15120f',
+  border: '1px solid rgba(255,255,255,.09)',
+  borderRadius: 8,
+};
+const eyebrow = {
+  display: 'block',
+  marginBottom: 7,
+  color: '#ff6a2a',
+  fontSize: 9,
+  fontWeight: 800,
+  letterSpacing: 1.6,
+  textTransform: 'uppercase',
+};
+const heroTitle = {
+  margin: 0,
+  font: "42px 'Instrument Serif', Georgia, serif",
+  color: '#f7efe2',
+};
+const heroCopy = {
+  maxWidth: 760,
+  margin: '7px 0 0',
+  color: '#aaa29a',
+  fontSize: 13,
+  lineHeight: 1.55,
 };
 const editorGrid = {
   display: 'grid',
-  gridTemplateColumns: '320px minmax(0, 1fr)',
-  gap: 24,
-  marginTop: 16,
+  gridTemplateColumns: '330px minmax(430px, 1fr) 320px',
+  gap: 14,
+  marginTop: 14,
   alignItems: 'start',
+};
+const sourcePanel = {
+  position: 'sticky',
+  top: 14,
+  display: 'grid',
+  gap: 12,
+  padding: 14,
+  background: '#121212',
+  border: '1px solid rgba(255,255,255,.1)',
+  borderRadius: 8,
 };
 const videoStyle = {
   width: '100%',
@@ -926,7 +1109,7 @@ const videoStyle = {
   background: '#050505',
   maxHeight: 520,
   objectFit: 'contain',
-  boxShadow: '0 18px 42px rgba(23, 23, 23, .16)',
+  boxShadow: '0 22px 58px rgba(0, 0, 0, .42)',
 };
 const actionStack = {
   display: 'grid',
@@ -934,66 +1117,266 @@ const actionStack = {
   gap: 8,
 };
 const sidebarStyle = {
-  borderRight: '1px solid #dedbd3', background: '#fffdf8', padding: 16, overflowY: 'auto',
+  borderRight: '1px solid rgba(255,255,255,.1)', background: '#0f0f0f', padding: 16, overflowY: 'auto',
   maxHeight: 'calc(100vh - 60px)',
 };
 const queueSummary = {
-  display: 'grid', gap: 2, padding: 12, marginBottom: 10, background: '#faf9f6',
-  border: '1px solid #ebe8e1', borderRadius: 8,
+  display: 'grid', gap: 2, padding: 12, marginBottom: 10, background: '#17130f',
+  border: '1px solid rgba(255,106,42,.25)', borderRadius: 8, color: '#f7efe2',
 };
 const filterRow = {
   display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 12,
 };
 const filterBtn = {
   display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 8px',
-  background: '#fff', border: '1px solid #dedbd3', borderRadius: 999,
-  color: '#6f6d68', cursor: 'pointer', fontSize: 9, fontWeight: 700,
+  background: '#151515', border: '1px solid rgba(255,255,255,.12)', borderRadius: 999,
+  color: '#aaa29a', cursor: 'pointer', fontSize: 9, fontWeight: 700,
 };
 const editorStats = {
-  display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 8,
-  margin: '18px 0 8px',
+  display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8,
+};
+const statCard = {
+  display: 'grid',
+  gap: 4,
+  padding: 11,
+  borderRadius: 7,
+  background: '#0f0f0f',
+  border: '1px solid rgba(255,255,255,.09)',
+  color: '#aaa29a',
+  fontSize: 9,
+  textTransform: 'uppercase',
 };
 const contextBox = {
-  display: 'grid', gap: 4, marginTop: 10, padding: 10, background: '#fff',
-  border: '1px solid #dedbd3', borderRadius: 8, fontSize: 11, color: '#6f6d68',
+  display: 'grid', gap: 4, padding: 10, background: '#191919',
+  border: '1px solid rgba(255,255,255,.09)', borderRadius: 8, fontSize: 11, color: '#aaa29a',
 };
 const sessionCard = {
-  border: '1px solid #dedbd3', borderRadius: 6, padding: 10, cursor: 'pointer',
-  background: '#fff',
+  border: '1px solid rgba(255,255,255,.1)', borderRadius: 6, padding: 10, cursor: 'pointer',
+  background: '#151515',
 };
 const duePill = {
-  display: 'inline-block', marginTop: 7, padding: '4px 7px', border: '1px solid #dedbd3',
-  borderRadius: 999, background: '#faf9f6', color: '#6f6d68', fontSize: 9, fontWeight: 700,
+  display: 'inline-block', marginTop: 7, padding: '4px 7px', border: '1px solid rgba(255,255,255,.12)',
+  borderRadius: 999, background: '#101010', color: '#aaa29a', fontSize: 9, fontWeight: 700,
 };
 const launchReadyBox = {
   display: 'grid', gap: 4, marginTop: 10, padding: 10, background: 'rgba(63,185,80,.07)',
   border: '1px solid rgba(63,185,80,.28)', borderRadius: 8, color: '#256b35',
 };
 const uploadBox = {
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  height: 200, border: '2px dashed #dedbd3', borderRadius: 8, cursor: 'pointer',
-  color: '#77746f', marginTop: 16, background: '#fff',
+  display: 'grid', placeItems: 'center',
+  minHeight: 260, border: '1px dashed rgba(255,255,255,.18)', borderRadius: 8, cursor: 'pointer',
+  color: '#aaa29a', marginTop: 16, background: '#101010', textAlign: 'center', padding: 24,
 };
 const primaryBtn = {
-  background: '#d84a17', color: '#fff', border: 0, padding: '10px 16px',
-  borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+  background: '#ff5a1f', color: '#100b08', border: 0, padding: '10px 14px',
+  borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 800,
 };
 const secondaryBtn = {
-  background: 'transparent', color: '#171717', border: '1px solid #dedbd3',
-  padding: '10px 16px', borderRadius: 6, cursor: 'pointer', fontSize: 13,
+  background: '#191919', color: '#f7efe2', border: '1px solid rgba(255,255,255,.12)',
+  padding: '10px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 12,
 };
 const ghostBtn = {
-  background: 'transparent', color: '#77746f', border: '1px solid #dedbd3',
+  background: 'transparent', color: '#aaa29a', border: '1px solid rgba(255,255,255,.12)',
   padding: '4px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase',
 };
-const checkboxRow = { fontSize: 13, color: '#171717', display: 'flex', gap: 8, alignItems: 'center' };
+const checkboxRow = { fontSize: 12, color: '#f7efe2', display: 'flex', gap: 8, alignItems: 'center', lineHeight: 1.35 };
 const statusBox = {
-  background: '#fff', border: '1px solid #dedbd3', borderRadius: 6,
-  padding: 12, fontSize: 13, color: '#171717',
+  display: 'grid', gap: 4, background: '#191919', border: '1px solid rgba(255,255,255,.1)', borderRadius: 6,
+  padding: 11, fontSize: 12, color: '#f7efe2',
 };
 const transcriptBox = {
-  background: '#fff', border: '1px solid #dedbd3', borderRadius: 8,
-  padding: 14, fontSize: 14, lineHeight: 1.8, height: 460, overflowY: 'auto',
+  background: '#0f0f0f', border: '1px solid rgba(255,255,255,.08)', borderRadius: 8,
+  padding: 14, fontSize: 14, lineHeight: 1.9, minHeight: 290, maxHeight: 420, overflowY: 'auto',
   display: 'flex', flexWrap: 'wrap', alignContent: 'flex-start', gap: '2px 6px',
   wordBreak: 'break-word',
+};
+const panelHead = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  gap: 12,
+};
+const statusPill = {
+  padding: '5px 8px',
+  borderRadius: 999,
+  background: 'rgba(255,106,42,.13)',
+  border: '1px solid rgba(255,106,42,.3)',
+  color: '#ff8a4d',
+  fontSize: 10,
+  fontWeight: 800,
+  textTransform: 'uppercase',
+};
+const sourceMeta = {
+  display: 'grid',
+  gap: 4,
+  color: '#aaa29a',
+  fontSize: 11,
+};
+const errorBox = {
+  padding: 11,
+  borderRadius: 6,
+  background: 'rgba(180,35,24,.12)',
+  border: '1px solid rgba(180,35,24,.35)',
+  color: '#ff9b90',
+  fontSize: 12,
+  lineHeight: 1.45,
+};
+const workPanel = {
+  display: 'grid',
+  gap: 12,
+};
+const recipePanel = {
+  position: 'sticky',
+  top: 14,
+  display: 'grid',
+  gap: 12,
+  padding: 14,
+  background: '#121212',
+  border: '1px solid rgba(255,255,255,.1)',
+  borderRadius: 8,
+};
+const workflowRail = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+  gap: 6,
+};
+const workflowStep = {
+  display: 'grid',
+  gap: 5,
+  padding: 9,
+  borderRadius: 6,
+  background: '#141414',
+  border: '1px solid rgba(255,255,255,.08)',
+  color: '#736c64',
+  fontSize: 10,
+  textTransform: 'uppercase',
+};
+const workflowStepActive = {
+  color: '#f7efe2',
+  borderColor: 'rgba(255,106,42,.35)',
+  background: 'linear-gradient(180deg, rgba(255,106,42,.16), #161311)',
+};
+const timelineCard = {
+  display: 'grid',
+  gap: 12,
+  padding: 14,
+  background: '#121212',
+  border: '1px solid rgba(255,255,255,.1)',
+  borderRadius: 8,
+};
+const timelineTrack = {
+  position: 'relative',
+  height: 48,
+  overflow: 'hidden',
+  borderRadius: 6,
+  background: 'repeating-linear-gradient(90deg, #1c1c1c 0, #1c1c1c 18px, #171717 18px, #171717 36px)',
+  border: '1px solid rgba(255,255,255,.08)',
+};
+const timelineSegment = {
+  position: 'absolute',
+  top: 7,
+  bottom: 7,
+  border: 0,
+  borderRadius: 5,
+  background: '#ff5a1f',
+  cursor: 'pointer',
+  boxShadow: '0 0 18px rgba(255,90,31,.35)',
+};
+const timelineEmpty = {
+  display: 'grid',
+  placeItems: 'center',
+  height: '100%',
+  color: '#736c64',
+  fontSize: 12,
+};
+const metricGrid = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+  gap: 8,
+};
+const metricCard = {
+  display: 'grid',
+  gap: 3,
+  padding: 9,
+  borderRadius: 6,
+  background: '#0f0f0f',
+  border: '1px solid rgba(255,255,255,.08)',
+  color: '#aaa29a',
+  fontSize: 9,
+  textTransform: 'uppercase',
+};
+const transcriptPanel = {
+  display: 'grid',
+  gap: 10,
+  padding: 14,
+  background: '#121212',
+  border: '1px solid rgba(255,255,255,.1)',
+  borderRadius: 8,
+};
+const hookPill = {
+  maxWidth: 240,
+  padding: '6px 8px',
+  borderRadius: 6,
+  background: '#1f1712',
+  color: '#ffbd9a',
+  fontSize: 10,
+  lineHeight: 1.3,
+};
+const controlGroup = {
+  display: 'grid',
+  gap: 8,
+  padding: 10,
+  borderRadius: 7,
+  background: '#0f0f0f',
+  border: '1px solid rgba(255,255,255,.08)',
+};
+const fieldLabel = {
+  display: 'grid',
+  gap: 6,
+  color: '#aaa29a',
+  fontSize: 10,
+  fontWeight: 800,
+  letterSpacing: 1,
+  textTransform: 'uppercase',
+};
+const selectStyle = {
+  width: '100%',
+  padding: '9px 10px',
+  borderRadius: 6,
+  border: '1px solid rgba(255,255,255,.13)',
+  background: '#181818',
+  color: '#f7efe2',
+};
+const inputStyle = {
+  width: '100%',
+  padding: '9px 10px',
+  borderRadius: 6,
+  border: '1px solid rgba(255,255,255,.13)',
+  background: '#181818',
+  color: '#f7efe2',
+};
+const outputPanel = {
+  display: 'grid',
+  gap: 8,
+  padding: 10,
+  borderRadius: 7,
+  background: '#0f0f0f',
+  border: '1px solid rgba(63,185,80,.22)',
+};
+const remotionPanel = {
+  gridColumn: '2 / 4',
+  display: 'grid',
+  gap: 12,
+  padding: 14,
+  background: '#121212',
+  border: '1px solid rgba(255,255,255,.1)',
+  borderRadius: 8,
+};
+const playerShell = {
+  width: 260,
+  maxWidth: '100%',
+  overflow: 'hidden',
+  borderRadius: 8,
+  border: '1px solid rgba(255,255,255,.12)',
+  background: '#000',
 };
