@@ -77,6 +77,10 @@ function netRevenueFor(source, overrideRevenue) {
   return Number(source?.shopifyNetSales ?? source?.netSales ?? 0);
 }
 
+function grossRevenueFor(source) {
+  return Number(source?.grossSales ?? source?.netSales ?? 0);
+}
+
 function acquisitionRevenueFor(source, revenue) {
   const totalRevenue = Number(revenue || 0);
   if (totalRevenue <= 0) return 0;
@@ -1818,6 +1822,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const returningCustomers = Number(sh.returningCustomers || 0) + addReturningCust;
           return {
             month: mk, revenue, dtcRevenue, dealerRevenue, offPlatformRevenue,
+            dtcGrossRevenue: grossRevenueFor(dtc),
             orders, dtcOrders, dealerOrders, offPlatformOrders, newCustomers, returningCustomers,
             customers: dtc.customers || 0,
             customerKeys: dtc.customerKeys || [], newCustomerKeys: dtc.newCustomerKeys || [],
@@ -1853,6 +1858,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const ltm = rollupRows.reduce((a, r) => ({
           revenue: a.revenue + r.revenue,
           dtcRevenue: a.dtcRevenue + r.dtcRevenue,
+          dtcGrossRevenue: a.dtcGrossRevenue + r.dtcGrossRevenue,
           dealerRevenue: a.dealerRevenue + r.dealerRevenue,
           offPlatformRevenue: a.offPlatformRevenue + r.offPlatformRevenue,
           orders: a.orders + r.orders,
@@ -1866,7 +1872,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           cm3: a.cm3 + r.cm3,
           newRevenue: a.newRevenue + r.newRevenue,
           opex: a.opex + r.opex,
-        }), { revenue: 0, dtcRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, newRevenue: 0, opex: 0 });
+        }), { revenue: 0, dtcRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, newRevenue: 0, opex: 0 });
 
         const livePrimaryYtd = shopifyData?._stores?.primary?.ytd;
         const snapPrimaryYtd = [...Object.values(snapshotShopByMonth)]
@@ -1911,6 +1917,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           ? ltm.returningCustomers / (ltm.newCustomers + ltm.returningCustomers) : 0;
         const ltmCmMargin = ltm.revenue > 0 ? ltm.cm3 / ltm.revenue : 0;
         const ltmOpexCoverage = ltm.opex > 0 ? ltm.cm3 / ltm.opex : null;
+        const dtcGrossToNetDelta = Math.max(ltm.dtcGrossRevenue - ltm.dtcRevenue, 0);
         // For UI: show the default opex if no per-month overrides, else "$X avg"
         const opex = ltm.opex / Math.max(rollupRows.length, 1);
 
@@ -2050,8 +2057,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                 {/* Calendar-year KPI strip */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 12 }}>
                   {[
-                    { label: `${summaryYear} Total Revenue`, value: fmt$(ltm.revenue), sub: 'DTC + dealer + off-platform' },
-                    { label: `${summaryYear} DTC Revenue`,   value: fmt$(ltm.dtcRevenue), sub: fmtPct(ltm.dtcRevenue / Math.max(ltm.revenue, 1)) + ' of total' },
+                    { label: `${summaryYear} YTD Net Revenue`, value: fmt$(ltm.revenue), sub: dtcGrossToNetDelta > 0 ? `DTC net sales basis · ${fmt$(dtcGrossToNetDelta)} below Shopify total sales` : 'DTC net sales + dealer + off-platform' },
+                    { label: `${summaryYear} DTC Net Sales`,   value: fmt$(ltm.dtcRevenue), sub: fmtPct(ltm.dtcRevenue / Math.max(ltm.revenue, 1)) + ' of total' },
                     { label: `${summaryYear} Dealer Revenue`, value: fmt$(ltm.dealerRevenue), sub: fmtPct(ltm.dealerRevenue / Math.max(ltm.revenue, 1)) + ' of total' },
                     { label: `${summaryYear} YTD Ad Spend`,  value: fmt$(ltm.adSpend), sub: fmt$(ltm.metaSpend) + ' Meta · ' + fmt$(ltm.googleSpend) + ' Google' },
                     { label: `${summaryYear} YTD CM3`,       value: fmt$(ltm.cm3), color: ltm.cm3 >= 0 ? '#256b35' : '#b42318', sub: fmtPct(ltmCmMargin) + ' margin' },
