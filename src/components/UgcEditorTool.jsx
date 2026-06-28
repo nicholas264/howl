@@ -101,6 +101,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   const [autoEditing, setAutoEditing] = useState(false);
   const [aiCleanupMessage, setAiCleanupMessage] = useState('');
   const [polishedRenderMessage, setPolishedRenderMessage] = useState('');
+  const [remotionStatus, setRemotionStatus] = useState({ loading: true, configured: false, missing: [] });
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [sessionFilter, setSessionFilter] = useState('needs_edit');
   const videoRef = useRef(null);
@@ -110,6 +111,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
 
   // ── Load session list on mount ─────────────────────────────────────────────
   useEffect(() => { refreshSessions(); }, []);
+  useEffect(() => { refreshRemotionStatus(); }, []);
 
   async function refreshSessions() {
     setSessionsLoading(true);
@@ -121,6 +123,31 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       console.error('failed to load sessions', err);
     } finally {
       setSessionsLoading(false);
+    }
+  }
+
+  async function refreshRemotionStatus() {
+    setRemotionStatus(prev => ({ ...prev, loading: true }));
+    try {
+      const res = await fetch('/api/remotion-config-status');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not check Lambda render setup');
+      setRemotionStatus({
+        loading: false,
+        configured: Boolean(data.configured),
+        missing: data.missing || [],
+        region: data.region,
+        functionName: data.function_name,
+        serveUrl: data.serve_url,
+      });
+    } catch (err) {
+      console.error('remotion status failed', err);
+      setRemotionStatus({
+        loading: false,
+        configured: false,
+        missing: [],
+        error: err.message || 'Could not check Lambda render setup',
+      });
     }
   }
 
@@ -966,6 +993,11 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                     <button onClick={render} style={primaryBtn} disabled={!segments.length || stage === 'rendering'}>
                       {stage === 'done' ? 'Render again' : 'Render cut'}
                     </button>
+                    {remotionStatus.configured && (
+                      <button onClick={renderPolishedAd} style={secondaryBtn} disabled={!segments.length || stage === 'rendering' || !activeSession}>
+                        Render polished ad
+                      </button>
+                    )}
                     <button onClick={autoEdit} style={secondaryBtn} disabled={autoEditing || !activeSession}>
                       {autoEditing ? 'Auto editing...' : 'Auto edit full ad'}
                     </button>
@@ -1028,7 +1060,13 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
               {aiCleanupMessage && <div style={statusBox}>{aiCleanupMessage}</div>}
               {polishedRenderMessage && <div style={statusBox}>{polishedRenderMessage}</div>}
               <div style={setupNote}>
-                Branded intro/outro cards are preview-only for now. Export uses the fast server render while we stay off AWS.
+                {remotionStatus.loading
+                  ? 'Checking AWS Lambda render setup...'
+                  : remotionStatus.configured
+                    ? `Polished Remotion Lambda renders are connected in ${remotionStatus.region}. Use Render polished ad for branded intro/outro cards and motion captions.`
+                    : remotionStatus.error
+                      ? remotionStatus.error
+                      : `Fast server render is available. Polished Remotion Lambda render needs setup: ${remotionStatus.missing.join(', ') || 'AWS env vars'}.`}
               </div>
               {stage === 'transcribing' && <div style={statusBox}>Extracting audio and building word-level captions...</div>}
               {stage === 'rendering' && (
