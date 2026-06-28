@@ -16,14 +16,27 @@ export default function UGCTemplate({ variation, photoUrl, format, dimensions, a
       position: 'relative',
       overflow: 'hidden',
       backgroundColor: hasBackground ? 'transparent' : COLORS.natural,
-      backgroundImage: hasBackground ? `url(${backgroundImage})` : 'none',
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
+      isolation: 'isolate',
       display: 'flex',
       flexDirection: 'column',
       boxSizing: 'border-box',
     }}>
-      {hasBackground && <div style={{ position: 'absolute', inset: 0, background: scrim, zIndex: 0 }} />}
+      {hasBackground && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 0, backgroundColor: COLORS.natural }}>
+          <img
+            crossOrigin="anonymous"
+            src={backgroundImage}
+            alt=""
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              display: 'block',
+            }}
+          />
+          <div style={{ position: 'absolute', inset: 0, background: scrim }} />
+        </div>
+      )}
 
       {/* Top accent bar */}
       <div style={{ height: 8, background: COLORS.flame, flexShrink: 0, position: 'relative', zIndex: 1 }} />

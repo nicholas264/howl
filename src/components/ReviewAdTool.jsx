@@ -42,6 +42,19 @@ function loadSaved() {
   } catch { return []; }
 }
 
+async function waitForImages(root) {
+  const images = Array.from(root?.querySelectorAll?.('img') || []);
+  await Promise.all(images.map(img => {
+    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+    if (img.complete) return Promise.reject(new Error(`Image failed to load: ${img.currentSrc || img.src}`));
+    return new Promise((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error(`Image failed to load: ${img.currentSrc || img.src}`));
+    });
+  }));
+  await Promise.all(images.map(img => img.decode?.().catch(() => {}) || Promise.resolve()));
+}
+
 const LS_BG = 'howl_review_bg';
 
 export default function ReviewAdTool({ driveAuth, onAddToCart }) {
@@ -163,6 +176,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
       await document.fonts.ready;
       const fmt = FORMATS[manualFormat];
       const el = singleCaptureRef.current;
+      await waitForImages(el);
       await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
       const dataUrl = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
       const a = document.createElement('a');
@@ -187,6 +201,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
           const el = captureRefs.current[`${review.id}_${fk}`];
           if (!el) continue;
           const fmt = FORMATS[fk];
+          await waitForImages(el);
           await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
           const dataUrl = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
           const fileName = `howl_${review.handle || 'review'}_${fmt.label.replace(':', 'x')}_${count}.png`;
@@ -211,6 +226,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
       await document.fonts.ready;
       const fmt = FORMATS[manualFormat];
       const el = singleCaptureRef.current;
+      await waitForImages(el);
       await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
       const dataUrl = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
       const monthDay = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -243,6 +259,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
           const el = captureRefs.current[`${review.id}_${fk}`];
           if (!el) continue;
           const fmt = FORMATS[fk];
+          await waitForImages(el);
           await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
           renders[fk] = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
         }
@@ -284,6 +301,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
         const el = captureRefs.current[`${review.id}_square`];
         if (!el) continue;
         const fmt = FORMATS.square;
+        await waitForImages(el);
         await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
         const dataUrl = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
         cards.push({
