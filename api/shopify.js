@@ -288,12 +288,13 @@ async function fetchStoreAnalytics(store, token) {
       };
     })(),
     month,
-    netSales: authoritative?.totalSales ?? v.netSales,
+    netSales: authoritative?.netSales ?? v.netSales,
+    grossSales: authoritative?.totalSales ?? v.netSales,
     shopifyNetSales: authoritative?.netSales ?? v.netSales,
     orders: authoritative?.orders ?? v.orders,
     shipping: v.shipping,
     aov: (authoritative?.orders ?? v.orders) > 0
-      ? (authoritative?.totalSales ?? v.netSales) / (authoritative?.orders ?? v.orders)
+      ? (authoritative?.netSales ?? v.netSales) / (authoritative?.orders ?? v.orders)
       : 0,
     newRevenue: v.newRevenue,
     returningRevenue: v.returningRevenue,

@@ -72,6 +72,29 @@ function fmtCurrency(n) {
   return '$' + parseFloat(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+function netRevenueFor(source, overrideRevenue) {
+  if (overrideRevenue != null) return Number(overrideRevenue || 0);
+  return Number(source?.shopifyNetSales ?? source?.netSales ?? 0);
+}
+
+function acquisitionRevenueFor(source, revenue) {
+  const totalRevenue = Number(revenue || 0);
+  if (totalRevenue <= 0) return 0;
+  const rawNewRevenue = Number(source?.newRevenue || 0);
+  const rawReturningRevenue = Number(source?.returningRevenue || 0);
+  const classifiedCoverage = (rawNewRevenue + rawReturningRevenue) / totalRevenue;
+
+  if (rawNewRevenue > 0 && classifiedCoverage >= 0.8) {
+    return rawNewRevenue;
+  }
+
+  const newCustomers = Number(source?.newCustomers || 0);
+  const returningCustomers = Number(source?.returningCustomers || 0);
+  const totalCustomers = newCustomers + returningCustomers;
+  if (totalCustomers <= 0) return rawNewRevenue;
+  return totalRevenue * (newCustomers / totalCustomers);
+}
+
 function fmtCtr(n) {
   if (!n) return '—';
   return parseFloat(n).toFixed(2) + '%';
@@ -1740,10 +1763,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
             && dealerRevenueByMonth[mk] !== '';
           const hasDealerOrdersOverride = Object.prototype.hasOwnProperty.call(dealerOrdersByMonth, mk)
             && dealerOrdersByMonth[mk] !== '';
-          const dtcRevenue = Number(dtc.netSales || 0);
+          const dtcRevenue = netRevenueFor(dtc);
           const dealerRevenue = hasDealerRevenueOverride
             ? Number(dealerRevenueByMonth[mk] || 0)
-            : Number(dealer.netSales || 0);
+            : netRevenueFor(dealer);
           const offPlatformRevenue = Number(offPlatformRevenueByMonth[mk] || 0);
           const dtcOrders = Number(dtc.orders || 0);
           const dealerOrders = hasDealerOrdersOverride
@@ -1774,7 +1797,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const googleRoasReported = googleSpend > 0 ? googleConvValue / googleSpend : null;
           const cm3 = revenue - cogs - paymentFees - shipCost - fulfill - adSpend;
           // NCAC = total ad spend (Meta + Google) ÷ new customers.
-          const classifiedNewRevenue = Number(sh.newRevenue || 0);
+          const classifiedNewRevenue = acquisitionRevenueFor(dtc, dtcRevenue)
+            + acquisitionRevenueFor(dealer, dealerRevenue);
           const classifiedNewCustomers = Number(sh.newCustomers || 0) + addNewCust;
           const totalNewCust = classifiedNewCustomers;
           const ncac = totalNewCust > 0 ? adSpend / totalNewCust : null;
@@ -2479,13 +2503,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
             && dealerOrdersByMonth[f.month] !== '';
           const dealerRevenue = hasDealerRevenueOverride
             ? Number(dealerRevenueByMonth[f.month] || 0)
-            : Number(dealer.netSales || 0);
+            : netRevenueFor(dealer);
           const dealerOrders = hasDealerOrdersOverride
             ? Number(dealerOrdersByMonth[f.month] || 0)
             : Number(dealer.orders || 0);
           const offPlatformRevenue = Number(offPlatformRevenueByMonth[f.month] || 0);
           const offPlatformOrders = Number(offPlatformOrdersByMonth[f.month] || 0);
-          const actRevenue = Number(dtc.netSales || 0) + dealerRevenue + offPlatformRevenue;
+          const actRevenue = netRevenueFor(dtc) + dealerRevenue + offPlatformRevenue;
           const orders = Number(dtc.orders || 0) + dealerOrders + offPlatformOrders;
           const realCogs = sh.cogs || 0;
           const fallbackCogs = Math.max(actRevenue - (sh.costedRevenue || 0), 0) * (1 - ((s?.grossMarginPct || 60) / 100));
