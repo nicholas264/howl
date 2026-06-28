@@ -56,6 +56,24 @@ async function waitForImages(root) {
 }
 
 const LS_BG = 'howl_review_bg';
+const LS_BG_SET = 'howl_review_bg_set';
+const LS_BG_MODE = 'howl_review_bg_mode';
+
+function loadBgImages() {
+  try {
+    const savedSet = JSON.parse(localStorage.getItem(LS_BG_SET) || '[]').filter(Boolean);
+    if (savedSet.length) return savedSet;
+    const legacy = localStorage.getItem(LS_BG);
+    return legacy ? [legacy] : [];
+  } catch { return []; }
+}
+
+function hashString(value) {
+  let hash = 0;
+  const str = String(value || '');
+  for (let i = 0; i < str.length; i++) hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+  return Math.abs(hash);
+}
 
 export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   const { getToken } = useAuth();
@@ -73,12 +91,15 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState('');
   const [dragging, setDragging] = useState(false);
-  const [bgImage, setBgImage] = useState(() => { try { return localStorage.getItem(LS_BG) || null; } catch { return null; } });
+  const [bgImages, setBgImages] = useState(loadBgImages);
+  const [bgMode, setBgMode] = useState(() => { try { return localStorage.getItem(LS_BG_MODE) || 'single'; } catch { return 'single'; } });
   const [scrimColor, setScrimColor] = useState(() => { try { return localStorage.getItem('howl_review_scrim') || 'rgba(249,243,223,0.72)'; } catch { return 'rgba(249,243,223,0.72)'; } });
   const [savedImages, setSavedImages] = useState([]);
   const [bgUploading, setBgUploading] = useState(false);
+  const [syncedLoading, setSyncedLoading] = useState(false);
   const [textColor, setTextColor] = useState(() => { try { return localStorage.getItem('howl_review_textcolor') || '#333F4C'; } catch { return '#333F4C'; } });
   const bgFileRef = useRef(null);
+  const bgImage = bgImages[0] || null;
 
   const handleScrimChange = (val) => {
     setScrimColor(val);
@@ -90,12 +111,61 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
     try { localStorage.setItem('howl_review_textcolor', val); } catch {}
   };
 
+  const saveBgImages = (next) => {
+    const clean = [...new Set(next.filter(Boolean))];
+    setBgImages(clean);
+    try {
+      localStorage.setItem(LS_BG_SET, JSON.stringify(clean));
+      if (clean[0]) localStorage.setItem(LS_BG, clean[0]);
+      else localStorage.removeItem(LS_BG);
+    } catch {}
+  };
+
+  const handleBgModeChange = (mode) => {
+    setBgMode(mode);
+    try { localStorage.setItem(LS_BG_MODE, mode); } catch {}
+  };
+
+  const selectBgImage = (url) => {
+    if (!url) return;
+    if (bgMode === 'rotate') {
+      const next = bgImages.includes(url)
+        ? bgImages.filter(item => item !== url)
+        : [...bgImages, url];
+      saveBgImages(next.length ? next : [url]);
+    } else {
+      saveBgImages([url]);
+    }
+  };
+
+  const backgroundForReview = useCallback((review, formatKey = '') => {
+    if (!bgImages.length) return null;
+    if (bgMode !== 'rotate') return bgImages[0];
+    const idx = hashString(`${review?.id || 'manual'}:${formatKey}`) % bgImages.length;
+    return bgImages[idx];
+  }, [bgImages, bgMode]);
+
   const updateReview = (id, patch) => {
     setReviews(prev => {
       const next = prev.map(r => r.id === id ? { ...r, ...patch } : r);
-      try { localStorage.setItem(LS_REVIEWS, JSON.stringify(next)); } catch {}
+      if (!next.find(r => r.id === id)?.source) {
+        try { localStorage.setItem(LS_REVIEWS, JSON.stringify(next)); } catch {}
+      }
       return next;
     });
+  };
+
+  const persistReviewEdit = async (review) => {
+    if (!review?.source || review.source !== 'loox') return;
+    try {
+      await fetch('/api/db/loox-reviews', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: review.looxId || review.id, quote: review.quote, nickname: review.nickname }),
+      });
+    } catch (err) {
+      console.error('Could not save synced review edit', err);
+    }
   };
 
   // Single / no-CSV mode
@@ -113,15 +183,21 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
     return () => { cancelled = true; };
   }, []);
 
-  const handleBgFile = async (file) => {
-    if (!file || !file.type.startsWith('image/')) return;
+  const handleBgFiles = async (files) => {
+    const imageFiles = Array.from(files || []).filter(file => file?.type?.startsWith('image/'));
+    if (imageFiles.length === 0) return;
     setBgUploading(true);
     try {
-      const record = await uploadImageToLibrary(file, getToken);
-      if (!record) throw new Error('Upload failed');
-      setSavedImages(prev => [record, ...prev.filter(i => i.url !== record.url)]);
-      setBgImage(record.url);
-      try { localStorage.setItem(LS_BG, record.url); } catch {}
+      const records = [];
+      for (const file of imageFiles) {
+        const record = await uploadImageToLibrary(file, getToken);
+        if (record) records.push(record);
+      }
+      if (records.length === 0) throw new Error('Upload failed');
+      setSavedImages(prev => [...records, ...prev.filter(i => !records.some(r => r.url === i.url))]);
+      saveBgImages(bgMode === 'rotate'
+        ? [...bgImages, ...records.map(r => r.url)]
+        : [records[0].url]);
     } catch (err) {
       alert(`Background upload failed: ${err?.message || err}`);
     } finally {
@@ -130,15 +206,14 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   };
 
   const clearBg = () => {
-    setBgImage(null);
-    try { localStorage.removeItem(LS_BG); } catch {}
+    saveBgImages([]);
   };
 
   const removeSavedImage = async (id) => {
     const prev = savedImages;
     const target = prev.find(i => i.id === id);
     setSavedImages(prev.filter(i => i.id !== id));
-    if (target && bgImage === target.url) clearBg();
+    if (target && bgImages.includes(target.url)) saveBgImages(bgImages.filter(url => url !== target.url));
     const ok = await deleteImageRecord(id);
     if (!ok) {
       setSavedImages(prev);
@@ -162,6 +237,27 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
       try { localStorage.setItem(LS_NAME, file.name); } catch {}
     };
     reader.readAsText(file);
+  };
+
+  const loadSyncedReviews = async () => {
+    setSyncedLoading(true);
+    try {
+      const r = await fetch('/api/db/loox-reviews?limit=500');
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Could not load synced reviews');
+      const rows = (data.reviews || []).filter(row => VALID_HANDLES.has(row.handle));
+      setReviews(rows);
+      setCsvName('Synced Loox reviews');
+      setSelected(new Set(rows.filter(row => row.rating === 5 && row.adStatus !== 'hold').map(row => row.id)));
+      setPreviewId(rows[0]?.id || null);
+      setRatingFilter(5);
+      setProductFilter('all');
+      if (rows.length > 0) setPreviewMode('bulk');
+    } catch (err) {
+      alert(`Could not load synced Loox reviews: ${err?.message || err}`);
+    } finally {
+      setSyncedLoading(false);
+    }
   };
 
   const clearCSV = () => {
@@ -365,7 +461,10 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
         {/* Left */}
         <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #dedbd3', display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: 28, gap: 20 }}>
           <div>
-            <div style={S.label}>Import Loox CSV</div>
+            <div style={{ ...S.label, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <span>Import Loox CSV</span>
+              <button onClick={loadSyncedReviews} disabled={syncedLoading} style={S.linkBtn}>{syncedLoading ? 'Loading' : 'Load synced'}</button>
+            </div>
             <label
               onDrop={handleDrop}
               onDragOver={e => { e.preventDefault(); setDragging(true); }}
@@ -399,7 +498,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
           </div>
 
           {/* Background image */}
-          <BgImagePicker bgImage={bgImage} savedImages={savedImages} onSelect={url => { setBgImage(url); try { localStorage.setItem(LS_BG, url); } catch {} }} onUpload={handleBgFile} onClear={clearBg} fileRef={bgFileRef} scrimColor={scrimColor} onScrimChange={handleScrimChange} />
+          <BgImagePicker bgImages={bgImages} bgMode={bgMode} savedImages={savedImages} onModeChange={handleBgModeChange} onSelect={selectBgImage} onUpload={handleBgFiles} onClear={clearBg} fileRef={bgFileRef} scrimColor={scrimColor} onScrimChange={handleScrimChange} uploading={bgUploading} />
           <TextColorPicker textColor={textColor} onChange={handleTextColorChange} />
 
           <button
@@ -464,6 +563,9 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
             <div style={{ fontSize: 9, color: '#77746f', marginTop: 1 }}>{reviews.length} reviews loaded</div>
           </div>
           <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
+            <button onClick={loadSyncedReviews} disabled={syncedLoading} style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#d84a17', background: 'none', border: 'none', cursor: syncedLoading ? 'wait' : 'pointer', padding: 0 }}>
+              {syncedLoading ? 'Loading' : 'Sync'}
+            </button>
             <label style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#d84a17', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               <input type="file" accept=".csv" onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
               Replace
@@ -537,7 +639,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
               <button key={key} onClick={() => toggleFormat(key)} style={S.fmtBtn(formatKeys.includes(key))}>{f.label}</button>
             ))}
           </div>
-          <BgImagePicker bgImage={bgImage} savedImages={savedImages} onSelect={url => { setBgImage(url); try { localStorage.setItem(LS_BG, url); } catch {} }} onUpload={handleBgFile} onClear={clearBg} fileRef={bgFileRef} scrimColor={scrimColor} onScrimChange={handleScrimChange} />
+          <BgImagePicker bgImages={bgImages} bgMode={bgMode} savedImages={savedImages} onModeChange={handleBgModeChange} onSelect={selectBgImage} onUpload={handleBgFiles} onClear={clearBg} fileRef={bgFileRef} scrimColor={scrimColor} onScrimChange={handleScrimChange} uploading={bgUploading} />
           <TextColorPicker textColor={textColor} onChange={handleTextColorChange} />
           <button
             onClick={() => handleBulkExport()}
@@ -616,7 +718,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
                           dimensions={fmt}
                           reviewerName={review.nickname}
                           attribution={verifiedLabel(review.handle)}
-                          backgroundImage={bgImage}
+                          backgroundImage={backgroundForReview(review, fk)}
                           scrimColor={scrimColor}
                           textColor={textColor}
                         />
@@ -651,7 +753,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
                         dimensions={FORMATS.square}
                         reviewerName={previewReview.nickname}
                         attribution={verifiedLabel(previewReview.handle)}
-                        backgroundImage={bgImage}
+                        backgroundImage={backgroundForReview(previewReview, 'square')}
                         scrimColor={scrimColor}
                         textColor={textColor}
                       />
@@ -663,7 +765,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
                         dimensions={FORMATS.story}
                         reviewerName={previewReview.nickname}
                         attribution={verifiedLabel(previewReview.handle)}
-                        backgroundImage={bgImage}
+                        backgroundImage={backgroundForReview(previewReview, 'story')}
                         scrimColor={scrimColor}
                         textColor={textColor}
                       />
@@ -677,7 +779,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
                       dimensions={pvFmt}
                       reviewerName={previewReview.nickname}
                       attribution={verifiedLabel(previewReview.handle)}
-                      backgroundImage={bgImage}
+                      backgroundImage={backgroundForReview(previewReview, formatKeys[0])}
                       scrimColor={scrimColor}
                       textColor={textColor}
                     />
@@ -695,6 +797,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
                   <textarea
                     value={previewReview.quote}
                     onChange={e => updateReview(previewReview.id, { quote: e.target.value })}
+                    onBlur={() => persistReviewEdit(previewReview)}
                     rows={4}
                     style={S.textarea}
                   />
@@ -705,6 +808,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
                     type="text"
                     value={previewReview.nickname || ''}
                     onChange={e => updateReview(previewReview.id, { nickname: e.target.value })}
+                    onBlur={() => persistReviewEdit(previewReview)}
                     style={S.input}
                   />
                 </div>
@@ -724,7 +828,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
             const key = `${r.id}_${fk}`;
             return (
               <div key={key} ref={el => { captureRefs.current[key] = el; }} style={{ width: fmt.width, height: fmt.height }}>
-                <UGCTemplate variation={{ headline: r.quote }} format={fk} dimensions={fmt} reviewerName={r.nickname} attribution={verifiedLabel(r.handle)} backgroundImage={bgImage} scrimColor={scrimColor} textColor={textColor} />
+                <UGCTemplate variation={{ headline: r.quote }} format={fk} dimensions={fmt} reviewerName={r.nickname} attribution={verifiedLabel(r.handle)} backgroundImage={backgroundForReview(r, fk)} scrimColor={scrimColor} textColor={textColor} />
               </div>
             );
           });
@@ -768,29 +872,39 @@ const SCRIM_OPTIONS = [
   { label: 'None',  value: 'rgba(0,0,0,0)' },
 ];
 
-function BgImagePicker({ bgImage, savedImages, onSelect, onUpload, onClear, fileRef, scrimColor, onScrimChange }) {
+function BgImagePicker({ bgImages, bgMode, savedImages, onModeChange, onSelect, onUpload, onClear, fileRef, scrimColor, onScrimChange, uploading }) {
+  const hasBackground = bgImages.length > 0;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Background Image</span>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => fileRef.current?.click()} style={{ fontSize: 9, color: '#d84a17', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' }}>+ Upload</button>
-          {bgImage && <button onClick={onClear} style={{ fontSize: 9, color: '#77746f', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' }}>Clear</button>}
+          <button onClick={() => fileRef.current?.click()} style={{ fontSize: 9, color: '#d84a17', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' }}>{uploading ? 'Uploading' : '+ Upload'}</button>
+          {hasBackground && <button onClick={onClear} style={{ fontSize: 9, color: '#77746f', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' }}>Clear</button>}
         </div>
       </div>
-      <input ref={fileRef} type="file" accept="image/*" onChange={e => { onUpload(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
+      <div style={{ display: 'flex', gap: 5 }}>
+        <button onClick={() => onModeChange('single')} style={S.miniModeBtn(bgMode !== 'rotate')}>Single</button>
+        <button onClick={() => onModeChange('rotate')} style={S.miniModeBtn(bgMode === 'rotate')}>Mix</button>
+      </div>
+      <input ref={fileRef} type="file" multiple accept="image/*" onChange={e => { onUpload(e.target.files); e.target.value = ''; }} style={{ display: 'none' }} />
       {savedImages.length > 0 ? (
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
           {savedImages.map(img => (
-            <div key={img.id} onClick={() => onSelect(img.url)} style={{ width: 48, height: 48, borderRadius: 3, overflow: 'hidden', border: `2px solid ${bgImage === img.url ? '#d84a17' : '#e0d9c4'}`, cursor: 'pointer', flexShrink: 0 }}>
+            <div key={img.id} onClick={() => onSelect(img.url)} style={{ width: 48, height: 48, borderRadius: 3, overflow: 'hidden', border: `2px solid ${bgImages.includes(img.url) ? '#d84a17' : '#e0d9c4'}`, cursor: 'pointer', flexShrink: 0, position: 'relative' }}>
               <img crossOrigin="anonymous" src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              {bgMode === 'rotate' && bgImages.includes(img.url) && (
+                <span style={{ position: 'absolute', right: 3, bottom: 3, padding: '1px 4px', borderRadius: 2, background: '#d84a17', color: '#fff', fontSize: 8, fontWeight: 700 }}>
+                  {bgImages.indexOf(img.url) + 1}
+                </span>
+              )}
             </div>
           ))}
         </div>
       ) : (
         <div style={{ fontSize: 9, color: '#77746f' }}>Upload images in Image Ads tab to reuse here.</div>
       )}
-      {bgImage && (
+      {hasBackground && (
         <div>
           <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', fontWeight: 600, marginBottom: 5 }}>Overlay Color</div>
           <div style={{ display: 'flex', gap: 5 }}>
@@ -828,6 +942,8 @@ const S = {
   exportBtn: (disabled) => ({ width: '100%', padding: '12px 0', background: disabled ? '#dedbd3' : '#d84a17', border: 'none', borderRadius: 4, color: disabled ? '#88857f' : '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer' }),
   filterBtn: (active) => ({ padding: '3px 8px', border: `1px solid ${active ? '#d84a17' : '#dedbd3'}`, background: active ? 'rgba(220,68,10,0.15)' : '#f4f1ea', color: active ? '#d84a17' : '#77746f', fontFamily: 'inherit', fontSize: 9, cursor: 'pointer', borderRadius: 3 }),
   microBtn: { padding: '3px 7px', border: '1px solid #dedbd3', background: '#f4f1ea', color: '#77746f', fontFamily: 'inherit', fontSize: 8, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 3 },
+  linkBtn: { padding: 0, border: 'none', background: 'none', color: '#d84a17', fontFamily: 'inherit', fontSize: 9, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer' },
+  miniModeBtn: (active) => ({ flex: 1, padding: '5px 0', border: `1px solid ${active ? '#d84a17' : '#dedbd3'}`, background: active ? 'rgba(220,68,10,0.15)' : '#f4f1ea', color: active ? '#d84a17' : '#77746f', fontFamily: 'inherit', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 3 }),
   modeBtn: (active) => ({ padding: '6px 14px', border: `1px solid ${active ? '#d84a17' : '#dedbd3'}`, background: active ? 'rgba(220,68,10,0.12)' : '#f4f1ea', color: active ? '#d84a17' : '#77746f', fontFamily: 'inherit', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 }),
   previewToolbar: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexShrink: 0 },
   editPanel: { width: 'min(620px, 100%)', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 180px', gap: 12, padding: 16, border: '1px solid #dedbd3', borderRadius: 4, background: '#fffdf8', boxSizing: 'border-box' },

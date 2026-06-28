@@ -5,6 +5,7 @@ import { backfillCreativeAssetsFromLaunchHistory, ensureCreativeAssetTables } fr
 import { ensureCreativeAnalysisQueue } from '../_lib/creative-analysis-queue.js';
 import { ensureAppTables } from '../_lib/app-access.js';
 import { ensureCreatorOpsTables } from '../_lib/creator-ops.js';
+import { ensureLooxReviewTables } from '../_lib/loox-reviews.js';
 
 export default async function handler(req, res) {
   if (!(await requireAdmin(req, res))) return;
@@ -242,6 +243,7 @@ export default async function handler(req, res) {
     await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS vision_frame_count INTEGER`;
     await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS transcription_status TEXT`;
     await ensureCreativeAnalysisQueue(sql);
+    await ensureLooxReviewTables(sql);
 
     // Attribution columns on launch_history (idempotent).
     await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS launched_by_user_id TEXT`;
