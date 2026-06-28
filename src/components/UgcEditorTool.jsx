@@ -90,6 +90,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   const [progress, setProgress] = useState(0);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadMessage, setUploadMessage] = useState('');
+  const [pendingUpload, setPendingUpload] = useState(null);
   const [error, setError] = useState('');
   const [words, setWords] = useState([]);
   const [duration, setDuration] = useState(0);
@@ -223,11 +224,13 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     setStage('uploading');
     setUploadProgress(0);
     setUploadMessage('Preparing local preview...');
+    setPendingUpload(null);
 
     if (videoUrl && videoUrl.startsWith('blob:')) URL.revokeObjectURL(videoUrl);
     const localPreviewUrl = URL.createObjectURL(f);
     setVideoUrl(localPreviewUrl);
 
+    let uploadedBlobUrl = '';
     try {
       setUploadMessage('Uploading source to Blob...');
       const token = await getToken();
@@ -241,34 +244,71 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         },
         contentType: f.type,
       });
+      uploadedBlobUrl = blob.url;
+      setPendingUpload({
+        video_url: blob.url,
+        title: f.name,
+        file_name: f.name,
+        file_size: f.size,
+      });
 
       setUploadMessage('Saving editor session...');
-      const sessRes = await fetch('/api/db/ugc-sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: f.name,
-          file_name: f.name,
-          file_size: f.size,
-          video_url: blob.url,
-          settings: DEFAULT_SETTINGS,
-          status: 'uploaded',
-          source_type: 'internal_employee',
-          source_label: 'Manual editor upload',
-        }),
+      await createUploadedSession({
+        video_url: blob.url,
+        title: f.name,
+        file_name: f.name,
+        file_size: f.size,
       });
-      const sessData = await sessRes.json().catch(() => ({}));
-      if (!sessRes.ok) {
-        throw new Error(`Uploaded to Blob, but could not save the editor session: ${sessData.error || sessRes.status}`);
-      }
-      setActiveSession(sessData.session);
-      setSessions(prev => [sessData.session, ...prev]);
+      setStage('uploaded');
+      setUploadMessage('');
+      setPendingUpload(null);
+    } catch (err) {
+      console.error(err);
+      setError(
+        uploadedBlobUrl
+          ? `${err.message || 'Upload failed'} The file is already in Blob; use Save session to attach it.`
+          : (err.message || 'Upload failed'),
+      );
+      setStage(localPreviewUrl ? 'uploaded' : 'idle');
+      setUploadMessage('');
+    }
+  };
+
+  const createUploadedSession = async ({ video_url, title, file_name, file_size }) => {
+    const sessRes = await fetch('/api/db/ugc-sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        file_name,
+        file_size,
+        video_url,
+        settings: DEFAULT_SETTINGS,
+        status: 'uploaded',
+        source_type: 'internal_employee',
+        source_label: 'Manual editor upload',
+      }),
+    });
+    const sessData = await sessRes.json().catch(() => ({}));
+    if (!sessRes.ok) {
+      throw new Error(`Uploaded to Blob, but could not save the editor session: ${sessData.error || sessRes.status}`);
+    }
+    setActiveSession(sessData.session);
+    setSessions(prev => [sessData.session, ...prev.filter(session => session.id !== sessData.session.id)]);
+    return sessData.session;
+  };
+
+  const retrySaveSession = async () => {
+    if (!pendingUpload) return;
+    setError('');
+    setUploadMessage('Saving editor session...');
+    try {
+      await createUploadedSession(pendingUpload);
+      setPendingUpload(null);
       setStage('uploaded');
       setUploadMessage('');
     } catch (err) {
-      console.error(err);
-      setError(err.message || 'Upload failed');
-      setStage(localPreviewUrl ? 'uploaded' : 'idle');
+      setError(err.message || 'Could not save editor session');
       setUploadMessage('');
     }
   };
@@ -903,12 +943,18 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
             <aside style={recipePanel}>
               <div style={panelHead}>
                 <div>
-                  <span style={eyebrow}>Ad recipe</span>
-                  <strong>Variant controls</strong>
+                  <span style={eyebrow}>Preview recipe</span>
+                  <strong>Caption and card controls</strong>
                 </div>
               </div>
 
               <div style={actionStack}>
+                {!activeSession && pendingUpload && (
+                  <>
+                    <button onClick={retrySaveSession} style={primaryBtn}>Save session</button>
+                    <div style={setupNote}>The file uploaded to Blob, but the editor session was not saved. Save session attaches this video to the queue without another upload.</div>
+                  </>
+                )}
                 {(stage === 'uploaded' || stage === 'idle') && activeSession && (
                   <>
                     <button onClick={autoEdit} style={primaryBtn} disabled={autoEditing}>Auto edit full ad</button>
@@ -919,9 +965,6 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                   <>
                     <button onClick={render} style={primaryBtn} disabled={!segments.length || stage === 'rendering'}>
                       {stage === 'done' ? 'Render again' : 'Render cut'}
-                    </button>
-                    <button onClick={renderPolishedAd} style={secondaryBtn} disabled={!segments.length || stage === 'rendering'}>
-                      Render polished ad
                     </button>
                     <button onClick={autoEdit} style={secondaryBtn} disabled={autoEditing || !activeSession}>
                       {autoEditing ? 'Auto editing...' : 'Auto edit full ad'}
@@ -945,11 +988,11 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                 </label>
                 <label style={checkboxRow}>
                   <input type="checkbox" checked={settings.showIntro} onChange={(e) => updateSetting('showIntro', e.target.checked)} />
-                  Remotion intro card
+                  Preview intro card
                 </label>
                 <label style={checkboxRow}>
                   <input type="checkbox" checked={settings.showOutro} onChange={(e) => updateSetting('showOutro', e.target.checked)} />
-                  CTA outro card
+                  Preview CTA outro card
                 </label>
               </div>
 
@@ -984,6 +1027,9 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
 
               {aiCleanupMessage && <div style={statusBox}>{aiCleanupMessage}</div>}
               {polishedRenderMessage && <div style={statusBox}>{polishedRenderMessage}</div>}
+              <div style={setupNote}>
+                Branded intro/outro cards are preview-only for now. Export uses the fast server render while we stay off AWS.
+              </div>
               {stage === 'transcribing' && <div style={statusBox}>Extracting audio and building word-level captions...</div>}
               {stage === 'rendering' && (
                 <div style={statusBox}>
@@ -1156,19 +1202,23 @@ function remapWordsToOutput(keptWords, segments) {
 
 const shellStyle = {
   display: 'grid',
-  gridTemplateColumns: '282px minmax(0, 1fr)',
+  gridTemplateColumns: '230px minmax(0, 1fr)',
   minHeight: 'calc(100vh - 60px)',
   background: '#0b0b0b',
   color: '#f7efe2',
+  minWidth: 0,
+  overflowX: 'hidden',
 };
 const mainStyle = {
-  padding: 22,
-  maxWidth: 1500,
+  padding: 18,
+  maxWidth: 'none',
   width: '100%',
+  minWidth: 0,
+  overflowX: 'hidden',
 };
 const heroPanel = {
   display: 'grid',
-  gridTemplateColumns: 'minmax(0, 1fr) 520px',
+  gridTemplateColumns: 'minmax(0, 1fr) minmax(320px, 460px)',
   gap: 18,
   alignItems: 'end',
   padding: 22,
@@ -1199,10 +1249,11 @@ const heroCopy = {
 };
 const editorGrid = {
   display: 'grid',
-  gridTemplateColumns: '330px minmax(430px, 1fr) 320px',
+  gridTemplateColumns: 'minmax(260px, 310px) minmax(0, 1fr)',
   gap: 14,
   marginTop: 14,
   alignItems: 'start',
+  minWidth: 0,
 };
 const sourcePanel = {
   position: 'sticky',
@@ -1338,14 +1389,16 @@ const workPanel = {
   gap: 12,
 };
 const recipePanel = {
-  position: 'sticky',
-  top: 14,
+  gridColumn: '1 / -1',
   display: 'grid',
+  gridTemplateColumns: '220px minmax(180px, 260px) repeat(4, minmax(150px, 1fr))',
   gap: 12,
   padding: 14,
   background: '#121212',
   border: '1px solid rgba(255,255,255,.1)',
   borderRadius: 8,
+  alignItems: 'start',
+  minWidth: 0,
 };
 const workflowRail = {
   display: 'grid',
@@ -1450,6 +1503,7 @@ const fieldLabel = {
   fontWeight: 800,
   letterSpacing: 1,
   textTransform: 'uppercase',
+  minWidth: 0,
 };
 const selectStyle = {
   width: '100%',
@@ -1468,6 +1522,7 @@ const inputStyle = {
   color: '#f7efe2',
 };
 const outputPanel = {
+  gridColumn: '1 / -1',
   display: 'grid',
   gap: 8,
   padding: 10,
@@ -1476,7 +1531,7 @@ const outputPanel = {
   border: '1px solid rgba(63,185,80,.22)',
 };
 const remotionPanel = {
-  gridColumn: '2 / 4',
+  gridColumn: '1 / -1',
   display: 'grid',
   gap: 12,
   padding: 14,
@@ -1485,10 +1540,20 @@ const remotionPanel = {
   borderRadius: 8,
 };
 const playerShell = {
-  width: 260,
+  width: 220,
   maxWidth: '100%',
   overflow: 'hidden',
   borderRadius: 8,
   border: '1px solid rgba(255,255,255,.12)',
   background: '#000',
+};
+const setupNote = {
+  gridColumn: '1 / -1',
+  padding: 10,
+  borderRadius: 7,
+  background: 'rgba(255,106,42,.08)',
+  border: '1px solid rgba(255,106,42,.18)',
+  color: '#ffbd9a',
+  fontSize: 11,
+  lineHeight: 1.45,
 };
