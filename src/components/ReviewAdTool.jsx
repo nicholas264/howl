@@ -69,6 +69,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   const [ratingFilter, setRatingFilter] = useState(5);
   const [productFilter, setProductFilter] = useState('all');
   const [formatKeys, setFormatKeys] = useState(['square']);
+  const [previewMode, setPreviewMode] = useState('single');
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState('');
   const [dragging, setDragging] = useState(false);
@@ -87,6 +88,14 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   const handleTextColorChange = (val) => {
     setTextColor(val);
     try { localStorage.setItem('howl_review_textcolor', val); } catch {}
+  };
+
+  const updateReview = (id, patch) => {
+    setReviews(prev => {
+      const next = prev.map(r => r.id === id ? { ...r, ...patch } : r);
+      try { localStorage.setItem(LS_REVIEWS, JSON.stringify(next)); } catch {}
+      return next;
+    });
   };
 
   // Single / no-CSV mode
@@ -335,8 +344,10 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
     (productFilter === 'all' || r.handle === productFilter)
   );
   const previewReview = reviews.find(r => r.id === previewId) || filtered[0] || null;
+  const selectedReviews = filtered.filter(r => selected.has(r.id));
   const selectedCount = filtered.filter(r => selected.has(r.id)).length;
   const exportTotal = selectedCount * formatKeys.length;
+  const bulkPreviewReviews = selectedReviews.slice(0, 80);
 
   const toggleFormat = (key) => setFormatKeys(prev =>
     prev.includes(key) ? (prev.length > 1 ? prev.filter(k => k !== key) : prev) : [...prev, key]
@@ -573,51 +584,133 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
       </div>
 
       {/* Right: preview */}
-      <div style={{ ...S.rightPanel, gap: 24, flexWrap: 'wrap' }}>
-        {previewReview ? (
-          bothSelected ? (
+      <div style={S.rightPanel}>
+        <div style={S.previewToolbar}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => setPreviewMode('single')} style={S.modeBtn(previewMode === 'single')}>Single</button>
+            <button onClick={() => setPreviewMode('bulk')} style={S.modeBtn(previewMode === 'bulk')}>Bulk</button>
+          </div>
+          <div style={{ fontSize: 10, color: '#77746f', letterSpacing: 1, textTransform: 'uppercase' }}>
+            {selectedCount} selected
+          </div>
+        </div>
+
+        {previewMode === 'bulk' ? (
+          selectedCount > 0 ? (
             <>
-              <PreviewCard fmt={FORMATS.square} scale={squareScale}>
-                <UGCTemplate
-                  variation={{ headline: previewReview.quote }}
-                  format="square"
-                  dimensions={FORMATS.square}
-                  reviewerName={previewReview.nickname}
-                  attribution={verifiedLabel(previewReview.handle)}
-                  backgroundImage={bgImage}
-                  scrimColor={scrimColor}
-                  textColor={textColor}
-                />
-              </PreviewCard>
-              <PreviewCard fmt={FORMATS.story} scale={storyScale}>
-                <UGCTemplate
-                  variation={{ headline: previewReview.quote }}
-                  format="story"
-                  dimensions={FORMATS.story}
-                  reviewerName={previewReview.nickname}
-                  attribution={verifiedLabel(previewReview.handle)}
-                  backgroundImage={bgImage}
-                  scrimColor={scrimColor}
-                  textColor={textColor}
-                />
-              </PreviewCard>
+              <div style={S.bulkGrid}>
+                {bulkPreviewReviews.flatMap(review => formatKeys.map(fk => {
+                  const fmt = FORMATS[fk];
+                  const scale = fk === 'story' ? 0.11 : 0.14;
+                  return (
+                    <button
+                      key={`${review.id}_${fk}`}
+                      onClick={() => { setPreviewId(review.id); setPreviewMode('single'); }}
+                      style={S.bulkCard}
+                      title="Open this review"
+                    >
+                      <PreviewCard fmt={fmt} scale={scale}>
+                        <UGCTemplate
+                          variation={{ headline: review.quote }}
+                          format={fk}
+                          dimensions={fmt}
+                          reviewerName={review.nickname}
+                          attribution={verifiedLabel(review.handle)}
+                          backgroundImage={bgImage}
+                          scrimColor={scrimColor}
+                          textColor={textColor}
+                        />
+                      </PreviewCard>
+                      <div style={S.bulkMeta}>
+                        <span>{review.nickname || 'Customer'}</span>
+                        <span>{fmt.label}</span>
+                      </div>
+                    </button>
+                  );
+                }))}
+              </div>
+              {selectedReviews.length > bulkPreviewReviews.length && (
+                <div style={{ fontSize: 10, color: '#77746f', letterSpacing: 1, textTransform: 'uppercase' }}>
+                  Showing first {bulkPreviewReviews.length} of {selectedReviews.length}
+                </div>
+              )}
             </>
           ) : (
-            <PreviewCard fmt={pvFmt} scale={pvScale}>
-              <UGCTemplate
-                variation={{ headline: previewReview.quote }}
-                format={formatKeys[0]}
-                dimensions={pvFmt}
-                reviewerName={previewReview.nickname}
-                attribution={verifiedLabel(previewReview.handle)}
-                backgroundImage={bgImage}
-                scrimColor={scrimColor}
-                textColor={textColor}
-              />
-            </PreviewCard>
+            <div style={{ color: '#77746f', fontSize: 12 }}>Select reviews to preview the batch.</div>
           )
         ) : (
-          <div style={{ color: '#77746f', fontSize: 12 }}>No reviews match filter</div>
+          <>
+            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
+              {previewReview ? (
+                bothSelected ? (
+                  <>
+                    <PreviewCard fmt={FORMATS.square} scale={squareScale}>
+                      <UGCTemplate
+                        variation={{ headline: previewReview.quote }}
+                        format="square"
+                        dimensions={FORMATS.square}
+                        reviewerName={previewReview.nickname}
+                        attribution={verifiedLabel(previewReview.handle)}
+                        backgroundImage={bgImage}
+                        scrimColor={scrimColor}
+                        textColor={textColor}
+                      />
+                    </PreviewCard>
+                    <PreviewCard fmt={FORMATS.story} scale={storyScale}>
+                      <UGCTemplate
+                        variation={{ headline: previewReview.quote }}
+                        format="story"
+                        dimensions={FORMATS.story}
+                        reviewerName={previewReview.nickname}
+                        attribution={verifiedLabel(previewReview.handle)}
+                        backgroundImage={bgImage}
+                        scrimColor={scrimColor}
+                        textColor={textColor}
+                      />
+                    </PreviewCard>
+                  </>
+                ) : (
+                  <PreviewCard fmt={pvFmt} scale={pvScale}>
+                    <UGCTemplate
+                      variation={{ headline: previewReview.quote }}
+                      format={formatKeys[0]}
+                      dimensions={pvFmt}
+                      reviewerName={previewReview.nickname}
+                      attribution={verifiedLabel(previewReview.handle)}
+                      backgroundImage={bgImage}
+                      scrimColor={scrimColor}
+                      textColor={textColor}
+                    />
+                  </PreviewCard>
+                )
+              ) : (
+                <div style={{ color: '#77746f', fontSize: 12 }}>No reviews match filter</div>
+              )}
+            </div>
+
+            {previewReview && (
+              <div style={S.editPanel}>
+                <div>
+                  <div style={S.label}>Review Text</div>
+                  <textarea
+                    value={previewReview.quote}
+                    onChange={e => updateReview(previewReview.id, { quote: e.target.value })}
+                    rows={4}
+                    style={S.textarea}
+                  />
+                </div>
+                <div>
+                  <div style={S.label}>Reviewer</div>
+                  <input
+                    type="text"
+                    value={previewReview.nickname || ''}
+                    onChange={e => updateReview(previewReview.id, { nickname: e.target.value })}
+                    style={S.input}
+                  />
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -735,5 +828,11 @@ const S = {
   exportBtn: (disabled) => ({ width: '100%', padding: '12px 0', background: disabled ? '#dedbd3' : '#d84a17', border: 'none', borderRadius: 4, color: disabled ? '#88857f' : '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer' }),
   filterBtn: (active) => ({ padding: '3px 8px', border: `1px solid ${active ? '#d84a17' : '#dedbd3'}`, background: active ? 'rgba(220,68,10,0.15)' : '#f4f1ea', color: active ? '#d84a17' : '#77746f', fontFamily: 'inherit', fontSize: 9, cursor: 'pointer', borderRadius: 3 }),
   microBtn: { padding: '3px 7px', border: '1px solid #dedbd3', background: '#f4f1ea', color: '#77746f', fontFamily: 'inherit', fontSize: 8, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 3 },
-  rightPanel: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', background: '#fff', padding: 40, overflow: 'auto' },
+  modeBtn: (active) => ({ padding: '6px 14px', border: `1px solid ${active ? '#d84a17' : '#dedbd3'}`, background: active ? 'rgba(220,68,10,0.12)' : '#f4f1ea', color: active ? '#d84a17' : '#77746f', fontFamily: 'inherit', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 }),
+  previewToolbar: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexShrink: 0 },
+  editPanel: { width: 'min(620px, 100%)', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 180px', gap: 12, padding: 16, border: '1px solid #dedbd3', borderRadius: 4, background: '#fffdf8', boxSizing: 'border-box' },
+  bulkGrid: { width: '100%', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 14, alignItems: 'start' },
+  bulkCard: { border: '1px solid #dedbd3', borderRadius: 4, background: '#fffdf8', padding: 10, cursor: 'pointer', fontFamily: 'inherit', color: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, minHeight: 0 },
+  bulkMeta: { width: '100%', display: 'flex', justifyContent: 'space-between', gap: 8, color: '#77746f', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' },
+  rightPanel: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 22, background: '#fff', padding: 32, overflow: 'auto' },
 };
