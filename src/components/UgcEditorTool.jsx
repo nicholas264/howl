@@ -99,6 +99,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   const [aiCleaning, setAiCleaning] = useState(false);
   const [autoEditing, setAutoEditing] = useState(false);
   const [aiCleanupMessage, setAiCleanupMessage] = useState('');
+  const [polishedRenderMessage, setPolishedRenderMessage] = useState('');
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [sessionFilter, setSessionFilter] = useState('needs_edit');
   const videoRef = useRef(null);
@@ -443,6 +444,66 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       console.error(err);
       setError(err.message || 'Render failed');
       setStage('ready');
+    }
+  };
+
+  const renderPolishedAd = async () => {
+    if (!segments.length || !activeSession) return;
+    setStage('rendering');
+    setProgress(0);
+    setError('');
+    setOutputUrl(null);
+    setPolishedRenderMessage('');
+    setLogTail('Starting Remotion Lambda render...');
+    try {
+      const start = await startRemotionRender({
+        sessionId: activeSession.id,
+        segments,
+        words,
+        settings,
+      });
+      setPolishedRenderMessage(`Remotion render started: ${start.render_id}`);
+      for (let attempt = 0; attempt < 120; attempt++) {
+        await delay(3000);
+        const status = await getRemotionRenderStatus({
+          sessionId: activeSession.id,
+          renderId: start.render_id,
+          bucketName: start.bucket_name,
+          functionName: start.function_name,
+          region: start.region,
+        });
+        setProgress(status.progress || 0);
+        setLogTail(status.costs?.displayCost ? `Rendering on Lambda · ${status.costs.displayCost}` : 'Rendering on Lambda...');
+        if (status.done && status.output_file) {
+          const url = status.output_file;
+          setOutputUrl(url);
+          setActiveSession(prev => prev ? {
+            ...prev,
+            rendered_url: url,
+            status: 'rendered',
+          } : prev);
+          setSessions(prev => prev.map(session => session.id === activeSession.id ? {
+            ...session,
+            rendered_url: url,
+            status: 'rendered',
+          } : session));
+          setProgress(1);
+          setStage('done');
+          setPolishedRenderMessage('Polished Remotion ad rendered.');
+          refreshSessions();
+          return;
+        }
+      }
+      setStage('ready');
+      setPolishedRenderMessage('Render is still running. Try the polished render status again in a moment.');
+    } catch (err) {
+      console.error(err);
+      if (err.setupRequired) {
+        setPolishedRenderMessage(err.message);
+      } else {
+        setError(err.message || 'Polished Remotion render failed');
+      }
+      setStage(words.length ? 'ready' : 'uploaded');
     }
   };
 
@@ -859,6 +920,9 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                     <button onClick={render} style={primaryBtn} disabled={!segments.length || stage === 'rendering'}>
                       {stage === 'done' ? 'Render again' : 'Render cut'}
                     </button>
+                    <button onClick={renderPolishedAd} style={secondaryBtn} disabled={!segments.length || stage === 'rendering'}>
+                      Render polished ad
+                    </button>
                     <button onClick={autoEdit} style={secondaryBtn} disabled={autoEditing || !activeSession}>
                       {autoEditing ? 'Auto editing...' : 'Auto edit full ad'}
                     </button>
@@ -919,6 +983,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
               </label>
 
               {aiCleanupMessage && <div style={statusBox}>{aiCleanupMessage}</div>}
+              {polishedRenderMessage && <div style={statusBox}>{polishedRenderMessage}</div>}
               {stage === 'transcribing' && <div style={statusBox}>Extracting audio and building word-level captions...</div>}
               {stage === 'rendering' && (
                 <div style={statusBox}>
@@ -1009,6 +1074,44 @@ async function renderSession(sessionId, segments, captionsSrt) {
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Server render failed');
   return data;
+}
+
+async function startRemotionRender({ sessionId, segments, words, settings }) {
+  const response = await fetch('/api/render-ugc-remotion', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: sessionId,
+      segments,
+      words,
+      settings,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error(data.error || 'Could not start Remotion render');
+    error.setupRequired = Boolean(data.setup_required);
+    throw error;
+  }
+  return data;
+}
+
+async function getRemotionRenderStatus({ sessionId, renderId, bucketName, functionName, region }) {
+  const params = new URLSearchParams({
+    session_id: String(sessionId),
+    render_id: renderId,
+    bucket_name: bucketName,
+    function_name: functionName,
+    region,
+  });
+  const response = await fetch(`/api/render-ugc-remotion-status?${params.toString()}`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Could not fetch Remotion render status');
+  return data;
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function buildSegments(words, duration, autoCutSilences) {
