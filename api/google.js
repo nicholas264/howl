@@ -60,6 +60,32 @@ async function getAccessToken() {
   return d.access_token;
 }
 
+function googleAdsErrorMessage(status, text) {
+  let payload = null;
+  try {
+    payload = JSON.parse(text);
+  } catch {}
+  const root = payload?.error || {};
+  const details = Array.isArray(root.details) ? root.details : [];
+  const googleAdsFailure = details.find(d => Array.isArray(d?.errors));
+  const firstFailure = googleAdsFailure?.errors?.[0];
+  const code = firstFailure?.errorCode
+    ? Object.entries(firstFailure.errorCode).map(([k, v]) => `${k}.${v}`).join(', ')
+    : root.status || `HTTP_${status}`;
+  const message = firstFailure?.message || root.message || text.slice(0, 300);
+  const requestId = details.find(d => d?.requestId)?.requestId || root.requestId || null;
+  const location = firstFailure?.location?.fieldPathElements
+    ?.map(part => part.fieldName)
+    .filter(Boolean)
+    .join('.');
+  return [
+    `Google Ads API ${status}: ${code}`,
+    message,
+    location ? `Field: ${location}` : '',
+    requestId ? `Request ID: ${requestId}` : '',
+  ].filter(Boolean).join(' · ');
+}
+
 async function searchStream(customerId, query, accessToken) {
   const url = `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers/${customerId}/googleAds:searchStream`;
   const headers = {
@@ -77,7 +103,7 @@ async function searchStream(customerId, query, accessToken) {
   });
   const text = await r.text();
   if (!r.ok) {
-    throw new Error(`Google Ads API ${r.status}: ${text.slice(0, 500)}`);
+    throw new Error(googleAdsErrorMessage(r.status, text));
   }
   // searchStream returns an array of response chunks.
   const chunks = JSON.parse(text);
@@ -228,7 +254,14 @@ export default async function handler(req, res) {
 
       return res.json({ months: monthsArr, customerId });
     } catch (err) {
-      return res.status(500).json({ error: err.message });
+      const hint = /invalid_grant|expired|revoked|Refresh token exchange failed/i.test(err.message)
+        ? 'Reconnect Google Ads with /api/google?action=auth, then update GOOGLE_ADS_REFRESH_TOKEN in Vercel.'
+        : /CUSTOMER_NOT_FOUND|USER_PERMISSION_DENIED|login-customer-id|authorization/i.test(err.message)
+          ? 'Check GOOGLE_ADS_CUSTOMER_ID, GOOGLE_ADS_LOGIN_CUSTOMER_ID, and that the refresh-token user can access the Ads account.'
+          : /developer.?token|DEVELOPER_TOKEN|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(err.message)
+            ? 'Check GOOGLE_ADS_DEVELOPER_TOKEN approval and that the OAuth token includes the adwords scope.'
+            : null;
+      return res.status(500).json({ error: hint ? `${err.message} · ${hint}` : err.message });
     }
   }
 
