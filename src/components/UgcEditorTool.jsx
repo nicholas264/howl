@@ -11,6 +11,8 @@ const DEFAULT_SETTINGS = {
   autoCutSilences: true,
 };
 
+const PLAYBACK_ERROR = 'The browser could not play this source. Try reloading the session; if it still fails, re-upload as MP4/MOV so the server can proxy it.';
+
 const SESSION_FILTERS = [
   ['needs_edit', 'Needs edit'],
   ['launch_ready', 'Launch ready'],
@@ -60,8 +62,10 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   const [words, setWords] = useState([]);
   const [duration, setDuration] = useState(0);
   const [outputUrl, setOutputUrl] = useState(null);
+  const [playbackToken, setPlaybackToken] = useState('');
   const [logTail, setLogTail] = useState('');
   const [aiCleaning, setAiCleaning] = useState(false);
+  const [autoEditing, setAutoEditing] = useState(false);
   const [aiCleanupMessage, setAiCleanupMessage] = useState('');
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [sessionFilter, setSessionFilter] = useState('needs_edit');
@@ -135,6 +139,36 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     session?.creator_name,
     session?.brief_title,
   ].filter(Boolean).join(' · ');
+  const playbackUrl = useMemo(() => {
+    if (videoUrl?.startsWith('blob:')) return videoUrl;
+    if (activeSession?.id && playbackToken) return `/api/ugc-source?id=${activeSession.id}&token=${encodeURIComponent(playbackToken)}`;
+    if (activeSession?.id && playbackToken === '') return `/api/ugc-source?id=${activeSession.id}`;
+    if (activeSession?.id) return '';
+    return videoUrl;
+  }, [activeSession?.id, playbackToken, videoUrl]);
+
+  useEffect(() => {
+    if (!activeSession?.id || videoUrl?.startsWith('blob:')) {
+      setPlaybackToken('');
+      return;
+    }
+    let active = true;
+    setPlaybackToken(null);
+    fetch(`/api/ugc-source-token?id=${activeSession.id}`)
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not prepare source playback');
+        if (active) setPlaybackToken(data.token || '');
+      })
+      .catch(err => {
+        console.error('playback token failed', err);
+        if (active) {
+          setPlaybackToken('');
+          setError(err.message || 'Could not prepare source playback');
+        }
+      });
+    return () => { active = false; };
+  }, [activeSession?.id, videoUrl]);
 
   const updateSetting = (key, value) => {
     setSettings(prev => ({ ...prev, [key]: value }));
@@ -216,21 +250,9 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     setProgress(0);
     setError('');
     try {
-      const r = await fetch('/api/transcribe-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: activeSession.id }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || 'Transcription failed');
-      const ws = (data.words || []).map(w => ({
-        word: w.word,
-        start: w.start,
-        end: w.end,
-        kept: true,
-      }));
+      const { words: ws, duration: nextDuration } = await transcribeSession(activeSession.id);
       setWords(ws);
-      setDuration(data.duration || (ws.length ? ws[ws.length - 1].end : 0));
+      setDuration(nextDuration);
       setStage('ready');
       // Already persisted server-side; no need to mark dirty
       refreshSessions();
@@ -315,13 +337,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     setError('');
     setAiCleanupMessage('');
     try {
-      const response = await fetch('/api/ugc-edit-suggest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: activeSession.id }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'AI cleanup failed');
+      const data = await requestCleanup(activeSession.id);
       const remove = new Set(data.remove_indexes || []);
       setWords(prev => prev.map((word, index) => (
         remove.has(index) ? { ...word, kept: false } : word
@@ -360,17 +376,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         captionsSrt = buildSrtFromWords(remapped);
       }
       setLogTail('Rendering and saving footage on the server...');
-      const response = await fetch('/api/render-ugc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: activeSession.id,
-          segments,
-          captions_srt: captionsSrt,
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Server render failed');
+      const data = await renderSession(activeSession.id, segments, captionsSrt);
       const url = data.url;
       setOutputUrl(url);
       setActiveSession(prev => prev ? {
@@ -397,6 +403,63 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       console.error(err);
       setError(err.message || 'Render failed');
       setStage('ready');
+    }
+  };
+
+  const autoEdit = async () => {
+    if (!activeSession) return;
+    setAutoEditing(true);
+    setError('');
+    setOutputUrl(null);
+    try {
+      let nextWords = words;
+      let nextDuration = duration;
+      if (!nextWords.length) {
+        setStage('transcribing');
+        setLogTail('Extracting audio and building word-level captions...');
+        const transcript = await transcribeSession(activeSession.id);
+        nextWords = transcript.words;
+        nextDuration = transcript.duration;
+        setWords(nextWords);
+        setDuration(nextDuration);
+      }
+
+      setStage('ready');
+      setLogTail('Finding filler, false starts, and long pauses...');
+      const cleanup = await requestCleanup(activeSession.id).catch(err => {
+        setAiCleanupMessage(`AI cleanup skipped: ${err.message || 'not available'}`);
+        return null;
+      });
+      if (cleanup?.remove_indexes?.length) {
+        const remove = new Set(cleanup.remove_indexes);
+        nextWords = nextWords.map((word, index) => remove.has(index) ? { ...word, kept: false } : word);
+        setWords(nextWords);
+        setAiCleanupMessage(`${remove.size} word${remove.size === 1 ? '' : 's'} cut automatically. Review the crossed-out transcript before launch.`);
+      } else if (cleanup) {
+        setAiCleanupMessage(cleanup.summary || 'No safe cleanup cuts found.');
+      }
+
+      const nextSegments = buildSegments(nextWords, nextDuration, settings.autoCutSilences);
+      if (!nextSegments.length) throw new Error('No editable segments found after transcription');
+      setStage('rendering');
+      setLogTail('Rendering captions and cuts on the server...');
+      const nextKeptWords = nextWords.filter(word => word.kept);
+      const captionsSrt = settings.burnCaptions
+        ? buildSrtFromWords(remapWordsToOutput(nextKeptWords, nextSegments))
+        : null;
+      const data = await renderSession(activeSession.id, nextSegments, captionsSrt);
+      setOutputUrl(data.url);
+      setActiveSession(prev => prev ? { ...prev, rendered_url: data.url, status: 'rendered' } : prev);
+      setSessions(prev => prev.map(session => session.id === activeSession.id ? { ...session, rendered_url: data.url, status: 'rendered' } : session));
+      setProgress(1);
+      setStage('done');
+      refreshSessions();
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'Auto edit failed');
+      setStage(words.length ? 'ready' : 'uploaded');
+    } finally {
+      setAutoEditing(false);
     }
   };
 
@@ -471,7 +534,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
 
   // ── Layout ─────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', minHeight: 'calc(100vh - 60px)' }}>
+    <div style={shellStyle}>
       <aside style={sidebarStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <span style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f' }}>Edit queue</span>
@@ -547,8 +610,8 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         </div>
       </aside>
 
-      <div style={{ padding: 24, maxWidth: 1100 }}>
-        <h1 style={{ fontSize: 22, marginBottom: 4 }}>UGC Editor</h1>
+      <div style={mainStyle}>
+        <h1 style={{ fontSize: 28, marginBottom: 4 }}>UGC Editor</h1>
         <p style={{ color: '#77746f', marginTop: 0, fontSize: 13 }}>
           Creator uploads land here automatically from assignment links. Cut silences and bad takes from the transcript, burn captions, render, then send the finished asset to launch.
         </p>
@@ -582,9 +645,21 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         )}
 
         {videoUrl && stage !== 'uploading' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 24, marginTop: 16, alignItems: 'start' }}>
+          <div style={editorGrid}>
             <div style={{ position: 'sticky', top: 16 }}>
-              <video ref={videoRef} src={videoUrl} controls crossOrigin="anonymous" style={{ width: '100%', borderRadius: 8, background: '#000', maxHeight: 320 }} />
+              <video
+                ref={videoRef}
+                src={playbackUrl}
+                controls
+                playsInline
+                preload="metadata"
+                style={videoStyle}
+                onLoadedMetadata={(event) => {
+                  const nextDuration = event.currentTarget.duration;
+                  if (Number.isFinite(nextDuration) && nextDuration > 0 && !duration) setDuration(nextDuration);
+                }}
+                onError={() => setError(PLAYBACK_ERROR)}
+              />
               <div style={{ fontSize: 12, color: '#77746f', marginTop: 6 }}>
                 {activeSession?.creator_name && <strong style={{ display: 'block', color: '#171717', marginBottom: 3 }}>{activeSession.creator_name}</strong>}
                 {!activeSession?.creator_name && activeSession?.source_label && <strong style={{ display: 'block', color: '#171717', marginBottom: 3 }}>{activeSession.source_label}</strong>}
@@ -621,7 +696,10 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
 
               <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {(stage === 'uploaded' || stage === 'idle') && activeSession && (
-                  <button onClick={transcribe} style={primaryBtn}>Transcribe</button>
+                  <div style={actionStack}>
+                    <button onClick={autoEdit} style={primaryBtn} disabled={autoEditing}>Auto edit</button>
+                    <button onClick={transcribe} style={secondaryBtn}>Transcribe only</button>
+                  </div>
                 )}
                 {stage === 'transcribing' && (
                   <div style={statusBox}>Extracting audio + transcribing on the server…</div>
@@ -653,6 +731,13 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                           {stage === 'done' ? 'Re-render' : 'Render'}
                         </button>
                         <button
+                          onClick={autoEdit}
+                          style={secondaryBtn}
+                          disabled={autoEditing || !activeSession}
+                        >
+                          {autoEditing ? 'Auto editing...' : 'Auto edit'}
+                        </button>
+                        <button
                           onClick={suggestCleanup}
                           style={secondaryBtn}
                           disabled={aiCleaning || !words.length}
@@ -682,7 +767,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
 
                     {stage === 'done' && outputUrl && (
                       <>
-                        <video src={outputUrl} controls style={{ width: '100%', borderRadius: 8, background: '#000', marginTop: 8 }} />
+                        <video src={outputUrl} controls playsInline style={{ width: '100%', borderRadius: 8, background: '#000', marginTop: 8 }} />
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button onClick={download} style={primaryBtn}>Download</button>
                           {onAddToCart && <button onClick={sendToCart} style={secondaryBtn}>Send to Launcher</button>}
@@ -697,8 +782,11 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
             </div>
 
             <div>
-              <div style={{ fontSize: 11, textTransform: 'uppercase', color: '#88857f', marginBottom: 8, letterSpacing: 1 }}>
-                Transcript {words.length ? `· click words to cut` : ''}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 12 }}>
+                <div style={{ fontSize: 11, textTransform: 'uppercase', color: '#88857f', letterSpacing: 1 }}>
+                  Transcript {words.length ? `· click words to cut` : ''}
+                </div>
+                {words.length ? <div style={{ fontSize: 11, color: '#77746f' }}>{segments.length} cuts · {keptWords.length}/{words.length} words kept</div> : null}
               </div>
               <div style={transcriptBox}>
                 {!words.length && <div style={{ color: '#88857f', fontSize: 13 }}>Transcript will appear here.</div>}
@@ -728,6 +816,49 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       </div>
     </div>
   );
+}
+
+async function transcribeSession(sessionId) {
+  const r = await fetch('/api/transcribe-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId }),
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'Transcription failed');
+  const ws = (data.words || []).map(w => ({
+    word: w.word,
+    start: w.start,
+    end: w.end,
+    kept: w.kept !== false,
+  }));
+  return { words: ws, duration: data.duration || (ws.length ? ws[ws.length - 1].end : 0) };
+}
+
+async function requestCleanup(sessionId) {
+  const response = await fetch('/api/ugc-edit-suggest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'AI cleanup failed');
+  return data;
+}
+
+async function renderSession(sessionId, segments, captionsSrt) {
+  const response = await fetch('/api/render-ugc', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: sessionId,
+      segments,
+      captions_srt: captionsSrt,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Server render failed');
+  return data;
 }
 
 function buildSegments(words, duration, autoCutSilences) {
@@ -770,8 +901,40 @@ function remapWordsToOutput(keptWords, segments) {
   return out;
 }
 
+const shellStyle = {
+  display: 'grid',
+  gridTemplateColumns: '280px minmax(0, 1fr)',
+  minHeight: 'calc(100vh - 60px)',
+  background: '#f5f2eb',
+};
+const mainStyle = {
+  padding: 24,
+  maxWidth: 1240,
+  width: '100%',
+};
+const editorGrid = {
+  display: 'grid',
+  gridTemplateColumns: '320px minmax(0, 1fr)',
+  gap: 24,
+  marginTop: 16,
+  alignItems: 'start',
+};
+const videoStyle = {
+  width: '100%',
+  aspectRatio: '9 / 16',
+  borderRadius: 8,
+  background: '#050505',
+  maxHeight: 520,
+  objectFit: 'contain',
+  boxShadow: '0 18px 42px rgba(23, 23, 23, .16)',
+};
+const actionStack = {
+  display: 'grid',
+  gridTemplateColumns: '1fr',
+  gap: 8,
+};
 const sidebarStyle = {
-  borderRight: '1px solid #dedbd3', background: '#fff', padding: 16, overflowY: 'auto',
+  borderRight: '1px solid #dedbd3', background: '#fffdf8', padding: 16, overflowY: 'auto',
   maxHeight: 'calc(100vh - 60px)',
 };
 const queueSummary = {
