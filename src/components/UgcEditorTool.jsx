@@ -89,6 +89,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   const [stage, setStage] = useState('idle'); // idle | uploading | uploaded | transcribing | ready | rendering | done
   const [progress, setProgress] = useState(0);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadMessage, setUploadMessage] = useState('');
   const [error, setError] = useState('');
   const [words, setWords] = useState([]);
   const [duration, setDuration] = useState(0);
@@ -217,10 +218,17 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     setFile(f);
     setOutputUrl(null);
     setWords([]);
+    setActiveSession(null);
     setStage('uploading');
     setUploadProgress(0);
+    setUploadMessage('Preparing local preview...');
+
+    if (videoUrl && videoUrl.startsWith('blob:')) URL.revokeObjectURL(videoUrl);
+    const localPreviewUrl = URL.createObjectURL(f);
+    setVideoUrl(localPreviewUrl);
 
     try {
+      setUploadMessage('Uploading source to Blob...');
       const token = await getToken();
       const blob = await upload(`ugc-source/${Date.now()}-${f.name}`, f, {
         access: 'public',
@@ -233,10 +241,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         contentType: f.type,
       });
 
-      // Create the session row immediately so it shows up in the sidebar
-      const localPreviewUrl = URL.createObjectURL(f);
-      setVideoUrl(localPreviewUrl);
-
+      setUploadMessage('Saving editor session...');
       const sessRes = await fetch('/api/db/ugc-sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -251,15 +256,19 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
           source_label: 'Manual editor upload',
         }),
       });
-      const sessData = await sessRes.json();
-      if (!sessRes.ok) throw new Error(sessData.error || 'Could not create session');
+      const sessData = await sessRes.json().catch(() => ({}));
+      if (!sessRes.ok) {
+        throw new Error(`Uploaded to Blob, but could not save the editor session: ${sessData.error || sessRes.status}`);
+      }
       setActiveSession(sessData.session);
       setSessions(prev => [sessData.session, ...prev]);
       setStage('uploaded');
+      setUploadMessage('');
     } catch (err) {
       console.error(err);
       setError(err.message || 'Upload failed');
-      setStage('idle');
+      setStage(localPreviewUrl ? 'uploaded' : 'idle');
+      setUploadMessage('');
     }
   };
 
@@ -710,14 +719,14 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
 
         {stage === 'uploading' && (
           <div style={{ ...statusBox, marginTop: 16 }}>
-            Uploading to Vercel Blob… {Math.round(uploadProgress * 100)}%
+            {uploadMessage || 'Uploading to Vercel Blob...'} {Math.round(uploadProgress * 100)}%
             <div style={{ height: 4, background: '#dedbd3', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
               <div style={{ width: `${uploadProgress * 100}%`, height: '100%', background: '#d84a17' }} />
             </div>
           </div>
         )}
 
-        {videoUrl && stage !== 'uploading' && (
+        {videoUrl && (
           <div style={editorGrid}>
             <section style={sourcePanel}>
               <div style={panelHead}>
