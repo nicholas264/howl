@@ -1767,10 +1767,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
             && dealerRevenueByMonth[mk] !== '';
           const hasDealerOrdersOverride = Object.prototype.hasOwnProperty.call(dealerOrdersByMonth, mk)
             && dealerOrdersByMonth[mk] !== '';
-          const dtcRevenue = netRevenueFor(dtc);
+          const dtcNetRevenue = netRevenueFor(dtc);
+          const dtcRevenue = grossRevenueFor(dtc);
+          const dtcAcquisitionRevenue = acquisitionRevenueFor(dtc, dtcNetRevenue);
           const dealerRevenue = hasDealerRevenueOverride
             ? Number(dealerRevenueByMonth[mk] || 0)
             : netRevenueFor(dealer);
+          const dealerAcquisitionRevenue = acquisitionRevenueFor(dealer, dealerRevenue);
           const offPlatformRevenue = Number(offPlatformRevenueByMonth[mk] || 0);
           const dtcOrders = Number(dtc.orders || 0);
           const dealerOrders = hasDealerOrdersOverride
@@ -1780,6 +1783,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const addNewCust = Number(newCustomersAddByMonth[mk] || 0);
           const addReturningCust = Number(returningCustomersAddByMonth[mk] || 0);
           const revenue = dtcRevenue + dealerRevenue + offPlatformRevenue;
+          const netRevenue = dtcNetRevenue + dealerRevenue + offPlatformRevenue;
           const orders = dtcOrders + dealerOrders + offPlatformOrders;
           // Hybrid COGS: actual unitCost × qty for line items where Shopify has cost set,
           // GM% assumption applied to (uncosted Shopify revenue + manual additions).
@@ -1801,8 +1805,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const googleRoasReported = googleSpend > 0 ? googleConvValue / googleSpend : null;
           const cm3 = revenue - cogs - paymentFees - shipCost - fulfill - adSpend;
           // NCAC = total ad spend (Meta + Google) ÷ new customers.
-          const classifiedNewRevenue = acquisitionRevenueFor(dtc, dtcRevenue)
-            + acquisitionRevenueFor(dealer, dealerRevenue);
+          const classifiedNewRevenue = dtcAcquisitionRevenue + dealerAcquisitionRevenue;
           const classifiedNewCustomers = Number(sh.newCustomers || 0) + addNewCust;
           const totalNewCust = classifiedNewCustomers;
           const ncac = totalNewCust > 0 ? adSpend / totalNewCust : null;
@@ -1821,8 +1824,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const newCustomers = classifiedNewCustomers;
           const returningCustomers = Number(sh.returningCustomers || 0) + addReturningCust;
           return {
-            month: mk, revenue, dtcRevenue, dealerRevenue, offPlatformRevenue,
-            dtcGrossRevenue: grossRevenueFor(dtc),
+            month: mk, revenue, netRevenue, dtcRevenue, dtcNetRevenue, dealerRevenue, offPlatformRevenue,
+            dtcGrossRevenue: dtcRevenue,
             orders, dtcOrders, dealerOrders, offPlatformOrders, newCustomers, returningCustomers,
             customers: dtc.customers || 0,
             customerKeys: dtc.customerKeys || [], newCustomerKeys: dtc.newCustomerKeys || [],
@@ -1857,7 +1860,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
 
         const ltm = rollupRows.reduce((a, r) => ({
           revenue: a.revenue + r.revenue,
+          netRevenue: a.netRevenue + r.netRevenue,
           dtcRevenue: a.dtcRevenue + r.dtcRevenue,
+          dtcNetRevenue: a.dtcNetRevenue + r.dtcNetRevenue,
           dtcGrossRevenue: a.dtcGrossRevenue + r.dtcGrossRevenue,
           dealerRevenue: a.dealerRevenue + r.dealerRevenue,
           offPlatformRevenue: a.offPlatformRevenue + r.offPlatformRevenue,
@@ -1872,7 +1877,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           cm3: a.cm3 + r.cm3,
           newRevenue: a.newRevenue + r.newRevenue,
           opex: a.opex + r.opex,
-        }), { revenue: 0, dtcRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, newRevenue: 0, opex: 0 });
+        }), { revenue: 0, netRevenue: 0, dtcRevenue: 0, dtcNetRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, newRevenue: 0, opex: 0 });
 
         const livePrimaryYtd = shopifyData?._stores?.primary?.ytd;
         const snapPrimaryYtd = [...Object.values(snapshotShopByMonth)]
@@ -1917,7 +1922,6 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           ? ltm.returningCustomers / (ltm.newCustomers + ltm.returningCustomers) : 0;
         const ltmCmMargin = ltm.revenue > 0 ? ltm.cm3 / ltm.revenue : 0;
         const ltmOpexCoverage = ltm.opex > 0 ? ltm.cm3 / ltm.opex : null;
-        const dtcGrossToNetDelta = Math.max(ltm.dtcGrossRevenue - ltm.dtcRevenue, 0);
         // For UI: show the default opex if no per-month overrides, else "$X avg"
         const opex = ltm.opex / Math.max(rollupRows.length, 1);
 
@@ -2057,8 +2061,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                 {/* Calendar-year KPI strip */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 12 }}>
                   {[
-                    { label: `${summaryYear} YTD Net Revenue`, value: fmt$(ltm.revenue), sub: dtcGrossToNetDelta > 0 ? `DTC net sales basis · ${fmt$(dtcGrossToNetDelta)} below Shopify total sales` : 'DTC net sales + dealer + off-platform' },
-                    { label: `${summaryYear} DTC Net Sales`,   value: fmt$(ltm.dtcRevenue), sub: fmtPct(ltm.dtcRevenue / Math.max(ltm.revenue, 1)) + ' of total' },
+                    { label: `${summaryYear} YTD Gross Sales`, value: fmt$(ltm.revenue), sub: 'DTC total sales + dealer + off-platform' },
+                    { label: `${summaryYear} YTD Net Revenue`, value: fmt$(ltm.netRevenue), sub: 'DTC net sales + dealer + off-platform' },
+                    { label: `${summaryYear} DTC Gross Sales`, value: fmt$(ltm.dtcRevenue), sub: fmtPct(ltm.dtcRevenue / Math.max(ltm.revenue, 1)) + ' of gross' },
+                    { label: `${summaryYear} DTC Net Sales`, value: fmt$(ltm.dtcNetRevenue), sub: fmtPct(ltm.dtcNetRevenue / Math.max(ltm.netRevenue, 1)) + ' of net' },
                     { label: `${summaryYear} Dealer Revenue`, value: fmt$(ltm.dealerRevenue), sub: fmtPct(ltm.dealerRevenue / Math.max(ltm.revenue, 1)) + ' of total' },
                     { label: `${summaryYear} YTD Ad Spend`,  value: fmt$(ltm.adSpend), sub: fmt$(ltm.metaSpend) + ' Meta · ' + fmt$(ltm.googleSpend) + ' Google' },
                     { label: `${summaryYear} YTD CM3`,       value: fmt$(ltm.cm3), color: ltm.cm3 >= 0 ? '#256b35' : '#b42318', sub: fmtPct(ltmCmMargin) + ' margin' },
@@ -2516,7 +2522,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
             : Number(dealer.orders || 0);
           const offPlatformRevenue = Number(offPlatformRevenueByMonth[f.month] || 0);
           const offPlatformOrders = Number(offPlatformOrdersByMonth[f.month] || 0);
-          const actRevenue = netRevenueFor(dtc) + dealerRevenue + offPlatformRevenue;
+          const actRevenue = grossRevenueFor(dtc) + dealerRevenue + offPlatformRevenue;
           const orders = Number(dtc.orders || 0) + dealerOrders + offPlatformOrders;
           const realCogs = sh.cogs || 0;
           const fallbackCogs = Math.max(actRevenue - (sh.costedRevenue || 0), 0) * (1 - ((s?.grossMarginPct || 60) / 100));
@@ -2537,7 +2543,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const projCac = isCurrent ? actCac * paceFactor : actCac;
           const projCm3 = isCurrent ? actCm3 * paceFactor : actCm3;
 
-          // Targets (use DTC revenue as the comparable to Shopify netSales)
+          // Targets pace against gross sales/topline revenue for the CFO view.
           const tgtRevenue = f.dtcRevenue ?? f.netRevenue ?? 0;
           const tgtCac = f.cac || 0;
           const tgtCm3 = f.contributionProfit || 0;
