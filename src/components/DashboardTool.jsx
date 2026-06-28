@@ -1688,8 +1688,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           out.returningCustomerKeys = out.returningCustomerKeys.filter(
             key => !out.newCustomerKeys.includes(key),
           );
-          out.newCustomers = out.newCustomerKeys.length + out.legacyNewCustomers;
-          out.returningCustomers = out.returningCustomerKeys.length + out.legacyReturningCustomers;
+          const hasReportedNew = Number(a.newCustomers || 0) > 0 || Number(b.newCustomers || 0) > 0;
+          const hasReportedReturning = Number(a.returningCustomers || 0) > 0 || Number(b.returningCustomers || 0) > 0;
+          if (!hasReportedNew) out.newCustomers = out.newCustomerKeys.length + out.legacyNewCustomers;
+          if (!hasReportedReturning) out.returningCustomers = out.returningCustomerKeys.length + out.legacyReturningCustomers;
           return out;
         };
         const allShopMonths = new Set([
