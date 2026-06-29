@@ -40,6 +40,25 @@ function runFfmpeg(args) {
   });
 }
 
+function subtitleStyle(settings = {}) {
+  const position = settings.captionPosition || 'bottom';
+  const scale = Math.max(0.78, Math.min(1.22, Number(settings.captionScale || 1)));
+  const alignment = position === 'top' ? 8 : position === 'center' ? 5 : 2;
+  const marginV = position === 'top' ? 90 : position === 'center' ? 20 : 56;
+  const fontSize = Math.round(18 * scale);
+  return [
+    'Fontname=Arial',
+    `Fontsize=${fontSize}`,
+    'PrimaryColour=&H00FFFFFF&',
+    'OutlineColour=&H00000000&',
+    'BorderStyle=1',
+    'Outline=2',
+    'Shadow=0',
+    `Alignment=${alignment}`,
+    `MarginV=${marginV}`,
+  ].join(',');
+}
+
 export default async function handler(req, res) {
   const access = await requirePermission(req, res, 'assets.write');
   if (!access) return;
@@ -76,6 +95,9 @@ export default async function handler(req, res) {
   const captions = typeof req.body?.captions_srt === 'string'
     ? req.body.captions_srt.slice(0, 500000)
     : '';
+  const captionSettings = req.body?.caption_settings && typeof req.body.caption_settings === 'object'
+    ? req.body.caption_settings
+    : {};
   const token = `${sessionId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const outputPath = join(tmpdir(), `howl-render-${token}.mp4`);
   const subtitlePath = join(tmpdir(), `howl-render-${token}.srt`);
@@ -92,7 +114,7 @@ export default async function handler(req, res) {
     if (captions) {
       writeFileSync(subtitlePath, captions, 'utf8');
       const escapedPath = subtitlePath.replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'");
-      filterParts.push(`[vcut]subtitles='${escapedPath}':force_style='Fontname=Arial,Fontsize=18,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,BorderStyle=1,Outline=2,Shadow=0,Alignment=2,MarginV=40'[vout]`);
+      filterParts.push(`[vcut]subtitles='${escapedPath}':force_style='${subtitleStyle(captionSettings)}'[vout]`);
       videoMap = '[vout]';
     }
 

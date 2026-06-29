@@ -13,6 +13,10 @@ const DEFAULT_SETTINGS = {
   burnCaptions: true,
   autoCutSilences: true,
   captionStyle: 'pop',
+  captionPosition: 'bottom',
+  captionScale: 1,
+  captionDensity: 3,
+  captionEmphasis: 'active',
   showIntro: true,
   showOutro: true,
   variantIntent: 'direct_response',
@@ -34,6 +38,18 @@ const CAPTION_STYLES = [
   ['pop', 'Kinetic pop'],
   ['clean', 'Clean proof'],
   ['raw', 'Raw creator'],
+];
+
+const CAPTION_POSITIONS = [
+  ['bottom', 'Bottom safe'],
+  ['center', 'Center punch'],
+  ['top', 'Top hook'],
+];
+
+const CAPTION_EMPHASIS = [
+  ['active', 'Active word'],
+  ['block', 'Full block'],
+  ['none', 'No highlight'],
 ];
 
 const VARIANT_INTENTS = [
@@ -615,7 +631,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         captionsSrt = buildSrtFromWords(remapped);
       }
       setLogTail('Rendering and saving footage on the server...');
-      const data = await renderSession(activeSession.id, segments, captionsSrt);
+      const data = await renderSession(activeSession.id, segments, captionsSrt, settings);
       const url = data.url;
       setOutputUrl(url);
       setActiveSession(prev => prev ? {
@@ -822,7 +838,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       const captionsSrt = settings.burnCaptions
         ? buildSrtFromWords(remapWordsToOutput(nextKeptWords, nextSegments))
         : null;
-      const data = await renderSession(activeSession.id, nextSegments, captionsSrt);
+      const data = await renderSession(activeSession.id, nextSegments, captionsSrt, settings);
       setOutputUrl(data.url);
       setActiveSession(prev => prev ? { ...prev, rendered_url: data.url, status: 'rendered' } : prev);
       setSessions(prev => prev.map(session => session.id === activeSession.id ? { ...session, rendered_url: data.url, status: 'rendered' } : session));
@@ -927,6 +943,10 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     words: keptWords,
     showCaptions: settings.burnCaptions,
     captionStyle: settings.captionStyle || 'pop',
+    captionPosition: settings.captionPosition || 'bottom',
+    captionScale: Number(settings.captionScale || 1),
+    captionDensity: Number(settings.captionDensity || 3),
+    captionEmphasis: settings.captionEmphasis || 'active',
     showIntro: settings.showIntro,
     showOutro: settings.showOutro,
     intro: {
@@ -1390,6 +1410,42 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                 </select>
               </label>
               <label style={fieldLabel}>
+                Caption position
+                <select value={settings.captionPosition || 'bottom'} onChange={(e) => updateSetting('captionPosition', e.target.value)} style={selectStyle}>
+                  {CAPTION_POSITIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+              <label style={fieldLabel}>
+                Caption emphasis
+                <select value={settings.captionEmphasis || 'active'} onChange={(e) => updateSetting('captionEmphasis', e.target.value)} style={selectStyle}>
+                  {CAPTION_EMPHASIS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+              <label style={fieldLabel}>
+                Caption size <span>{Number(settings.captionScale || 1).toFixed(2)}x</span>
+                <input
+                  type="range"
+                  min="0.78"
+                  max="1.22"
+                  step="0.02"
+                  value={settings.captionScale || 1}
+                  onChange={(e) => updateSetting('captionScale', Number(e.target.value))}
+                  style={rangeStyle}
+                />
+              </label>
+              <label style={fieldLabel}>
+                Words per beat <span>{settings.captionDensity || 3}</span>
+                <input
+                  type="range"
+                  min="2"
+                  max="5"
+                  step="1"
+                  value={settings.captionDensity || 3}
+                  onChange={(e) => updateSetting('captionDensity', Number(e.target.value))}
+                  style={rangeStyle}
+                />
+              </label>
+              <label style={fieldLabel}>
                 Intro headline
                 <input value={settings.introTitle || ''} onChange={(e) => updateSetting('introTitle', e.target.value)} style={inputStyle} />
               </label>
@@ -1499,7 +1555,7 @@ async function requestCleanup(sessionId, options = {}) {
   return data;
 }
 
-async function renderSession(sessionId, segments, captionsSrt) {
+async function renderSession(sessionId, segments, captionsSrt, captionSettings = {}) {
   const response = await fetch('/api/render-ugc', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1507,6 +1563,7 @@ async function renderSession(sessionId, segments, captionsSrt) {
       session_id: sessionId,
       segments,
       captions_srt: captionsSrt,
+      caption_settings: captionSettings,
     }),
   });
   const data = await response.json();
@@ -2182,6 +2239,10 @@ const inputStyle = {
   border: '1px solid rgba(255,255,255,.13)',
   background: '#181818',
   color: '#f7efe2',
+};
+const rangeStyle = {
+  width: '100%',
+  accentColor: '#ff5a1f',
 };
 const outputPanel = {
   gridColumn: '1 / -1',

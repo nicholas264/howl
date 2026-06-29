@@ -58,6 +58,10 @@ export function buildRemotionInput({ session, segments, words, settings }) {
   const recipe = {
     burnCaptions: true,
     captionStyle: 'pop',
+    captionPosition: 'bottom',
+    captionScale: 1,
+    captionDensity: 3,
+    captionEmphasis: 'active',
     showIntro: true,
     showOutro: true,
     introTitle: 'HOWL',
@@ -72,6 +76,10 @@ export function buildRemotionInput({ session, segments, words, settings }) {
     words: keptWords,
     showCaptions: recipe.burnCaptions !== false,
     captionStyle: recipe.captionStyle || 'pop',
+    captionPosition: recipe.captionPosition || 'bottom',
+    captionScale: Number(recipe.captionScale || 1),
+    captionDensity: Number(recipe.captionDensity || 3),
+    captionEmphasis: recipe.captionEmphasis || 'active',
     showIntro: recipe.showIntro !== false,
     showOutro: recipe.showOutro !== false,
     intro: {

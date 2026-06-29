@@ -19,6 +19,10 @@ export function RemotionRoot() {
         words: [],
         showCaptions: true,
         captionStyle: 'pop',
+        captionPosition: 'bottom',
+        captionScale: 1,
+        captionDensity: 3,
+        captionEmphasis: 'active',
         showIntro: true,
         showOutro: true,
         intro: {
