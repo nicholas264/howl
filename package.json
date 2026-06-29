@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "verify:ugc-infra": "AUTH_DISABLED=true NODE_ENV=development node scripts/verify-ugc-infra.mjs",
     "remotion:policy:role": "remotion lambda policies role",
     "remotion:policy:user": "remotion lambda policies user",
     "remotion:policy:validate": "remotion lambda policies validate",
