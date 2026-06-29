@@ -167,6 +167,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   const autosaveTimer = useRef(null);
   const dirtyRef = useRef(false);
   const initialSessionLoadRef = useRef(null);
+  const renderPollBusyRef = useRef(false);
 
   // ── Load session list on mount ─────────────────────────────────────────────
   useEffect(() => {
@@ -303,6 +304,90 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       });
     return () => { active = false; };
   }, [activeSession?.id, videoUrl]);
+
+  useEffect(() => {
+    const attachedRender = activeSession?.settings?.remotion_render;
+    if (
+      !activeSession?.id ||
+      !remotionStatus.configured ||
+      !attachedRender?.render_id ||
+      outputUrl
+    ) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const pollLatestRender = async () => {
+      if (renderPollBusyRef.current) return;
+      renderPollBusyRef.current = true;
+      try {
+        const status = await getRemotionRenderStatus({ sessionId: activeSession.id });
+        if (cancelled) return;
+        setProgress(status.progress || 0);
+        if (status.done && status.output_file) {
+          const url = status.output_file;
+          setOutputUrl(url);
+          setActiveSession(prev => prev ? {
+            ...prev,
+            rendered_url: url,
+            status: 'rendered',
+            settings: {
+              ...(prev.settings || {}),
+              remotion_render: {
+                ...((prev.settings || {}).remotion_render || {}),
+                output_file: url,
+              },
+            },
+          } : prev);
+          setSessions(prev => prev.map(session => session.id === activeSession.id ? {
+            ...session,
+            rendered_url: url,
+            status: 'rendered',
+          } : session));
+          setVariantRenders(prev => mergeRenderHistory(prev, [{
+            id: status.render_id || url,
+            label: status.render_label || attachedRender.render_label || 'Polished ad',
+            status: 'done',
+            url,
+            renderId: status.render_id || null,
+            renderedAt: new Date().toISOString(),
+          }]));
+          setStage('done');
+          setPolishedRenderMessage(`${status.render_label || attachedRender.render_label || 'Latest Lambda render'} is ready.`);
+          refreshSessions();
+        } else {
+          const percent = Math.max(1, Math.round((status.progress || 0) * 100));
+          setStage('rendering');
+          setPolishedRenderMessage(`${status.render_label || attachedRender.render_label || 'Latest Lambda render'} is rendering in Lambda (${percent}%). You can leave this page; the session will pick it back up.`);
+          setVariantRenders(prev => mergeRenderHistory(prev, [{
+            id: status.render_id || attachedRender.render_id,
+            label: status.render_label || attachedRender.render_label || 'Polished ad',
+            status: `${percent}%`,
+            renderId: status.render_id || attachedRender.render_id,
+          }]));
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setPolishedRenderMessage(err.message || 'Could not check the attached Lambda render yet.');
+        }
+      } finally {
+        renderPollBusyRef.current = false;
+      }
+    };
+
+    pollLatestRender();
+    const interval = window.setInterval(pollLatestRender, 8000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [
+    activeSession?.id,
+    activeSession?.settings?.remotion_render?.render_id,
+    activeSession?.settings?.remotion_render?.render_label,
+    outputUrl,
+    remotionStatus.configured,
+  ]);
 
   const updateSetting = (key, value) => {
     setSettings(prev => ({ ...prev, [key]: value }));
@@ -1685,12 +1770,12 @@ function recipeToSettings(baseSettings, recipe) {
 function normalizeRenderHistory(history = []) {
   if (!Array.isArray(history)) return [];
   return history
-    .filter(item => item?.output_file || item?.url)
+    .filter(item => item?.output_file || item?.url || item?.render_id || item?.renderId || item?.id)
     .map(item => ({
-      id: item.render_id || item.output_file || item.url,
+      id: item.render_id || item.renderId || item.output_file || item.url || item.id,
       label: item.render_label || item.label || 'Polished ad',
-      status: 'done',
-      url: item.output_file || item.url,
+      status: item.status || (item.output_file || item.url ? 'done' : 'pending'),
+      url: item.output_file || item.url || null,
       renderId: item.render_id || item.renderId || null,
       renderedAt: item.rendered_at || item.renderedAt || null,
     }))
