@@ -471,7 +471,6 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
           setWords(nextWords);
           setDuration(nextDuration);
           setStage('ready');
-          setLogTail('Transcript ready. Review the cut map, then render a polished ad.');
           setSessions(prev => prev.map(item => item.id === session.id ? {
             ...item,
             status: 'transcribed',
@@ -479,6 +478,13 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
             word_count: nextWords.length,
           } : item));
           refreshSessions();
+          await prepareFirstCut({
+            sessionId: session.id,
+            sourceWords: nextWords,
+            sourceDuration: nextDuration,
+            skipPersist: true,
+            sourceLabel: 'Upload first cut',
+          });
         } catch (transcribeErr) {
           console.error(transcribeErr);
           setError(transcribeErr.message || 'Transcription failed');
@@ -732,6 +738,64 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         ? `${label}: ${remove.size} word${remove.size === 1 ? '' : 's'} cut. ${data.summary || 'Review the crossed-out transcript before rendering.'}`
         : (data.summary || `${label}: no safe cuts found.`),
     );
+  };
+
+  const prepareFirstCut = async ({
+    sessionId = activeSession?.id,
+    sourceWords = words,
+    sourceDuration = duration,
+    skipPersist = false,
+    sourceLabel = 'First cut',
+  } = {}) => {
+    if (!sessionId || !sourceWords.length) return;
+    setAiCleaning(true);
+    setError('');
+    setLogTail('Preparing a first-pass ad cut...');
+    const hook = makeHookText(sourceWords);
+    setSettings(prev => ({
+      ...prev,
+      variantIntent: 'direct_response',
+      captionStyle: 'pop',
+      captionPosition: prev.captionPosition || 'bottom',
+      captionEmphasis: 'active',
+      burnCaptions: true,
+      showIntro: true,
+      showOutro: true,
+      introTitle: hook.slice(0, 46) || 'Real heat. No smoke.',
+      introSubtitle: 'A fast proof-led UGC cut',
+      outroHeadline: 'Feel the heat.',
+      outroCta: prev.outroCta || 'howlcampfires.com',
+    }));
+    setVariantMessage('First cut recipe loaded: hook/proof angle, pop captions, intro card, and CTA outro.');
+    try {
+      if (!skipPersist) await persistSessionEdits();
+      const targetDuration = Number(sourceDuration || 0) > 35 ? 30 : 20;
+      const data = await requestCleanup(sessionId, {
+        mode: 'tighten',
+        targetDuration,
+        variantIntent: 'direct_response',
+      });
+      const remove = new Set(data.remove_indexes || []);
+      const nextWords = sourceWords.map((word, index) => (
+        remove.has(index) ? { ...word, kept: false } : { ...word, kept: word.kept !== false }
+      ));
+      setWords(nextWords);
+      setStage('ready');
+      setAiCleanupMessage(
+        remove.size
+          ? `${sourceLabel}: ${remove.size} word${remove.size === 1 ? '' : 's'} cut for a ${targetDuration}s proof-led ad. ${data.summary || 'Review before rendering.'}`
+          : `${sourceLabel}: recipe loaded. ${data.summary || 'No safe AI cuts found.'}`,
+      );
+      setLogTail('First cut ready. Review the crossed-out transcript, then render a polished ad.');
+    } catch (err) {
+      console.error(err);
+      setStage('ready');
+      setAiCleanupMessage(`${sourceLabel}: recipe loaded. AI tighten skipped: ${err.message || 'not available'}`);
+      setLogTail('Transcript ready. Review the cut map, then render a polished ad.');
+    } finally {
+      markDirty();
+      setAiCleaning(false);
+    }
   };
 
   const segments = useMemo(
@@ -1276,7 +1340,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                 checked={autoTranscribeUploads}
                 onChange={(event) => updateAutoTranscribeUploads(event.target.checked)}
               />
-              Auto-start transcript after upload
+              Auto-start transcript and first cut after upload
             </label>
           </section>
         )}
@@ -1493,6 +1557,9 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                     )}
                     <button onClick={autoEdit} style={secondaryBtn} disabled={autoEditing || !activeSession}>
                       {autoEditing ? 'Auto editing...' : 'Auto edit full ad'}
+                    </button>
+                    <button onClick={() => prepareFirstCut()} style={secondaryBtn} disabled={aiCleaning || !words.length || !activeSession}>
+                      {aiCleaning ? 'Preparing...' : 'Prepare first cut'}
                     </button>
                     <button onClick={suggestCleanup} style={secondaryBtn} disabled={aiCleaning || !words.length}>
                       {aiCleaning ? 'Reviewing...' : 'AI cleanup'}
@@ -1860,6 +1927,19 @@ function appendSettingRender(settings, item) {
     ...current,
     remotion_renders: [nextItem, ...withoutDuplicate].slice(0, 12),
   };
+}
+
+function makeHookText(words = []) {
+  const text = words
+    .filter(word => word?.word)
+    .slice(0, 12)
+    .map(word => String(word.word).trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .replace(/[.!?]+$/, '')
+    .trim();
+  return text || 'Real heat. No smoke.';
 }
 
 function delay(ms) {
