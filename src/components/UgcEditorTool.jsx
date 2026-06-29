@@ -7,6 +7,7 @@ import { UgcVideo, calcDurationInFrames } from '../remotion/UgcVideo';
 
 const SILENCE_THRESHOLD_S = 0.6;
 const AUTOSAVE_DEBOUNCE_MS = 1200;
+const UPLOAD_RECOVERY_KEY = 'howl_ugc_recoverable_uploads';
 
 const DEFAULT_SETTINGS = {
   burnCaptions: true,
@@ -40,6 +41,39 @@ const VARIANT_INTENTS = [
   ['testimonial', 'Testimonial'],
   ['demo', 'Product demo'],
   ['problem_solution', 'Problem/solution'],
+];
+
+const VARIANT_RECIPES = [
+  {
+    id: 'hook-proof',
+    label: 'Hook + proof',
+    intent: 'direct_response',
+    captionStyle: 'pop',
+    introTitle: 'Real heat. No smoke.',
+    introSubtitle: 'A fast proof-led UGC cut',
+    outroHeadline: 'Feel the heat.',
+    outroCta: 'howlcampfires.com',
+  },
+  {
+    id: 'testimonial',
+    label: 'Testimonial',
+    intent: 'testimonial',
+    captionStyle: 'clean',
+    introTitle: 'Creator tested',
+    introSubtitle: 'Keep the strongest credibility moments',
+    outroHeadline: 'Built for nights outside.',
+    outroCta: 'Shop HOWL',
+  },
+  {
+    id: 'demo',
+    label: 'Product demo',
+    intent: 'demo',
+    captionStyle: 'raw',
+    introTitle: 'See it in action',
+    introSubtitle: 'A simple product-first cut',
+    outroHeadline: 'Bring the fire anywhere.',
+    outroCta: 'howlcampfires.com',
+  },
 ];
 
 const PLAYBACK_ERROR = 'The browser could not play this source. Try reloading the session; if it still fails, re-upload as MP4/MOV so the server can proxy it.';
@@ -91,6 +125,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadMessage, setUploadMessage] = useState('');
   const [pendingUpload, setPendingUpload] = useState(null);
+  const [recoverableUploads, setRecoverableUploads] = useState([]);
   const [error, setError] = useState('');
   const [words, setWords] = useState([]);
   const [duration, setDuration] = useState(0);
@@ -102,6 +137,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   const [aiCleanupMessage, setAiCleanupMessage] = useState('');
   const [polishedRenderMessage, setPolishedRenderMessage] = useState('');
   const [remotionStatus, setRemotionStatus] = useState({ loading: true, configured: false, missing: [] });
+  const [variantMessage, setVariantMessage] = useState('');
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [sessionFilter, setSessionFilter] = useState('needs_edit');
   const videoRef = useRef(null);
@@ -110,7 +146,10 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   const initialSessionLoadRef = useRef(null);
 
   // ── Load session list on mount ─────────────────────────────────────────────
-  useEffect(() => { refreshSessions(); }, []);
+  useEffect(() => {
+    refreshSessions();
+    setRecoverableUploads(readRecoverableUploads());
+  }, []);
   useEffect(() => { refreshRemotionStatus(); }, []);
 
   async function refreshSessions() {
@@ -252,6 +291,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     setUploadProgress(0);
     setUploadMessage('Preparing local preview...');
     setPendingUpload(null);
+    setVariantMessage('');
 
     if (videoUrl && videoUrl.startsWith('blob:')) URL.revokeObjectURL(videoUrl);
     const localPreviewUrl = URL.createObjectURL(f);
@@ -272,12 +312,17 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         contentType: f.type,
       });
       uploadedBlobUrl = blob.url;
-      setPendingUpload({
+      const uploaded = {
+        id: `${Date.now()}-${f.name}`,
         video_url: blob.url,
         title: f.name,
         file_name: f.name,
         file_size: f.size,
-      });
+        created_at: new Date().toISOString(),
+      };
+      setPendingUpload(uploaded);
+      rememberRecoverableUpload(uploaded);
+      setRecoverableUploads(readRecoverableUploads());
 
       setUploadMessage('Saving editor session...');
       await createUploadedSession({
@@ -289,6 +334,8 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       setStage('uploaded');
       setUploadMessage('');
       setPendingUpload(null);
+      forgetRecoverableUpload(uploaded.video_url);
+      setRecoverableUploads(readRecoverableUploads());
     } catch (err) {
       console.error(err);
       setError(
@@ -322,15 +369,17 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     }
     setActiveSession(sessData.session);
     setSessions(prev => [sessData.session, ...prev.filter(session => session.id !== sessData.session.id)]);
+    forgetRecoverableUpload(video_url);
+    setRecoverableUploads(readRecoverableUploads());
     return sessData.session;
   };
 
-  const retrySaveSession = async () => {
-    if (!pendingUpload) return;
+  const retrySaveSession = async (uploadRecord = pendingUpload) => {
+    if (!uploadRecord) return;
     setError('');
     setUploadMessage('Saving editor session...');
     try {
-      await createUploadedSession(pendingUpload);
+      await createUploadedSession(uploadRecord);
       setPendingUpload(null);
       setStage('uploaded');
       setUploadMessage('');
@@ -341,6 +390,18 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   };
 
   const handleFile = (e) => acceptFile(e.target.files?.[0]);
+
+  const recoverUpload = async (uploadRecord) => {
+    if (!uploadRecord?.video_url) return;
+    setPendingUpload(uploadRecord);
+    setVideoUrl(uploadRecord.video_url);
+    setFile(null);
+    setActiveSession(null);
+    setWords([]);
+    setOutputUrl(null);
+    setStage('uploaded');
+    await retrySaveSession(uploadRecord);
+  };
 
   const [dragOver, setDragOver] = useState(false);
   const handleDrop = (e) => {
@@ -734,6 +795,45 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   const cutPercent = duration ? Math.max(0, Math.min(100, (cutDuration / duration) * 100)) : 0;
   const keepPercent = duration ? Math.max(0, Math.min(100, (keptDuration / duration) * 100)) : 0;
   const firstHook = keptWords.slice(0, 9).map(word => word.word).join(' ');
+  const uploadSteps = [
+    ['Preview', videoUrl ? 'done' : stage === 'uploading' ? 'active' : 'idle'],
+    ['Blob', activeSession || pendingUpload ? 'done' : stage === 'uploading' ? 'active' : 'idle'],
+    ['Session', activeSession ? 'done' : pendingUpload ? 'warning' : 'idle'],
+    ['Playback', playbackUrl ? 'done' : activeSession ? 'active' : 'idle'],
+  ];
+  const applyVariantRecipe = (recipe) => {
+    setSettings(prev => ({
+      ...prev,
+      variantIntent: recipe.intent,
+      captionStyle: recipe.captionStyle,
+      introTitle: recipe.introTitle,
+      introSubtitle: recipe.introSubtitle,
+      outroHeadline: recipe.outroHeadline,
+      outroCta: recipe.outroCta,
+      burnCaptions: true,
+      showIntro: true,
+      showOutro: true,
+    }));
+    setVariantMessage(`${recipe.label} recipe loaded. Preview it, then render the cut or polished ad.`);
+    markDirty();
+  };
+  const prepareVariantSet = () => {
+    const hook = firstHook ? firstHook.replace(/[.!?]+$/, '') : 'Real HOWL footage';
+    setSettings(prev => ({
+      ...prev,
+      variantIntent: 'direct_response',
+      captionStyle: 'pop',
+      introTitle: hook.slice(0, 46),
+      introSubtitle: 'Turn this source clip into three launch angles',
+      outroHeadline: 'Feel the heat.',
+      outroCta: 'howlcampfires.com',
+      burnCaptions: true,
+      showIntro: true,
+      showOutro: true,
+    }));
+    setVariantMessage('Variant set prepared: use the recipe cards to switch between hook, testimonial, and demo angles before rendering.');
+    markDirty();
+  };
 
   // ── Layout ─────────────────────────────────────────────────────────────────
   return (
@@ -845,6 +945,28 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
           </label>
         )}
 
+        {!videoUrl && recoverableUploads.length > 0 && (
+          <section style={recoverPanel}>
+            <div style={panelHead}>
+              <div>
+                <span style={eyebrow}>Recover uploads</span>
+                <strong>Blob uploads without editor sessions</strong>
+              </div>
+            </div>
+            <div style={recoverList}>
+              {recoverableUploads.map(uploadRecord => (
+                <div key={uploadRecord.video_url} style={recoverCard}>
+                  <div>
+                    <strong>{uploadRecord.file_name || uploadRecord.title || 'Recovered source'}</strong>
+                    <span>{uploadRecord.file_size ? `${(uploadRecord.file_size / 1024 / 1024).toFixed(1)} MB` : 'Stored in Blob'}</span>
+                  </div>
+                  <button onClick={() => recoverUpload(uploadRecord)} style={secondaryBtn}>Attach</button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {stage === 'uploading' && (
           <div style={{ ...statusBox, marginTop: 16 }}>
             {uploadMessage || 'Uploading to Vercel Blob...'} {Math.round(uploadProgress * 100)}%
@@ -863,6 +985,14 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                   <strong>{activeSession?.creator_name || activeSession?.source_label || 'Manual upload'}</strong>
                 </div>
                 <span style={statusPill}>{stage.replaceAll('_', ' ')}</span>
+              </div>
+              <div style={uploadHealth}>
+                {uploadSteps.map(([label, status]) => (
+                  <div key={label} style={{ ...uploadStep, ...(status === 'done' ? uploadStepDone : {}), ...(status === 'active' ? uploadStepActive : {}), ...(status === 'warning' ? uploadStepWarn : {}) }}>
+                    <i>{status === 'done' ? 'ok' : status === 'warning' ? '!' : '-'}</i>
+                    <span>{label}</span>
+                  </div>
+                ))}
               </div>
               <video
                 ref={videoRef}
@@ -1007,6 +1137,32 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                     <button onClick={resetWords} style={secondaryBtn}>Reset cuts</button>
                   </>
                 )}
+              </div>
+
+              <div style={variantPanel}>
+                <div style={panelHead}>
+                  <div>
+                    <span style={eyebrow}>Variant set</span>
+                    <strong>Turn this cut into multiple ad angles</strong>
+                  </div>
+                  <button onClick={prepareVariantSet} style={ghostBtn} disabled={!words.length}>Prep set</button>
+                </div>
+                <div style={variantGrid}>
+                  {VARIANT_RECIPES.map(recipe => (
+                    <button
+                      key={recipe.id}
+                      onClick={() => applyVariantRecipe(recipe)}
+                      style={{
+                        ...variantCard,
+                        ...(settings.variantIntent === recipe.intent && settings.captionStyle === recipe.captionStyle ? variantCardActive : {}),
+                      }}
+                    >
+                      <strong>{recipe.label}</strong>
+                      <span>{recipe.captionStyle} captions · {recipe.intent.replaceAll('_', ' ')}</span>
+                    </button>
+                  ))}
+                </div>
+                {variantMessage && <div style={statusBox}>{variantMessage}</div>}
               </div>
 
               <div style={controlGroup}>
@@ -1238,6 +1394,28 @@ function remapWordsToOutput(keptWords, segments) {
   return out;
 }
 
+function readRecoverableUploads() {
+  if (typeof window === 'undefined') return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(UPLOAD_RECOVERY_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed.slice(0, 6) : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberRecoverableUpload(uploadRecord) {
+  if (typeof window === 'undefined' || !uploadRecord?.video_url) return;
+  const existing = readRecoverableUploads().filter(item => item.video_url !== uploadRecord.video_url);
+  window.localStorage.setItem(UPLOAD_RECOVERY_KEY, JSON.stringify([uploadRecord, ...existing].slice(0, 6)));
+}
+
+function forgetRecoverableUpload(videoUrl) {
+  if (typeof window === 'undefined' || !videoUrl) return;
+  const next = readRecoverableUploads().filter(item => item.video_url !== videoUrl);
+  window.localStorage.setItem(UPLOAD_RECOVERY_KEY, JSON.stringify(next));
+}
+
 const shellStyle = {
   display: 'grid',
   gridTemplateColumns: '230px minmax(0, 1fr)',
@@ -1368,6 +1546,31 @@ const uploadBox = {
   minHeight: 260, border: '1px dashed rgba(255,255,255,.18)', borderRadius: 8, cursor: 'pointer',
   color: '#aaa29a', marginTop: 16, background: '#101010', textAlign: 'center', padding: 24,
 };
+const recoverPanel = {
+  display: 'grid',
+  gap: 10,
+  marginTop: 12,
+  padding: 14,
+  borderRadius: 8,
+  background: '#121212',
+  border: '1px solid rgba(255,106,42,.18)',
+};
+const recoverList = {
+  display: 'grid',
+  gap: 8,
+};
+const recoverCard = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr) auto',
+  gap: 10,
+  alignItems: 'center',
+  padding: 10,
+  borderRadius: 7,
+  background: '#0f0f0f',
+  border: '1px solid rgba(255,255,255,.08)',
+  color: '#aaa29a',
+  fontSize: 11,
+};
 const primaryBtn = {
   background: '#ff5a1f', color: '#100b08', border: 0, padding: '10px 14px',
   borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 800,
@@ -1412,6 +1615,38 @@ const sourceMeta = {
   gap: 4,
   color: '#aaa29a',
   fontSize: 11,
+};
+const uploadHealth = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+  gap: 5,
+};
+const uploadStep = {
+  display: 'grid',
+  gap: 3,
+  padding: 7,
+  borderRadius: 6,
+  background: '#0f0f0f',
+  border: '1px solid rgba(255,255,255,.08)',
+  color: '#736c64',
+  fontSize: 9,
+  textTransform: 'uppercase',
+  minWidth: 0,
+};
+const uploadStepDone = {
+  color: '#8de3a4',
+  borderColor: 'rgba(63,185,80,.24)',
+  background: 'rgba(63,185,80,.08)',
+};
+const uploadStepActive = {
+  color: '#ffbd9a',
+  borderColor: 'rgba(255,106,42,.28)',
+  background: 'rgba(255,106,42,.09)',
+};
+const uploadStepWarn = {
+  color: '#ffd08a',
+  borderColor: 'rgba(210,153,34,.3)',
+  background: 'rgba(210,153,34,.08)',
 };
 const errorBox = {
   padding: 11,
@@ -1532,6 +1767,37 @@ const controlGroup = {
   borderRadius: 7,
   background: '#0f0f0f',
   border: '1px solid rgba(255,255,255,.08)',
+};
+const variantPanel = {
+  gridColumn: '1 / -1',
+  display: 'grid',
+  gap: 10,
+  padding: 10,
+  borderRadius: 7,
+  background: '#0f0f0f',
+  border: '1px solid rgba(255,255,255,.08)',
+};
+const variantGrid = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gap: 8,
+};
+const variantCard = {
+  display: 'grid',
+  gap: 4,
+  textAlign: 'left',
+  padding: 10,
+  borderRadius: 7,
+  background: '#171717',
+  border: '1px solid rgba(255,255,255,.1)',
+  color: '#f7efe2',
+  cursor: 'pointer',
+  fontSize: 11,
+  minWidth: 0,
+};
+const variantCardActive = {
+  borderColor: 'rgba(255,106,42,.45)',
+  background: 'rgba(255,106,42,.12)',
 };
 const fieldLabel = {
   display: 'grid',
