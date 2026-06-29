@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { upload } from '@vercel/blob/client';
 import { useAuth } from '@clerk/clerk-react';
 import { Player } from '@remotion/player';
 import { buildSrtFromWords } from '../utils/ffmpegClient';
+import { uploadPublicBlob } from '../utils/blobUpload';
 import { UgcVideo, calcDurationInFrames } from '../remotion/UgcVideo';
 
 const SILENCE_THRESHOLD_S = 0.6;
@@ -420,12 +420,11 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     try {
       setUploadMessage('Uploading source to Blob...');
       const token = await getToken();
-      const blob = await upload(`ugc-source/${Date.now()}-${f.name}`, f, {
-        access: 'public',
-        handleUploadUrl: '/api/blob/upload-token',
+      const blob = await uploadPublicBlob(`ugc-source/${Date.now()}-${f.name}`, f, {
         clientPayload: token,
         onUploadProgress: (event) => {
           if (event?.total) setUploadProgress(event.loaded / event.total);
+          else if (typeof event?.percentage === 'number') setUploadProgress(event.percentage);
           else if (typeof event === 'number') setUploadProgress(event);
         },
         contentType: f.type,

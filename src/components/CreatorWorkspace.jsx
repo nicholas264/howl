@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Papa from 'papaparse';
-import { upload } from '@vercel/blob/client';
 import { useAuth } from '@clerk/clerk-react';
 import CreatorAcquisitionWorkspace from './CreatorAcquisitionWorkspace';
 import CreatorDataHealthWorkspace from './CreatorDataHealthWorkspace';
 import CreatorOperationsWorkspace from './CreatorOperationsWorkspace';
+import { uploadPublicBlob } from '../utils/blobUpload';
 
 const STAGES = [
   ['all', 'All'],
@@ -683,13 +683,12 @@ export default function CreatorWorkspace({
     setError('');
     try {
       const token = await getToken();
-      const blob = await upload(`creator-footage/${selected.id}/${Date.now()}-${file.name}`, file, {
-        access: 'public',
-        handleUploadUrl: '/api/blob/upload-token',
+      const blob = await uploadPublicBlob(`creator-footage/${selected.id}/${Date.now()}-${file.name}`, file, {
         clientPayload: token,
         contentType: file.type,
         onUploadProgress: event => {
           if (event?.total) setUploadProgress(Math.round((event.loaded / event.total) * 100));
+          else if (typeof event?.percentage === 'number') setUploadProgress(Math.round(event.percentage * 100));
         },
       });
       const deliverableResponse = await fetch('/api/creator-workflow', {

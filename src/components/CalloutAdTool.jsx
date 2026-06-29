@@ -1,8 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { upload } from '@vercel/blob/client';
 import { useAuth } from '@clerk/clerk-react';
 import { PRODUCTS } from '../data';
 import { COLORS, FONTS, BRAND_FONT_FILES, canvasFont, cssLetterSpacing, pxLetterSpacing, loadBrandFonts } from '../brand';
+import { uploadPublicBlob } from '../utils/blobUpload';
 
 async function fetchLayouts() {
   try {
@@ -173,9 +173,7 @@ async function fetchLayout(id) {
 
 async function uploadCalloutImage(blob, productId, token) {
   const fileName = `callout-${productId || 'img'}-${Date.now()}.jpg`;
-  const blobRes = await upload(`callout-photos/${fileName}`, blob, {
-    access: 'public',
-    handleUploadUrl: '/api/blob/upload-token',
+  const blobRes = await uploadPublicBlob(`callout-photos/${fileName}`, blob, {
     clientPayload: token,
     contentType: blob.type || 'image/jpeg',
   });

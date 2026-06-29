@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { upload } from '@vercel/blob/client';
+import { uploadPublicBlob } from '../utils/blobUpload';
 
 export default function CreatorSubmissionPage() {
   const token = new URLSearchParams(window.location.search).get('token') || '';
@@ -41,16 +41,16 @@ export default function CreatorSubmissionPage() {
     setProgress(0);
     let blob = null;
     try {
-      blob = await upload(
+      blob = await uploadPublicBlob(
         `creator-submissions/${submission.id}/${Date.now()}-${file.name}`,
         file,
         {
-          access: 'public',
           handleUploadUrl: '/api/blob/creator-upload-token',
           clientPayload: token,
           contentType: file.type,
           onUploadProgress: event => {
             if (event?.total) setProgress(Math.round((event.loaded / event.total) * 100));
+            else if (typeof event?.percentage === 'number') setProgress(Math.round(event.percentage * 100));
           },
         },
       );

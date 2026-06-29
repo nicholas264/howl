@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import ffmpegPath from 'ffmpeg-static';
-import { put } from '@vercel/blob';
+import { del } from '@vercel/blob';
 
+import uploadTokenHandler from '../api/blob/upload-token.js';
 import sessionHandler from '../api/db/ugc-sessions.js';
 import sourceHandler from '../api/ugc-source.js';
 
@@ -25,6 +26,7 @@ const runId = Date.now();
 const tempDir = await mkdtemp(path.join(tmpdir(), 'howl-ugc-infra-'));
 const videoPath = path.join(tempDir, 'source.mp4');
 let createdSessionId = null;
+let uploadedBlobUrl = null;
 
 try {
   await cleanupVerificationSessions();
@@ -44,10 +46,9 @@ try {
   ]);
 
   const sourceBytes = await readFile(videoPath);
-  const blob = await put(`ugc-verification/${runId}-source.mp4`, sourceBytes, {
-    access: 'public',
-    contentType: 'video/mp4',
-  });
+  const pathname = `ugc-verification/${runId}-source.mp4`;
+  const blob = await uploadViaClientToken(pathname, sourceBytes, 'video/mp4');
+  uploadedBlobUrl = blob.url;
 
   const created = await callJson(sessionHandler, {
     method: 'POST',
@@ -55,7 +56,7 @@ try {
       title: `UGC infra verification ${runId}`,
       file_name: `ugc-infra-${runId}.mp4`,
       file_size: sourceBytes.length,
-      video_url: blob.url,
+      video_url: uploadedBlobUrl,
       duration: 1.6,
       words: [],
       settings: { verification: true },
@@ -70,7 +71,7 @@ try {
     method: 'GET',
     query: { id: createdSessionId },
   });
-  assertEqual(fetched.jsonBody.session.video_url, blob.url, 'session video_url persisted');
+  assertEqual(fetched.jsonBody.session.video_url, uploadedBlobUrl, 'session video_url persisted');
   assertEqual(fetched.jsonBody.session.status, 'uploaded', 'session status persisted');
 
   const sourceHead = await callRaw(sourceHandler, {
@@ -100,10 +101,11 @@ try {
     query: { id: createdSessionId },
   });
   createdSessionId = null;
+  uploadedBlobUrl = null;
 
   console.log(JSON.stringify({
     ok: true,
-    blob_url: blob.url,
+    blob_url: uploadedBlobUrl || blob.url,
     source_content_type: sourceHead.headers['content-type'],
     range_bytes: sourceRange.byteLength,
   }, null, 2));
@@ -114,7 +116,42 @@ try {
       query: { id: createdSessionId },
     }).catch(err => console.error(`cleanup failed for session ${createdSessionId}:`, err.message));
   }
+  if (uploadedBlobUrl) {
+    await del(uploadedBlobUrl).catch(err => console.error(`cleanup failed for blob ${uploadedBlobUrl}:`, err.message));
+  }
   await rm(tempDir, { recursive: true, force: true });
+}
+
+async function uploadViaClientToken(pathname, bytes, contentType) {
+  const tokenResponse = await callJson(uploadTokenHandler, {
+    method: 'POST',
+    body: {
+      type: 'blob.generate-client-token',
+      payload: {
+        pathname,
+        clientPayload: 'local-dev-token',
+        multipart: false,
+      },
+    },
+  });
+  const clientToken = tokenResponse.jsonBody.clientToken;
+  if (!clientToken) throw new Error('upload-token did not return clientToken');
+
+  const putRes = await fetch(`https://blob.vercel-storage.com/?pathname=${encodeURIComponent(pathname)}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${clientToken}`,
+      'x-api-version': '12',
+      'x-vercel-blob-access': 'public',
+      'x-content-type': contentType,
+    },
+    body: bytes,
+  });
+  if (!putRes.ok) {
+    const text = await putRes.text().catch(() => '');
+    throw new Error(`client-token Blob PUT failed (${putRes.status}): ${text.slice(0, 300)}`);
+  }
+  return putRes.json();
 }
 
 async function cleanupVerificationSessions() {
