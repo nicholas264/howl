@@ -8,6 +8,7 @@ import { UgcVideo, calcDurationInFrames } from '../remotion/UgcVideo';
 const SILENCE_THRESHOLD_S = 0.6;
 const AUTOSAVE_DEBOUNCE_MS = 1200;
 const UPLOAD_RECOVERY_KEY = 'howl_ugc_recoverable_uploads';
+const UPLOAD_AUTOTRANSCRIBE_KEY = 'howl_ugc_auto_transcribe_uploads';
 
 const DEFAULT_SETTINGS = {
   burnCaptions: true,
@@ -148,6 +149,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   const [uploadMessage, setUploadMessage] = useState('');
   const [pendingUpload, setPendingUpload] = useState(null);
   const [recoverableUploads, setRecoverableUploads] = useState([]);
+  const [autoTranscribeUploads, setAutoTranscribeUploads] = useState(readAutoTranscribeUploads);
   const [error, setError] = useState('');
   const [words, setWords] = useState([]);
   const [duration, setDuration] = useState(0);
@@ -394,6 +396,13 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     markDirty();
   };
 
+  const updateAutoTranscribeUploads = (value) => {
+    setAutoTranscribeUploads(value);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(UPLOAD_AUTOTRANSCRIBE_KEY, value ? 'true' : 'false');
+    }
+  };
+
   // ── New upload ────────────────────────────────────────────────────────────
   const acceptFile = async (f) => {
     if (!f) return;
@@ -443,17 +452,43 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       setRecoverableUploads(readRecoverableUploads());
 
       setUploadMessage('Saving editor session...');
-      await createUploadedSession({
+      const session = await createUploadedSession({
         video_url: blob.url,
         title: f.name,
         file_name: f.name,
         file_size: f.size,
       });
-      setStage('uploaded');
       setUploadMessage('');
       setPendingUpload(null);
       forgetRecoverableUpload(uploaded.video_url);
       setRecoverableUploads(readRecoverableUploads());
+
+      if (autoTranscribeUploads) {
+        setStage('transcribing');
+        setLogTail('Upload saved. Extracting audio and building word-level captions...');
+        try {
+          const { words: nextWords, duration: nextDuration } = await transcribeSession(session.id);
+          setWords(nextWords);
+          setDuration(nextDuration);
+          setStage('ready');
+          setLogTail('Transcript ready. Review the cut map, then render a polished ad.');
+          setSessions(prev => prev.map(item => item.id === session.id ? {
+            ...item,
+            status: 'transcribed',
+            duration: nextDuration,
+            word_count: nextWords.length,
+          } : item));
+          refreshSessions();
+        } catch (transcribeErr) {
+          console.error(transcribeErr);
+          setError(transcribeErr.message || 'Transcription failed');
+          setStage('uploaded');
+          setLogTail('Upload is saved. Transcription failed, but you can retry with Transcribe only.');
+        }
+      } else {
+        setStage('uploaded');
+        setLogTail('Upload saved. Start transcription when you are ready.');
+      }
     } catch (err) {
       console.error(err);
       setError(
@@ -1222,18 +1257,28 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         </section>
 
         {!videoUrl && stage !== 'uploading' && (
-          <label
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            style={{ ...uploadBox, borderColor: dragOver ? '#ff6a2a' : 'rgba(255,255,255,.18)', background: dragOver ? 'rgba(255,106,42,.12)' : '#101010' }}
-          >
-            <input type="file" accept="video/*" onChange={handleFile} style={{ display: 'none' }} />
-            <div>
-              <strong>Drop creator footage</strong>
-              <span>MP4, MOV, or WebM. We’ll store the source, transcribe it, and build an editable ad recipe.</span>
-            </div>
-          </label>
+          <section>
+            <label
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              style={{ ...uploadBox, borderColor: dragOver ? '#ff6a2a' : 'rgba(255,255,255,.18)', background: dragOver ? 'rgba(255,106,42,.12)' : '#101010' }}
+            >
+              <input type="file" accept="video/*" onChange={handleFile} style={{ display: 'none' }} />
+              <div>
+                <strong>Drop creator footage</strong>
+                <span>MP4, MOV, or WebM. We’ll store the source, transcribe it, and build an editable ad recipe.</span>
+              </div>
+            </label>
+            <label style={{ ...checkboxRow, marginTop: 10, maxWidth: 420 }}>
+              <input
+                type="checkbox"
+                checked={autoTranscribeUploads}
+                onChange={(event) => updateAutoTranscribeUploads(event.target.checked)}
+              />
+              Auto-start transcript after upload
+            </label>
+          </section>
         )}
 
         {!videoUrl && recoverableUploads.length > 0 && (
@@ -1258,11 +1303,13 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
           </section>
         )}
 
-        {stage === 'uploading' && (
+        {(stage === 'uploading' || stage === 'transcribing') && (
           <div style={{ ...statusBox, marginTop: 16 }}>
-            {uploadMessage || 'Uploading to Vercel Blob...'} {Math.round(uploadProgress * 100)}%
+            {stage === 'transcribing'
+              ? (logTail || 'Extracting audio and building word-level captions...')
+              : `${uploadMessage || 'Uploading to Vercel Blob...'} ${Math.round(uploadProgress * 100)}%`}
             <div style={{ height: 4, background: '#dedbd3', borderRadius: 2, marginTop: 8, overflow: 'hidden' }}>
-              <div style={{ width: `${uploadProgress * 100}%`, height: '100%', background: '#d84a17' }} />
+              <div style={{ width: `${stage === 'transcribing' ? 100 : uploadProgress * 100}%`, height: '100%', background: '#d84a17' }} />
             </div>
           </div>
         )}
@@ -1895,6 +1942,11 @@ function forgetRecoverableUpload(videoUrl) {
   if (typeof window === 'undefined' || !videoUrl) return;
   const next = readRecoverableUploads().filter(item => item.video_url !== videoUrl);
   window.localStorage.setItem(UPLOAD_RECOVERY_KEY, JSON.stringify(next));
+}
+
+function readAutoTranscribeUploads() {
+  if (typeof window === 'undefined') return true;
+  return window.localStorage.getItem(UPLOAD_AUTOTRANSCRIBE_KEY) !== 'false';
 }
 
 const shellStyle = {
