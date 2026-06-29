@@ -514,6 +514,31 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     markDirty();
   };
 
+  const cutSegment = (segment) => {
+    setWords(prev => prev.map(word => (
+      wordInSegment(word, segment) ? { ...word, kept: false } : word
+    )));
+    setAiCleanupMessage(`Cut ${segmentLabel(segment)} from the edit.`);
+    markDirty();
+  };
+
+  const soloSegment = (segment) => {
+    setWords(prev => prev.map(word => ({
+      ...word,
+      kept: wordInSegment(word, segment),
+    })));
+    setAiCleanupMessage(`Soloed ${segmentLabel(segment)}. Reset cuts to restore the full transcript.`);
+    markDirty();
+  };
+
+  const restoreSegment = (segment) => {
+    setWords(prev => prev.map(word => (
+      wordNearSegment(word, segment) ? { ...word, kept: true } : word
+    )));
+    setAiCleanupMessage(`Restored words around ${segmentLabel(segment)}.`);
+    markDirty();
+  };
+
   const resetWords = () => {
     setWords(prev => prev.map(w => ({ ...w, kept: true })));
     setAiCleanupMessage('');
@@ -1177,6 +1202,21 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                     );
                   }) : <span style={timelineEmpty}>Transcribe to build the cut map</span>}
                 </div>
+                {segments.length > 0 && (
+                  <div style={segmentEditor}>
+                    {segments.map((segment, index) => (
+                      <div key={`${segment.start}-${segment.end}-${index}-controls`} style={segmentRow}>
+                        <button onClick={() => seekTo(segment.start)} style={segmentTimeBtn}>
+                          {index + 1}. {segmentLabel(segment)}
+                        </button>
+                        <span>{segmentWordCount(words, segment)} words</span>
+                        <button onClick={() => cutSegment(segment)} style={miniBtn}>Cut</button>
+                        <button onClick={() => soloSegment(segment)} style={miniBtn}>Solo</button>
+                        <button onClick={() => restoreSegment(segment)} style={miniBtn}>Restore</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div style={metricGrid}>
                   <div style={metricCard}><span>Segments</span><strong>{segments.length}</strong></div>
                   <div style={metricCard}><span>Words kept</span><strong>{words.length ? `${keptWords.length}/${words.length}` : '-'}</strong></div>
@@ -1617,6 +1657,22 @@ function buildSegments(words, duration, autoCutSilences) {
   return segs.map(s => ({ start: s.start, end: Math.min(duration || s.end, s.end) }));
 }
 
+function wordInSegment(word, segment) {
+  return Number(word.start) >= segment.start - 0.08 && Number(word.end || word.start) <= segment.end + 0.08;
+}
+
+function wordNearSegment(word, segment) {
+  return Number(word.start) >= segment.start - 0.35 && Number(word.start) <= segment.end + 0.35;
+}
+
+function segmentWordCount(words, segment) {
+  return words.filter(word => wordInSegment(word, segment)).length;
+}
+
+function segmentLabel(segment) {
+  return `${Number(segment.start || 0).toFixed(1)}-${Number(segment.end || 0).toFixed(1)}s`;
+}
+
 function remapWordsToOutput(keptWords, segments) {
   const out = [];
   let offset = 0;
@@ -1966,6 +2022,47 @@ const timelineEmpty = {
   height: '100%',
   color: '#736c64',
   fontSize: 12,
+};
+const segmentEditor = {
+  display: 'grid',
+  gap: 6,
+  maxHeight: 150,
+  overflowY: 'auto',
+};
+const segmentRow = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(95px, 1fr) auto auto auto auto',
+  gap: 6,
+  alignItems: 'center',
+  padding: 7,
+  borderRadius: 6,
+  background: '#0f0f0f',
+  border: '1px solid rgba(255,255,255,.08)',
+  color: '#aaa29a',
+  fontSize: 10,
+  minWidth: 0,
+};
+const segmentTimeBtn = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  textAlign: 'left',
+  background: 'transparent',
+  border: 0,
+  color: '#f7efe2',
+  cursor: 'pointer',
+  fontWeight: 800,
+  fontSize: 10,
+};
+const miniBtn = {
+  background: '#191919',
+  color: '#f7efe2',
+  border: '1px solid rgba(255,255,255,.12)',
+  padding: '5px 7px',
+  borderRadius: 5,
+  cursor: 'pointer',
+  fontSize: 10,
 };
 const metricGrid = {
   display: 'grid',
