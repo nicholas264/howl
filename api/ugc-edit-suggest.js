@@ -10,6 +10,33 @@ function parseJson(value) {
   return JSON.parse(value.replace(/```json|```/g, '').trim());
 }
 
+function editBrief(mode, targetDuration, variantIntent) {
+  const target = Number(targetDuration || 0);
+  const targetLine = target > 0
+    ? `Aim for roughly ${target} seconds of kept dialogue if the transcript has enough useful material.`
+    : 'Keep the strongest usable ad dialogue without forcing an arbitrary length.';
+  const angleLine = variantIntent
+    ? `Prioritize a ${String(variantIntent).replaceAll('_', ' ')} ad angle.`
+    : 'Prioritize the strongest direct-response ad angle.';
+  if (mode === 'tighten') {
+    return `${targetLine}
+Remove repeated setup, soft qualifiers, long pivots, weak asides, and any sentence that does not help the ad move faster.
+Preserve the clearest hook, product proof, objection handling, and CTA.`;
+  }
+  if (mode === 'punchy') {
+    return `${targetLine}
+Build a punchy short-form cut: keep the strongest opening claim, vivid product moments, emotional proof, and a clean CTA.
+Remove slow preamble, meandering context, hedging, and anything that delays the first concrete benefit.`;
+  }
+  if (mode === 'variant') {
+    return `${targetLine}
+${angleLine}
+Keep only words that support that angle. Remove good-but-off-angle sections if they weaken the variant.`;
+  }
+  return `Remove only clear filler words, repeated false starts, accidental duplicate phrases, and abandoned takes.
+Never remove product claims, proof, transitions, objections, offers, calls to action, or words needed for grammatical meaning.`;
+}
+
 export default async function handler(req, res) {
   const access = await requirePermission(req, res, 'assets.write');
   if (!access) return;
@@ -19,6 +46,11 @@ export default async function handler(req, res) {
   }
 
   const sessionId = Number(req.body?.session_id);
+  const mode = ['cleanup', 'tighten', 'punchy', 'variant'].includes(req.body?.mode)
+    ? req.body.mode
+    : 'cleanup';
+  const targetDuration = Number(req.body?.target_duration || 0);
+  const variantIntent = req.body?.variant_intent || '';
   if (!sessionId) return res.status(400).json({ error: 'session_id required' });
   const { sql } = access;
 
@@ -38,8 +70,13 @@ export default async function handler(req, res) {
     }
 
     const indexedTranscript = words
-      .map((word, index) => `${index}: ${(word.word || '').toString().trim()}`)
+      .map((word, index) => {
+        const start = Number(word.start || 0).toFixed(2);
+        const end = Number(word.end || word.start || 0).toFixed(2);
+        return `${index} [${start}-${end}s]: ${(word.word || '').toString().trim()}`;
+      })
       .join('\n');
+    const instruction = editBrief(mode, targetDuration, variantIntent);
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -51,15 +88,21 @@ export default async function handler(req, res) {
         model: 'claude-sonnet-4-6',
         max_tokens: 1600,
         temperature: 0,
-        system: `You are a conservative dialogue editor for direct-response UGC.
-Remove only clear filler words, repeated false starts, accidental duplicate phrases, and abandoned takes.
-Never remove product claims, proof, transitions, objections, offers, calls to action, or words needed for grammatical meaning.
+        system: `You are an expert direct-response UGC dialogue editor.
+You receive an indexed word transcript with timestamps and return the exact word indexes to remove.
+Never invent words or rewrite the transcript.
+Keep speech grammatical by preserving all required connector words when a sentence remains.
 The editor will show every proposed cut to a human before rendering.
 Return only valid JSON with:
-{"remove_indexes":[integer],"summary":"one short sentence"}`,
+{"remove_indexes":[integer],"summary":"one short sentence","editor_note":"one short phrase naming the cut strategy"}`,
         messages: [{
           role: 'user',
-          content: `Review this indexed word transcript. Return exact word indexes that can be removed without changing meaning.\n\n${indexedTranscript}`,
+          content: `Edit mode: ${mode}
+${instruction}
+
+Return remove_indexes only. The kept words should play as a coherent UGC ad.
+
+${indexedTranscript}`,
         }],
       }),
     });
@@ -84,8 +127,12 @@ Return only valid JSON with:
     `;
     return res.json({
       ok: true,
+      mode,
+      target_duration: targetDuration || null,
+      variant_intent: variantIntent || null,
       remove_indexes: removeIndexes,
       summary: (parsed.summary || '').toString().slice(0, 300),
+      editor_note: (parsed.editor_note || '').toString().slice(0, 160),
     });
   } catch (err) {
     return res.status(500).json({ error: err.message || 'AI cleanup failed' });

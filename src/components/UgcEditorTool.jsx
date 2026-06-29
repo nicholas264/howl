@@ -76,6 +76,12 @@ const VARIANT_RECIPES = [
   },
 ];
 
+const EDIT_PRESETS = [
+  { id: 'tighten20', label: 'Tighten 20s', mode: 'tighten', targetDuration: 20 },
+  { id: 'punchy15', label: 'Punchy 15s', mode: 'punchy', targetDuration: 15 },
+  { id: 'angle30', label: 'Angle 30s', mode: 'variant', targetDuration: 30 },
+];
+
 const PLAYBACK_ERROR = 'The browser could not play this source. Try reloading the session; if it still fails, re-upload as MP4/MOV so the server can proxy it.';
 
 const SESSION_FILTERS = [
@@ -138,6 +144,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   const [polishedRenderMessage, setPolishedRenderMessage] = useState('');
   const [remotionStatus, setRemotionStatus] = useState({ loading: true, configured: false, missing: [] });
   const [variantMessage, setVariantMessage] = useState('');
+  const [variantRenders, setVariantRenders] = useState([]);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [sessionFilter, setSessionFilter] = useState('needs_edit');
   const videoRef = useRef(null);
@@ -210,6 +217,17 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   }, [words, settings, duration, activeSession]);
 
   const markDirty = () => { dirtyRef.current = true; };
+
+  const persistSessionEdits = async () => {
+    if (!activeSession) return;
+    const response = await fetch(`/api/db/ugc-sessions?id=${activeSession.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ words, settings, duration }),
+    });
+    if (!response.ok) throw new Error('Could not save current transcript before AI edit');
+    dirtyRef.current = false;
+  };
 
   const sessionStats = useMemo(() => sessions.reduce((stats, session) => {
     stats.all += 1;
@@ -506,22 +524,47 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     setError('');
     setAiCleanupMessage('');
     try {
-      const data = await requestCleanup(activeSession.id);
-      const remove = new Set(data.remove_indexes || []);
-      setWords(prev => prev.map((word, index) => (
-        remove.has(index) ? { ...word, kept: false } : word
-      )));
-      markDirty();
-      setAiCleanupMessage(
-        remove.size
-          ? `${remove.size} word${remove.size === 1 ? '' : 's'} proposed for removal. Review the crossed-out transcript before rendering.`
-          : (data.summary || 'No safe cleanup cuts found.'),
-      );
+      await persistSessionEdits();
+      const data = await requestCleanup(activeSession.id, { mode: 'cleanup' });
+      applyEditSuggestion(data, 'AI cleanup');
     } catch (err) {
       setError(err.message || 'AI cleanup failed');
     } finally {
       setAiCleaning(false);
     }
+  };
+
+  const suggestEditPreset = async (preset) => {
+    if (!activeSession || !words.length) return;
+    setAiCleaning(true);
+    setError('');
+    setAiCleanupMessage('');
+    try {
+      await persistSessionEdits();
+      const data = await requestCleanup(activeSession.id, {
+        mode: preset.mode,
+        targetDuration: preset.targetDuration,
+        variantIntent: settings.variantIntent,
+      });
+      applyEditSuggestion(data, preset.label);
+    } catch (err) {
+      setError(err.message || `${preset.label} failed`);
+    } finally {
+      setAiCleaning(false);
+    }
+  };
+
+  const applyEditSuggestion = (data, label) => {
+    const remove = new Set(data.remove_indexes || []);
+    setWords(prev => prev.map((word, index) => (
+      remove.has(index) ? { ...word, kept: false } : word
+    )));
+    markDirty();
+    setAiCleanupMessage(
+      remove.size
+        ? `${label}: ${remove.size} word${remove.size === 1 ? '' : 's'} cut. ${data.summary || 'Review the crossed-out transcript before rendering.'}`
+        : (data.summary || `${label}: no safe cuts found.`),
+    );
   };
 
   const segments = useMemo(
@@ -575,55 +618,54 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     }
   };
 
-  const renderPolishedAd = async () => {
+  const renderPolishedAd = async (options = {}) => {
     if (!segments.length || !activeSession) return;
+    const renderSettings = options.settings || settings;
+    const renderLabel = options.label || 'Polished Remotion ad';
     setStage('rendering');
     setProgress(0);
     setError('');
     setOutputUrl(null);
     setPolishedRenderMessage('');
-    setLogTail('Starting Remotion Lambda render...');
+    setLogTail(`Starting ${renderLabel} render...`);
     try {
       const start = await startRemotionRender({
         sessionId: activeSession.id,
         segments,
         words,
-        settings,
+        settings: renderSettings,
       });
-      setPolishedRenderMessage(`Remotion render started: ${start.render_id}`);
-      for (let attempt = 0; attempt < 120; attempt++) {
-        await delay(3000);
-        const status = await getRemotionRenderStatus({
-          sessionId: activeSession.id,
-          renderId: start.render_id,
-          bucketName: start.bucket_name,
-          functionName: start.function_name,
-          region: start.region,
-        });
-        setProgress(status.progress || 0);
-        setLogTail(status.costs?.displayCost ? `Rendering on Lambda · ${status.costs.displayCost}` : 'Rendering on Lambda...');
-        if (status.done && status.output_file) {
-          const url = status.output_file;
-          setOutputUrl(url);
-          setActiveSession(prev => prev ? {
-            ...prev,
-            rendered_url: url,
-            status: 'rendered',
-          } : prev);
-          setSessions(prev => prev.map(session => session.id === activeSession.id ? {
-            ...session,
-            rendered_url: url,
-            status: 'rendered',
-          } : session));
-          setProgress(1);
-          setStage('done');
-          setPolishedRenderMessage('Polished Remotion ad rendered.');
-          refreshSessions();
-          return;
-        }
+      setPolishedRenderMessage(`${renderLabel} started: ${start.render_id}`);
+      const status = await waitForRemotionRender({
+        sessionId: activeSession.id,
+        start,
+        onProgress: (nextStatus) => {
+          setProgress(nextStatus.progress || 0);
+          setLogTail(nextStatus.costs?.displayCost ? `Rendering on Lambda · ${nextStatus.costs.displayCost}` : 'Rendering on Lambda...');
+        },
+      });
+      if (status.done && status.output_file) {
+        const url = status.output_file;
+        setOutputUrl(url);
+        setActiveSession(prev => prev ? {
+          ...prev,
+          rendered_url: url,
+          status: 'rendered',
+        } : prev);
+        setSessions(prev => prev.map(session => session.id === activeSession.id ? {
+          ...session,
+          rendered_url: url,
+          status: 'rendered',
+        } : session));
+        setProgress(1);
+        setStage('done');
+        setPolishedRenderMessage(`${renderLabel} rendered.`);
+        refreshSessions();
+        return url;
       }
       setStage('ready');
       setPolishedRenderMessage('Render is still running. Try the polished render status again in a moment.');
+      return null;
     } catch (err) {
       console.error(err);
       if (err.setupRequired) {
@@ -631,6 +673,54 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       } else {
         setError(err.message || 'Polished Remotion render failed');
       }
+      setStage(words.length ? 'ready' : 'uploaded');
+      return null;
+    }
+  };
+
+  const renderVariantSet = async () => {
+    if (!segments.length || !activeSession || !remotionStatus.configured) return;
+    setVariantRenders([]);
+    setVariantMessage('Rendering three polished variants. Keep this tab open while Lambda finishes each cut.');
+    setError('');
+    setStage('rendering');
+    try {
+      for (const recipe of VARIANT_RECIPES) {
+        const renderSettings = recipeToSettings(settings, recipe);
+        setVariantRenders(prev => [...prev, { id: recipe.id, label: recipe.label, status: 'rendering' }]);
+        setLogTail(`Rendering ${recipe.label} variant on Lambda...`);
+        const start = await startRemotionRender({
+          sessionId: activeSession.id,
+          segments,
+          words,
+          settings: renderSettings,
+        });
+        const status = await waitForRemotionRender({
+          sessionId: activeSession.id,
+          start,
+          onProgress: (nextStatus) => {
+            setProgress(nextStatus.progress || 0);
+            setLogTail(nextStatus.costs?.displayCost ? `${recipe.label} · ${nextStatus.costs.displayCost}` : `Rendering ${recipe.label}...`);
+          },
+        });
+        const outputFile = status.output_file || null;
+        setVariantRenders(prev => prev.map(item => (
+          item.id === recipe.id
+            ? { ...item, status: outputFile ? 'done' : 'pending', url: outputFile, renderId: start.render_id }
+            : item
+        )));
+        if (outputFile) {
+          setOutputUrl(outputFile);
+          setActiveSession(prev => prev ? { ...prev, rendered_url: outputFile, status: 'rendered' } : prev);
+        }
+      }
+      setProgress(1);
+      setStage('done');
+      setVariantMessage('Variant set rendered. Review the finished links below and send the winner to Launcher.');
+      refreshSessions();
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'Variant set render failed');
       setStage(words.length ? 'ready' : 'uploaded');
     }
   };
@@ -1128,12 +1218,27 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                         Render polished ad
                       </button>
                     )}
+                    {remotionStatus.configured && (
+                      <button onClick={renderVariantSet} style={secondaryBtn} disabled={!segments.length || stage === 'rendering' || !activeSession}>
+                        Render 3 variants
+                      </button>
+                    )}
                     <button onClick={autoEdit} style={secondaryBtn} disabled={autoEditing || !activeSession}>
                       {autoEditing ? 'Auto editing...' : 'Auto edit full ad'}
                     </button>
                     <button onClick={suggestCleanup} style={secondaryBtn} disabled={aiCleaning || !words.length}>
                       {aiCleaning ? 'Reviewing...' : 'AI cleanup'}
                     </button>
+                    {EDIT_PRESETS.map(preset => (
+                      <button
+                        key={preset.id}
+                        onClick={() => suggestEditPreset(preset)}
+                        style={secondaryBtn}
+                        disabled={aiCleaning || !words.length}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
                     <button onClick={resetWords} style={secondaryBtn}>Reset cuts</button>
                   </>
                 )}
@@ -1163,6 +1268,20 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                   ))}
                 </div>
                 {variantMessage && <div style={statusBox}>{variantMessage}</div>}
+                {variantRenders.length > 0 && (
+                  <div style={variantResults}>
+                    {variantRenders.map(item => (
+                      <div key={item.id} style={variantResultRow}>
+                        <span>{item.label}</span>
+                        {item.url ? (
+                          <a href={item.url} target="_blank" rel="noreferrer" style={resultLink}>Open</a>
+                        ) : (
+                          <strong>{item.status}</strong>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div style={controlGroup}>
@@ -1290,11 +1409,16 @@ async function transcribeSession(sessionId) {
   return { words: ws, duration: data.duration || (ws.length ? ws[ws.length - 1].end : 0) };
 }
 
-async function requestCleanup(sessionId) {
+async function requestCleanup(sessionId, options = {}) {
   const response = await fetch('/api/ugc-edit-suggest', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id: sessionId }),
+    body: JSON.stringify({
+      session_id: sessionId,
+      mode: options.mode || 'cleanup',
+      target_duration: options.targetDuration || null,
+      variant_intent: options.variantIntent || null,
+    }),
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'AI cleanup failed');
@@ -1348,6 +1472,37 @@ async function getRemotionRenderStatus({ sessionId, renderId, bucketName, functi
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Could not fetch Remotion render status');
   return data;
+}
+
+async function waitForRemotionRender({ sessionId, start, onProgress }) {
+  for (let attempt = 0; attempt < 120; attempt++) {
+    await delay(3000);
+    const status = await getRemotionRenderStatus({
+      sessionId,
+      renderId: start.render_id,
+      bucketName: start.bucket_name,
+      functionName: start.function_name,
+      region: start.region,
+    });
+    onProgress?.(status);
+    if (status.done) return status;
+  }
+  return { done: false };
+}
+
+function recipeToSettings(baseSettings, recipe) {
+  return {
+    ...baseSettings,
+    variantIntent: recipe.intent,
+    captionStyle: recipe.captionStyle,
+    introTitle: recipe.introTitle,
+    introSubtitle: recipe.introSubtitle,
+    outroHeadline: recipe.outroHeadline,
+    outroCta: recipe.outroCta,
+    burnCaptions: true,
+    showIntro: true,
+    showOutro: true,
+  };
 }
 
 function delay(ms) {
@@ -1798,6 +1953,27 @@ const variantCard = {
 const variantCardActive = {
   borderColor: 'rgba(255,106,42,.45)',
   background: 'rgba(255,106,42,.12)',
+};
+const variantResults = {
+  display: 'grid',
+  gap: 6,
+};
+const variantResultRow = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr) auto',
+  gap: 8,
+  alignItems: 'center',
+  padding: '7px 9px',
+  borderRadius: 6,
+  background: '#171717',
+  border: '1px solid rgba(255,255,255,.08)',
+  color: '#aaa29a',
+  fontSize: 11,
+};
+const resultLink = {
+  color: '#ffbd9a',
+  fontWeight: 800,
+  textDecoration: 'none',
 };
 const fieldLabel = {
   display: 'grid',
