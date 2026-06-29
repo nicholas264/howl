@@ -1839,6 +1839,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const opexThis = opexFor(mk);
           const opexCoverage = opexThis > 0 ? cm3 / opexThis : null;
           const isCurrent = mk === currentMonthKey;
+          const projectedCm3 = isCurrent ? cm3 * paceFactor : cm3;
+          const netProfit = cm3 - opexThis;
+          const projectedNetProfit = projectedCm3 - opexThis;
           const newCustomers = classifiedNewCustomers;
           const returningCustomers = Number(sh.returningCustomers || 0) + addReturningCust;
           return {
@@ -1855,7 +1858,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
             metaSpend, googleSpend, adSpend, metaPurchaseValue, googleConvValue,
             metaRoasReported, googleRoasReported, cogs, cogsActualPct, paymentFees,
             shipCost, fulfill, cm3, ncac, blendedNcac, blendedRoas, newRoas,
-            firstOrderPayback, opex: opexThis, opexCoverage, isCurrent,
+            firstOrderPayback, opex: opexThis, opexCoverage, netProfit, projectedNetProfit, isCurrent,
           };
         });
         const rows = allRows.filter(r => r.month >= startMonth);
@@ -1871,6 +1874,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           newCustomers: Math.round(currentRow.newCustomers * paceFactor),
           returningCustomers: Math.round(currentRow.returningCustomers * paceFactor),
           cm3: currentRow.cm3 * paceFactor,
+          netProfit: currentRow.cm3 * paceFactor - currentRow.opex,
           opex: currentRow.opex,
           opexCoverage: currentRow.opex > 0 ? (currentRow.cm3 * paceFactor) / currentRow.opex : null,
           ncac: currentRow.newCustomers > 0 ? currentRow.adSpend / currentRow.newCustomers : null,
@@ -1893,9 +1897,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           metaPurchaseValue: a.metaPurchaseValue + r.metaPurchaseValue,
           googleConvValue: a.googleConvValue + r.googleConvValue,
           cm3: a.cm3 + r.cm3,
+          netProfit: a.netProfit + r.projectedNetProfit,
           newRevenue: a.newRevenue + r.newRevenue,
           opex: a.opex + r.opex,
-        }), { revenue: 0, netRevenue: 0, dtcRevenue: 0, dtcNetRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, newRevenue: 0, opex: 0 });
+        }), { revenue: 0, netRevenue: 0, dtcRevenue: 0, dtcNetRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, netProfit: 0, newRevenue: 0, opex: 0 });
 
         const livePrimaryYtd = shopifyData?._stores?.primary?.ytd;
         const snapPrimaryYtd = [...Object.values(snapshotShopByMonth)]
@@ -1953,6 +1958,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const cmMax = Math.max(...cmRange, 1);
         const cmMin = Math.min(...cmRange, 0);
         const cmAbsMax = Math.max(Math.abs(cmMax), Math.abs(cmMin), 1);
+        const netProfitRange = rows.map(r => r.projectedNetProfit);
+        const netProfitMax = Math.max(...netProfitRange, 1);
+        const netProfitMin = Math.min(...netProfitRange, 0);
+        const netProfitAbsMax = Math.max(Math.abs(netProfitMax), Math.abs(netProfitMin), 1);
 
         const fmtMo = (mk) => {
           if (!mk) return '—';
@@ -2086,6 +2095,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                     { label: `${summaryYear} Dealer Revenue`, value: fmt$(ltm.dealerRevenue), sub: fmtPct(ltm.dealerRevenue / Math.max(ltm.revenue, 1)) + ' of total' },
                     { label: `${summaryYear} YTD Ad Spend`,  value: fmt$(ltm.adSpend), sub: fmt$(ltm.metaSpend) + ' Meta · ' + fmt$(ltm.googleSpend) + ' Google' },
                     { label: `${summaryYear} YTD CM3`,       value: fmt$(ltm.cm3), color: ltm.cm3 >= 0 ? '#256b35' : '#b42318', sub: fmtPct(ltmCmMargin) + ' margin' },
+                    { label: `Est. ${summaryYear} YTD Net Profit`, value: fmt$(ltm.netProfit), color: ltm.netProfit >= 0 ? '#256b35' : '#b42318', sub: 'CM3 - OpEx; current month paced' },
                     { label: `${summaryYear} OpEx Cov.`,     value: ltmOpexCoverage == null ? '—' : fmtPct(ltmOpexCoverage), color: ltmOpexCoverage >= 1 ? '#256b35' : '#9a6a0a', sub: fmt$(opex) + ' / mo opex' },
                     { label: `${summaryYear} New Custs`,     value: ltm.newCustomers.toLocaleString(), sub: `${totalCustomers.toLocaleString()} total unique` },
                     { label: 'Avg NCAC',        value: ltmNcac == null ? '—' : '$' + ltmNcac.toFixed(0) },
@@ -2117,6 +2127,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                         { label: 'Projected Revenue', value: fmt$(pace.revenue), sub: fmt$(currentRow.revenue) + ' MTD' },
                         { label: 'Projected Ad Spend', value: fmt$(pace.adSpend), sub: fmt$(currentRow.adSpend) + ' MTD' },
                         { label: 'Projected CM3', value: fmt$(pace.cm3), color: pace.cm3 >= 0 ? '#256b35' : '#b42318', sub: fmt$(currentRow.cm3) + ' MTD' },
+                        { label: 'Projected Net Profit', value: fmt$(pace.netProfit), color: pace.netProfit >= 0 ? '#256b35' : '#b42318', sub: 'after ' + fmt$(pace.opex) + ' OpEx' },
                         { label: 'OpEx Coverage', value: pace.opexCoverage == null ? '—' : fmtPct(pace.opexCoverage), color: (pace.opexCoverage || 0) >= 1 ? '#256b35' : (pace.opexCoverage || 0) >= 0.5 ? '#9a6a0a' : '#b42318', sub: 'vs ' + fmt$(pace.opex) },
                         { label: 'Projected New', value: pace.newCustomers.toLocaleString(), sub: currentRow.newCustomers + ' MTD' },
                         { label: 'NCAC (run rate)', value: pace.ncac == null ? '—' : '$' + pace.ncac.toFixed(0), sub: currentRow.newCustomers ? '' : 'no new yet' },
@@ -2332,14 +2343,45 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                   </div>
                 </div>
 
+                {/* Estimated net profit by month */}
+                <div style={{ ...S.card, marginBottom: 20 }}>
+                  <span style={S.label}>Estimated Net Profit After OpEx by Month</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                    {rows.map(r => {
+                      const value = r.projectedNetProfit;
+                      const pos = value >= 0;
+                      const barPct = (Math.abs(value) / netProfitAbsMax) * 50;
+                      return (
+                        <div key={r.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 9, color: '#77746f', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}{r.isCurrent ? '*' : ''}</span>
+                          <div style={{ flex: 1, height: 16, background: '#f4f1ea', borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
+                            <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: '#dedbd3' }} />
+                            <div style={{
+                              position: 'absolute', top: 0, bottom: 0,
+                              ...(pos ? { left: '50%', width: `${barPct}%` } : { right: '50%', width: `${barPct}%` }),
+                              background: pos ? '#256b35' : '#b42318',
+                            }} />
+                          </div>
+                          <span style={{ fontSize: 10, color: pos ? '#256b35' : '#b42318', width: 76, textAlign: 'right', fontWeight: 700 }}>
+                            {fmt$(value)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize: 9, color: '#88857f', marginTop: 8, letterSpacing: 1 }}>
+                    Net profit estimate = CM3 - monthly OpEx. * = current month projected to month-end using today&apos;s MTD pace.
+                  </div>
+                </div>
+
                 {/* Detailed monthly P&L table */}
                 <div style={{ ...S.card, marginBottom: 20 }}>
                   <span style={S.label}>Monthly P&L (CM3 build)</span>
                   <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8, minWidth: 1080 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8, minWidth: 1160 }}>
                       <thead>
                         <tr>
-                          {['Month', 'DTC', 'Dealer', 'Other', 'Total', 'Orders', 'New', 'Ret', 'Meta', 'Google', 'NCAC', '1st Pay', 'COGS', 'Fees', 'Ship', 'Pick', 'CM3', 'CM%', 'OpEx', 'OpEx Cov', 'ROAS'].map(h => (
+                          {['Month', 'DTC', 'Dealer', 'Other', 'Total', 'Orders', 'New', 'Ret', 'Meta', 'Google', 'NCAC', '1st Pay', 'COGS', 'Fees', 'Ship', 'Pick', 'CM3', 'CM%', 'OpEx', 'OpEx Cov', 'Net Profit', 'ROAS'].map(h => (
                             <th key={h} style={{ fontSize: 8, letterSpacing: 1, color: '#88857f', textAlign: h === 'Month' ? 'left' : 'right', padding: '4px 6px 8px 0', textTransform: 'uppercase', fontWeight: 600 }}>{h}</th>
                           ))}
                         </tr>
@@ -2369,6 +2411,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: margin >= 0 ? '#256b35' : '#b42318', textAlign: 'right' }}>{r.revenue > 0 ? fmtPct(margin) : '—'}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: opexByMonth[r.month] != null ? '#343330' : '#88857f', textAlign: 'right' }}>{fmt$(r.opex)}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.opexCoverage == null ? '#88857f' : r.opexCoverage >= 1 ? '#256b35' : r.opexCoverage >= 0 ? '#9a6a0a' : '#b42318', textAlign: 'right', fontWeight: 600 }}>{r.opexCoverage == null ? '—' : (r.opexCoverage * 100).toFixed(0) + '%'}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.netProfit >= 0 ? '#256b35' : '#b42318', textAlign: 'right', fontWeight: 700 }}>{fmt$(r.netProfit)}</td>
                               <td style={{ padding: '6px 0', fontSize: 11, color: '#343330', textAlign: 'right' }}>{r.blendedRoas != null ? r.blendedRoas.toFixed(2) : '—'}</td>
                             </tr>
                           );
@@ -2392,13 +2435,14 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: ltmCmMargin >= 0 ? '#256b35' : '#b42318', textAlign: 'right', fontWeight: 700 }}>{fmtPct(ltmCmMargin)}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#343330', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.opex)}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: ltmOpexCoverage == null ? '#88857f' : ltmOpexCoverage >= 1 ? '#256b35' : '#9a6a0a', textAlign: 'right', fontWeight: 700 }}>{ltmOpexCoverage == null ? '—' : (ltmOpexCoverage * 100).toFixed(0) + '%'}</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: ltm.netProfit >= 0 ? '#256b35' : '#b42318', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.netProfit)}</td>
                           <td style={{ padding: '8px 0 4px', fontSize: 11, color: '#343330', textAlign: 'right', fontWeight: 700 }}>{ltmRoas == null ? '—' : ltmRoas.toFixed(2)}</td>
                         </tr>
                       </tfoot>
                     </table>
                   </div>
                   <div style={{ fontSize: 9, color: '#88857f', marginTop: 8, letterSpacing: 1 }}>
-                    CM3 = Revenue − COGS − Payment Fees − Shipping − Pick/Pack − (Meta + Google) Spend. COGS uses Shopify per-unit cost when set, GM% assumption otherwise. NCAC = (Meta + Google) spend ÷ new lifetime customers. OpEx column = monthly P&L override or default. Bold OpEx = override set; dim = default.
+                    CM3 = Revenue − COGS − Payment Fees − Shipping − Pick/Pack − (Meta + Google) Spend. Estimated net profit = CM3 − OpEx. COGS uses Shopify per-unit cost when set, GM% assumption otherwise. NCAC = (Meta + Google) spend ÷ new lifetime customers. OpEx column = monthly P&L override or default. Bold OpEx = override set; dim = default.
                   </div>
                 </div>
               </>
