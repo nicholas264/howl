@@ -63,6 +63,8 @@ export default async function handler(req, res) {
     words: req.body?.words,
     settings: req.body?.settings,
   });
+  const renderKey = String(req.body?.render_key || 'polished').slice(0, 80);
+  const renderLabel = String(req.body?.render_label || 'Polished ad').slice(0, 120);
   const durationInFrames = calcDurationInFrames({
     segments,
     showIntro: inputProps.showIntro,
@@ -96,6 +98,8 @@ export default async function handler(req, res) {
     });
     const renderState = {
       provider: 'remotion_lambda',
+      render_key: renderKey,
+      render_label: renderLabel,
       render_id: renderId,
       bucket_name: bucketName,
       function_name: lambda.functionName,

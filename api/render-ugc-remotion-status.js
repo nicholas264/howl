@@ -8,6 +8,28 @@ export const config = {
   maxDuration: 60,
 };
 
+function appendRenderHistory(settings, renderState, outputFile, costs) {
+  const current = settings && typeof settings === 'object' ? settings : {};
+  const history = Array.isArray(current.remotion_renders) ? current.remotion_renders : [];
+  const nextItem = {
+    provider: 'remotion_lambda',
+    render_key: renderState.render_key || 'polished',
+    render_label: renderState.render_label || 'Polished ad',
+    render_id: renderState.render_id,
+    output_file: outputFile,
+    region: renderState.region,
+    duration_in_frames: renderState.duration_in_frames || null,
+    rendered_at: new Date().toISOString(),
+    costs: costs || null,
+    settings: renderState.input?.settings || null,
+  };
+  const withoutDuplicate = history.filter(item => item.render_id !== nextItem.render_id && item.output_file !== outputFile);
+  return {
+    ...current,
+    remotion_renders: [nextItem, ...withoutDuplicate].slice(0, 12),
+  };
+}
+
 export default async function handler(req, res) {
   const access = await requirePermission(req, res, 'assets.write');
   if (!access) return;
@@ -61,9 +83,14 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: message, progress });
     }
     if (progress.done && progress.outputFile) {
+      const nextSettings = appendRenderHistory(session.settings, renderState, progress.outputFile, progress.costs || null);
       await sql`
         UPDATE ugc_sessions
-        SET rendered_url = ${progress.outputFile}, status = 'rendered', last_error = NULL, updated_at = now()
+        SET rendered_url = ${progress.outputFile},
+            settings = ${JSON.stringify(nextSettings)}::jsonb,
+            status = 'rendered',
+            last_error = NULL,
+            updated_at = now()
         WHERE id = ${sessionId}
       `;
       if (session.deliverable_id) {
@@ -85,6 +112,8 @@ export default async function handler(req, res) {
       render_id: renderId,
       bucket_name: bucketName,
       costs: progress.costs || null,
+      render_label: renderState.render_label || null,
+      render_key: renderState.render_key || null,
     });
   } catch (err) {
     return res.status(500).json({ error: err.message || 'Could not fetch Remotion render progress' });

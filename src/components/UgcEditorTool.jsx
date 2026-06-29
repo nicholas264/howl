@@ -466,6 +466,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       setWords(sess.words || []);
       setDuration(parseFloat(sess.duration) || 0);
       setSettings({ ...DEFAULT_SETTINGS, ...(sess.settings || {}) });
+      setVariantRenders(normalizeRenderHistory(sess.settings?.remotion_renders));
       setOutputUrl(sess.rendered_url || null);
       setError(sess.last_error || '');
       setStage(sess.rendered_url ? 'done' : (sess.words?.length ? 'ready' : 'uploaded'));
@@ -490,6 +491,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     setWords([]);
     setDuration(0);
     setSettings(DEFAULT_SETTINGS);
+    setVariantRenders([]);
     setOutputUrl(null);
     setError('');
     setStage('idle');
@@ -622,6 +624,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     if (!segments.length || !activeSession) return;
     const renderSettings = options.settings || settings;
     const renderLabel = options.label || 'Polished Remotion ad';
+    const renderKey = options.renderKey || 'polished';
     setStage('rendering');
     setProgress(0);
     setError('');
@@ -634,6 +637,8 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         segments,
         words,
         settings: renderSettings,
+        renderKey,
+        renderLabel,
       });
       setPolishedRenderMessage(`${renderLabel} started: ${start.render_id}`);
       const status = await waitForRemotionRender({
@@ -660,6 +665,22 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         setProgress(1);
         setStage('done');
         setPolishedRenderMessage(`${renderLabel} rendered.`);
+        setVariantRenders(prev => mergeRenderHistory(prev, [{
+          id: start.render_id,
+          label: renderLabel,
+          status: 'done',
+          url,
+          renderId: start.render_id,
+          renderedAt: new Date().toISOString(),
+        }]));
+        setSettings(prev => appendSettingRender(prev, {
+          render_id: start.render_id,
+          render_key: renderKey,
+          render_label: renderLabel,
+          output_file: url,
+          rendered_at: new Date().toISOString(),
+          settings: renderSettings,
+        }));
         refreshSessions();
         return url;
       }
@@ -694,6 +715,8 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
           segments,
           words,
           settings: renderSettings,
+          renderKey: recipe.id,
+          renderLabel: recipe.label,
         });
         const status = await waitForRemotionRender({
           sessionId: activeSession.id,
@@ -712,6 +735,14 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         if (outputFile) {
           setOutputUrl(outputFile);
           setActiveSession(prev => prev ? { ...prev, rendered_url: outputFile, status: 'rendered' } : prev);
+          setSettings(prev => appendSettingRender(prev, {
+            render_id: start.render_id,
+            render_key: recipe.id,
+            render_label: recipe.label,
+            output_file: outputFile,
+            rendered_at: new Date().toISOString(),
+            settings: renderSettings,
+          }));
         }
       }
       setProgress(1);
@@ -1272,7 +1303,10 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                   <div style={variantResults}>
                     {variantRenders.map(item => (
                       <div key={item.id} style={variantResultRow}>
-                        <span>{item.label}</span>
+                        <span>
+                          {item.label}
+                          {item.renderedAt ? <small>{new Date(item.renderedAt).toLocaleString()}</small> : null}
+                        </span>
                         {item.url ? (
                           <a href={item.url} target="_blank" rel="noreferrer" style={resultLink}>Open</a>
                         ) : (
@@ -1440,7 +1474,7 @@ async function renderSession(sessionId, segments, captionsSrt) {
   return data;
 }
 
-async function startRemotionRender({ sessionId, segments, words, settings }) {
+async function startRemotionRender({ sessionId, segments, words, settings, renderKey, renderLabel }) {
   const response = await fetch('/api/render-ugc-remotion', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1449,6 +1483,8 @@ async function startRemotionRender({ sessionId, segments, words, settings }) {
       segments,
       words,
       settings,
+      render_key: renderKey || null,
+      render_label: renderLabel || null,
     }),
   });
   const data = await response.json();
@@ -1502,6 +1538,55 @@ function recipeToSettings(baseSettings, recipe) {
     burnCaptions: true,
     showIntro: true,
     showOutro: true,
+  };
+}
+
+function normalizeRenderHistory(history = []) {
+  if (!Array.isArray(history)) return [];
+  return history
+    .filter(item => item?.output_file || item?.url)
+    .map(item => ({
+      id: item.render_id || item.output_file || item.url,
+      label: item.render_label || item.label || 'Polished ad',
+      status: 'done',
+      url: item.output_file || item.url,
+      renderId: item.render_id || item.renderId || null,
+      renderedAt: item.rendered_at || item.renderedAt || null,
+    }))
+    .slice(0, 12);
+}
+
+function mergeRenderHistory(current, incoming) {
+  const combined = [...normalizeRenderHistory(incoming), ...normalizeRenderHistory(current)];
+  const seen = new Set();
+  const result = [];
+  for (const item of combined) {
+    const key = item.renderId || item.url || item.id;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result.slice(0, 12);
+}
+
+function appendSettingRender(settings, item) {
+  const current = settings && typeof settings === 'object' ? settings : {};
+  const history = Array.isArray(current.remotion_renders) ? current.remotion_renders : [];
+  const nextItem = {
+    provider: 'remotion_lambda',
+    render_key: item.render_key || 'polished',
+    render_label: item.render_label || 'Polished ad',
+    render_id: item.render_id || null,
+    output_file: item.output_file,
+    rendered_at: item.rendered_at || new Date().toISOString(),
+    settings: item.settings || null,
+  };
+  const withoutDuplicate = history.filter(existing => (
+    existing.render_id !== nextItem.render_id && existing.output_file !== nextItem.output_file
+  ));
+  return {
+    ...current,
+    remotion_renders: [nextItem, ...withoutDuplicate].slice(0, 12),
   };
 }
 
