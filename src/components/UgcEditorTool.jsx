@@ -161,6 +161,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   const [aiCleanupMessage, setAiCleanupMessage] = useState('');
   const [polishedRenderMessage, setPolishedRenderMessage] = useState('');
   const [remotionStatus, setRemotionStatus] = useState({ loading: true, configured: false, missing: [] });
+  const [pipelineHealth, setPipelineHealth] = useState({ loading: true, services: [] });
   const [variantMessage, setVariantMessage] = useState('');
   const [variantRenders, setVariantRenders] = useState([]);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
@@ -177,6 +178,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     setRecoverableUploads(readRecoverableUploads());
   }, []);
   useEffect(() => { refreshRemotionStatus(); }, []);
+  useEffect(() => { refreshPipelineHealth(); }, []);
 
   async function refreshSessions() {
     setSessionsLoading(true);
@@ -212,6 +214,29 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         configured: false,
         missing: [],
         error: err.message || 'Could not check Lambda render setup',
+      });
+    }
+  }
+
+  async function refreshPipelineHealth() {
+    setPipelineHealth(prev => ({ ...prev, loading: true }));
+    try {
+      const res = await fetch('/api/ugc-pipeline-health');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not check UGC pipeline health');
+      setPipelineHealth({
+        loading: false,
+        ok: Boolean(data.ok),
+        services: data.services || [],
+        checkedAt: data.checked_at || null,
+      });
+    } catch (err) {
+      console.error('ugc pipeline health failed', err);
+      setPipelineHealth({
+        loading: false,
+        ok: false,
+        services: [],
+        error: err.message || 'Could not check UGC pipeline health',
       });
     }
   }
@@ -1717,6 +1742,37 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                       ? remotionStatus.error
                       : `Fast server render is available. Polished Remotion Lambda render needs setup: ${remotionStatus.missing.join(', ') || 'AWS env vars'}.`}
               </div>
+              <div style={healthPanel}>
+                <div style={panelHead}>
+                  <div>
+                    <span style={eyebrow}>Pipeline health</span>
+                    <strong>{pipelineHealth.loading ? 'Checking services' : pipelineHealth.ok ? 'Ready to edit' : 'Needs attention'}</strong>
+                  </div>
+                  <button onClick={refreshPipelineHealth} style={ghostBtn}>Refresh</button>
+                </div>
+                {pipelineHealth.error ? (
+                  <div style={setupNote}>{pipelineHealth.error}</div>
+                ) : (
+                  <div style={healthGrid}>
+                    {(pipelineHealth.services || []).map(service => (
+                      <div
+                        key={service.key}
+                        style={{
+                          ...healthItem,
+                          ...(service.ok ? healthItemOk : healthItemWarn),
+                        }}
+                        title={service.missing?.length ? `Missing: ${service.missing.join(', ')}` : service.detail}
+                      >
+                        <i>{service.ok ? 'ok' : '!'}</i>
+                        <span>{service.label}</span>
+                      </div>
+                    ))}
+                    {pipelineHealth.loading && !pipelineHealth.services?.length && (
+                      <div style={healthItem}><i>-</i><span>Checking pipeline...</span></div>
+                    )}
+                  </div>
+                )}
+              </div>
               {stage === 'transcribing' && <div style={statusBox}>Extracting audio and building word-level captions...</div>}
               {stage === 'rendering' && (
                 <div style={statusBox}>
@@ -2200,6 +2256,43 @@ const checkboxRow = { fontSize: 12, color: '#f7efe2', display: 'flex', gap: 8, a
 const statusBox = {
   display: 'grid', gap: 4, background: '#191919', border: '1px solid rgba(255,255,255,.1)', borderRadius: 6,
   padding: 11, fontSize: 12, color: '#f7efe2',
+};
+const healthPanel = {
+  display: 'grid',
+  gap: 10,
+  padding: 10,
+  borderRadius: 7,
+  background: '#0f0f0f',
+  border: '1px solid rgba(255,255,255,.08)',
+};
+const healthGrid = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gap: 7,
+};
+const healthItem = {
+  minWidth: 0,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '7px 8px',
+  borderRadius: 6,
+  background: '#171717',
+  border: '1px solid rgba(255,255,255,.08)',
+  color: '#aaa29a',
+  fontSize: 10,
+  fontWeight: 800,
+  textTransform: 'uppercase',
+};
+const healthItemOk = {
+  color: '#b8f2c1',
+  borderColor: 'rgba(72,187,120,.24)',
+  background: 'rgba(72,187,120,.08)',
+};
+const healthItemWarn = {
+  color: '#ffbd9a',
+  borderColor: 'rgba(255,106,42,.26)',
+  background: 'rgba(255,106,42,.08)',
 };
 const transcriptBox = {
   background: '#0f0f0f', border: '1px solid rgba(255,255,255,.08)', borderRadius: 8,
