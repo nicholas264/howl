@@ -485,6 +485,11 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       setVariantRenders(normalizeRenderHistory(sess.settings?.remotion_renders));
       setOutputUrl(sess.rendered_url || null);
       setError(sess.last_error || '');
+      setPolishedRenderMessage(
+        sess.settings?.remotion_render?.render_id && !sess.rendered_url
+          ? `${sess.settings.remotion_render.render_label || 'Latest Lambda render'} is attached to this session. Check latest render to resume status.`
+          : '',
+      );
       setStage(sess.rendered_url ? 'done' : (sess.words?.length ? 'ready' : 'uploaded'));
       dirtyRef.current = false;
     } catch (err) {
@@ -794,6 +799,42 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       console.error(err);
       setError(err.message || 'Variant set render failed');
       setStage(words.length ? 'ready' : 'uploaded');
+    }
+  };
+
+  const checkLatestRenderStatus = async () => {
+    if (!activeSession?.id) return;
+    setError('');
+    setLogTail('Checking latest Lambda render...');
+    try {
+      const status = await getRemotionRenderStatus({ sessionId: activeSession.id });
+      setProgress(status.progress || 0);
+      if (status.done && status.output_file) {
+        const url = status.output_file;
+        setOutputUrl(url);
+        setActiveSession(prev => prev ? { ...prev, rendered_url: url, status: 'rendered' } : prev);
+        setSessions(prev => prev.map(session => session.id === activeSession.id ? {
+          ...session,
+          rendered_url: url,
+          status: 'rendered',
+        } : session));
+        setVariantRenders(prev => mergeRenderHistory(prev, [{
+          id: status.render_id || url,
+          label: status.render_label || 'Polished ad',
+          status: 'done',
+          url,
+          renderId: status.render_id || null,
+          renderedAt: new Date().toISOString(),
+        }]));
+        setStage('done');
+        setPolishedRenderMessage(`${status.render_label || 'Latest Lambda render'} is ready.`);
+        refreshSessions();
+        return;
+      }
+      setPolishedRenderMessage(`${status.render_label || 'Latest Lambda render'} is ${Math.round((status.progress || 0) * 100)}% complete.`);
+      setStage(words.length ? 'ready' : 'uploaded');
+    } catch (err) {
+      setError(err.message || 'Could not check latest Lambda render');
     }
   };
 
@@ -1314,6 +1355,11 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                         Render 3 variants
                       </button>
                     )}
+                    {remotionStatus.configured && activeSession?.settings?.remotion_render?.render_id && (
+                      <button onClick={checkLatestRenderStatus} style={secondaryBtn} disabled={stage === 'rendering'}>
+                        Check latest render
+                      </button>
+                    )}
                     <button onClick={autoEdit} style={secondaryBtn} disabled={autoEditing || !activeSession}>
                       {autoEditing ? 'Auto editing...' : 'Auto edit full ad'}
                     </button>
@@ -1594,13 +1640,11 @@ async function startRemotionRender({ sessionId, segments, words, settings, rende
 }
 
 async function getRemotionRenderStatus({ sessionId, renderId, bucketName, functionName, region }) {
-  const params = new URLSearchParams({
-    session_id: String(sessionId),
-    render_id: renderId,
-    bucket_name: bucketName,
-    function_name: functionName,
-    region,
-  });
+  const params = new URLSearchParams({ session_id: String(sessionId) });
+  if (renderId) params.set('render_id', renderId);
+  if (bucketName) params.set('bucket_name', bucketName);
+  if (functionName) params.set('function_name', functionName);
+  if (region) params.set('region', region);
   const response = await fetch(`/api/render-ugc-remotion-status?${params.toString()}`);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Could not fetch Remotion render status');
