@@ -328,12 +328,13 @@ function mergeStoreResults(stores) {
 
     for (const m of result.months) {
       if (!monthMap[m.month]) monthMap[m.month] = {
-        netSales: 0, orders: 0, shipping: 0, newCustomers: 0, returningCustomers: 0,
+        netSales: 0, grossSales: 0, orders: 0, shipping: 0, newCustomers: 0, returningCustomers: 0,
         newRevenue: 0, returningRevenue: 0, cogs: 0, costedRevenue: 0, uncostedRevenue: 0,
         customerKeys: new Set(), newCustomerKeys: new Set(), returningCustomerKeys: new Set(),
       };
       const t = monthMap[m.month];
       t.netSales += m.netSales || 0;
+      t.grossSales += m.grossSales ?? m.netSales ?? 0;
       t.orders += m.orders || 0;
       t.shipping += m.shipping || 0;
       t.newCustomers += m.newCustomers || 0;
@@ -368,7 +369,7 @@ function mergeStoreResults(stores) {
     return {
       month,
       netSales: v.netSales,
-      grossSales: v.netSales,
+      grossSales: v.grossSales,
       orders: v.orders,
       shipping: v.shipping,
       sessions: 0,
