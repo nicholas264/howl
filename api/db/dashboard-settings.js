@@ -3,6 +3,7 @@ import { requirePermission } from '../_lib/app-access.js';
 
 const DEFAULTS = {
   grossMarginPct: 60,        // % of net revenue retained after COGS — fallback when Shopify unitCost is missing
+  dealerWholesaleRetailPct: 70, // dealer/wholesale selling price as % of DTC retail; 70 means dealer keeps a 30% retail margin
   paymentFeePct: 2.9,        // payment processor %
   paymentFeeFixed: 0.30,     // per-order processor fixed
   shippingCostPerOrder: 8,   // outbound fulfillment cost

@@ -94,6 +94,19 @@ function sumNetRevenue(...sources) {
   return sources.reduce((sum, source) => sum + netRevenueFor(source), 0);
 }
 
+function wholesaleGrossMarginPct(dtcGrossMarginPct, wholesaleRetailPct) {
+  const retailPct = Math.max(Number(wholesaleRetailPct || 70), 1) / 100;
+  const retailCogsRate = 1 - (Number(dtcGrossMarginPct || 0) / 100);
+  return Math.max(0, Math.min(100, (1 - (retailCogsRate / retailPct)) * 100));
+}
+
+function estimatedCogsFor(source, revenue, fallbackGrossMarginPct) {
+  const costedRevenue = Math.min(Number(source?.costedRevenue || 0), Number(revenue || 0));
+  const actualCogs = Number(source?.cogs || 0);
+  const fallbackRevenue = Math.max(Number(revenue || 0) - costedRevenue, 0);
+  return actualCogs + fallbackRevenue * (1 - (Number(fallbackGrossMarginPct || 0) / 100));
+}
+
 function acquisitionRevenueFor(source, revenue) {
   const totalRevenue = Number(revenue || 0);
   if (totalRevenue <= 0) return 0;
@@ -189,6 +202,7 @@ const S = {
 
 const DASH_TABS = [
   { key: 'dashboard-cfo',      view: 'cfo',      label: 'CFO' },
+  { key: 'dashboard-growth',   view: 'growth',   label: 'Growth' },
   { key: 'dashboard-meta',     view: 'meta',     label: 'Meta' },
   { key: 'dashboard-shopify',  view: 'shopify',  label: 'Shopify' },
   { key: 'dashboard-creative', view: 'creative', label: 'Creative' },
@@ -499,7 +513,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
   // CFO assumptions (loaded from /api/db/dashboard-settings).
   // Initialize with defaults so the panel renders even if the fetch is still pending or fails.
   const [settings, setSettings] = useState({
-    grossMarginPct: 60, paymentFeePct: 2.9, paymentFeeFixed: 0.30,
+    grossMarginPct: 60, dealerWholesaleRetailPct: 70, paymentFeePct: 2.9, paymentFeeFixed: 0.30,
     shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000,
     googleSpend: {}, opexByMonth: {}, dealerRevenueByMonth: {}, dealerOrdersByMonth: {},
     offPlatformRevenueByMonth: {}, offPlatformOrdersByMonth: {}, cfoStartMonth: '2026-01',
@@ -847,7 +861,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
   }
 
   const VIEW_TITLES = {
-    cfo:      { title: 'CFO View',  subtitle: 'New vs returning, NCAC, contribution margin, OpEx coverage.' },
+    cfo:      { title: 'CFO View',  subtitle: 'Revenue, contribution margin, OpEx coverage, and estimated profitability.' },
+    growth:   { title: 'Growth Data', subtitle: 'Media mix, channel spend, and acquisition context.' },
     meta:     { title: 'Meta Ads',  subtitle: 'Live budget, formats, monthly velocity, recent launches.' },
     shopify:  { title: 'Shopify',   subtitle: 'Seasonality, monthly trend, CVR, product mix.' },
     creative: { title: 'Creative',  subtitle: 'Velocity, format mix, top creators — sourced from launch_history.' },
@@ -1653,18 +1668,18 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
       )}
 
       {/* ── CFO / Head of Growth Section ──────────────────────────────────── */}
-      {view === 'cfo' && (() => {
+      {(view === 'cfo' || view === 'growth') && (() => {
         const monthlyInsights = data?.monthlyInsights || [];
         const shopifyMonths = shopifyData?.months || [];
         // Render whenever we have ANY data: live OR snapshots OR settings can fall back to defaults.
         const hasAnyData = monthlyInsights.length > 0 || shopifyMonths.length > 0 || (historySnapshots && historySnapshots.length > 0);
-        if (!hasAnyData) {
-          return (
-            <div style={{ ...S.card, color: '#77746f', fontSize: 12 }}>
-              {(loading || shopifyLoading) ? 'Loading…' : 'No data yet. Click Load Meta or Load Shopify above to populate the CFO View.'}
-            </div>
-          );
-        }
+	        if (!hasAnyData) {
+	          return (
+	            <div style={{ ...S.card, color: '#77746f', fontSize: 12 }}>
+	              {(loading || shopifyLoading) ? 'Loading…' : `No data yet. Click Load Meta or Load Shopify above to populate the ${view === 'growth' ? 'Growth Data' : 'CFO'} view.`}
+	            </div>
+	          );
+	        }
 
         // Live data (current pull)
         const liveSpendByMonth = Object.fromEntries(monthlyInsights.map(m => [m.month, m]));
@@ -1727,7 +1742,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const spendByMonth = { ...snapshotMetaByMonth, ...liveSpendByMonth };
 
         // Settings-derived maps (declared before allMonthKeys to avoid TDZ).
-        const s = settings || { grossMarginPct: 60, paymentFeePct: 2.9, paymentFeeFixed: 0.30, shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000, googleSpend: {}, opexByMonth: {}, dealerRevenueByMonth: {}, dealerOrdersByMonth: {}, offPlatformRevenueByMonth: {}, offPlatformOrdersByMonth: {} };
+        const s = settings || { grossMarginPct: 60, dealerWholesaleRetailPct: 70, paymentFeePct: 2.9, paymentFeeFixed: 0.30, shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000, googleSpend: {}, opexByMonth: {}, dealerRevenueByMonth: {}, dealerOrdersByMonth: {}, offPlatformRevenueByMonth: {}, offPlatformOrdersByMonth: {} };
+        const dealerGrossMarginPct = wholesaleGrossMarginPct(s.grossMarginPct, s.dealerWholesaleRetailPct);
         // Google spend pulled live from /api/google → monthly_metrics.google → snapshot.
         // Manual settings.googleSpend is ignored (column removed from assumptions UI).
         const googleByMonth = Object.fromEntries(
@@ -1803,12 +1819,15 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const revenue = dtcRevenue + dealerRevenue + offPlatformRevenue;
           const netRevenue = dtcNetRevenue + dealerRevenue + offPlatformRevenue;
           const orders = dtcOrders + dealerOrders + offPlatformOrders;
-          // Hybrid COGS: actual unitCost × qty for line items where Shopify has cost set,
-          // GM% assumption applied to (uncosted Shopify revenue + manual additions).
-          const realCogs = sh.cogs || 0;
-          const fallbackCogs = Math.max(revenue - (sh.costedRevenue || 0), 0) * (1 - (s.grossMarginPct / 100));
-          const cogs = realCogs + fallbackCogs;
-          const cogsActualPct = revenue > 0 ? (sh.costedRevenue || 0) / revenue : 0; // 1.0 = 100% real, 0 = all fallback
+          // Hybrid COGS by channel: actual unitCost × qty where available,
+          // with fallback margin assumptions per revenue source.
+          const dealerCogsSource = hasDealerRevenueOverride ? {} : dealer;
+          const dtcCogs = estimatedCogsFor(dtc, dtcRevenue, s.grossMarginPct);
+          const dealerCogs = estimatedCogsFor(dealerCogsSource, dealerRevenue, dealerGrossMarginPct);
+          const offPlatformCogs = offPlatformRevenue * (1 - (s.grossMarginPct / 100));
+          const cogs = dtcCogs + dealerCogs + offPlatformCogs;
+          const costedRevenue = Number(dtc.costedRevenue || 0) + Number(dealerCogsSource.costedRevenue || 0);
+          const cogsActualPct = revenue > 0 ? costedRevenue / revenue : 0; // 1.0 = 100% real, 0 = all fallback
           const paymentFees = revenue * (s.paymentFeePct / 100) + orders * s.paymentFeeFixed;
           const shipCost = orders * s.shippingCostPerOrder;
           const fulfill = orders * s.fulfillmentCostPerOrder;
@@ -1971,15 +1990,104 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
 
         const dataReady = (data || shopifyData || (historySnapshots && historySnapshots.length > 0));
 
+        if (view === 'growth') {
+          const maxSpend = Math.max(...rows.map(r => r.adSpend), 1);
+          const mixMetaPct = ltm.adSpend > 0 ? ltm.metaSpend / ltm.adSpend : 0;
+          const mixGooglePct = ltm.adSpend > 0 ? ltm.googleSpend / ltm.adSpend : 0;
+          const metaPurchasesByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.meta).map(r => [r.month, Number(r.meta.purchases || 0)]));
+          const googleConvByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.google).map(r => [r.month, Number(r.google.conversions || 0)]));
+          const ltmMetaPurchases = rollupRows.reduce((a, r) => a + (metaPurchasesByMonth[r.month] || 0), 0);
+          const ltmGoogleConv = rollupRows.reduce((a, r) => a + (googleConvByMonth[r.month] || 0), 0);
+          const ltmMetaCpa = ltmMetaPurchases > 0 ? ltm.metaSpend / ltmMetaPurchases : null;
+          const ltmGoogleCpa = ltmGoogleConv > 0 ? ltm.googleSpend / ltmGoogleConv : null;
+          return (
+            <>
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 16, marginTop: 28 }}>
+                <div>
+                  <div className="eyebrow" style={{ marginBottom: 6 }}>Growth Data</div>
+                  <div className="display-md" style={{ color: '#171717' }}>Media Mix</div>
+                  <div className="display-italic" style={{ fontSize: 12, color: '#77746f', marginTop: 4 }}>
+                    Channel spend mix, CPA, and spend concentration by month.
+                  </div>
+                </div>
+              </div>
+              <div style={{ ...S.card, marginBottom: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+                  <span style={S.label}>Media Mix — Meta vs Google</span>
+                  <span style={{ fontSize: 10, color: '#77746f', letterSpacing: 1 }}>
+                    {summaryYear} YTD: <span style={{ color: '#1877f2', fontWeight: 700 }}>{fmtPct(mixMetaPct)} Meta</span>
+                    {' · '}
+                    <span style={{ color: '#fbbc05', fontWeight: 700 }}>{fmtPct(mixGooglePct)} Google</span>
+                    {' · '}
+                    <span style={{ color: '#343330' }}>{fmt$(ltm.adSpend)} total</span>
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid #dedbd3' }}>
+                  <div>
+                    <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#1877f2', marginBottom: 4, fontWeight: 600 }}>Meta CPA</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#171717', lineHeight: 1 }}>{ltmMetaCpa == null ? '—' : '$' + ltmMetaCpa.toFixed(0)}</div>
+                    <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>{ltmMetaPurchases.toLocaleString()} purchases</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#fbbc05', marginBottom: 4, fontWeight: 600 }}>Google CPA</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#171717', lineHeight: 1 }}>{ltmGoogleCpa == null ? '—' : '$' + ltmGoogleCpa.toFixed(0)}</div>
+                    <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>{ltmGoogleConv.toLocaleString(undefined, { maximumFractionDigits: 1 })} conversions</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', marginBottom: 4, fontWeight: 600 }}>Blended CPA</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#171717', lineHeight: 1 }}>{ltmCpa == null ? '—' : '$' + ltmCpa.toFixed(0)}</div>
+                    <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>{ltm.orders.toLocaleString()} orders (Shopify)</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', marginBottom: 4, fontWeight: 600 }}>Channel CPA Delta</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: (ltmGoogleCpa != null && ltmMetaCpa != null) ? (ltmGoogleCpa < ltmMetaCpa ? '#256b35' : '#b42318') : '#171717', lineHeight: 1 }}>
+                      {(ltmGoogleCpa != null && ltmMetaCpa != null) ? (ltmGoogleCpa < ltmMetaCpa ? 'Google ' : 'Meta ') + 'wins' : '—'}
+                    </div>
+                    <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>
+                      {(ltmGoogleCpa != null && ltmMetaCpa != null) ? '$' + Math.abs(ltmGoogleCpa - ltmMetaCpa).toFixed(0) + ' difference' : 'need both channels'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                  {rows.map(r => {
+                    const barPct = (r.adSpend / maxSpend) * 100;
+                    const metaPct = r.adSpend > 0 ? (r.metaSpend / r.adSpend) * 100 : 0;
+                    return (
+                      <div key={r.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 9, color: '#77746f', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}</span>
+                        <div style={{ flex: 1, height: 16, background: '#f4f1ea', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ display: 'flex', height: '100%', width: `${barPct}%`, transition: 'width 0.4s' }}>
+                            <div title={`Meta: ${fmt$(r.metaSpend)}`} style={{ width: `${metaPct}%`, background: '#1877f2', height: '100%' }} />
+                            <div title={`Google: ${fmt$(r.googleSpend)}`} style={{ width: `${100 - metaPct}%`, background: '#fbbc05', height: '100%' }} />
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 11, color: '#171717', width: 70, textAlign: 'right', fontWeight: 700 }}>{fmt$(r.adSpend)}</span>
+                        <div style={{ display: 'flex', gap: 6, width: 140, justifyContent: 'flex-end', fontSize: 9 }}>
+                          {r.metaSpend > 0 && <span style={{ color: '#1877f2', letterSpacing: 1 }}>{fmt$(r.metaSpend)}M</span>}
+                          {r.googleSpend > 0 && <span style={{ color: '#fbbc05', letterSpacing: 1 }}>{fmt$(r.googleSpend)}G</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ display: 'flex', gap: 14, marginTop: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#1877f2' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Meta</span></div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#fbbc05' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Google</span></div>
+                </div>
+              </div>
+            </>
+          );
+        }
+
         return (
           <>
             <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 16, marginTop: 28 }}>
-              <div>
-                <div className="eyebrow" style={{ marginBottom: 6 }}>CFO View</div>
-                <div className="display-md" style={{ color: '#171717' }}>Growth & Contribution</div>
-                <div className="display-italic" style={{ fontSize: 12, color: '#77746f', marginTop: 4 }}>
-                  New vs returning, NCAC, and CM3 (revenue net of COGS, fees, shipping, fulfillment, ad spend).
-                </div>
+	              <div>
+	                <div className="eyebrow" style={{ marginBottom: 6 }}>CFO View</div>
+	                <div className="display-md" style={{ color: '#171717' }}>Financial Performance</div>
+	                <div className="display-italic" style={{ fontSize: 12, color: '#77746f', marginTop: 4 }}>
+	                  Revenue, CM3, OpEx coverage, and estimated net profit.
+	                </div>
               </div>
               <button onClick={() => setShowAssumptions(v => !v)} style={S.ghostBtn}>
                 {showAssumptions ? 'Hide' : 'Edit'} Assumptions
@@ -1996,9 +2104,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
               <div style={{ ...S.card, marginBottom: 16 }}>
                 <span style={S.label}>Assumptions (used for COGS, fees, CM3)</span>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginTop: 10 }}>
-                  {[
-                    { k: 'grossMarginPct',         label: 'Gross Margin %',     suffix: '%'  },
-                    { k: 'paymentFeePct',          label: 'Payment Fee %',      suffix: '%'  },
+	                  {[
+	                    { k: 'grossMarginPct',         label: 'Gross Margin %',     suffix: '%'  },
+	                    { k: 'dealerWholesaleRetailPct', label: 'Wholesale % Retail', suffix: '%'  },
+	                    { k: 'paymentFeePct',          label: 'Payment Fee %',      suffix: '%'  },
                     { k: 'paymentFeeFixed',        label: 'Payment $ / order',  suffix: '$'  },
                     { k: 'shippingCostPerOrder',   label: 'Shipping $ / order', suffix: '$'  },
                     { k: 'fulfillmentCostPerOrder',label: 'Pick/Pack $ / order',suffix: '$'  },
@@ -2012,9 +2121,12 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                         onChange={e => setSettings({ ...settings, [k]: parseFloat(e.target.value) || 0 })}
                         style={{ width: '100%', padding: '6px 8px', background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 12, borderRadius: 4 }}
                       />
-                      <span style={{ fontSize: 9, color: '#88857f' }}>{suffix}</span>
-                    </div>
-                  ))}
+	                      <span style={{ fontSize: 9, color: '#88857f' }}>{suffix}</span>
+	                    </div>
+	                  ))}
+                  <div style={{ gridColumn: '1 / -1', fontSize: 9, color: '#88857f', letterSpacing: 1 }}>
+                    Dealer/wholesale COGS assumes wholesale revenue is {Number(settings.dealerWholesaleRetailPct || 70).toFixed(0)}% of retail, deriving an estimated {dealerGrossMarginPct.toFixed(1)}% gross margin on wholesale revenue from the DTC gross margin.
+                  </div>
                   <div>
                     <span style={{ ...S.label, marginBottom: 4 }}>Monthly Table Start</span>
                     <input
@@ -2178,7 +2290,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                   </div>
                 </div>
 
-                {/* Media Mix — Meta vs Google */}
+                {view === 'growth' && (
                 <div style={{ ...S.card, marginBottom: 20 }}>
                   {(() => {
                     const maxSpend = Math.max(...rows.map(r => r.adSpend), 1);
@@ -2259,6 +2371,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                     );
                   })()}
                 </div>
+                )}
 
                 {/* OpEx Coverage by month (full width) */}
                 <div style={{ ...S.card, marginBottom: 20 }}>
@@ -2556,7 +2669,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const offPlatformRevenueByMonth = settings?.offPlatformRevenueByMonth || {};
         const offPlatformOrdersByMonth = settings?.offPlatformOrdersByMonth || {};
         const defaultOpex = settings?.monthlyOpex || 0;
-        const s = settings;
+        const s = settings || {};
+        const dealerGrossMarginPct = wholesaleGrossMarginPct(s?.grossMarginPct || 60, s?.dealerWholesaleRetailPct || 70);
 
         // Filter forecast to start month forward; current calendar year only.
         const nowD = new Date();
@@ -2589,9 +2703,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const offPlatformOrders = Number(offPlatformOrdersByMonth[f.month] || 0);
           const actRevenue = grossRevenueFor(dtc) + dealerRevenue + offPlatformRevenue;
           const orders = Number(dtc.orders || 0) + dealerOrders + offPlatformOrders;
-          const realCogs = sh.cogs || 0;
-          const fallbackCogs = Math.max(actRevenue - (sh.costedRevenue || 0), 0) * (1 - ((s?.grossMarginPct || 60) / 100));
-          const actCogs = realCogs + fallbackCogs;
+          const dealerCogsSource = hasDealerRevenueOverride ? {} : dealer;
+          const actCogs = estimatedCogsFor(dtc, grossRevenueFor(dtc), s?.grossMarginPct || 60)
+            + estimatedCogsFor(dealerCogsSource, dealerRevenue, dealerGrossMarginPct)
+            + offPlatformRevenue * (1 - ((s?.grossMarginPct || 60) / 100));
           const actMetaSpend = meta.spend || 0;
           const actGoogleSpend = Number(googleByMonth[f.month] || 0);
           const actCac = actMetaSpend + actGoogleSpend;
