@@ -63,9 +63,14 @@ async function fetchStoreAnalytics(store, token) {
   // ShopifyQL is the same reporting layer used by Shopify Analytics. It is the
   // authority for revenue, orders, and customer cohorts; raw orders below remain
   // useful for product detail and COGS but don't reproduce Shopify's report rules.
-  const [monthlyReport, ytdRows] = await Promise.all([
+  const [monthlyReport, sessionsReport, ytdRows] = await Promise.all([
     report(`FROM sales
       SHOW total_sales, net_sales, orders, customers, new_customers, returning_customers
+      GROUP BY month
+      SINCE -13m UNTIL today
+      ORDER BY month`),
+    report(`FROM sessions
+      SHOW sessions
       GROUP BY month
       SINCE -13m UNTIL today
       ORDER BY month`),
@@ -83,6 +88,10 @@ async function fetchStoreAnalytics(store, token) {
       newCustomers: Number(row.new_customers || 0),
       returningCustomers: Number(row.returning_customers || 0),
     },
+  ]));
+  const sessionsByMonth = Object.fromEntries(sessionsReport.map(row => [
+    String(row.month).slice(0, 7),
+    Number(row.sessions || 0),
   ]));
   const ytdRow = ytdRows[0] || {};
   const ytd = {
@@ -273,6 +282,8 @@ async function fetchStoreAnalytics(store, token) {
 
   const months = Object.entries(monthMap).map(([month, v]) => {
     const authoritative = reportByMonth[month];
+    const orders = authoritative?.orders ?? v.orders;
+    const sessions = sessionsByMonth[month] || 0;
     return {
     ...(() => {
       // A customer acquired this month stays in the "new" bucket even if they
@@ -291,10 +302,12 @@ async function fetchStoreAnalytics(store, token) {
     netSales: authoritative?.netSales ?? v.netSales,
     grossSales: authoritative?.totalSales ?? v.netSales,
     shopifyNetSales: authoritative?.netSales ?? v.netSales,
-    orders: authoritative?.orders ?? v.orders,
+    orders,
     shipping: v.shipping,
-    aov: (authoritative?.orders ?? v.orders) > 0
-      ? (authoritative?.netSales ?? v.netSales) / (authoritative?.orders ?? v.orders)
+    sessions,
+    cvr: sessions > 0 ? (orders / sessions) * 100 : 0,
+    aov: orders > 0
+      ? (authoritative?.netSales ?? v.netSales) / orders
       : 0,
     newRevenue: v.newRevenue,
     returningRevenue: v.returningRevenue,
@@ -329,6 +342,7 @@ function mergeStoreResults(stores) {
     for (const m of result.months) {
       if (!monthMap[m.month]) monthMap[m.month] = {
         netSales: 0, grossSales: 0, orders: 0, shipping: 0, newCustomers: 0, returningCustomers: 0,
+        sessions: 0,
         newRevenue: 0, returningRevenue: 0, cogs: 0, costedRevenue: 0, uncostedRevenue: 0,
         customerKeys: new Set(), newCustomerKeys: new Set(), returningCustomerKeys: new Set(),
       };
@@ -337,6 +351,7 @@ function mergeStoreResults(stores) {
       t.grossSales += m.grossSales ?? m.netSales ?? 0;
       t.orders += m.orders || 0;
       t.shipping += m.shipping || 0;
+      t.sessions += m.sessions || 0;
       t.newCustomers += m.newCustomers || 0;
       t.returningCustomers += m.returningCustomers || 0;
       t.newRevenue += m.newRevenue || 0;
@@ -372,8 +387,8 @@ function mergeStoreResults(stores) {
       grossSales: v.grossSales,
       orders: v.orders,
       shipping: v.shipping,
-      sessions: 0,
-      cvr: 0,
+      sessions: v.sessions,
+      cvr: v.sessions > 0 ? (v.orders / v.sessions) * 100 : 0,
       aov: v.orders > 0 ? v.netSales / v.orders : 0,
       newCustomers,
       returningCustomers,

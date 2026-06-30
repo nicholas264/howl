@@ -622,6 +622,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         month: m.month,
         shopify: {
           netSales: m.netSales, grossSales: m.grossSales ?? m.netSales, orders: m.orders, shipping: m.shipping,
+          sessions: m.sessions, cvr: m.cvr,
           customers: m.customers, shopifyNetSales: m.shopifyNetSales,
           newCustomers: m.newCustomers, returningCustomers: m.returningCustomers,
           newRevenue: m.newRevenue, returningRevenue: m.returningRevenue,
@@ -637,6 +638,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
       const snapshot = byMonth.get(m.month) || { month: m.month };
       snapshot.shopify_dealer = {
         netSales: m.netSales, grossSales: m.grossSales ?? m.netSales, orders: m.orders, shipping: m.shipping,
+        sessions: m.sessions, cvr: m.cvr,
         customers: m.customers, shopifyNetSales: m.shopifyNetSales,
         newCustomers: m.newCustomers, returningCustomers: m.returningCustomers,
         newRevenue: m.newRevenue, returningRevenue: m.returningRevenue,
@@ -1712,12 +1714,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const sumShopify = (a, b) => {
           if (!a && !b) return null;
           a = a || {}; b = b || {};
-          const keys = ['orders','shipping','newCustomers','returningCustomers','newRevenue','returningRevenue','cogs','costedRevenue','uncostedRevenue'];
+          const keys = ['orders','shipping','sessions','newCustomers','returningCustomers','newRevenue','returningRevenue','cogs','costedRevenue','uncostedRevenue'];
           const out = {};
           for (const k of keys) out[k] = (a[k] || 0) + (b[k] || 0);
           out.netSales = sumNetRevenue(a, b);
           out.grossSales = sumGrossRevenue(a, b);
           out.shopifyNetSales = out.netSales;
+          out.cvr = out.sessions > 0 ? (out.orders / out.sessions) * 100 : 0;
           const legacyCount = (source, key) => {
             if ((source.customerKeys || []).length > 0) return Number(source[`legacy${key}`] || 0);
             return Number(source[key.charAt(0).toLowerCase() + key.slice(1)] || 0)
@@ -2685,10 +2688,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           if (!a && !b) return null;
           a = a || {}; b = b || {};
           const out = {};
-          for (const k of ['orders','shipping','newCustomers','returningCustomers','newRevenue','returningRevenue','cogs','costedRevenue','uncostedRevenue']) out[k] = (a[k] || 0) + (b[k] || 0);
+          for (const k of ['orders','shipping','sessions','newCustomers','returningCustomers','newRevenue','returningRevenue','cogs','costedRevenue','uncostedRevenue']) out[k] = (a[k] || 0) + (b[k] || 0);
           out.netSales = sumNetRevenue(a, b);
           out.grossSales = sumGrossRevenue(a, b);
           out.shopifyNetSales = out.netSales;
+          out.cvr = out.sessions > 0 ? (out.orders / out.sessions) * 100 : 0;
           return out;
         };
         const allShopMonths = new Set([
