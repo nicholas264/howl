@@ -1936,10 +1936,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           metaPurchaseValue: a.metaPurchaseValue + r.metaPurchaseValue,
           googleConvValue: a.googleConvValue + r.googleConvValue,
           cm3: a.cm3 + r.cm3,
-          netProfit: a.netProfit + r.projectedNetProfit,
+          netProfit: a.netProfit + r.netProfit,
+          projectedNetProfit: a.projectedNetProfit + r.projectedNetProfit,
           newRevenue: a.newRevenue + r.newRevenue,
           opex: a.opex + r.opex,
-        }), { revenue: 0, netRevenue: 0, dtcRevenue: 0, dtcNetRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, netProfit: 0, newRevenue: 0, opex: 0 });
+        }), { revenue: 0, netRevenue: 0, dtcRevenue: 0, dtcNetRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, netProfit: 0, projectedNetProfit: 0, newRevenue: 0, opex: 0 });
 
         const livePrimaryYtd = shopifyData?._stores?.primary?.ytd;
         const snapPrimaryYtd = [...Object.values(snapshotShopByMonth)]
@@ -2228,7 +2229,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                     { label: `${summaryYear} Dealer Revenue`, value: fmt$(ltm.dealerRevenue), sub: fmtPct(ltm.dealerRevenue / Math.max(ltm.revenue, 1)) + ' of total' },
                     { label: `${summaryYear} YTD Ad Spend`,  value: fmt$(ltm.adSpend), sub: fmt$(ltm.metaSpend) + ' Meta · ' + fmt$(ltm.googleSpend) + ' Google' },
                     { label: `${summaryYear} YTD CM3`,       value: fmt$(ltm.cm3), color: ltm.cm3 >= 0 ? '#256b35' : '#b42318', sub: fmtPct(ltmCmMargin) + ' margin' },
-                    { label: `Est. ${summaryYear} YTD Net Profit`, value: fmt$(ltm.netProfit), color: ltm.netProfit >= 0 ? '#256b35' : '#b42318', sub: 'CM3 - OpEx; current month paced' },
+                    { label: `Est. ${summaryYear} YTD Net Profit`, value: fmt$(ltm.netProfit), color: ltm.netProfit >= 0 ? '#256b35' : '#b42318', sub: 'actual/MTD CM3 - OpEx' },
                     { label: `${summaryYear} OpEx Cov.`,     value: ltmOpexCoverage == null ? '—' : fmtPct(ltmOpexCoverage), color: ltmOpexCoverage >= 1 ? '#256b35' : '#9a6a0a', sub: fmt$(opex) + ' / mo opex' },
                     { label: `${summaryYear} New Custs`,     value: ltm.newCustomers.toLocaleString(), sub: `${totalCustomers.toLocaleString()} total unique` },
                     { label: 'Avg NCAC',        value: ltmNcac == null ? '—' : '$' + ltmNcac.toFixed(0) },
@@ -2477,9 +2478,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                   </div>
                 </div>
 
-                {/* Estimated net profit by month */}
-                <div style={{ ...S.card, marginBottom: 20 }}>
-                  <span style={S.label}>Estimated Net Profit After OpEx by Month</span>
+	                {/* Estimated / projected net profit by month */}
+	                <div style={{ ...S.card, marginBottom: 20 }}>
+	                  <span style={S.label}>Estimated Net Profit After OpEx by Month</span>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
                     {rows.map(r => {
                       const value = r.projectedNetProfit;
@@ -2504,8 +2505,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                     })}
                   </div>
                   <div style={{ fontSize: 9, color: '#88857f', marginTop: 8, letterSpacing: 1 }}>
-                    Net profit estimate = CM3 - monthly OpEx. * = current month projected to month-end using today&apos;s MTD pace.
-                  </div>
+	                    Closed months use actual/MTD net profit. * = current month projected to month-end using today&apos;s MTD pace.
+	                  </div>
                 </div>
 
                 {/* Detailed monthly P&L table */}
