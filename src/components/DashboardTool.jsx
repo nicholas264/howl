@@ -1941,6 +1941,12 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           newRevenue: a.newRevenue + r.newRevenue,
           opex: a.opex + r.opex,
         }), { revenue: 0, netRevenue: 0, dtcRevenue: 0, dtcNetRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, netProfit: 0, projectedNetProfit: 0, newRevenue: 0, opex: 0 });
+        const priorNetProfit = rollupRows
+          .filter(r => !r.isCurrent)
+          .reduce((sum, r) => sum + r.netProfit, 0);
+        const currentNetProfit = currentRow?.month?.startsWith(`${summaryYear}-`)
+          ? currentRow.netProfit
+          : 0;
 
         const livePrimaryYtd = shopifyData?._stores?.primary?.ytd;
         const snapPrimaryYtd = [...Object.values(snapshotShopByMonth)]
@@ -2229,7 +2235,17 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                     { label: `${summaryYear} Dealer Revenue`, value: fmt$(ltm.dealerRevenue), sub: fmtPct(ltm.dealerRevenue / Math.max(ltm.revenue, 1)) + ' of total' },
                     { label: `${summaryYear} YTD Ad Spend`,  value: fmt$(ltm.adSpend), sub: fmt$(ltm.metaSpend) + ' Meta · ' + fmt$(ltm.googleSpend) + ' Google' },
                     { label: `${summaryYear} YTD CM3`,       value: fmt$(ltm.cm3), color: ltm.cm3 >= 0 ? '#256b35' : '#b42318', sub: fmtPct(ltmCmMargin) + ' margin' },
-                    { label: `Est. ${summaryYear} YTD Net Profit`, value: fmt$(ltm.netProfit), color: ltm.netProfit >= 0 ? '#256b35' : '#b42318', sub: 'actual/MTD CM3 - OpEx' },
+                    {
+                      label: `Est. ${summaryYear} YTD Net Profit`,
+                      value: fmt$(ltm.netProfit),
+                      color: ltm.netProfit >= 0 ? '#256b35' : '#b42318',
+                      sub: 'actual/MTD CM3 - OpEx',
+                      bridge: [
+                        { label: 'Prior', value: priorNetProfit },
+                        { label: fmtMo(currentMonthKey).replace(` '${summaryYear.slice(2)}`, ''), value: currentNetProfit },
+                        { label: 'YTD', value: ltm.netProfit },
+                      ],
+                    },
                     { label: `${summaryYear} OpEx Cov.`,     value: ltmOpexCoverage == null ? '—' : fmtPct(ltmOpexCoverage), color: ltmOpexCoverage >= 1 ? '#256b35' : '#9a6a0a', sub: fmt$(opex) + ' / mo opex' },
                     { label: `${summaryYear} New Custs`,     value: ltm.newCustomers.toLocaleString(), sub: `${totalCustomers.toLocaleString()} total unique` },
                     { label: 'Avg NCAC',        value: ltmNcac == null ? '—' : '$' + ltmNcac.toFixed(0) },
@@ -2240,11 +2256,21 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                     { label: 'Google ROAS',     value: ltmGoogleRoas == null ? '—' : ltmGoogleRoas.toFixed(2) + 'x', color: (ltmGoogleRoas || 0) >= 2 ? '#256b35' : (ltmGoogleRoas || 0) >= 1 ? '#9a6a0a' : '#b42318', sub: 'reported (pixel)' },
                     { label: 'Mktg % Rev',      value: ltm.revenue > 0 ? fmtPct(ltm.adSpend / ltm.revenue) : '—', color: ltm.revenue > 0 && (ltm.adSpend / ltm.revenue) <= 0.30 ? '#256b35' : ltm.revenue > 0 && (ltm.adSpend / ltm.revenue) <= 0.50 ? '#9a6a0a' : '#b42318', sub: 'ad spend ÷ revenue' },
                     { label: 'Repeat Rate',     value: fmtPct(ltmRepeatRate) },
-                  ].map(({ label, value, sub, color }) => (
+                  ].map(({ label, value, sub, color, bridge }) => (
                     <div key={label} style={S.card}>
                       <span style={S.label}>{label}</span>
                       <div style={{ fontSize: 20, fontWeight: 700, color: color || '#171717', lineHeight: 1 }}>{value}</div>
                       {sub && <div style={{ fontSize: 9, color: '#88857f', marginTop: 6, letterSpacing: 1 }}>{sub}</div>}
+                      {bridge && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginTop: 10, paddingTop: 8, borderTop: '1px solid #dedbd3' }}>
+                          {bridge.map(item => (
+                            <div key={item.label}>
+                              <div style={{ fontSize: 8, color: '#88857f', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 3 }}>{item.label}</div>
+                              <div style={{ fontSize: 11, color: item.value >= 0 ? '#256b35' : '#b42318', fontWeight: 700 }}>{fmt$(item.value)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
