@@ -107,6 +107,18 @@ function estimatedCogsFor(source, revenue, fallbackGrossMarginPct) {
   return actualCogs + fallbackRevenue * (1 - (Number(fallbackGrossMarginPct || 0) / 100));
 }
 
+function numberInputValue(value) {
+  return value ?? '';
+}
+
+function numberInputChange(value) {
+  return value === '' ? '' : Number(value);
+}
+
+function assumptionNumber(value, fallback = 0) {
+  return value === '' || value == null || Number.isNaN(Number(value)) ? fallback : Number(value);
+}
+
 function acquisitionRevenueFor(source, revenue) {
   const totalRevenue = Number(revenue || 0);
   if (totalRevenue <= 0) return 0;
@@ -986,13 +998,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           { key: '__analyze',       label: '',             align: 'right', sortable: false, kind: 'action' },
         ];
 
-        // Pull CFO assumptions for per-creative contribution profit.
-        const s = settings || {};
-        const gmPct = (s.grossMarginPct ?? 60) / 100;
-        const pfPct = (s.paymentFeePct ?? 2.9) / 100;
-        const pfFixed = s.paymentFeeFixed ?? 0.30;
-        const shipPerOrder = s.shippingCostPerOrder ?? 8;
-        const fulfillPerOrder = s.fulfillmentCostPerOrder ?? 3;
+	        // Pull CFO assumptions for per-creative contribution profit.
+	        const s = settings || {};
+	        const gmPct = assumptionNumber(s.grossMarginPct, 60) / 100;
+	        const pfPct = assumptionNumber(s.paymentFeePct, 2.9) / 100;
+	        const pfFixed = assumptionNumber(s.paymentFeeFixed, 0.30);
+	        const shipPerOrder = assumptionNumber(s.shippingCostPerOrder, 8);
+	        const fulfillPerOrder = assumptionNumber(s.fulfillmentCostPerOrder, 3);
 
         const groups = (creativeTable?.groups || []).map(g => {
           const rev = g.purchaseValue || 0;
@@ -1743,7 +1755,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
 
         // Settings-derived maps (declared before allMonthKeys to avoid TDZ).
         const s = settings || { grossMarginPct: 60, dealerWholesaleRetailPct: 70, paymentFeePct: 2.9, paymentFeeFixed: 0.30, shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000, googleSpend: {}, opexByMonth: {}, dealerRevenueByMonth: {}, dealerOrdersByMonth: {}, offPlatformRevenueByMonth: {}, offPlatformOrdersByMonth: {} };
-        const dealerGrossMarginPct = wholesaleGrossMarginPct(s.grossMarginPct, s.dealerWholesaleRetailPct);
+        const grossMarginPct = assumptionNumber(s.grossMarginPct, 60);
+        const dealerWholesaleRetailPct = assumptionNumber(s.dealerWholesaleRetailPct, 70);
+        const paymentFeePct = assumptionNumber(s.paymentFeePct, 2.9);
+        const paymentFeeFixed = assumptionNumber(s.paymentFeeFixed, 0.30);
+        const shippingCostPerOrder = assumptionNumber(s.shippingCostPerOrder, 8);
+        const fulfillmentCostPerOrder = assumptionNumber(s.fulfillmentCostPerOrder, 3);
+        const dealerGrossMarginPct = wholesaleGrossMarginPct(grossMarginPct, dealerWholesaleRetailPct);
         // Google spend pulled live from /api/google → monthly_metrics.google → snapshot.
         // Manual settings.googleSpend is ignored (column removed from assumptions UI).
         const googleByMonth = Object.fromEntries(
@@ -1772,7 +1790,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         ])).filter(Boolean).sort();
         // Hard cap to keep tables readable; will grow as we accumulate snapshots forward
         const recent24 = allMonthKeys.slice(-24);
-        const defaultOpex = s.monthlyOpex || 0;
+        const defaultOpex = assumptionNumber(s.monthlyOpex, 0);
         const opexFor = (mk) => {
           const v = opexByMonth[mk];
           return (v == null || v === '') ? defaultOpex : Number(v);
@@ -1783,7 +1801,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const variableMarginPerOrder = (rev, orders) => {
           if (!orders) return 0;
           const aov = rev / orders;
-          return aov * (s.grossMarginPct / 100) - aov * (s.paymentFeePct / 100) - s.paymentFeeFixed - s.shippingCostPerOrder - s.fulfillmentCostPerOrder;
+          return aov * (grossMarginPct / 100) - aov * (paymentFeePct / 100) - paymentFeeFixed - shippingCostPerOrder - fulfillmentCostPerOrder;
         };
 
         const nowD = new Date();
@@ -1822,15 +1840,15 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           // Hybrid COGS by channel: actual unitCost × qty where available,
           // with fallback margin assumptions per revenue source.
           const dealerCogsSource = hasDealerRevenueOverride ? {} : dealer;
-          const dtcCogs = estimatedCogsFor(dtc, dtcRevenue, s.grossMarginPct);
+          const dtcCogs = estimatedCogsFor(dtc, dtcNetRevenue, grossMarginPct);
           const dealerCogs = estimatedCogsFor(dealerCogsSource, dealerRevenue, dealerGrossMarginPct);
-          const offPlatformCogs = offPlatformRevenue * (1 - (s.grossMarginPct / 100));
+          const offPlatformCogs = offPlatformRevenue * (1 - (grossMarginPct / 100));
           const cogs = dtcCogs + dealerCogs + offPlatformCogs;
           const costedRevenue = Number(dtc.costedRevenue || 0) + Number(dealerCogsSource.costedRevenue || 0);
-          const cogsActualPct = revenue > 0 ? costedRevenue / revenue : 0; // 1.0 = 100% real, 0 = all fallback
-          const paymentFees = revenue * (s.paymentFeePct / 100) + orders * s.paymentFeeFixed;
-          const shipCost = orders * s.shippingCostPerOrder;
-          const fulfill = orders * s.fulfillmentCostPerOrder;
+          const cogsActualPct = netRevenue > 0 ? costedRevenue / netRevenue : 0; // 1.0 = 100% real, 0 = all fallback
+          const paymentFees = netRevenue * (paymentFeePct / 100) + orders * paymentFeeFixed;
+          const shipCost = orders * shippingCostPerOrder;
+          const fulfill = orders * fulfillmentCostPerOrder;
           const metaSpend = meta.spend || 0;
           const googleSpend = Number(googleByMonth[mk] || 0);
           const adSpend = metaSpend + googleSpend;
@@ -1840,7 +1858,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const metaPurchaseValue = metaRoasReported != null ? metaSpend * metaRoasReported : 0;
           const googleConvValue = Number(snapshotGoogleByMonth[mk]?.conversionValue || 0);
           const googleRoasReported = googleSpend > 0 ? googleConvValue / googleSpend : null;
-          const cm3 = revenue - cogs - paymentFees - shipCost - fulfill - adSpend;
+          const cm3 = netRevenue - cogs - paymentFees - shipCost - fulfill - adSpend;
           // NCAC = total ad spend (Meta + Google) ÷ new customers.
           const classifiedNewRevenue = dtcAcquisitionRevenue + dealerAcquisitionRevenue;
           const classifiedNewCustomers = Number(sh.newCustomers || 0) + addNewCust;
@@ -1851,9 +1869,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const newRoas = adSpend > 0 ? classifiedNewRevenue / adSpend : null;
           // First-order payback: variable margin generated by new-customer first orders ÷ NCAC.
           // <100% = new customer doesn't pay back on first order (need repeats).
-          const newOrderMargin = classifiedNewRevenue * (s.grossMarginPct / 100)
-                                - classifiedNewRevenue * (s.paymentFeePct / 100)
-                                - classifiedNewCustomers * (s.paymentFeeFixed + s.shippingCostPerOrder + s.fulfillmentCostPerOrder);
+          const dtcNewMargin = dtcAcquisitionRevenue * (grossMarginPct / 100);
+          const dealerNewMargin = dealerAcquisitionRevenue * (dealerGrossMarginPct / 100);
+          const newOrderMargin = (dtcNewMargin + dealerNewMargin)
+                                - classifiedNewRevenue * (paymentFeePct / 100)
+                                - classifiedNewCustomers * (paymentFeeFixed + shippingCostPerOrder + fulfillmentCostPerOrder);
           const firstOrderPayback = adSpend > 0 ? newOrderMargin / adSpend : null;
           const opexThis = opexFor(mk);
           const opexCoverage = opexThis > 0 ? cm3 / opexThis : null;
@@ -1962,7 +1982,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const ltmGoogleRoas = ltm.googleSpend > 0 ? ltm.googleConvValue   / ltm.googleSpend : null;
         const ltmRepeatRate = (ltm.newCustomers + ltm.returningCustomers) > 0
           ? ltm.returningCustomers / (ltm.newCustomers + ltm.returningCustomers) : 0;
-        const ltmCmMargin = ltm.revenue > 0 ? ltm.cm3 / ltm.revenue : 0;
+        const ltmCmMargin = ltm.netRevenue > 0 ? ltm.cm3 / ltm.netRevenue : 0;
         const ltmOpexCoverage = ltm.opex > 0 ? ltm.cm3 / ltm.opex : null;
         // For UI: show the default opex if no per-month overrides, else "$X avg"
         const opex = ltm.opex / Math.max(rollupRows.length, 1);
@@ -2115,17 +2135,18 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                   ].map(({ k, label, suffix }) => (
                     <div key={k}>
                       <span style={{ ...S.label, marginBottom: 4 }}>{label}</span>
-                      <input
-                        type="number" step="0.01"
-                        value={settings[k]}
-                        onChange={e => setSettings({ ...settings, [k]: parseFloat(e.target.value) || 0 })}
-                        style={{ width: '100%', padding: '6px 8px', background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 12, borderRadius: 4 }}
-                      />
+	                      <input
+	                        type="number" step="0.01"
+	                        value={numberInputValue(settings[k])}
+	                        onFocus={e => e.target.select()}
+	                        onChange={e => setSettings({ ...settings, [k]: numberInputChange(e.target.value) })}
+	                        style={{ width: '100%', padding: '6px 8px', background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 12, borderRadius: 4 }}
+	                      />
 	                      <span style={{ fontSize: 9, color: '#88857f' }}>{suffix}</span>
 	                    </div>
 	                  ))}
                   <div style={{ gridColumn: '1 / -1', fontSize: 9, color: '#88857f', letterSpacing: 1 }}>
-                    Dealer/wholesale COGS assumes wholesale revenue is {Number(settings.dealerWholesaleRetailPct || 70).toFixed(0)}% of retail, deriving an estimated {dealerGrossMarginPct.toFixed(1)}% gross margin on wholesale revenue from the DTC gross margin.
+                    Dealer/wholesale COGS assumes wholesale revenue is {dealerWholesaleRetailPct.toFixed(0)}% of retail, deriving an estimated {dealerGrossMarginPct.toFixed(1)}% gross margin on wholesale revenue from the DTC gross margin.
                   </div>
                   <div>
                     <span style={{ ...S.label, marginBottom: 4 }}>Monthly Table Start</span>
@@ -2501,7 +2522,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                       </thead>
                       <tbody>
                         {rows.map(r => {
-                          const margin = r.revenue > 0 ? r.cm3 / r.revenue : 0;
+                          const margin = r.netRevenue > 0 ? r.cm3 / r.netRevenue : 0;
                           return (
                             <tr key={r.month} style={{ borderTop: '1px solid #dedbd3' }}>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#343330' }}>{fmtMo(r.month)}</td>
@@ -2521,7 +2542,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#77746f', textAlign: 'right' }}>{fmt$(r.shipCost)}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#77746f', textAlign: 'right' }}>{fmt$(r.fulfill)}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.cm3 >= 0 ? '#256b35' : '#b42318', textAlign: 'right', fontWeight: 700 }}>{fmt$(r.cm3)}</td>
-                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: margin >= 0 ? '#256b35' : '#b42318', textAlign: 'right' }}>{r.revenue > 0 ? fmtPct(margin) : '—'}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: margin >= 0 ? '#256b35' : '#b42318', textAlign: 'right' }}>{r.netRevenue > 0 ? fmtPct(margin) : '—'}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: opexByMonth[r.month] != null ? '#343330' : '#88857f', textAlign: 'right' }}>{fmt$(r.opex)}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.opexCoverage == null ? '#88857f' : r.opexCoverage >= 1 ? '#256b35' : r.opexCoverage >= 0 ? '#9a6a0a' : '#b42318', textAlign: 'right', fontWeight: 600 }}>{r.opexCoverage == null ? '—' : (r.opexCoverage * 100).toFixed(0) + '%'}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.netProfit >= 0 ? '#256b35' : '#b42318', textAlign: 'right', fontWeight: 700 }}>{fmt$(r.netProfit)}</td>
@@ -2555,7 +2576,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                     </table>
                   </div>
                   <div style={{ fontSize: 9, color: '#88857f', marginTop: 8, letterSpacing: 1 }}>
-                    CM3 = Revenue − COGS − Payment Fees − Shipping − Pick/Pack − (Meta + Google) Spend. Estimated net profit = CM3 − OpEx. COGS uses Shopify per-unit cost when set, GM% assumption otherwise. NCAC = (Meta + Google) spend ÷ new lifetime customers. OpEx column = monthly P&L override or default. Bold OpEx = override set; dim = default.
+                    CM3 = Net Revenue − COGS − Payment Fees − Shipping − Pick/Pack − (Meta + Google) Spend. Estimated net profit = CM3 − OpEx. COGS uses Shopify per-unit cost when set, GM% assumption otherwise. Dealer COGS uses the wholesale margin assumption. NCAC = (Meta + Google) spend ÷ new lifetime customers. OpEx column = monthly P&L override or default. Bold OpEx = override set; dim = default.
                   </div>
                 </div>
               </>
@@ -2668,9 +2689,14 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const dealerOrdersByMonth = settings?.dealerOrdersByMonth || {};
         const offPlatformRevenueByMonth = settings?.offPlatformRevenueByMonth || {};
         const offPlatformOrdersByMonth = settings?.offPlatformOrdersByMonth || {};
-        const defaultOpex = settings?.monthlyOpex || 0;
+        const defaultOpex = assumptionNumber(settings?.monthlyOpex, 0);
         const s = settings || {};
-        const dealerGrossMarginPct = wholesaleGrossMarginPct(s?.grossMarginPct || 60, s?.dealerWholesaleRetailPct || 70);
+        const grossMarginPct = assumptionNumber(s?.grossMarginPct, 60);
+        const dealerGrossMarginPct = wholesaleGrossMarginPct(grossMarginPct, assumptionNumber(s?.dealerWholesaleRetailPct, 70));
+        const paymentFeePct = assumptionNumber(s?.paymentFeePct, 2.9);
+        const paymentFeeFixed = assumptionNumber(s?.paymentFeeFixed, 0.30);
+        const shippingCostPerOrder = assumptionNumber(s?.shippingCostPerOrder, 8);
+        const fulfillmentCostPerOrder = assumptionNumber(s?.fulfillmentCostPerOrder, 3);
 
         // Filter forecast to start month forward; current calendar year only.
         const nowD = new Date();
@@ -2702,20 +2728,21 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const offPlatformRevenue = Number(offPlatformRevenueByMonth[f.month] || 0);
           const offPlatformOrders = Number(offPlatformOrdersByMonth[f.month] || 0);
           const actRevenue = grossRevenueFor(dtc) + dealerRevenue + offPlatformRevenue;
+          const actNetRevenue = netRevenueFor(dtc) + dealerRevenue + offPlatformRevenue;
           const orders = Number(dtc.orders || 0) + dealerOrders + offPlatformOrders;
           const dealerCogsSource = hasDealerRevenueOverride ? {} : dealer;
-          const actCogs = estimatedCogsFor(dtc, grossRevenueFor(dtc), s?.grossMarginPct || 60)
+          const actCogs = estimatedCogsFor(dtc, netRevenueFor(dtc), grossMarginPct)
             + estimatedCogsFor(dealerCogsSource, dealerRevenue, dealerGrossMarginPct)
-            + offPlatformRevenue * (1 - ((s?.grossMarginPct || 60) / 100));
+            + offPlatformRevenue * (1 - (grossMarginPct / 100));
           const actMetaSpend = meta.spend || 0;
           const actGoogleSpend = Number(googleByMonth[f.month] || 0);
           const actCac = actMetaSpend + actGoogleSpend;
           const actOpex = opexByMonth[f.month] != null && opexByMonth[f.month] !== ''
             ? Number(opexByMonth[f.month]) : defaultOpex;
-          const actFees = actRevenue * ((s?.paymentFeePct || 2.9) / 100) + orders * (s?.paymentFeeFixed || 0.30);
-          const actShip = orders * (s?.shippingCostPerOrder || 8);
-          const actPick = orders * (s?.fulfillmentCostPerOrder || 3);
-          const actCm3 = actRevenue - actCogs - actFees - actShip - actPick - actCac;
+          const actFees = actNetRevenue * (paymentFeePct / 100) + orders * paymentFeeFixed;
+          const actShip = orders * shippingCostPerOrder;
+          const actPick = orders * fulfillmentCostPerOrder;
+          const actCm3 = actNetRevenue - actCogs - actFees - actShip - actPick - actCac;
 
           // Project current-month actual to full month.
           const paceFactor = isCurrent ? daysInMonth / Math.max(dayOfMonth, 1) : 1;
