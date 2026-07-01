@@ -1903,8 +1903,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const revenue = dtcRevenue + dealerRevenue + offPlatformRevenue;
           const netRevenue = dtcNetRevenue + dealerRevenue + offPlatformRevenue;
           const orders = dtcOrders + dealerOrders + offPlatformOrders;
+          const shopifyOrders = Number(sh.orders || 0);
           const sessions = Number(sh.sessions || 0);
-          const cvr = sessions > 0 ? orders / sessions : null;
+          const cvr = sessions > 0 ? shopifyOrders / sessions : null;
           // Hybrid COGS by channel: actual unitCost × qty where available,
           // with fallback margin assumptions per revenue source.
           const dealerCogsSource = hasDealerRevenueOverride ? {} : dealer;
@@ -1962,7 +1963,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           return {
             month: mk, revenue, netRevenue, dtcRevenue, dtcNetRevenue, dealerRevenue, offPlatformRevenue,
             dtcGrossRevenue: dtcRevenue,
-            orders, sessions, cvr, dtcOrders, dealerOrders, offPlatformOrders, newCustomers, returningCustomers,
+            orders, shopifyOrders, sessions, cvr, dtcOrders, dealerOrders, offPlatformOrders, newCustomers, returningCustomers,
             customers: dtc.customers || 0,
             customerKeys: dtc.customerKeys || [], newCustomerKeys: dtc.newCustomerKeys || [],
             returningCustomerKeys: dtc.returningCustomerKeys || [],
@@ -2008,6 +2009,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           dealerRevenue: a.dealerRevenue + r.dealerRevenue,
           offPlatformRevenue: a.offPlatformRevenue + r.offPlatformRevenue,
           orders: a.orders + r.orders,
+          shopifyOrders: a.shopifyOrders + r.shopifyOrders,
           sessions: a.sessions + r.sessions,
           newCustomers: a.newCustomers + r.newCustomers,
           returningCustomers: a.returningCustomers + r.returningCustomers,
@@ -2029,7 +2031,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           emailOpens: a.emailOpens + r.emailOpens,
           emailClicks: a.emailClicks + r.emailClicks,
           emailUnsubscribes: a.emailUnsubscribes + r.emailUnsubscribes,
-        }), { revenue: 0, netRevenue: 0, dtcRevenue: 0, dtcNetRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, sessions: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, netProfit: 0, projectedNetProfit: 0, newRevenue: 0, opex: 0, klaviyoRevenue: 0, klaviyoOrders: 0, klaviyoFlowRevenue: 0, klaviyoCampaignRevenue: 0, emailSends: 0, emailOpens: 0, emailClicks: 0, emailUnsubscribes: 0 });
+        }), { revenue: 0, netRevenue: 0, dtcRevenue: 0, dtcNetRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, shopifyOrders: 0, sessions: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, netProfit: 0, projectedNetProfit: 0, newRevenue: 0, opex: 0, klaviyoRevenue: 0, klaviyoOrders: 0, klaviyoFlowRevenue: 0, klaviyoCampaignRevenue: 0, emailSends: 0, emailOpens: 0, emailClicks: 0, emailUnsubscribes: 0 });
         const priorNetProfit = rollupRows
           .filter(r => !r.isCurrent)
           .reduce((sum, r) => sum + r.netProfit, 0);
@@ -2078,7 +2080,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const ltmGoogleRoas = ltm.googleSpend > 0 ? ltm.googleConvValue   / ltm.googleSpend : null;
         const ltmRepeatRate = (ltm.newCustomers + ltm.returningCustomers) > 0
           ? ltm.returningCustomers / (ltm.newCustomers + ltm.returningCustomers) : 0;
-        const ltmCvr = ltm.sessions > 0 ? ltm.orders / ltm.sessions : null;
+        const ltmCvr = ltm.sessions > 0 ? ltm.shopifyOrders / ltm.sessions : null;
         const ltmKlaviyoRevenuePct = ltm.netRevenue > 0 ? ltm.klaviyoRevenue / ltm.netRevenue : null;
         const ltmEmailOpenRate = ltm.emailSends > 0 ? ltm.emailOpens / ltm.emailSends : null;
         const ltmEmailClickRate = ltm.emailSends > 0 ? ltm.emailClicks / ltm.emailSends : null;
@@ -2144,7 +2146,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
             { label: 'MER', value: ltmMer == null ? '—' : ltmMer.toFixed(2) + 'x', ...ratioStatus(ltmMer, v => v >= 2.0, v => v >= 1.4), note: 'gross revenue / ad spend' },
             { label: 'aMER', value: ltmAmer == null ? '—' : ltmAmer.toFixed(2) + 'x', ...ratioStatus(ltmAmer, v => v >= 1.0, v => v >= 0.7), note: 'new-customer revenue / ad spend' },
             { label: 'NCAC', value: ltmNcac == null ? '—' : '$' + ltmNcac.toFixed(0), ...ratioStatus(ltmNcac, v => v <= 120, v => v <= 180), note: 'ad spend / new customer' },
-            { label: 'CVR', value: ltmCvr == null ? '—' : fmtPct(ltmCvr), ...ratioStatus(ltmCvr, v => v >= 0.015, v => v >= 0.01), note: 'orders / Shopify sessions' },
+            { label: 'CVR', value: ltmCvr == null ? '—' : fmtPct(ltmCvr), ...ratioStatus(ltmCvr, v => v >= 0.015, v => v >= 0.01), note: 'Shopify orders / Shopify sessions' },
             { label: 'CM3 Margin', value: fmtPct(ltmCmMargin), ...ratioStatus(ltmCmMargin, v => v >= 0.15, v => v >= 0.05), note: 'after COGS, fees, fulfillment, media' },
             { label: 'Klaviyo Rev Share', value: ltmKlaviyoRevenuePct == null ? '—' : fmtPct(ltmKlaviyoRevenuePct), ...ratioStatus(ltmKlaviyoRevenuePct, v => v >= 0.2, v => v >= 0.1), note: 'Klaviyo revenue / net revenue' },
           ];
@@ -3611,10 +3613,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
 
         // Compute averages and insights
         const fullMonths = months.filter(m => m.orders > 0);
-        const avgCvr = fullMonths.length > 0 ? fullMonths.reduce((s, m) => s + m.cvr, 0) / fullMonths.length : 0;
         const totalRevenue = months.reduce((s, m) => s + m.netSales, 0);
         const totalOrders = months.reduce((s, m) => s + m.orders, 0);
         const totalSessions = months.reduce((s, m) => s + m.sessions, 0);
+        const avgCvr = totalSessions > 0 ? (totalOrders / totalSessions) * 100 : 0;
 
         // Best / worst months
         const bestCvrMonth = fullMonths.length > 0 ? fullMonths.reduce((a, b) => a.cvr > b.cvr ? a : b) : null;
