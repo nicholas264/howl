@@ -2123,6 +2123,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const ltmMetaCpa = ltmMetaPurchases > 0 ? ltm.metaSpend / ltmMetaPurchases : null;
           const ltmGoogleCpa = ltmGoogleConv > 0 ? ltm.googleSpend / ltmGoogleConv : null;
           const maxKlaviyoRevenue = Math.max(...rows.map(r => r.klaviyoRevenue || 0), 1);
+          const klaviyoTopDrivers = [
+            ...(klaviyoData?.topFlows || []).map(item => ({ ...item, kind: 'Flow', color: '#2ea98f' })),
+            ...(klaviyoData?.topMessages || []).map(item => ({ ...item, kind: 'Message', color: '#d84a17' })),
+          ].sort((a, b) => b.revenue - a.revenue).slice(0, 8);
           const healthyColor = '#256b35';
           const warningColor = '#9a6a0a';
           const dangerColor = '#b42318';
@@ -2365,6 +2369,23 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                 {Object.keys(snapshotKlaviyoByMonth).length === 0 && (
                   <div style={{ fontSize: 10, color: '#9a6a0a', marginTop: 12, letterSpacing: 1 }}>
                     Add <code>KLAVIYO_API_KEY</code> in Vercel and click Load Klaviyo to populate this section.
+                  </div>
+                )}
+                {klaviyoTopDrivers.length > 0 && (
+                  <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid #dedbd3' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                      <span style={S.label}>Top Klaviyo Revenue Drivers</span>
+                      <span style={{ fontSize: 9, color: '#88857f', letterSpacing: 1 }}>Loaded from latest Klaviyo pull</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      {klaviyoTopDrivers.map(item => (
+                        <div key={`${item.kind}-${item.id}`} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 8, alignItems: 'center', padding: '8px 10px', background: '#fff', border: '1px solid #dedbd3', borderRadius: 6 }}>
+                          <span style={{ fontSize: 8, color: item.color, fontWeight: 800, letterSpacing: 1 }}>{item.kind}</span>
+                          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 10, color: '#343330' }} title={item.id}>{item.name || item.id}</span>
+                          <span style={{ fontSize: 10, color: '#171717', fontWeight: 800 }}>{fmt$(item.revenue)}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

@@ -51,6 +51,22 @@ function seriesFromAggregate(payload, measurement) {
   return out;
 }
 
+function topDimensionsFromAggregate(payload, measurement, { limit = 8, fallbackPrefix = 'Klaviyo item' } = {}) {
+  const attrs = payload?.data?.attributes || payload?.attributes || {};
+  const rows = attrs.data || [];
+  return rows.map(row => {
+    const id = (row?.dimensions || []).filter(Boolean).join(' / ') || 'unattributed';
+    const total = (row?.measurements?.[measurement] || []).reduce((sum, value) => sum + Number(value || 0), 0);
+    return {
+      id,
+      name: id === 'unattributed' ? 'Unattributed' : `${fallbackPrefix} ${id}`,
+      revenue: total,
+    };
+  }).filter(item => item.revenue > 0)
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, limit);
+}
+
 function dateRange(monthsBack) {
   const end = new Date();
   const start = new Date(end.getFullYear(), end.getMonth() - (monthsBack - 1), 1);
@@ -229,6 +245,8 @@ export default async function handler(req, res) {
         timezone,
       })),
     ]);
+    const topFlows = topDimensionsFromAggregate(flowRevenue, 'sum_value', { fallbackPrefix: 'Flow' });
+    const topMessages = topDimensionsFromAggregate(campaignRevenue, 'sum_value', { fallbackPrefix: 'Message' });
     for (const [mk, value] of Object.entries(seriesFromAggregate(flowRevenue, 'sum_value'))) addMetric(months, mk, 'flowRevenue', value);
     for (const [mk, value] of Object.entries(seriesFromAggregate(campaignRevenue, 'sum_value'))) addMetric(months, mk, 'campaignRevenue', value);
 
@@ -271,6 +289,8 @@ export default async function handler(req, res) {
     return res.json({
       configured: true,
       months: monthsArr,
+      topFlows,
+      topMessages,
       metricIds: { ...metricIds, placedOrder: placedOrderId },
       timezone,
       revision: process.env.KLAVIYO_REVISION || DEFAULT_REVISION,
