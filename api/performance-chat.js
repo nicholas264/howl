@@ -7,6 +7,7 @@ const ALLOWED_MODELS = new Set([
   'claude-haiku-4-5-20251001',
 ]);
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
+const DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini';
 
 function compactRows(rows) {
   return (rows || []).slice(-18).map(row => ({
@@ -37,7 +38,9 @@ function compactRows(rows) {
 export default async function handler(req, res) {
   if (!(await requirePermission(req, res, 'analytics.read'))) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
+    return res.status(500).json({ error: 'ANTHROPIC_API_KEY or OPENAI_API_KEY required' });
+  }
 
   const body = req.body || {};
   const question = String(body.question || '').trim();
@@ -61,7 +64,10 @@ export default async function handler(req, res) {
     'Return concise bullets with specific optimization opportunities and watchouts.',
   ].join(' ');
 
-  try {
+  const prompt = `Question: ${question}\n\nDashboard context:\n${JSON.stringify(context, null, 2)}`;
+
+  const callAnthropic = async () => {
+    if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -76,15 +82,66 @@ export default async function handler(req, res) {
         system,
         messages: [{
           role: 'user',
-          content: `Question: ${question}\n\nDashboard context:\n${JSON.stringify(context, null, 2)}`,
+          content: prompt,
         }],
       }),
     });
     const data = await r.json();
-    if (!r.ok) return res.status(r.status).json({ error: data?.error?.message || 'Performance analysis failed' });
+    if (!r.ok) {
+      const err = new Error(data?.error?.message || 'Anthropic performance analysis failed');
+      err.status = r.status;
+      throw err;
+    }
     const text = (data.content || []).map(part => part.text || '').filter(Boolean).join('\n\n').trim();
-    return res.json({ answer: text, model, usage: data.usage || null });
+    return { answer: text, provider: 'anthropic', model, usage: data.usage || null };
+  };
+
+  const callOpenAI = async () => {
+    if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
+    const openaiModel = process.env.OPENAI_PERFORMANCE_MODEL || DEFAULT_OPENAI_MODEL;
+    const r = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: openaiModel,
+        instructions: system,
+        input: prompt,
+        max_output_tokens: 1200,
+        temperature: 0.2,
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      const err = new Error(data?.error?.message || 'OpenAI performance analysis failed');
+      err.status = r.status;
+      throw err;
+    }
+    const text = data.output_text
+      || (data.output || [])
+        .flatMap(item => item.content || [])
+        .map(part => part.text || '')
+        .filter(Boolean)
+        .join('\n\n')
+        .trim();
+    return { answer: text, provider: 'openai', model: openaiModel, usage: data.usage || null };
+  };
+
+  try {
+    try {
+      return res.json(await callAnthropic());
+    } catch (anthropicErr) {
+      if (!process.env.OPENAI_API_KEY) throw anthropicErr;
+      const fallback = await callOpenAI();
+      return res.json({
+        ...fallback,
+        fallbackFrom: 'anthropic',
+        fallbackReason: anthropicErr.message,
+      });
+    }
   } catch (err) {
-    return res.status(500).json({ error: err.message || 'Performance analysis failed' });
+    return res.status(err.status || 500).json({ error: err.message || 'Performance analysis failed' });
   }
 }
