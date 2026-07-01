@@ -3130,6 +3130,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const actShip = orders * shippingCostPerOrder;
           const actPick = orders * fulfillmentCostPerOrder;
           const actCm3 = actNetRevenue - actCogs - actFees - actShip - actPick - actCac;
+          const sessions = Number(sh.sessions || 0);
+          const shopifyOrders = Number(sh.orders || 0);
+          const cvr = sessions > 0 ? shopifyOrders / sessions : null;
+          const revenuePerSession = sessions > 0 ? actRevenue / sessions : null;
 
           // Project current-month actual to full month.
           const paceFactor = isCurrent ? daysInMonth / Math.max(dayOfMonth, 1) : 1;
@@ -3149,6 +3153,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
             actCac, projCac, tgtCac,
             actOpex, tgtOpex,
             actCm3, projCm3, tgtCm3,
+            sessions, shopifyOrders, cvr, revenuePerSession,
             forecast: f,
           };
         });
@@ -3160,7 +3165,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           cac:     a.cac + r.actCac,
           opex:    a.opex + r.actOpex,
           cm3:     a.cm3 + r.actCm3,
-        }), { revenue: 0, cac: 0, opex: 0, cm3: 0 });
+          sessions: a.sessions + r.sessions,
+          shopifyOrders: a.shopifyOrders + r.shopifyOrders,
+        }), { revenue: 0, cac: 0, opex: 0, cm3: 0, sessions: 0, shopifyOrders: 0 });
 
         const ytdTargetSoFar = annualRows.filter(r => r.isPast || r.isCurrent).reduce((a, r) => ({
           revenue: a.revenue + r.tgtRevenue,
@@ -3192,6 +3199,15 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const [y, m] = mk.split('-');
           return new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString('en-US', { month: 'short' });
         };
+        const latestConversionRow = [...annualRows].reverse().find(r => (r.isPast || r.isCurrent) && r.sessions > 0);
+        const priorConversionRow = latestConversionRow
+          ? [...annualRows].reverse().find(r => r.month < latestConversionRow.month && r.sessions > 0)
+          : null;
+        const ytdCvr = ytdActual.sessions > 0 ? ytdActual.shopifyOrders / ytdActual.sessions : null;
+        const ytdRevenuePerSession = ytdActual.sessions > 0 ? ytdActual.revenue / ytdActual.sessions : null;
+        const cvrTrend = latestConversionRow?.cvr != null && priorConversionRow?.cvr != null
+          ? latestConversionRow.cvr - priorConversionRow.cvr
+          : null;
 
         const KPI_DEFS = [
           { key: 'revenue', label: 'Revenue',  goodWhen: 'higher' },
@@ -3322,6 +3338,25 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                     </div>
                   );
                 })}
+              </div>
+            </div>
+
+            {/* Traffic + conversion reality check */}
+            <div style={{ ...S.card, marginBottom: 16 }}>
+              <span style={S.label}>Traffic + Conversion — Shopify-Verified</span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginTop: 12 }}>
+                {[
+                  { label: 'YTD CVR', value: fmtPct(ytdCvr), sub: `${ytdActual.shopifyOrders.toLocaleString()} Shopify orders / ${ytdActual.sessions.toLocaleString()} sessions` },
+                  { label: 'Latest CVR', value: latestConversionRow?.cvr == null ? '—' : fmtPct(latestConversionRow.cvr), sub: latestConversionRow ? `${fmtMo(latestConversionRow.month)} actual` : 'no session data' },
+                  { label: 'CVR MoM', value: cvrTrend == null ? '—' : `${cvrTrend >= 0 ? '+' : ''}${(cvrTrend * 100).toFixed(2)} pts`, sub: priorConversionRow ? `${fmtMo(priorConversionRow.month)} to ${fmtMo(latestConversionRow.month)}` : 'need prior month', color: cvrTrend == null ? '#171717' : cvrTrend >= 0 ? '#256b35' : '#b42318' },
+                  { label: 'Revenue / Session', value: ytdRevenuePerSession == null ? '—' : '$' + ytdRevenuePerSession.toFixed(2), sub: 'gross sales / sessions' },
+                ].map(({ label, value, sub, color }) => (
+                  <div key={label} style={{ borderLeft: '2px solid #dedbd3', paddingLeft: 14 }}>
+                    <div style={{ ...S.label, marginBottom: 4 }}>{label}</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: color || '#171717', lineHeight: 1 }}>{value}</div>
+                    <div style={{ fontSize: 10, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>{sub}</div>
+                  </div>
+                ))}
               </div>
             </div>
 
