@@ -29,9 +29,14 @@ function compactRows(rows) {
     netProfit: Math.round(row.netProfit || 0),
     klaviyoRevenue: Math.round(row.klaviyoRevenue || 0),
     klaviyoOrders: Math.round(row.klaviyoOrders || 0),
+    klaviyoFlowRevenue: Math.round(row.klaviyoFlowRevenue || 0),
+    klaviyoCampaignRevenue: Math.round(row.klaviyoCampaignRevenue || 0),
     klaviyoRevenuePct: row.klaviyoRevenuePct == null ? null : Number((row.klaviyoRevenuePct * 100).toFixed(1)),
     emailOpenRate: row.emailOpenRate == null ? null : Number((row.emailOpenRate * 100).toFixed(1)),
     emailClickRate: row.emailClickRate == null ? null : Number((row.emailClickRate * 100).toFixed(1)),
+    emailClickToOpenRate: row.emailClickToOpenRate == null ? null : Number((row.emailClickToOpenRate * 100).toFixed(1)),
+    emailUnsubscribeRate: row.emailUnsubscribeRate == null ? null : Number((row.emailUnsubscribeRate * 100).toFixed(2)),
+    klaviyoRevenuePerRecipient: row.klaviyoRevenuePerRecipient == null ? null : Number(row.klaviyoRevenuePerRecipient.toFixed(3)),
   }));
 }
 
@@ -51,6 +56,11 @@ export default async function handler(req, res) {
     generatedAt: new Date().toISOString(),
     summary: body.summary || {},
     rows: compactRows(body.rows || []),
+    klaviyoDrivers: (body.klaviyoDrivers || []).slice(0, 8).map(item => ({
+      kind: String(item.kind || '').slice(0, 40),
+      name: String(item.name || '').slice(0, 140),
+      revenue: Math.round(Number(item.revenue || 0)),
+    })),
     dataHealth: body.dataHealth || {},
   };
   const model = ALLOWED_MODELS.has(body.model) ? body.model : DEFAULT_MODEL;
@@ -59,6 +69,7 @@ export default async function handler(req, res) {
     'You are HOWL\'s performance analyst for an operator dashboard.',
     'Use only the provided dashboard context. Be direct, numeric, and decision-oriented.',
     'Call out ratio integrity: MER, aMER/new ROAS, NCAC, CVR, Klaviyo revenue share, contribution margin, and net profit.',
+    'For Klaviyo, evaluate revenue per recipient, click-to-open rate, unsubscribe rate, flow/campaign mix, and top revenue drivers when present.',
     'Distinguish Shopify-verified revenue from platform-reported attribution.',
     'If data is missing or stale, say so and explain what cannot be concluded.',
     'Return concise bullets with specific optimization opportunities and watchouts.',

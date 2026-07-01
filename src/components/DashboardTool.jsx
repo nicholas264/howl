@@ -1954,6 +1954,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const emailClicks = Number(klaviyo.emailClicks || 0);
           const emailOpenRate = emailSends > 0 ? emailOpens / emailSends : null;
           const emailClickRate = emailSends > 0 ? emailClicks / emailSends : null;
+          const emailClickToOpenRate = emailOpens > 0 ? emailClicks / emailOpens : null;
+          const emailUnsubscribes = Number(klaviyo.unsubscribes || 0);
+          const emailUnsubscribeRate = emailSends > 0 ? emailUnsubscribes / emailSends : null;
+          const klaviyoRevenuePerRecipient = emailSends > 0 ? klaviyoRevenue / emailSends : null;
           const isCurrent = mk === currentMonthKey;
           const projectedCm3 = isCurrent ? cm3 * paceFactor : cm3;
           const netProfit = cm3 - opexThis;
@@ -1978,7 +1982,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
             klaviyoRevenue, klaviyoOrders, klaviyoFlowRevenue: Number(klaviyo.flowRevenue || 0),
             klaviyoCampaignRevenue: Number(klaviyo.campaignRevenue || 0), klaviyoRevenuePct,
             emailSends, emailOpens, emailClicks, emailOpenRate, emailClickRate,
-            emailUnsubscribes: Number(klaviyo.unsubscribes || 0),
+            emailClickToOpenRate, emailUnsubscribes, emailUnsubscribeRate, klaviyoRevenuePerRecipient,
           };
         });
         const rows = allRows.filter(r => r.month >= startMonth);
@@ -2084,6 +2088,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const ltmKlaviyoRevenuePct = ltm.netRevenue > 0 ? ltm.klaviyoRevenue / ltm.netRevenue : null;
         const ltmEmailOpenRate = ltm.emailSends > 0 ? ltm.emailOpens / ltm.emailSends : null;
         const ltmEmailClickRate = ltm.emailSends > 0 ? ltm.emailClicks / ltm.emailSends : null;
+        const ltmEmailClickToOpenRate = ltm.emailOpens > 0 ? ltm.emailClicks / ltm.emailOpens : null;
+        const ltmEmailUnsubscribeRate = ltm.emailSends > 0 ? ltm.emailUnsubscribes / ltm.emailSends : null;
+        const ltmKlaviyoRevenuePerRecipient = ltm.emailSends > 0 ? ltm.klaviyoRevenue / ltm.emailSends : null;
+        const ltmKlaviyoFlowPct = ltm.klaviyoRevenue > 0 ? ltm.klaviyoFlowRevenue / ltm.klaviyoRevenue : null;
         const ltmCmMargin = ltm.netRevenue > 0 ? ltm.cm3 / ltm.netRevenue : 0;
         const ltmOpexCoverage = ltm.opex > 0 ? ltm.cm3 / ltm.opex : null;
         // For UI: show the default opex if no per-month overrides, else "$X avg"
@@ -2187,7 +2195,16 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                     klaviyoRevenuePct: ltmKlaviyoRevenuePct,
                     emailOpenRate: ltmEmailOpenRate,
                     emailClickRate: ltmEmailClickRate,
+                    emailClickToOpenRate: ltmEmailClickToOpenRate,
+                    emailUnsubscribeRate: ltmEmailUnsubscribeRate,
+                    klaviyoRevenuePerRecipient: ltmKlaviyoRevenuePerRecipient,
+                    klaviyoFlowPct: ltmKlaviyoFlowPct,
                   },
+                  klaviyoDrivers: klaviyoTopDrivers.map(item => ({
+                    kind: item.kind,
+                    name: item.name || item.id,
+                    revenue: item.revenue,
+                  })),
                   dataHealth: {
                     shopifyIsStale,
                     metaIsStale,
@@ -2338,6 +2355,20 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                     { label: 'Flow Revenue', value: fmt$(ltm.klaviyoFlowRevenue), sub: ltm.klaviyoRevenue > 0 ? fmtPct(ltm.klaviyoFlowRevenue / ltm.klaviyoRevenue) + ' of Klaviyo' : '' },
                     { label: 'Open Rate', value: ltmEmailOpenRate == null ? '—' : fmtPct(ltmEmailOpenRate), sub: `${ltm.emailOpens.toLocaleString()} opens` },
                     { label: 'Click Rate', value: ltmEmailClickRate == null ? '—' : fmtPct(ltmEmailClickRate), sub: `${ltm.emailClicks.toLocaleString()} clicks` },
+                  ].map(({ label, value, sub, color }) => (
+                    <div key={label}>
+                      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', marginBottom: 4, fontWeight: 600 }}>{label}</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: color || '#171717', lineHeight: 1 }}>{value}</div>
+                      {sub && <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>{sub}</div>}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid #dedbd3' }}>
+                  {[
+                    { label: 'Revenue / Recipient', value: ltmKlaviyoRevenuePerRecipient == null ? '—' : '$' + ltmKlaviyoRevenuePerRecipient.toFixed(2), sub: `${ltm.emailSends.toLocaleString()} sends` },
+                    { label: 'Click-to-Open', value: ltmEmailClickToOpenRate == null ? '—' : fmtPct(ltmEmailClickToOpenRate), sub: 'clicks / opens' },
+                    { label: 'Unsubscribe Rate', value: ltmEmailUnsubscribeRate == null ? '—' : fmtPct(ltmEmailUnsubscribeRate), sub: `${ltm.emailUnsubscribes.toLocaleString()} unsubscribes`, color: ltmEmailUnsubscribeRate != null && ltmEmailUnsubscribeRate > 0.005 ? '#b42318' : '#171717' },
+                    { label: 'Flow Mix', value: ltmKlaviyoFlowPct == null ? '—' : fmtPct(ltmKlaviyoFlowPct), sub: 'flow revenue share' },
                   ].map(({ label, value, sub, color }) => (
                     <div key={label}>
                       <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', marginBottom: 4, fontWeight: 600 }}>{label}</div>
