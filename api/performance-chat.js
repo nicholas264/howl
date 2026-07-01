@@ -65,6 +65,11 @@ export default async function handler(req, res) {
       name: String(item.name || '').slice(0, 140),
       revenue: Math.round(Number(item.revenue || 0)),
     })),
+    klaviyoMetricCoverage: (body.klaviyoMetricCoverage || []).slice(0, 12).map(item => ({
+      label: String(item.label || '').slice(0, 80),
+      configured: Boolean(item.configured),
+      metricName: item.metricName ? String(item.metricName).slice(0, 120) : null,
+    })),
     dataHealth: body.dataHealth || {},
   };
   const model = ALLOWED_MODELS.has(body.model) ? body.model : DEFAULT_MODEL;
@@ -74,6 +79,7 @@ export default async function handler(req, res) {
     'Use only the provided dashboard context. Be direct, numeric, and decision-oriented.',
     'Call out ratio integrity: MER, aMER/new ROAS, NCAC, CVR, Klaviyo revenue share, contribution margin, and net profit.',
     'For Klaviyo, evaluate revenue per recipient, email click-to-open rate, email unsubscribe rate, SMS click and unsubscribe rates, flow/campaign mix, and top revenue drivers when present.',
+    'Use Klaviyo metric coverage to separate true performance reads from missing instrumentation.',
     'Distinguish Shopify-verified revenue from platform-reported attribution.',
     'If data is missing or stale, say so and explain what cannot be concluded.',
     'Return concise bullets with specific optimization opportunities and watchouts.',

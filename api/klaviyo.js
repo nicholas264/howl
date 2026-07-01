@@ -155,6 +155,27 @@ function findMetricIds(metrics) {
   return Object.fromEntries(Object.entries(METRIC_ALIASES).map(([key, aliases]) => [key, find(aliases)]));
 }
 
+function metricCoverage(metrics, metricIds) {
+  const byId = new Map(metrics.map(metric => [metric.id, metric.attributes?.name || metric.id]));
+  const labels = {
+    placedOrder: 'Placed Order revenue',
+    receivedEmail: 'Email sends',
+    openedEmail: 'Email opens',
+    clickedEmail: 'Email clicks',
+    unsubscribed: 'Email unsubscribes',
+    receivedSms: 'SMS sends',
+    clickedSms: 'SMS clicks',
+    unsubscribedSms: 'SMS unsubscribes',
+  };
+  return Object.entries(labels).map(([key, label]) => ({
+    key,
+    label,
+    configured: Boolean(metricIds[key]),
+    metricId: metricIds[key] || null,
+    metricName: metricIds[key] ? byId.get(metricIds[key]) || metricIds[key] : null,
+  }));
+}
+
 async function upsertMonthly(sql, monthsArr) {
   await sql`
     CREATE TABLE IF NOT EXISTS monthly_metrics (
@@ -212,10 +233,12 @@ export default async function handler(req, res) {
     const metrics = await client.listMetrics();
     const metricIds = findMetricIds(metrics);
     const placedOrderId = process.env.KLAVIYO_CONVERSION_METRIC_ID || metricIds.placedOrder;
+    const coverage = metricCoverage(metrics, { ...metricIds, placedOrder: placedOrderId || metricIds.placedOrder });
     if (!placedOrderId) {
       return res.status(200).json({
         configured: false,
         months: [],
+        metricCoverage: coverage,
         metricsAvailable: metrics.map(metric => metric.attributes?.name).filter(Boolean).slice(0, 50),
         error: 'Could not find Klaviyo Placed Order metric. Set KLAVIYO_CONVERSION_METRIC_ID.',
         missing: ['KLAVIYO_CONVERSION_METRIC_ID'],
@@ -303,6 +326,7 @@ export default async function handler(req, res) {
       months: monthsArr,
       topFlows,
       topMessages,
+      metricCoverage: coverage,
       metricIds: { ...metricIds, placedOrder: placedOrderId },
       timezone,
       revision: process.env.KLAVIYO_REVISION || DEFAULT_REVISION,

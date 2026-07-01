@@ -2133,6 +2133,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
             ...(klaviyoData?.topFlows || []).map(item => ({ ...item, kind: 'Flow', color: '#2ea98f' })),
             ...(klaviyoData?.topMessages || []).map(item => ({ ...item, kind: 'Message', color: '#d84a17' })),
           ].sort((a, b) => b.revenue - a.revenue).slice(0, 8);
+          const klaviyoMetricCoverage = Array.isArray(klaviyoData?.metricCoverage)
+            ? klaviyoData.metricCoverage
+            : [];
           const healthyColor = '#256b35';
           const warningColor = '#9a6a0a';
           const dangerColor = '#b42318';
@@ -2212,6 +2215,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                     kind: item.kind,
                     name: item.name || item.id,
                     revenue: item.revenue,
+                  })),
+                  klaviyoMetricCoverage: klaviyoMetricCoverage.map(item => ({
+                    label: item.label,
+                    configured: Boolean(item.configured),
+                    metricName: item.metricName || null,
                   })),
                   dataHealth: {
                     shopifyIsStale,
@@ -2432,6 +2440,29 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                           <span style={{ fontSize: 8, color: item.color, fontWeight: 800, letterSpacing: 1 }}>{item.kind}</span>
                           <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 10, color: '#343330' }} title={item.id}>{item.name || item.id}</span>
                           <span style={{ fontSize: 10, color: '#171717', fontWeight: 800 }}>{fmt$(item.revenue)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {klaviyoMetricCoverage.length > 0 && (
+                  <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid #dedbd3' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                      <span style={S.label}>Klaviyo Metric Coverage</span>
+                      <span style={{ fontSize: 9, color: '#88857f', letterSpacing: 1 }}>
+                        {klaviyoMetricCoverage.filter(item => item.configured).length}/{klaviyoMetricCoverage.length} detected
+                      </span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
+                      {klaviyoMetricCoverage.map(item => (
+                        <div key={item.key || item.label} style={{ padding: '8px 10px', background: '#fff', border: '1px solid #dedbd3', borderRadius: 6 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#77746f', fontWeight: 700 }}>{item.label}</span>
+                            <span style={{ flexShrink: 0, fontSize: 8, color: item.configured ? '#256b35' : '#9a6a0a', fontWeight: 800, letterSpacing: 1 }}>{item.configured ? 'Found' : 'Missing'}</span>
+                          </div>
+                          <div style={{ marginTop: 4, fontSize: 9, color: '#88857f', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.metricName || 'Metric not found'}>
+                            {item.metricName || 'Not returned by Klaviyo'}
+                          </div>
                         </div>
                       ))}
                     </div>
