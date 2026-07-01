@@ -608,10 +608,21 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
   }, 0);
   const newestShopifySnapshotAt = newestSourceSnapshotAt('shopify', 'shopify_dealer');
   const newestMetaSnapshotAt = newestSourceSnapshotAt('meta');
+  const newestGoogleSnapshotAt = newestSourceSnapshotAt('google');
   const newestKlaviyoSnapshotAt = newestSourceSnapshotAt('klaviyo');
   const shopifyIsStale = !newestShopifySnapshotAt || (Date.now() - newestShopifySnapshotAt) > STALE_MS;
   const metaIsStale = !newestMetaSnapshotAt || (Date.now() - newestMetaSnapshotAt) > STALE_MS;
+  const googleIsStale = !newestGoogleSnapshotAt || (Date.now() - newestGoogleSnapshotAt) > STALE_MS;
   const klaviyoIsStale = !newestKlaviyoSnapshotAt || (Date.now() - newestKlaviyoSnapshotAt) > STALE_MS;
+  const sourceAgeLabel = (timestamp) => {
+    if (!timestamp) return 'not synced';
+    const ageMs = Date.now() - timestamp;
+    const m = Math.floor(ageMs / 60000);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  };
   const [showAssumptions, setShowAssumptions] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -946,36 +957,12 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {(newestShopifySnapshotAt > 0 || newestMetaSnapshotAt > 0 || newestKlaviyoSnapshotAt > 0) && (
-            <span style={{ fontSize: 9, color: (shopifyIsStale || metaIsStale || klaviyoIsStale) ? '#9a6a0a' : '#88857f', letterSpacing: 1 }}>
-              Shopify {(() => {
-                if (!newestShopifySnapshotAt) return 'not synced';
-                const ageMs = Date.now() - newestShopifySnapshotAt;
-                const m = Math.floor(ageMs / 60000);
-                if (m < 60) return `${m}m ago`;
-                const h = Math.floor(m / 60);
-                if (h < 24) return `${h}h ago`;
-                const d = Math.floor(h / 24);
-                return `${d}d ago`;
-              })()} · Meta {(() => {
-                if (!newestMetaSnapshotAt) return 'not synced';
-                const ageMs = Date.now() - newestMetaSnapshotAt;
-                const m = Math.floor(ageMs / 60000);
-                if (m < 60) return `${m}m ago`;
-                const h = Math.floor(m / 60);
-                if (h < 24) return `${h}h ago`;
-                const d = Math.floor(h / 24);
-                return `${d}d ago`;
-              })()} · Klaviyo {(() => {
-                if (!newestKlaviyoSnapshotAt) return 'not synced';
-                const ageMs = Date.now() - newestKlaviyoSnapshotAt;
-                const m = Math.floor(ageMs / 60000);
-                if (m < 60) return `${m}m ago`;
-                const h = Math.floor(m / 60);
-                if (h < 24) return `${h}h ago`;
-                const d = Math.floor(h / 24);
-                return `${d}d ago`;
-              })()}
+          {(newestShopifySnapshotAt > 0 || newestMetaSnapshotAt > 0 || newestGoogleSnapshotAt > 0 || newestKlaviyoSnapshotAt > 0) && (
+            <span style={{ fontSize: 9, color: (shopifyIsStale || metaIsStale || googleIsStale || klaviyoIsStale) ? '#9a6a0a' : '#88857f', letterSpacing: 1 }}>
+              Shopify {sourceAgeLabel(newestShopifySnapshotAt)}
+              {' · '}Meta {sourceAgeLabel(newestMetaSnapshotAt)}
+              {' · '}Google {sourceAgeLabel(newestGoogleSnapshotAt)}
+              {' · '}Klaviyo {sourceAgeLabel(newestKlaviyoSnapshotAt)}
             </span>
           )}
           <button onClick={loadDashboard} disabled={loading} style={loading ? { ...S.ghostBtn, cursor: 'not-allowed' } : (data ? S.ghostBtn : S.btn)}>
@@ -2173,11 +2160,18 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
             { label: 'CM3 Margin', value: fmtPct(ltmCmMargin), ...ratioStatus(ltmCmMargin, v => v >= 0.15, v => v >= 0.05), note: 'after COGS, fees, fulfillment, media' },
             { label: 'Klaviyo Rev Share', value: ltmKlaviyoRevenuePct == null ? '—' : fmtPct(ltmKlaviyoRevenuePct), ...ratioStatus(ltmKlaviyoRevenuePct, v => v >= 0.2, v => v >= 0.1), note: 'Klaviyo revenue / net revenue' },
           ];
+          const sourceHealth = (timestamp, hasData, valueNote, missingNote = 'not synced') => {
+            if (!hasData) return { status: 'Missing', color: warningColor, note: missingNote };
+            if (!timestamp || (Date.now() - timestamp) > STALE_MS) {
+              return { status: 'Stale', color: warningColor, note: sourceAgeLabel(timestamp) };
+            }
+            return { status: 'Fresh', color: healthyColor, note: valueNote };
+          };
           const dataHealthItems = [
-            { label: 'Shopify CVR', status: ltm.sessions > 0 ? 'Live' : 'Missing', color: ltm.sessions > 0 ? healthyColor : warningColor, note: `${ltm.sessions.toLocaleString()} sessions` },
-            { label: 'Meta Spend', status: ltm.metaSpend > 0 ? 'Live' : 'Missing', color: ltm.metaSpend > 0 ? healthyColor : warningColor, note: fmt$(ltm.metaSpend) },
-            { label: 'Google Spend', status: ltm.googleSpend > 0 ? 'Live' : 'Missing', color: ltm.googleSpend > 0 ? healthyColor : warningColor, note: fmt$(ltm.googleSpend) },
-            { label: 'Klaviyo', status: Object.keys(snapshotKlaviyoByMonth).length > 0 ? 'Live' : 'Missing', color: Object.keys(snapshotKlaviyoByMonth).length > 0 ? healthyColor : warningColor, note: Object.keys(snapshotKlaviyoByMonth).length > 0 ? fmt$(ltm.klaviyoRevenue) : 'add API key' },
+            { label: 'Shopify CVR', ...sourceHealth(newestShopifySnapshotAt, ltm.sessions > 0, `${ltm.sessions.toLocaleString()} sessions`) },
+            { label: 'Meta Spend', ...sourceHealth(newestMetaSnapshotAt, ltm.metaSpend > 0, fmt$(ltm.metaSpend)) },
+            { label: 'Google Spend', ...sourceHealth(newestGoogleSnapshotAt, ltm.googleSpend > 0, fmt$(ltm.googleSpend)) },
+            { label: 'Klaviyo', ...sourceHealth(newestKlaviyoSnapshotAt, Object.keys(snapshotKlaviyoByMonth).length > 0, fmt$(ltm.klaviyoRevenue), 'add API key') },
             { label: 'AI Analysis', status: 'Ready', color: healthyColor, note: 'Anthropic -> OpenAI fallback' },
           ];
           const runPerformanceAnalysis = async () => {
@@ -2222,9 +2216,16 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                   dataHealth: {
                     shopifyIsStale,
                     metaIsStale,
+                    googleIsStale,
                     klaviyoIsStale,
                     klaviyoConfigured: klaviyoData?.configured !== false,
                     hasKlaviyoSnapshots: Object.keys(snapshotKlaviyoByMonth).length > 0,
+                    sourceAges: {
+                      shopify: sourceAgeLabel(newestShopifySnapshotAt),
+                      meta: sourceAgeLabel(newestMetaSnapshotAt),
+                      google: sourceAgeLabel(newestGoogleSnapshotAt),
+                      klaviyo: sourceAgeLabel(newestKlaviyoSnapshotAt),
+                    },
                   },
                 }),
               });
