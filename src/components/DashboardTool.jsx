@@ -2121,6 +2121,40 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const ltmMetaCpa = ltmMetaPurchases > 0 ? ltm.metaSpend / ltmMetaPurchases : null;
           const ltmGoogleCpa = ltmGoogleConv > 0 ? ltm.googleSpend / ltmGoogleConv : null;
           const maxKlaviyoRevenue = Math.max(...rows.map(r => r.klaviyoRevenue || 0), 1);
+          const healthyColor = '#256b35';
+          const warningColor = '#9a6a0a';
+          const dangerColor = '#b42318';
+          const latestRevenueMonth = [...rows].reverse().find(r => r.revenue > 0 || r.adSpend > 0 || r.klaviyoRevenue > 0);
+          const previousRevenueMonth = latestRevenueMonth
+            ? [...rows].reverse().find(r => r.month < latestRevenueMonth.month && (r.revenue > 0 || r.adSpend > 0 || r.klaviyoRevenue > 0))
+            : null;
+          const revenueMom = latestRevenueMonth && previousRevenueMonth?.revenue > 0
+            ? (latestRevenueMonth.revenue - previousRevenueMonth.revenue) / previousRevenueMonth.revenue
+            : null;
+          const cvrMom = latestRevenueMonth && previousRevenueMonth?.cvr
+            ? latestRevenueMonth.cvr - previousRevenueMonth.cvr
+            : null;
+          const ratioStatus = (value, good, warn) => {
+            if (value == null || Number.isNaN(value)) return { status: 'Missing', color: warningColor };
+            if (good(value)) return { status: 'Healthy', color: healthyColor };
+            if (warn(value)) return { status: 'Watch', color: warningColor };
+            return { status: 'Off track', color: dangerColor };
+          };
+          const guardrails = [
+            { label: 'MER', value: ltmMer == null ? '—' : ltmMer.toFixed(2) + 'x', ...ratioStatus(ltmMer, v => v >= 2.0, v => v >= 1.4), note: 'gross revenue / ad spend' },
+            { label: 'aMER', value: ltmAmer == null ? '—' : ltmAmer.toFixed(2) + 'x', ...ratioStatus(ltmAmer, v => v >= 1.0, v => v >= 0.7), note: 'new-customer revenue / ad spend' },
+            { label: 'NCAC', value: ltmNcac == null ? '—' : '$' + ltmNcac.toFixed(0), ...ratioStatus(ltmNcac, v => v <= 120, v => v <= 180), note: 'ad spend / new customer' },
+            { label: 'CVR', value: ltmCvr == null ? '—' : fmtPct(ltmCvr), ...ratioStatus(ltmCvr, v => v >= 0.015, v => v >= 0.01), note: 'orders / Shopify sessions' },
+            { label: 'CM3 Margin', value: fmtPct(ltmCmMargin), ...ratioStatus(ltmCmMargin, v => v >= 0.15, v => v >= 0.05), note: 'after COGS, fees, fulfillment, media' },
+            { label: 'Klaviyo Rev Share', value: ltmKlaviyoRevenuePct == null ? '—' : fmtPct(ltmKlaviyoRevenuePct), ...ratioStatus(ltmKlaviyoRevenuePct, v => v >= 0.2, v => v >= 0.1), note: 'Klaviyo revenue / net revenue' },
+          ];
+          const dataHealthItems = [
+            { label: 'Shopify CVR', status: ltm.sessions > 0 ? 'Live' : 'Missing', color: ltm.sessions > 0 ? healthyColor : warningColor, note: `${ltm.sessions.toLocaleString()} sessions` },
+            { label: 'Meta Spend', status: ltm.metaSpend > 0 ? 'Live' : 'Missing', color: ltm.metaSpend > 0 ? healthyColor : warningColor, note: fmt$(ltm.metaSpend) },
+            { label: 'Google Spend', status: ltm.googleSpend > 0 ? 'Live' : 'Missing', color: ltm.googleSpend > 0 ? healthyColor : warningColor, note: fmt$(ltm.googleSpend) },
+            { label: 'Klaviyo', status: Object.keys(snapshotKlaviyoByMonth).length > 0 ? 'Live' : 'Missing', color: Object.keys(snapshotKlaviyoByMonth).length > 0 ? healthyColor : warningColor, note: Object.keys(snapshotKlaviyoByMonth).length > 0 ? fmt$(ltm.klaviyoRevenue) : 'add API key' },
+            { label: 'AI Analysis', status: 'Ready', color: healthyColor, note: 'Anthropic -> OpenAI fallback' },
+          ];
           const runPerformanceAnalysis = async () => {
             setPerformanceChatLoading(true);
             setPerformanceChatError('');
@@ -2171,10 +2205,53 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
               <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 16, marginTop: 28 }}>
                 <div>
                   <div className="eyebrow" style={{ marginBottom: 6 }}>Growth Data</div>
-                  <div className="display-md" style={{ color: '#171717' }}>Media Mix</div>
+                  <div className="display-md" style={{ color: '#171717' }}>Performance Control Room</div>
                   <div className="display-italic" style={{ fontSize: 12, color: '#77746f', marginTop: 4 }}>
-                    Channel spend mix, CPA, and spend concentration by month.
+                    Ratio guardrails, source health, channel mix, and lifecycle revenue.
                   </div>
+                </div>
+              </div>
+              <div style={{ ...S.card, marginBottom: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+                  <span style={S.label}>Data Health + Ratio Guardrails</span>
+                  <span style={{ fontSize: 10, color: '#77746f', letterSpacing: 1 }}>
+                    {latestRevenueMonth ? `${fmtMo(latestRevenueMonth.month)} latest · Rev ${fmt$(latestRevenueMonth.revenue)}${revenueMom == null ? '' : ` · MoM ${revenueMom >= 0 ? '+' : ''}${(revenueMom * 100).toFixed(1)}%`}` : 'Waiting on source data'}
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.15fr .85fr', gap: 16 }}>
+                  <div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                      {guardrails.map(item => (
+                        <div key={item.label} style={{ padding: 11, background: '#fff', border: '1px solid #dedbd3', borderRadius: 6 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                            <span style={{ fontSize: 9, letterSpacing: 1.6, textTransform: 'uppercase', color: '#77746f', fontWeight: 700 }}>{item.label}</span>
+                            <span style={{ fontSize: 9, color: item.color, fontWeight: 800, letterSpacing: 1 }}>{item.label === 'Klaviyo Rev Share' && Object.keys(snapshotKlaviyoByMonth).length === 0 ? 'Setup' : item.status}</span>
+                          </div>
+                          <div style={{ marginTop: 6, fontSize: 20, fontWeight: 800, color: item.color, lineHeight: 1 }}>{item.value}</div>
+                          <div style={{ marginTop: 5, fontSize: 9, color: '#88857f', lineHeight: 1.35 }}>{item.note}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      {dataHealthItems.map(item => (
+                        <div key={item.label} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center', padding: '8px 10px', background: '#fff', border: '1px solid #dedbd3', borderRadius: 6 }}>
+                          <div>
+                            <div style={{ fontSize: 9, letterSpacing: 1.4, textTransform: 'uppercase', color: '#77746f', fontWeight: 700 }}>{item.label}</div>
+                            <div style={{ marginTop: 3, fontSize: 10, color: '#88857f' }}>{item.note}</div>
+                          </div>
+                          <div style={{ fontSize: 10, color: item.color, fontWeight: 800, letterSpacing: 1 }}>{item.status}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #dedbd3', display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 9, color: '#77746f', letterSpacing: 1 }}>
+                  <span>YTD CVR {ltmCvr == null ? '—' : fmtPct(ltmCvr)}</span>
+                  <span>Latest CVR {latestRevenueMonth?.cvr == null ? '—' : fmtPct(latestRevenueMonth.cvr)}</span>
+                  <span>CVR MoM {cvrMom == null ? '—' : `${cvrMom >= 0 ? '+' : ''}${(cvrMom * 100).toFixed(2)} pts`}</span>
+                  <span>Net Profit {fmt$(ltm.netProfit)}</span>
                 </div>
               </div>
               <div style={{ ...S.card, marginBottom: 20 }}>
