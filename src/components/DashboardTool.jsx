@@ -3622,15 +3622,38 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         }} />
       )}
 
-      {view === 'shopify' && !shopifyData && !shopifyLoading && (
+      {view === 'shopify' && !shopifyData && !shopifyLoading && !(historySnapshots || []).some(r => r.shopify || r.shopify_dealer) && (
         <div style={{ color: '#88857f', fontSize: 12, padding: '40px 0' }}>
           Click "Load Shopify" above to pull store analytics from Shopify.
         </div>
       )}
 
-      {view === 'shopify' && shopifyData && (() => {
-        const months = shopifyData.months || [];
-        const topProducts = shopifyData.topProducts || [];
+      {view === 'shopify' && (shopifyData || (historySnapshots || []).some(r => r.shopify || r.shopify_dealer)) && (() => {
+        const snapshotPrimary = Object.fromEntries((historySnapshots || []).filter(r => r.shopify).map(r => [r.month, r.shopify]));
+        const snapshotDealer = Object.fromEntries((historySnapshots || []).filter(r => r.shopify_dealer).map(r => [r.month, r.shopify_dealer]));
+        const combineSnapshotShop = (a, b) => {
+          if (!a && !b) return null;
+          a = a || {}; b = b || {};
+          const out = {};
+          for (const k of ['orders', 'shipping', 'sessions', 'newCustomers', 'returningCustomers', 'newRevenue', 'returningRevenue']) {
+            out[k] = Number(a[k] || 0) + Number(b[k] || 0);
+          }
+          out.netSales = sumNetRevenue(a, b);
+          out.grossSales = sumGrossRevenue(a, b);
+          out.cvr = out.sessions > 0 ? (out.orders / out.sessions) * 100 : 0;
+          out.aov = out.orders > 0 ? out.netSales / out.orders : 0;
+          return out;
+        };
+        const snapshotMonths = Array.from(new Set([...Object.keys(snapshotPrimary), ...Object.keys(snapshotDealer)]))
+          .sort()
+          .map(month => {
+            const combined = combineSnapshotShop(snapshotPrimary[month], snapshotDealer[month]);
+            return combined ? { month, ...combined } : null;
+          })
+          .filter(m => m && (m.netSales > 0 || m.orders > 0 || m.sessions > 0));
+        const months = shopifyData ? (shopifyData.months || []) : snapshotMonths;
+        const topProducts = shopifyData?.topProducts || [];
+        const usingSnapshots = !shopifyData;
 
         // Compute averages and insights
         const fullMonths = months.filter(m => m.orders > 0);
@@ -3648,7 +3671,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const now = new Date();
         const dayOfMonth = now.getDate();
         const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-        const currentMonthData = months.length > 0 ? months[months.length - 1] : null;
+        const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const currentMonthData = months.find(m => m.month === currentMonthKey) || null;
         const projectedRevenue = currentMonthData ? (currentMonthData.netSales / dayOfMonth) * daysInMonth : 0;
 
         // MoM trend
@@ -3675,12 +3699,17 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         return (
           <>
             {/* Seasonality Insights */}
+            {usingSnapshots && (
+              <div style={{ ...S.err, marginBottom: 16, color: '#9a6a0a', borderColor: 'rgba(245,166,35,0.4)', background: 'rgba(245,166,35,0.1)' }}>
+                Showing snapshotted Shopify history. Click Load Shopify to refresh live data and product mix.
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 20 }}>
               {[
                 { label: 'Best CVR Month', value: bestCvrMonth ? `${bestCvrMonth.cvr.toFixed(2)}%` : '—', sub: bestCvrMonth ? fmtMonth(bestCvrMonth.month) : '' },
                 { label: 'Worst CVR Month', value: worstCvrMonth ? `${worstCvrMonth.cvr.toFixed(2)}%` : '—', sub: worstCvrMonth ? fmtMonth(worstCvrMonth.month) : '' },
                 { label: 'Best Revenue Month', value: bestRevMonth ? `$${Math.round(bestRevMonth.netSales).toLocaleString()}` : '—', sub: bestRevMonth ? fmtMonth(bestRevMonth.month) : '' },
-                { label: 'This Month Pace', value: `$${Math.round(projectedRevenue).toLocaleString()}`, sub: currentMonthData ? `$${Math.round(currentMonthData.netSales).toLocaleString()} so far` : '' },
+                { label: 'This Month Pace', value: currentMonthData ? `$${Math.round(projectedRevenue).toLocaleString()}` : '—', sub: currentMonthData ? `$${Math.round(currentMonthData.netSales).toLocaleString()} so far` : 'No current month snapshot' },
                 { label: 'MoM Trend', value: momTrend !== null ? `${momTrend >= 0 ? '+' : ''}${momTrend.toFixed(1)}%` : '—', sub: momTrend !== null ? (momTrend >= 0 ? 'Revenue up' : 'Revenue down') : '', color: momTrend !== null ? (momTrend >= 0 ? '#256b35' : '#b42318') : '#171717' },
               ].map(({ label, value, sub, color }) => (
                 <div key={label} style={S.card}>
