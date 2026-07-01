@@ -1958,6 +1958,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const emailUnsubscribes = Number(klaviyo.unsubscribes || 0);
           const emailUnsubscribeRate = emailSends > 0 ? emailUnsubscribes / emailSends : null;
           const klaviyoRevenuePerRecipient = emailSends > 0 ? klaviyoRevenue / emailSends : null;
+          const smsSends = Number(klaviyo.smsSends || 0);
+          const smsClicks = Number(klaviyo.smsClicks || 0);
+          const smsUnsubscribes = Number(klaviyo.smsUnsubscribes || 0);
+          const smsClickRate = smsSends > 0 ? smsClicks / smsSends : null;
+          const smsUnsubscribeRate = smsSends > 0 ? smsUnsubscribes / smsSends : null;
           const isCurrent = mk === currentMonthKey;
           const projectedCm3 = isCurrent ? cm3 * paceFactor : cm3;
           const netProfit = cm3 - opexThis;
@@ -1983,6 +1988,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
             klaviyoCampaignRevenue: Number(klaviyo.campaignRevenue || 0), klaviyoRevenuePct,
             emailSends, emailOpens, emailClicks, emailOpenRate, emailClickRate,
             emailClickToOpenRate, emailUnsubscribes, emailUnsubscribeRate, klaviyoRevenuePerRecipient,
+            smsSends, smsClicks, smsUnsubscribes, smsClickRate, smsUnsubscribeRate,
           };
         });
         const rows = allRows.filter(r => r.month >= startMonth);
@@ -2035,7 +2041,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           emailOpens: a.emailOpens + r.emailOpens,
           emailClicks: a.emailClicks + r.emailClicks,
           emailUnsubscribes: a.emailUnsubscribes + r.emailUnsubscribes,
-        }), { revenue: 0, netRevenue: 0, dtcRevenue: 0, dtcNetRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, shopifyOrders: 0, sessions: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, netProfit: 0, projectedNetProfit: 0, newRevenue: 0, opex: 0, klaviyoRevenue: 0, klaviyoOrders: 0, klaviyoFlowRevenue: 0, klaviyoCampaignRevenue: 0, emailSends: 0, emailOpens: 0, emailClicks: 0, emailUnsubscribes: 0 });
+          smsSends: a.smsSends + r.smsSends,
+          smsClicks: a.smsClicks + r.smsClicks,
+          smsUnsubscribes: a.smsUnsubscribes + r.smsUnsubscribes,
+        }), { revenue: 0, netRevenue: 0, dtcRevenue: 0, dtcNetRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, shopifyOrders: 0, sessions: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, netProfit: 0, projectedNetProfit: 0, newRevenue: 0, opex: 0, klaviyoRevenue: 0, klaviyoOrders: 0, klaviyoFlowRevenue: 0, klaviyoCampaignRevenue: 0, emailSends: 0, emailOpens: 0, emailClicks: 0, emailUnsubscribes: 0, smsSends: 0, smsClicks: 0, smsUnsubscribes: 0 });
         const priorNetProfit = rollupRows
           .filter(r => !r.isCurrent)
           .reduce((sum, r) => sum + r.netProfit, 0);
@@ -2092,6 +2101,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const ltmEmailUnsubscribeRate = ltm.emailSends > 0 ? ltm.emailUnsubscribes / ltm.emailSends : null;
         const ltmKlaviyoRevenuePerRecipient = ltm.emailSends > 0 ? ltm.klaviyoRevenue / ltm.emailSends : null;
         const ltmKlaviyoFlowPct = ltm.klaviyoRevenue > 0 ? ltm.klaviyoFlowRevenue / ltm.klaviyoRevenue : null;
+        const ltmSmsClickRate = ltm.smsSends > 0 ? ltm.smsClicks / ltm.smsSends : null;
+        const ltmSmsUnsubscribeRate = ltm.smsSends > 0 ? ltm.smsUnsubscribes / ltm.smsSends : null;
         const ltmCmMargin = ltm.netRevenue > 0 ? ltm.cm3 / ltm.netRevenue : 0;
         const ltmOpexCoverage = ltm.opex > 0 ? ltm.cm3 / ltm.opex : null;
         // For UI: show the default opex if no per-month overrides, else "$X avg"
@@ -2199,6 +2210,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                     emailUnsubscribeRate: ltmEmailUnsubscribeRate,
                     klaviyoRevenuePerRecipient: ltmKlaviyoRevenuePerRecipient,
                     klaviyoFlowPct: ltmKlaviyoFlowPct,
+                    smsClickRate: ltmSmsClickRate,
+                    smsUnsubscribeRate: ltmSmsUnsubscribeRate,
+                    smsSends: ltm.smsSends,
                   },
                   klaviyoDrivers: klaviyoTopDrivers.map(item => ({
                     kind: item.kind,
@@ -2369,6 +2383,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                     { label: 'Click-to-Open', value: ltmEmailClickToOpenRate == null ? '—' : fmtPct(ltmEmailClickToOpenRate), sub: 'clicks / opens' },
                     { label: 'Unsubscribe Rate', value: ltmEmailUnsubscribeRate == null ? '—' : fmtPct(ltmEmailUnsubscribeRate), sub: `${ltm.emailUnsubscribes.toLocaleString()} unsubscribes`, color: ltmEmailUnsubscribeRate != null && ltmEmailUnsubscribeRate > 0.005 ? '#b42318' : '#171717' },
                     { label: 'Flow Mix', value: ltmKlaviyoFlowPct == null ? '—' : fmtPct(ltmKlaviyoFlowPct), sub: 'flow revenue share' },
+                    { label: 'SMS Sends', value: ltm.smsSends ? ltm.smsSends.toLocaleString() : '—', sub: `${ltm.smsClicks.toLocaleString()} clicks` },
+                    { label: 'SMS Click Rate', value: ltmSmsClickRate == null ? '—' : fmtPct(ltmSmsClickRate), sub: 'clicks / SMS sends' },
+                    { label: 'SMS Unsub Rate', value: ltmSmsUnsubscribeRate == null ? '—' : fmtPct(ltmSmsUnsubscribeRate), sub: `${ltm.smsUnsubscribes.toLocaleString()} SMS unsubscribes`, color: ltmSmsUnsubscribeRate != null && ltmSmsUnsubscribeRate > 0.01 ? '#b42318' : '#171717' },
                   ].map(({ label, value, sub, color }) => (
                     <div key={label}>
                       <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', marginBottom: 4, fontWeight: 600 }}>{label}</div>

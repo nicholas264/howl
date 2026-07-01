@@ -37,6 +37,10 @@ function compactRows(rows) {
     emailClickToOpenRate: row.emailClickToOpenRate == null ? null : Number((row.emailClickToOpenRate * 100).toFixed(1)),
     emailUnsubscribeRate: row.emailUnsubscribeRate == null ? null : Number((row.emailUnsubscribeRate * 100).toFixed(2)),
     klaviyoRevenuePerRecipient: row.klaviyoRevenuePerRecipient == null ? null : Number(row.klaviyoRevenuePerRecipient.toFixed(3)),
+    smsSends: Math.round(row.smsSends || 0),
+    smsClicks: Math.round(row.smsClicks || 0),
+    smsClickRate: row.smsClickRate == null ? null : Number((row.smsClickRate * 100).toFixed(1)),
+    smsUnsubscribeRate: row.smsUnsubscribeRate == null ? null : Number((row.smsUnsubscribeRate * 100).toFixed(2)),
   }));
 }
 
@@ -69,7 +73,7 @@ export default async function handler(req, res) {
     'You are HOWL\'s performance analyst for an operator dashboard.',
     'Use only the provided dashboard context. Be direct, numeric, and decision-oriented.',
     'Call out ratio integrity: MER, aMER/new ROAS, NCAC, CVR, Klaviyo revenue share, contribution margin, and net profit.',
-    'For Klaviyo, evaluate revenue per recipient, click-to-open rate, unsubscribe rate, flow/campaign mix, and top revenue drivers when present.',
+    'For Klaviyo, evaluate revenue per recipient, email click-to-open rate, email unsubscribe rate, SMS click and unsubscribe rates, flow/campaign mix, and top revenue drivers when present.',
     'Distinguish Shopify-verified revenue from platform-reported attribution.',
     'If data is missing or stale, say so and explain what cannot be concluded.',
     'Return concise bullets with specific optimization opportunities and watchouts.',

@@ -11,6 +11,9 @@ const METRIC_ALIASES = {
   openedEmail: ['Opened Email', 'Email Opened'],
   clickedEmail: ['Clicked Email', 'Email Clicked'],
   unsubscribed: ['Unsubscribed', 'Unsubscribed from Email Marketing'],
+  receivedSms: ['Received SMS', 'SMS Received', 'Sent SMS', 'SMS Sent'],
+  clickedSms: ['Clicked SMS', 'SMS Clicked'],
+  unsubscribedSms: ['Unsubscribed from SMS Marketing', 'Unsubscribed SMS', 'SMS Unsubscribed'],
 };
 
 function monthKey(dateString) {
@@ -30,6 +33,9 @@ function addMetric(months, month, key, value) {
       emailOpens: 0,
       emailClicks: 0,
       unsubscribes: 0,
+      smsSends: 0,
+      smsClicks: 0,
+      smsUnsubscribes: 0,
     };
   }
   months[month][key] += Number(value || 0);
@@ -255,6 +261,9 @@ export default async function handler(req, res) {
       ['openedEmail', 'emailOpens', 'unique'],
       ['clickedEmail', 'emailClicks', 'unique'],
       ['unsubscribed', 'unsubscribes', 'count'],
+      ['receivedSms', 'smsSends', 'count'],
+      ['clickedSms', 'smsClicks', 'unique'],
+      ['unsubscribedSms', 'smsUnsubscribes', 'count'],
     ].filter(([metricKey]) => metricIds[metricKey]);
     const engagement = await Promise.all(engagementJobs.map(([metricKey, field, measurement]) =>
       safeAggregate(metricKey, async () => ({
@@ -274,7 +283,10 @@ export default async function handler(req, res) {
       openRate: m.emailSends > 0 ? m.emailOpens / m.emailSends : null,
       clickRate: m.emailSends > 0 ? m.emailClicks / m.emailSends : null,
       clickToOpenRate: m.emailOpens > 0 ? m.emailClicks / m.emailOpens : null,
+      unsubscribeRate: m.emailSends > 0 ? m.unsubscribes / m.emailSends : null,
       revenuePerRecipient: m.emailSends > 0 ? m.revenue / m.emailSends : null,
+      smsClickRate: m.smsSends > 0 ? m.smsClicks / m.smsSends : null,
+      smsUnsubscribeRate: m.smsSends > 0 ? m.smsUnsubscribes / m.smsSends : null,
     }));
 
     if (process.env.DATABASE_URL && monthsArr.length) {
