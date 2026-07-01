@@ -522,6 +522,18 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
   const [googleError,   setGoogleError]   = useState('');
   const [googleUpdated, setGoogleUpdated] = useState(null);
 
+  // Klaviyo growth reporting state
+  const [klaviyoData,    setKlaviyoData]    = useState(null);
+  const [klaviyoLoading, setKlaviyoLoading] = useState(false);
+  const [klaviyoError,   setKlaviyoError]   = useState('');
+  const [klaviyoUpdated, setKlaviyoUpdated] = useState(null);
+
+  // Growth AI analysis state
+  const [performanceQuestion, setPerformanceQuestion] = useState('What is most limiting profitable growth right now, and which ratios are out of bounds?');
+  const [performanceAnswer, setPerformanceAnswer] = useState('');
+  const [performanceChatLoading, setPerformanceChatLoading] = useState(false);
+  const [performanceChatError, setPerformanceChatError] = useState('');
+
   // CFO assumptions (loaded from /api/db/dashboard-settings).
   // Initialize with defaults so the panel renders even if the fetch is still pending or fails.
   const [settings, setSettings] = useState({
@@ -596,8 +608,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
   }, 0);
   const newestShopifySnapshotAt = newestSourceSnapshotAt('shopify', 'shopify_dealer');
   const newestMetaSnapshotAt = newestSourceSnapshotAt('meta');
+  const newestKlaviyoSnapshotAt = newestSourceSnapshotAt('klaviyo');
   const shopifyIsStale = !newestShopifySnapshotAt || (Date.now() - newestShopifySnapshotAt) > STALE_MS;
   const metaIsStale = !newestMetaSnapshotAt || (Date.now() - newestMetaSnapshotAt) > STALE_MS;
+  const klaviyoIsStale = !newestKlaviyoSnapshotAt || (Date.now() - newestKlaviyoSnapshotAt) > STALE_MS;
   const [showAssumptions, setShowAssumptions] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -734,6 +748,31 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
     }
   }, []);
 
+  const loadKlaviyo = useCallback(async () => {
+    setKlaviyoLoading(true);
+    setKlaviyoError('');
+    try {
+      const r = await fetch('/api/klaviyo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_monthly' }),
+      });
+      const d = await r.json();
+      if (d.error && d.configured !== false) throw new Error(d.error);
+      setKlaviyoData(d);
+      setKlaviyoUpdated(new Date());
+      try {
+        const r2 = await fetch('/api/db/monthly-metrics');
+        const d2 = await r2.json();
+        if (Array.isArray(d2.rows)) setHistorySnapshots(d2.rows);
+      } catch {}
+    } catch (err) {
+      setKlaviyoError(err.message);
+    } finally {
+      setKlaviyoLoading(false);
+    }
+  }, []);
+
   const loadShopify = useCallback(async () => {
     setShopifyLoading(true);
     setShopifyError('');
@@ -761,8 +800,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
     if (!snapshotsLoaded || autoTried) return;
     if (metaIsStale && !data && !loading) loadDashboard();
     if (shopifyIsStale && !shopifyData && !shopifyLoading) loadShopify();
+    if (klaviyoIsStale && !klaviyoData && !klaviyoLoading) loadKlaviyo();
     setAutoTried(true);
-  }, [snapshotsLoaded, autoTried, metaIsStale, shopifyIsStale, data, shopifyData, loading, shopifyLoading, loadDashboard, loadShopify]);
+  }, [snapshotsLoaded, autoTried, metaIsStale, shopifyIsStale, klaviyoIsStale, data, shopifyData, klaviyoData, loading, shopifyLoading, klaviyoLoading, loadDashboard, loadShopify, loadKlaviyo]);
 
   // ── Derived stats ──────────────────────────────────────────────────────────
   const ads = data?.ads || [];
@@ -906,8 +946,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {(newestShopifySnapshotAt > 0 || newestMetaSnapshotAt > 0) && (
-            <span style={{ fontSize: 9, color: (shopifyIsStale || metaIsStale) ? '#9a6a0a' : '#88857f', letterSpacing: 1 }}>
+          {(newestShopifySnapshotAt > 0 || newestMetaSnapshotAt > 0 || newestKlaviyoSnapshotAt > 0) && (
+            <span style={{ fontSize: 9, color: (shopifyIsStale || metaIsStale || klaviyoIsStale) ? '#9a6a0a' : '#88857f', letterSpacing: 1 }}>
               Shopify {(() => {
                 if (!newestShopifySnapshotAt) return 'not synced';
                 const ageMs = Date.now() - newestShopifySnapshotAt;
@@ -926,6 +966,15 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                 if (h < 24) return `${h}h ago`;
                 const d = Math.floor(h / 24);
                 return `${d}d ago`;
+              })()} · Klaviyo {(() => {
+                if (!newestKlaviyoSnapshotAt) return 'not synced';
+                const ageMs = Date.now() - newestKlaviyoSnapshotAt;
+                const m = Math.floor(ageMs / 60000);
+                if (m < 60) return `${m}m ago`;
+                const h = Math.floor(m / 60);
+                if (h < 24) return `${h}h ago`;
+                const d = Math.floor(h / 24);
+                return `${d}d ago`;
               })()}
             </span>
           )}
@@ -938,6 +987,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           <button onClick={loadGoogle} disabled={googleLoading} style={googleLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : (googleData ? S.ghostBtn : S.btn)}>
             {googleLoading ? 'Loading…' : googleData ? 'Refresh Google' : 'Load Google'}
           </button>
+          {view === 'growth' && (
+            <button onClick={loadKlaviyo} disabled={klaviyoLoading} style={klaviyoLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : (klaviyoData ? S.ghostBtn : S.btn)}>
+              {klaviyoLoading ? 'Loading…' : klaviyoData ? 'Refresh Klaviyo' : 'Load Klaviyo'}
+            </button>
+          )}
           {view === 'forecast' && (
             <button onClick={refreshForecast} disabled={forecastLoading} style={forecastLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : (forecast ? S.ghostBtn : S.btn)}>
               {forecastLoading ? 'Pulling…' : forecast ? 'Refresh Forecast' : 'Pull Forecast'}
@@ -948,9 +1002,15 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
 
       {error && <div style={{ ...S.err, marginBottom: 20 }}>{error}</div>}
       {googleError && <div style={{ ...S.err, marginBottom: 20 }}>Google Ads: {googleError}</div>}
+      {klaviyoError && <div style={{ ...S.err, marginBottom: 20 }}>Klaviyo: {klaviyoError}</div>}
       {googleData && !googleError && (
         <div style={{ padding: '8px 12px', border: '1px solid rgba(63,185,80,0.4)', background: 'rgba(63,185,80,0.08)', color: '#256b35', fontSize: 10, borderRadius: 4, marginBottom: 20 }}>
           Google Ads: pulled {googleData.months?.length || 0} months · ${(googleData.months || []).reduce((a, m) => a + (m.spend || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} total spend
+        </div>
+      )}
+      {view === 'growth' && klaviyoData && !klaviyoError && (
+        <div style={{ padding: '8px 12px', border: `1px solid ${klaviyoData.configured === false ? 'rgba(245,166,35,0.4)' : 'rgba(63,185,80,0.4)'}`, background: klaviyoData.configured === false ? 'rgba(245,166,35,0.1)' : 'rgba(63,185,80,0.08)', color: klaviyoData.configured === false ? '#9a6a0a' : '#256b35', fontSize: 10, borderRadius: 4, marginBottom: 20 }}>
+          Klaviyo: {klaviyoData.configured === false ? (klaviyoData.error || 'not configured') : `pulled ${klaviyoData.months?.length || 0} months · $${Math.round((klaviyoData.months || []).reduce((a, m) => a + (m.revenue || 0), 0)).toLocaleString()} attributed revenue`}
         </div>
       )}
 
@@ -1708,6 +1768,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const snapshotShopByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.shopify).map(r => [r.month, r.shopify]));
         const snapshotMetaByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.meta).map(r => [r.month, r.meta]));
         const snapshotGoogleByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.google).map(r => [r.month, r.google]));
+        const snapshotKlaviyoByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.klaviyo).map(r => [r.month, r.klaviyo]));
         const dealerByMonth = Object.fromEntries((historySnapshots || []).filter(r => r.shopify_dealer).map(r => [r.month, r.shopify_dealer]));
 
         // Sum primary (snapshot or live) + dealer (CSV) per month.
@@ -1789,6 +1850,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           ...Object.keys(offPlatformRevenueByMonth),
           ...Object.keys(offPlatformOrdersByMonth),
           ...Object.keys(googleByMonth),
+          ...Object.keys(snapshotKlaviyoByMonth),
           ...Object.keys(opexByMonth),
         ])).filter(Boolean).sort();
         // Hard cap to keep tables readable; will grow as we accumulate snapshots forward
@@ -1814,10 +1876,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const paceFactor = daysInCurrentMonth / dayOfMonth;
 
         const allRows = recent24.map(mk => {
-          const sh = shopByMonth[mk] || { netSales: 0, orders: 0, newCustomers: 0, returningCustomers: 0, newRevenue: 0, returningRevenue: 0, cogs: 0, costedRevenue: 0, uncostedRevenue: 0 };
+          const sh = shopByMonth[mk] || { netSales: 0, orders: 0, sessions: 0, cvr: 0, newCustomers: 0, returningCustomers: 0, newRevenue: 0, returningRevenue: 0, cogs: 0, costedRevenue: 0, uncostedRevenue: 0 };
           const dtc = primaryByMonth[mk] || {};
           const dealer = dealerSourceByMonth[mk] || {};
           const meta = spendByMonth[mk] || { spend: 0, purchases: 0 };
+          const klaviyo = snapshotKlaviyoByMonth[mk] || {};
           const hasDealerRevenueOverride = Object.prototype.hasOwnProperty.call(dealerRevenueByMonth, mk)
             && dealerRevenueByMonth[mk] !== '';
           const hasDealerOrdersOverride = Object.prototype.hasOwnProperty.call(dealerOrdersByMonth, mk)
@@ -1840,6 +1903,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const revenue = dtcRevenue + dealerRevenue + offPlatformRevenue;
           const netRevenue = dtcNetRevenue + dealerRevenue + offPlatformRevenue;
           const orders = dtcOrders + dealerOrders + offPlatformOrders;
+          const sessions = Number(sh.sessions || 0);
+          const cvr = sessions > 0 ? orders / sessions : null;
           // Hybrid COGS by channel: actual unitCost × qty where available,
           // with fallback margin assumptions per revenue source.
           const dealerCogsSource = hasDealerRevenueOverride ? {} : dealer;
@@ -1880,6 +1945,14 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const firstOrderPayback = adSpend > 0 ? newOrderMargin / adSpend : null;
           const opexThis = opexFor(mk);
           const opexCoverage = opexThis > 0 ? cm3 / opexThis : null;
+          const klaviyoRevenue = Number(klaviyo.revenue || 0);
+          const klaviyoOrders = Number(klaviyo.orders || 0);
+          const klaviyoRevenuePct = netRevenue > 0 ? klaviyoRevenue / netRevenue : null;
+          const emailSends = Number(klaviyo.emailSends || 0);
+          const emailOpens = Number(klaviyo.emailOpens || 0);
+          const emailClicks = Number(klaviyo.emailClicks || 0);
+          const emailOpenRate = emailSends > 0 ? emailOpens / emailSends : null;
+          const emailClickRate = emailSends > 0 ? emailClicks / emailSends : null;
           const isCurrent = mk === currentMonthKey;
           const projectedCm3 = isCurrent ? cm3 * paceFactor : cm3;
           const netProfit = cm3 - opexThis;
@@ -1889,7 +1962,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           return {
             month: mk, revenue, netRevenue, dtcRevenue, dtcNetRevenue, dealerRevenue, offPlatformRevenue,
             dtcGrossRevenue: dtcRevenue,
-            orders, dtcOrders, dealerOrders, offPlatformOrders, newCustomers, returningCustomers,
+            orders, sessions, cvr, dtcOrders, dealerOrders, offPlatformOrders, newCustomers, returningCustomers,
             customers: dtc.customers || 0,
             customerKeys: dtc.customerKeys || [], newCustomerKeys: dtc.newCustomerKeys || [],
             returningCustomerKeys: dtc.returningCustomerKeys || [],
@@ -1901,6 +1974,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
             metaRoasReported, googleRoasReported, cogs, cogsActualPct, paymentFees,
             shipCost, fulfill, cm3, ncac, blendedNcac, blendedRoas, newRoas,
             firstOrderPayback, opex: opexThis, opexCoverage, netProfit, projectedNetProfit, isCurrent,
+            klaviyoRevenue, klaviyoOrders, klaviyoFlowRevenue: Number(klaviyo.flowRevenue || 0),
+            klaviyoCampaignRevenue: Number(klaviyo.campaignRevenue || 0), klaviyoRevenuePct,
+            emailSends, emailOpens, emailClicks, emailOpenRate, emailClickRate,
+            emailUnsubscribes: Number(klaviyo.unsubscribes || 0),
           };
         });
         const rows = allRows.filter(r => r.month >= startMonth);
@@ -1931,6 +2008,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           dealerRevenue: a.dealerRevenue + r.dealerRevenue,
           offPlatformRevenue: a.offPlatformRevenue + r.offPlatformRevenue,
           orders: a.orders + r.orders,
+          sessions: a.sessions + r.sessions,
           newCustomers: a.newCustomers + r.newCustomers,
           returningCustomers: a.returningCustomers + r.returningCustomers,
           metaSpend: a.metaSpend + r.metaSpend,
@@ -1943,7 +2021,15 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           projectedNetProfit: a.projectedNetProfit + r.projectedNetProfit,
           newRevenue: a.newRevenue + r.newRevenue,
           opex: a.opex + r.opex,
-        }), { revenue: 0, netRevenue: 0, dtcRevenue: 0, dtcNetRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, netProfit: 0, projectedNetProfit: 0, newRevenue: 0, opex: 0 });
+          klaviyoRevenue: a.klaviyoRevenue + r.klaviyoRevenue,
+          klaviyoOrders: a.klaviyoOrders + r.klaviyoOrders,
+          klaviyoFlowRevenue: a.klaviyoFlowRevenue + r.klaviyoFlowRevenue,
+          klaviyoCampaignRevenue: a.klaviyoCampaignRevenue + r.klaviyoCampaignRevenue,
+          emailSends: a.emailSends + r.emailSends,
+          emailOpens: a.emailOpens + r.emailOpens,
+          emailClicks: a.emailClicks + r.emailClicks,
+          emailUnsubscribes: a.emailUnsubscribes + r.emailUnsubscribes,
+        }), { revenue: 0, netRevenue: 0, dtcRevenue: 0, dtcNetRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, sessions: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, netProfit: 0, projectedNetProfit: 0, newRevenue: 0, opex: 0, klaviyoRevenue: 0, klaviyoOrders: 0, klaviyoFlowRevenue: 0, klaviyoCampaignRevenue: 0, emailSends: 0, emailOpens: 0, emailClicks: 0, emailUnsubscribes: 0 });
         const priorNetProfit = rollupRows
           .filter(r => !r.isCurrent)
           .reduce((sum, r) => sum + r.netProfit, 0);
@@ -1992,6 +2078,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const ltmGoogleRoas = ltm.googleSpend > 0 ? ltm.googleConvValue   / ltm.googleSpend : null;
         const ltmRepeatRate = (ltm.newCustomers + ltm.returningCustomers) > 0
           ? ltm.returningCustomers / (ltm.newCustomers + ltm.returningCustomers) : 0;
+        const ltmCvr = ltm.sessions > 0 ? ltm.orders / ltm.sessions : null;
+        const ltmKlaviyoRevenuePct = ltm.netRevenue > 0 ? ltm.klaviyoRevenue / ltm.netRevenue : null;
+        const ltmEmailOpenRate = ltm.emailSends > 0 ? ltm.emailOpens / ltm.emailSends : null;
+        const ltmEmailClickRate = ltm.emailSends > 0 ? ltm.emailClicks / ltm.emailSends : null;
         const ltmCmMargin = ltm.netRevenue > 0 ? ltm.cm3 / ltm.netRevenue : 0;
         const ltmOpexCoverage = ltm.opex > 0 ? ltm.cm3 / ltm.opex : null;
         // For UI: show the default opex if no per-month overrides, else "$X avg"
@@ -2030,6 +2120,52 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const ltmGoogleConv = rollupRows.reduce((a, r) => a + (googleConvByMonth[r.month] || 0), 0);
           const ltmMetaCpa = ltmMetaPurchases > 0 ? ltm.metaSpend / ltmMetaPurchases : null;
           const ltmGoogleCpa = ltmGoogleConv > 0 ? ltm.googleSpend / ltmGoogleConv : null;
+          const maxKlaviyoRevenue = Math.max(...rows.map(r => r.klaviyoRevenue || 0), 1);
+          const runPerformanceAnalysis = async () => {
+            setPerformanceChatLoading(true);
+            setPerformanceChatError('');
+            setPerformanceAnswer('');
+            try {
+              const response = await fetch('/api/performance-chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  question: performanceQuestion,
+                  rows,
+                  summary: {
+                    year: summaryYear,
+                    revenue: ltm.revenue,
+                    netRevenue: ltm.netRevenue,
+                    adSpend: ltm.adSpend,
+                    mer: ltmMer,
+                    amer: ltmAmer,
+                    ncac: ltmNcac,
+                    cvr: ltmCvr,
+                    cm3: ltm.cm3,
+                    netProfit: ltm.netProfit,
+                    klaviyoRevenue: ltm.klaviyoRevenue,
+                    klaviyoRevenuePct: ltmKlaviyoRevenuePct,
+                    emailOpenRate: ltmEmailOpenRate,
+                    emailClickRate: ltmEmailClickRate,
+                  },
+                  dataHealth: {
+                    shopifyIsStale,
+                    metaIsStale,
+                    klaviyoIsStale,
+                    klaviyoConfigured: klaviyoData?.configured !== false,
+                    hasKlaviyoSnapshots: Object.keys(snapshotKlaviyoByMonth).length > 0,
+                  },
+                }),
+              });
+              const payload = await response.json();
+              if (!response.ok || payload.error) throw new Error(payload.error || 'Analysis failed');
+              setPerformanceAnswer(payload.answer || '');
+            } catch (err) {
+              setPerformanceChatError(err.message);
+            } finally {
+              setPerformanceChatLoading(false);
+            }
+          };
           return (
             <>
               <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 16, marginTop: 28 }}>
@@ -2104,6 +2240,77 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#1877f2' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Meta</span></div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#fbbc05' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Google</span></div>
                 </div>
+              </div>
+              <div style={{ ...S.card, marginBottom: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+                  <span style={S.label}>Klaviyo — Email/SMS Revenue Contribution</span>
+                  <span style={{ fontSize: 10, color: '#77746f', letterSpacing: 1 }}>
+                    {ltmKlaviyoRevenuePct == null ? 'No revenue snapshot' : `${summaryYear} YTD: ${fmt$(ltm.klaviyoRevenue)} · ${fmtPct(ltmKlaviyoRevenuePct)} of net revenue`}
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid #dedbd3' }}>
+                  {[
+                    { label: 'Attributed Revenue', value: fmt$(ltm.klaviyoRevenue), sub: `${ltm.klaviyoOrders.toLocaleString()} orders` },
+                    { label: '% of Net Revenue', value: ltmKlaviyoRevenuePct == null ? '—' : fmtPct(ltmKlaviyoRevenuePct), color: ltmKlaviyoRevenuePct != null && ltmKlaviyoRevenuePct >= 0.25 ? '#256b35' : '#171717' },
+                    { label: 'Flow Revenue', value: fmt$(ltm.klaviyoFlowRevenue), sub: ltm.klaviyoRevenue > 0 ? fmtPct(ltm.klaviyoFlowRevenue / ltm.klaviyoRevenue) + ' of Klaviyo' : '' },
+                    { label: 'Open Rate', value: ltmEmailOpenRate == null ? '—' : fmtPct(ltmEmailOpenRate), sub: `${ltm.emailOpens.toLocaleString()} opens` },
+                    { label: 'Click Rate', value: ltmEmailClickRate == null ? '—' : fmtPct(ltmEmailClickRate), sub: `${ltm.emailClicks.toLocaleString()} clicks` },
+                  ].map(({ label, value, sub, color }) => (
+                    <div key={label}>
+                      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', marginBottom: 4, fontWeight: 600 }}>{label}</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: color || '#171717', lineHeight: 1 }}>{value}</div>
+                      {sub && <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>{sub}</div>}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                  {rows.map(r => {
+                    const barPct = ((r.klaviyoRevenue || 0) / maxKlaviyoRevenue) * 100;
+                    const flowPct = r.klaviyoRevenue > 0 ? (r.klaviyoFlowRevenue / r.klaviyoRevenue) * 100 : 0;
+                    const campaignPct = r.klaviyoRevenue > 0 ? Math.max(0, 100 - flowPct) : 0;
+                    return (
+                      <div key={r.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 9, color: '#77746f', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}</span>
+                        <div style={{ flex: 1, height: 16, background: '#f4f1ea', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ display: 'flex', height: '100%', width: `${barPct}%`, transition: 'width 0.4s' }}>
+                            <div title={`Flow: ${fmt$(r.klaviyoFlowRevenue)}`} style={{ width: `${flowPct}%`, background: '#2ea98f', height: '100%' }} />
+                            <div title={`Campaign/message: ${fmt$(r.klaviyoCampaignRevenue)}`} style={{ width: `${campaignPct}%`, background: '#d84a17', height: '100%' }} />
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 11, color: '#171717', width: 70, textAlign: 'right', fontWeight: 700 }}>{fmt$(r.klaviyoRevenue)}</span>
+                        <span style={{ fontSize: 9, color: '#88857f', width: 92, textAlign: 'right', letterSpacing: 1 }}>{r.klaviyoRevenuePct == null ? '—' : fmtPct(r.klaviyoRevenuePct)} rev</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {Object.keys(snapshotKlaviyoByMonth).length === 0 && (
+                  <div style={{ fontSize: 10, color: '#9a6a0a', marginTop: 12, letterSpacing: 1 }}>
+                    Add <code>KLAVIYO_API_KEY</code> in Vercel and click Load Klaviyo to populate this section.
+                  </div>
+                )}
+              </div>
+              <div style={{ ...S.card, marginBottom: 20 }}>
+                <span style={S.label}>Performance AI — Ratio Check and Optimization Readout</span>
+                <textarea
+                  value={performanceQuestion}
+                  onChange={e => setPerformanceQuestion(e.target.value)}
+                  rows={3}
+                  style={{ width: '100%', marginTop: 8, padding: 10, background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 12, borderRadius: 4, resize: 'vertical' }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
+                  <span style={{ fontSize: 9, color: '#88857f', letterSpacing: 1 }}>
+                    Uses monthly Shopify, Meta, Google, Klaviyo, CM3, and net profit rows.
+                  </span>
+                  <button onClick={runPerformanceAnalysis} disabled={performanceChatLoading || !performanceQuestion.trim()} style={performanceChatLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : S.btn}>
+                    {performanceChatLoading ? 'Analyzing…' : 'Analyze'}
+                  </button>
+                </div>
+                {performanceChatError && <div style={{ ...S.err, marginTop: 12 }}>{performanceChatError}</div>}
+                {performanceAnswer && (
+                  <div style={{ marginTop: 14, padding: 14, background: '#fff', border: '1px solid #dedbd3', borderRadius: 6, color: '#343330', fontSize: 12, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                    {performanceAnswer}
+                  </div>
+                )}
               </div>
             </>
           );
