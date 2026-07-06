@@ -2032,12 +2032,16 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           smsClicks: a.smsClicks + r.smsClicks,
           smsUnsubscribes: a.smsUnsubscribes + r.smsUnsubscribes,
         }), { revenue: 0, netRevenue: 0, dtcRevenue: 0, dtcNetRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, shopifyOrders: 0, sessions: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, netProfit: 0, projectedNetProfit: 0, newRevenue: 0, opex: 0, klaviyoRevenue: 0, klaviyoOrders: 0, klaviyoFlowRevenue: 0, klaviyoCampaignRevenue: 0, emailSends: 0, emailOpens: 0, emailClicks: 0, emailUnsubscribes: 0, smsSends: 0, smsClicks: 0, smsUnsubscribes: 0 });
-        const priorNetProfit = rollupRows
+        const priorClosedNetProfit = rollupRows
           .filter(r => !r.isCurrent)
           .reduce((sum, r) => sum + r.netProfit, 0);
-        const currentNetProfit = currentRow?.month?.startsWith(`${summaryYear}-`)
+        const currentActualNetProfit = currentRow?.month?.startsWith(`${summaryYear}-`)
           ? currentRow.netProfit
           : 0;
+        const currentProjectedNetProfit = currentRow?.month?.startsWith(`${summaryYear}-`)
+          ? currentRow.projectedNetProfit
+          : 0;
+        const estimatedYtdNetProfit = priorClosedNetProfit + currentProjectedNetProfit;
 
         const livePrimaryYtd = shopifyData?._stores?.primary?.ytd;
         const snapPrimaryYtd = [...Object.values(snapshotShopByMonth)]
@@ -2627,13 +2631,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                     { label: `${summaryYear} YTD CM3`,       value: fmt$(ltm.cm3), color: ltm.cm3 >= 0 ? '#256b35' : '#b42318', sub: fmtPct(ltmCmMargin) + ' margin' },
                     {
                       label: `Est. ${summaryYear} YTD Net Profit`,
-                      value: fmt$(ltm.netProfit),
-                      color: ltm.netProfit >= 0 ? '#256b35' : '#b42318',
-                      sub: 'actual/MTD CM3 - OpEx',
+                      value: fmt$(estimatedYtdNetProfit),
+                      color: estimatedYtdNetProfit >= 0 ? '#256b35' : '#b42318',
+                      sub: `${fmt$(ltm.netProfit)} actual to date`,
                       bridge: [
-                        { label: 'Prior', value: priorNetProfit },
-                        { label: fmtMo(currentMonthKey).replace(` '${summaryYear.slice(2)}`, ''), value: currentNetProfit },
-                        { label: 'YTD', value: ltm.netProfit },
+                        { label: 'Closed', value: priorClosedNetProfit },
+                        { label: `${fmtMo(currentMonthKey)} Pace`, value: currentProjectedNetProfit },
+                        { label: 'MTD Actual', value: currentActualNetProfit },
                       ],
                     },
                     { label: `${summaryYear} OpEx Cov.`,     value: ltmOpexCoverage == null ? '—' : fmtPct(ltmOpexCoverage), color: ltmOpexCoverage >= 1 ? '#256b35' : '#9a6a0a', sub: fmt$(opex) + ' / mo opex' },
@@ -3242,7 +3246,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
 
         const KPI_DEFS = [
           { key: 'revenue', label: 'Revenue',  goodWhen: 'higher' },
-          { key: 'cac',     label: 'Ad Spend (CAC)', goodWhen: 'tracking' },  // hitting target = good
+          { key: 'cac',     label: 'Acq. Spend', goodWhen: 'tracking' },  // hitting target = good
           { key: 'opex',    label: 'OpEx',     goodWhen: 'lower' },
           { key: 'cm3',     label: 'CM3',      goodWhen: 'higher' },
         ];
@@ -3420,7 +3424,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                 <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8, minWidth: 880 }}>
                   <thead>
                     <tr>
-                      {['Month', 'Status', 'Revenue Act', 'Rev Tgt', 'Δ', 'CAC Act', 'CAC Tgt', 'Δ', 'CM3 Act', 'CM3 Tgt', 'Δ'].map((h, i) => (
+                      {['Month', 'Status', 'Revenue Act', 'Rev Tgt', 'Δ', 'Spend Act', 'Spend Tgt', 'Δ', 'CM3 Act', 'CM3 Tgt', 'Δ'].map((h, i) => (
                         <th key={i} style={{ fontSize: 8, letterSpacing: 1, color: '#88857f', textAlign: i === 0 || i === 1 ? 'left' : 'right', padding: '4px 6px 8px 0', textTransform: 'uppercase', fontWeight: 600 }}>{h}</th>
                       ))}
                     </tr>
@@ -3456,7 +3460,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                 </table>
               </div>
               <div style={{ fontSize: 9, color: '#88857f', marginTop: 10, letterSpacing: 1 }}>
-                STATUS — actual: closed month, pace: current month projected to month-end, plan: forecast value used. CAC delta uses "lower is better"; revenue & CM3 use "higher is better". Forecast revenue line = DTC Revenue (closest comp to Shopify net sales).
+                STATUS — actual: closed month, pace: current month projected to month-end, plan: forecast value used. Spend delta uses "lower is better"; revenue & CM3 use "higher is better". Forecast revenue line = DTC Revenue, paced against gross sales actuals.
               </div>
             </div>
           </>

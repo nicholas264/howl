@@ -234,11 +234,11 @@ export default async function handler(req, res) {
         const mk = monthRaw.slice(0, 7);
         if (!byMonth[mk]) byMonth[mk] = { month: mk, spend: 0, impressions: 0, clicks: 0, conversions: 0, conversionValue: 0 };
         const m = row.metrics || {};
-        byMonth[mk].spend += Number(m.costMicros || 0) / 1_000_000;
+        byMonth[mk].spend += Number(m.costMicros ?? m.cost_micros ?? 0) / 1_000_000;
         byMonth[mk].impressions += Number(m.impressions || 0);
         byMonth[mk].clicks += Number(m.clicks || 0);
         byMonth[mk].conversions += Number(m.conversions || 0);
-        byMonth[mk].conversionValue += Number(m.conversionsValue || 0);
+        byMonth[mk].conversionValue += Number(m.conversionsValue ?? m.conversions_value ?? 0);
       }
       const monthsArr = Object.values(byMonth).sort((a, b) => a.month.localeCompare(b.month));
 
