@@ -72,6 +72,12 @@ function fmtCurrency(n) {
   return '$' + parseFloat(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+function fmtSignedCurrency(n) {
+  if (n == null || Number.isNaN(Number(n))) return '—';
+  const value = Number(n);
+  return `${value < 0 ? '-' : ''}$${Math.abs(Math.round(value)).toLocaleString()}`;
+}
+
 function netRevenueFor(source, overrideRevenue) {
   if (overrideRevenue != null) return Number(overrideRevenue || 0);
   return Number(source?.shopifyNetSales ?? source?.netSales ?? 0);
@@ -135,6 +141,92 @@ function acquisitionRevenueFor(source, revenue) {
   const totalCustomers = newCustomers + returningCustomers;
   if (totalCustomers <= 0) return rawNewRevenue;
   return totalRevenue * (newCustomers / totalCustomers);
+}
+
+function TrendLineChart({
+  rows,
+  value,
+  format,
+  color = DASH.flame,
+  target,
+  targetLabel,
+  higherIsBetter = true,
+  height = 168,
+}) {
+  const points = (rows || [])
+    .map(row => ({ row, y: value(row) }))
+    .filter(point => point.y != null && Number.isFinite(point.y));
+  if (points.length === 0) {
+    return <div style={{ height, display: 'grid', placeItems: 'center', color: DASH.muted2, fontSize: 11 }}>No trend data yet</div>;
+  }
+
+  const width = 640;
+  const padX = 34;
+  const padTop = 16;
+  const padBottom = 34;
+  const ys = points.map(point => point.y);
+  if (target != null && Number.isFinite(target)) ys.push(target);
+  const minRaw = Math.min(...ys);
+  const maxRaw = Math.max(...ys);
+  const range = Math.max(maxRaw - minRaw, maxRaw * 0.08, 1);
+  const minY = Math.max(0, minRaw - range * 0.12);
+  const maxY = maxRaw + range * 0.12;
+  const plotH = height - padTop - padBottom;
+  const xFor = (idx) => points.length === 1
+    ? width / 2
+    : padX + (idx * (width - padX * 2)) / (points.length - 1);
+  const yFor = (v) => padTop + ((maxY - v) / Math.max(maxY - minY, 1)) * plotH;
+  const path = points.map((point, idx) => `${xFor(idx).toFixed(1)},${yFor(point.y).toFixed(1)}`).join(' ');
+  const targetY = target != null && Number.isFinite(target) ? yFor(target) : null;
+  const latest = points[points.length - 1];
+  const prior = points.length > 1 ? points[points.length - 2] : null;
+  const latestGood = target == null || !Number.isFinite(target)
+    ? null
+    : higherIsBetter ? latest.y >= target : latest.y <= target;
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height, display: 'block', overflow: 'visible' }} preserveAspectRatio="none">
+        {[0, 0.5, 1].map(tick => {
+          const y = padTop + tick * plotH;
+          return <line key={tick} x1={padX} x2={width - padX} y1={y} y2={y} stroke={DASH.border} strokeWidth="1" />;
+        })}
+        {targetY != null && (
+          <>
+            <line x1={padX} x2={width - padX} y1={targetY} y2={targetY} stroke={DASH.success} strokeWidth="1.4" strokeDasharray="5 5" />
+            {targetLabel && <text x={width - padX} y={Math.max(10, targetY - 5)} textAnchor="end" fontSize="10" fill={DASH.success} fontWeight="700">{targetLabel}</text>}
+          </>
+        )}
+        <polyline points={path} fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+        {points.map((point, idx) => {
+          const x = xFor(idx);
+          const y = yFor(point.y);
+          return (
+            <g key={point.row.month}>
+              <circle cx={x} cy={y} r="4" fill={DASH.surface} stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+              {(idx === 0 || idx === points.length - 1 || point.row.isCurrent) && (
+                <text x={x} y={y - 9} textAnchor={idx === 0 ? 'start' : idx === points.length - 1 ? 'end' : 'middle'} fontSize="10" fill={DASH.text} fontWeight="700">
+                  {format(point.y)}
+                </text>
+              )}
+            </g>
+          );
+        })}
+        {points.map((point, idx) => {
+          const x = xFor(idx);
+          const [year, month] = point.row.month.split('-');
+          const label = new Date(Number(year), Number(month) - 1).toLocaleDateString('en-US', { month: 'short' });
+          return <text key={`${point.row.month}-label`} x={x} y={height - 9} textAnchor="middle" fontSize="10" fill={DASH.muted2}>{label}</text>;
+        })}
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 4, fontSize: 10, color: DASH.muted2 }}>
+        <span>Latest {format(latest.y)}</span>
+        <span style={{ color: latestGood == null ? DASH.muted2 : latestGood ? DASH.success : DASH.danger, fontWeight: 800 }}>
+          {prior ? `${latest.y - prior.y >= 0 ? '+' : ''}${format(latest.y - prior.y)} vs prior` : targetLabel || ''}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 function fmtCtr(n) {
@@ -2103,8 +2195,6 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const fmt$ = (n) => (n == null || isNaN(n)) ? '—' : '$' + Math.round(n).toLocaleString();
 
         const maxCustomers = Math.max(...rows.map(r => r.newCustomers + r.returningCustomers), 1);
-        const ncacRange = rows.filter(r => r.ncac != null).map(r => r.ncac);
-        const maxNcac = Math.max(...ncacRange, 1);
         const cmRange = rows.map(r => r.cm3);
         const cmMax = Math.max(...cmRange, 1);
         const cmMin = Math.min(...cmRange, 0);
@@ -2140,6 +2230,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const klaviyoMetricCoverage = Array.isArray(klaviyoData?.metricCoverage)
             ? klaviyoData.metricCoverage
             : [];
+          const trendRows = rows.filter(r => r.revenue > 0 || r.adSpend > 0 || r.sessions > 0 || r.newCustomers > 0);
           const healthyColor = '#256b35';
           const warningColor = '#9a6a0a';
           const dangerColor = '#b42318';
@@ -2302,6 +2393,44 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                   <span>Latest CVR {latestRevenueMonth?.cvr == null ? '—' : fmtPct(latestRevenueMonth.cvr)}</span>
                   <span>CVR MoM {cvrMom == null ? '—' : `${cvrMom >= 0 ? '+' : ''}${(cvrMom * 100).toFixed(2)} pts`}</span>
                   <span>Net Profit {fmt$(ltm.netProfit)}</span>
+                </div>
+              </div>
+              <div style={{ ...S.card, marginBottom: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
+                  <span style={S.label}>Conversion + Acquisition Cost Trends</span>
+                  <span style={{ fontSize: 10, color: '#77746f', letterSpacing: 1 }}>Shopify CVR and blended NCAC by month</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                  <div style={{ padding: '10px 12px', background: '#fff', border: '1px solid #dedbd3', borderRadius: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
+                      <span style={{ ...S.label, marginBottom: 0 }}>CVR Trend</span>
+                      <span style={{ fontSize: 10, color: '#88857f' }}>{ltmCvr == null ? '—' : fmtPct(ltmCvr)} YTD</span>
+                    </div>
+                    <TrendLineChart
+                      rows={trendRows}
+                      value={r => r.cvr}
+                      format={n => (n * 100).toFixed(1) + '%'}
+                      color="#d84a17"
+                      target={0.015}
+                      targetLabel="1.5% target"
+                      higherIsBetter
+                    />
+                  </div>
+                  <div style={{ padding: '10px 12px', background: '#fff', border: '1px solid #dedbd3', borderRadius: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
+                      <span style={{ ...S.label, marginBottom: 0 }}>NCAC Trend</span>
+                      <span style={{ fontSize: 10, color: '#88857f' }}>{ltmNcac == null ? '—' : fmtSignedCurrency(ltmNcac)} avg</span>
+                    </div>
+                    <TrendLineChart
+                      rows={trendRows}
+                      value={r => r.ncac}
+                      format={fmtSignedCurrency}
+                      color="#9a6a0a"
+                      target={120}
+                      targetLabel="$120 target"
+                      higherIsBetter={false}
+                    />
+                  </div>
                 </div>
               </div>
               <div style={{ ...S.card, marginBottom: 20 }}>
@@ -2852,23 +2981,19 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                 {/* NCAC + CM3 side by side */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
                   <div style={S.card}>
-                    <span style={S.label}>NCAC by Month (Ad spend ÷ new customers)</span>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                      {rows.map(r => {
-                        const barPct = r.ncac != null ? (r.ncac / maxNcac) * 100 : 0;
-                        return (
-                          <div key={r.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{ fontSize: 9, color: '#77746f', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}</span>
-                            <div style={{ flex: 1, height: 14, background: '#f4f1ea', borderRadius: 3, overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${barPct}%`, background: '#9a6a0a', borderRadius: 3 }} />
-                            </div>
-                            <span style={{ fontSize: 10, color: r.ncac != null ? '#171717' : '#88857f', width: 56, textAlign: 'right', fontWeight: r.ncac != null ? 700 : 400 }}>
-                              {r.ncac != null ? '$' + r.ncac.toFixed(0) : '—'}
-                            </span>
-                          </div>
-                        );
-                      })}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
+                      <span style={{ ...S.label, marginBottom: 0 }}>NCAC Trend</span>
+                      <span style={{ fontSize: 10, color: '#88857f' }}>Ad spend ÷ new customers</span>
                     </div>
+                    <TrendLineChart
+                      rows={rows}
+                      value={r => r.ncac}
+                      format={fmtSignedCurrency}
+                      color="#9a6a0a"
+                      target={120}
+                      targetLabel="$120 target"
+                      higherIsBetter={false}
+                    />
                   </div>
 
                   <div style={S.card}>
