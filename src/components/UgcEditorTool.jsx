@@ -1103,32 +1103,32 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     }
   };
 
-  const download = () => {
-    if (!outputUrl) return;
+  const download = (url = outputUrl, label = 'ugc_edit') => {
+    if (!url) return;
     const a = document.createElement('a');
-    a.href = outputUrl;
-    a.download = `ugc_edit_${Date.now()}.mp4`;
+    a.href = url;
+    a.download = `${slugifyFileName(label)}_${Date.now()}.mp4`;
     a.click();
   };
 
-  const sendToCart = async () => {
-    if (!outputUrl || !onAddToCart) return;
+  const sendToCart = async (url = outputUrl, label = 'UGC edit') => {
+    if (!url || !onAddToCart) return;
     const cartItem = {
       id: Date.now(),
       type: 'video',
       kind: 'ugc-edit',
-      dataUrl: outputUrl,
-      videoUrl: outputUrl,
+      dataUrl: url,
+      videoUrl: url,
       name: activeSession?.creator_name
-        ? `${activeSession.creator_name} · ${activeSession.deliverable_title || 'UGC edit'}`
-        : `UGC edit ${new Date().toLocaleString()}`,
+        ? `${activeSession.creator_name} · ${label || activeSession.deliverable_title || 'UGC edit'}`
+        : `${label || 'UGC edit'} ${new Date().toLocaleString()}`,
       creator: activeSession?.creator_name || null,
       creatorId: activeSession?.creator_id || null,
       sourceType: activeSession?.source_type || (activeSession?.creator_id ? 'external_creator' : 'internal_employee'),
       sourceLabel: activeSession?.source_label || activeSession?.creator_name || 'UGC editor',
       briefId: activeSession?.brief_id || null,
       deliverableId: activeSession?.deliverable_id || null,
-      sourceVideoUrl: outputUrl,
+      sourceVideoUrl: url,
       originalSourceVideoUrl: activeSession?.video_url || null,
       createdAt: Date.now(),
     };

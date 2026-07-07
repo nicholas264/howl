@@ -182,36 +182,93 @@ export default async function handler(req, res) {
       }
 
       // ── Pair detection ──────────────────────────────────────────────────────
-      // Group siblings under the same immediate parent folder. If a folder has
-      // exactly 2 media files where one is feed-shape (1:1 / landscape) and the
-      // other is story-shape (portrait, h > w), emit a single 'pair' item.
-      // Detection: video/image MediaMetadata first, then filename keywords.
-      const aspectFor = (f) => {
+      // Group same-creative aspect variants under a shared parent. Feed assets
+      // include 1:1, 4:5, and landscape; story assets are the taller 9:16 family.
+      // Detection: filename keywords first, then Drive image/video dimensions.
+      // Filename grouping lets a folder contain several creatives without
+      // cross-pairing unrelated assets.
+      const dimsFor = (f) => {
         const v = f.videoMediaMetadata, i = f.imageMediaMetadata;
-        const w = parseInt(v?.width || i?.width || 0);
-        const h = parseInt(v?.height || i?.height || 0);
-        if (w > 0 && h > 0) return h > w ? 'story' : 'feed';
-        const n = (f.name || '').toLowerCase();
-        if (/(9[x:]?16|story|stories|reel|vertical|portrait)/.test(n)) return 'story';
-        if (/(1[x:]?1|square|feed|landscape|16[x:]?9)/.test(n)) return 'feed';
-        return null;
-      };
-      const sameType = (a, b) => {
-        const av = a.mimeType?.startsWith('video/'), bv = b.mimeType?.startsWith('video/');
-        const ai = a.mimeType?.startsWith('image/'), bi = b.mimeType?.startsWith('image/');
-        return (av && bv) || (ai && bi);
+        const width = parseInt(v?.width || i?.width || 0);
+        const height = parseInt(v?.height || i?.height || 0);
+        return { width, height };
       };
 
+      const aspectLabelFor = (f) => {
+        const n = (f.name || '').toLowerCase();
+        if (/(9\s*[x:]\s*16|916|story|stories|reel|vertical)/.test(n)) return '9:16';
+        if (/(4\s*[x:]\s*5|45|portrait|feed)/.test(n)) return '4:5';
+        if (/(1\s*[x:]\s*1|11|square)/.test(n)) return '1:1';
+        if (/(16\s*[x:]\s*9|169|landscape)/.test(n)) return '16:9';
+
+        const { width, height } = dimsFor(f);
+        if (!(width > 0 && height > 0)) return null;
+        const ratio = width / height;
+        if (ratio < 0.68) return '9:16';
+        if (ratio < 0.92) return '4:5';
+        if (ratio < 1.12) return '1:1';
+        return '16:9';
+      };
+
+      const aspectFor = (f) => {
+        const label = aspectLabelFor(f);
+        if (!label) return null;
+        return label === '9:16' ? 'story' : 'feed';
+      };
+
+      const variantKeyFor = (f) => {
+        const parent = f.parents?.[0] || inboxId;
+        const type = f.mimeType?.startsWith('video/') ? 'video' : f.mimeType?.startsWith('image/') ? 'image' : 'file';
+        const stem = (f.name || '')
+          .toLowerCase()
+          .replace(/\.[^.]+$/, '')
+          .replace(/\b(9\s*[x:]\s*16|4\s*[x:]\s*5|1\s*[x:]\s*1|16\s*[x:]\s*9|916|45|11|169)\b/g, ' ')
+          .replace(/\b(story|stories|reels?|vertical|portrait|feed|square|landscape)\b/g, ' ')
+          .replace(/\b(copy|final|export|asset|creative|video|image)\b/g, ' ')
+          .replace(/[_\-.()[\]]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        return `${parent}:${type}:${stem || folderNames[parent] || parent}`;
+      };
       const byParent = {};
       for (const f of enriched) {
-        const p = f.parents?.[0];
-        if (!p || p === inboxId) continue; // only group inside subfolders
+        const p = f.parents?.[0] || inboxId;
         if (!byParent[p]) byParent[p] = [];
         byParent[p].push(f);
       }
 
       const pairedFileIds = new Set();
       const pairItems = [];
+      const byCreated = (a, b) => (a.createdTime || '').localeCompare(b.createdTime || '');
+      const feedScore = (f) => {
+        const label = aspectLabelFor(f);
+        if (label === '4:5') return 0;
+        if (label === '1:1') return 1;
+        if (label === '16:9') return 2;
+        return 9;
+      };
+      const storyScore = (f) => aspectLabelFor(f) === '9:16' ? 0 : 9;
+      const makePair = (parentId, feed, story) => {
+        pairedFileIds.add(feed.id);
+        pairedFileIds.add(story.id);
+        const feedAspect = aspectLabelFor(feed) || 'Feed';
+        const storyAspect = aspectLabelFor(story) || 'Story';
+        pairItems.push({
+          kind: 'pair',
+          id: `pair:${parentId}:${feed.id}:${story.id}`,
+          folderId: parentId,
+          folderName: folderNames[parentId] || '',
+          folderPath: feed.folderPath,
+          feed,
+          story,
+          feedAspect,
+          storyAspect,
+          aspectLabel: `${feedAspect} + ${storyAspect}`,
+          mimeType: feed.mimeType,
+          createdTime: feed.createdTime > story.createdTime ? feed.createdTime : story.createdTime,
+          name: folderNames[parentId] || feed.name,
+        });
+      };
       // For each subfolder, split by media type (video vs image) and within each
       // type pair feed-aspect files with story-aspect files one-to-one. Extras
       // are left as singles. This handles folders with 3+ files where only
@@ -228,6 +285,7 @@ export default async function handler(req, res) {
           const feeds = [];
           const stories = [];
           const unknown = [];
+          let groupedPairCount = 0;
           for (const f of sameTypeList) {
             const a = aspectFor(f);
             if (a === 'feed') feeds.push(f);
@@ -250,7 +308,27 @@ export default async function handler(req, res) {
             }
             feeds.length = 0; stories.length = 0; unknown.length = 0;
             feeds.push(feed); stories.push(story);
-          } else if (unknown.length) {
+          } else {
+            const grouped = {};
+            for (const f of sameTypeList) {
+              const k = variantKeyFor(f);
+              if (!grouped[k]) grouped[k] = [];
+              grouped[k].push(f);
+            }
+            for (const group of Object.values(grouped)) {
+              if (group.length < 2) continue;
+              const groupFeeds = group.filter(f => aspectFor(f) === 'feed').sort((a, b) => feedScore(a) - feedScore(b) || byCreated(a, b));
+              const groupStories = group.filter(f => aspectFor(f) === 'story').sort((a, b) => storyScore(a) - storyScore(b) || byCreated(a, b));
+              const pairCount = Math.min(groupFeeds.length, groupStories.length);
+              for (let i = 0; i < pairCount; i++) {
+                makePair(parentId, groupFeeds[i], groupStories[i]);
+                groupedPairCount += 1;
+                feeds.splice(feeds.findIndex(f => f.id === groupFeeds[i].id), 1);
+                stories.splice(stories.findIndex(f => f.id === groupStories[i].id), 1);
+              }
+            }
+          }
+          if (sameTypeList.length > 2 && unknown.length) {
             // 3+ files: pull unknowns into whichever side is empty so a pair
             // can still be formed.
             while (unknown.length && (feeds.length === 0 || stories.length === 0)) {
@@ -260,27 +338,13 @@ export default async function handler(req, res) {
             }
           }
           // Stable order so pairing is deterministic across refreshes.
-          const byCreated = (a, b) => (a.createdTime || '').localeCompare(b.createdTime || '');
-          feeds.sort(byCreated);
-          stories.sort(byCreated);
-          const pairCount = Math.min(feeds.length, stories.length);
+          feeds.sort((a, b) => feedScore(a) - feedScore(b) || byCreated(a, b));
+          stories.sort((a, b) => storyScore(a) - storyScore(b) || byCreated(a, b));
+          const allowLoosePairing = sameTypeList.length === 2 || (groupedPairCount === 0 && feeds.length === 1 && stories.length === 1);
+          const pairCount = allowLoosePairing ? Math.min(feeds.length, stories.length) : 0;
           for (let i = 0; i < pairCount; i++) {
-            const feed = feeds[i];
-            const story = stories[i];
-            pairedFileIds.add(feed.id);
-            pairedFileIds.add(story.id);
-            pairItems.push({
-              kind: 'pair',
-              id: `pair:${parentId}:${feed.id}:${story.id}`,
-              folderId: parentId,
-              folderName: folderNames[parentId] || '',
-              folderPath: feed.folderPath,
-              feed,
-              story,
-              mimeType: feed.mimeType,
-              createdTime: feed.createdTime > story.createdTime ? feed.createdTime : story.createdTime,
-              name: folderNames[parentId] || feed.name,
-            });
+            if (pairedFileIds.has(feeds[i].id) || pairedFileIds.has(stories[i].id)) continue;
+            makePair(parentId, feeds[i], stories[i]);
           }
         }
       }

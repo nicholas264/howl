@@ -757,10 +757,10 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                 item.kind === 'pair' ? (
                   <div style={{ position: 'relative', width: 140, height: 140 }}>
                     <DriveThumb fileId={item.feed.id} alt="feed" style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, objectFit: 'cover', borderRadius: 4, border: '2px solid #fff', zIndex: 1 }}
-                      fallback={<div style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, borderRadius: 4, background: '#f4f1ea', border: '2px solid #fff', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#88857f', fontSize: 9 }}>1:1</div>}
+                      fallback={<div style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, borderRadius: 4, background: '#f4f1ea', border: '2px solid #fff', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#88857f', fontSize: 9 }}>{item.feedAspect || 'Feed'}</div>}
                     />
                     <DriveThumb fileId={item.story.id} alt="story" style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, objectFit: 'cover', borderRadius: 4, border: '2px solid #fff', zIndex: 2 }}
-                      fallback={<div style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, borderRadius: 4, background: '#f4f1ea', border: '2px solid #fff', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#88857f', fontSize: 9 }}>9:16</div>}
+                      fallback={<div style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, borderRadius: 4, background: '#f4f1ea', border: '2px solid #fff', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#88857f', fontSize: 9 }}>{item.storyAspect || 'Story'}</div>}
                     />
                   </div>
                 ) : (
@@ -789,7 +789,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                     ? <span style={S.badge('#d84a17')}>Drive</span>
                     : <span style={S.badge('#256b35')}>Cart</span>}
                   {item.source === 'drive' && item.kind === 'pair' && (
-                    <span style={{ marginLeft: 6, ...S.badge('#256b35') }}>1:1 + 9:16</span>
+                    <span style={{ marginLeft: 6, ...S.badge('#256b35') }}>{item.aspectLabel || 'Feed + Story'}</span>
                   )}
                   {(item.squareUrl || item.url) && item.storyUrl && item.type !== 'video' && (
                     <span style={{ marginLeft: 6, ...S.badge('#256b35') }}>4:5 + 9:16</span>
