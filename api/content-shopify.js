@@ -10,6 +10,7 @@ import {
 import {
   createShopifyArticle,
   fetchShopifyArticles,
+  getAccessScopes,
   getPrimaryDomain,
   listShopifyBlogs,
   loadSiteLinks,
@@ -37,9 +38,11 @@ export default async function handler(req, res) {
       } catch (err) {
         blogError = err.message;
       }
+      const scopes = await getAccessScopes();
+      const canPublish = scopes.some(scope => ['write_content', 'write_online_store_pages'].includes(scope));
       // Named blog_error, not error: the client treats a top-level `error`
       // field as a failed request and would discard the rest of the status.
-      return res.json({ configured: true, store, blogs, links, blog_error: blogError });
+      return res.json({ configured: true, store, blogs, links, blog_error: blogError, can_publish: canPublish });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });

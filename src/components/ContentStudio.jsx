@@ -621,7 +621,7 @@ export default function ContentStudio() {
     if (!savedDraft) return;
     const hadFeedback = feedbackForm.note.trim();
     if (hadFeedback) await saveFeedback(savedDraft.id);
-    if (shopify.configured && publishBlogId && !brief.shopify_article_id) {
+    if (shopify.configured && shopify.can_publish && publishBlogId && !brief.shopify_article_id) {
       const sent = await sendToShopify({ publishLive: false });
       if (sent) return;
     }
@@ -775,21 +775,23 @@ export default function ContentStudio() {
             {shopify.configured ? (
               <div className="content-shopify">
                 {shopify.blogs?.length ? (
-                  <>
-                    <select value={publishBlogId} onChange={event => setPublishBlogId(event.target.value)}>
-                      {shopify.blogs.map(blog => (
-                        <option key={blog.id} value={blog.id}>{blog.title}</option>
-                      ))}
-                    </select>
-                    <div className="content-actions">
-                      <button type="button" disabled={!draft.trim() || generating === 'publish-draft'} onClick={() => sendToShopify({ publishLive: false })}>
-                        {generating === 'publish-draft' ? 'Sending…' : 'Send as draft'}
-                      </button>
-                      <button type="button" disabled={!draft.trim() || generating === 'publish-live'} onClick={() => sendToShopify({ publishLive: true })}>
-                        {generating === 'publish-live' ? 'Publishing…' : 'Publish live'}
-                      </button>
-                    </div>
-                  </>
+                  shopify.can_publish ? (
+                    <>
+                      <select value={publishBlogId} onChange={event => setPublishBlogId(event.target.value)}>
+                        {shopify.blogs.map(blog => (
+                          <option key={blog.id} value={blog.id}>{blog.title}</option>
+                        ))}
+                      </select>
+                      <div className="content-actions">
+                        <button type="button" disabled={!draft.trim() || generating === 'publish-draft'} onClick={() => sendToShopify({ publishLive: false })}>
+                          {generating === 'publish-draft' ? 'Sending…' : 'Send as draft'}
+                        </button>
+                        <button type="button" disabled={!draft.trim() || generating === 'publish-live'} onClick={() => sendToShopify({ publishLive: true })}>
+                          {generating === 'publish-live' ? 'Publishing…' : 'Publish live'}
+                        </button>
+                      </div>
+                    </>
+                  ) : <small>Read-only access: blog imports and site links work. Add the write_content scope to publish drafts from here.</small>
                 ) : <small>{shopify.blog_error || 'No blogs found on the store yet.'}</small>}
                 {brief.shopify_article_url && (
                   <small>

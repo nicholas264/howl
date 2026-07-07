@@ -36,6 +36,24 @@ export async function shopifyGql(query, variables = {}) {
 }
 
 let primaryDomainCache = null;
+let accessScopesCache = null;
+
+export async function getAccessScopes() {
+  if (accessScopesCache) return accessScopesCache;
+  const { store, token, configured } = shopifyContentConfig();
+  if (!configured) return [];
+  try {
+    const response = await fetch(`https://${store}/admin/oauth/access_scopes.json`, {
+      headers: { 'X-Shopify-Access-Token': token },
+    });
+    const data = await response.json();
+    const scopes = (data?.access_scopes || []).map(scope => scope.handle);
+    if (scopes.length) accessScopesCache = scopes;
+    return scopes;
+  } catch {
+    return [];
+  }
+}
 
 export async function getPrimaryDomain() {
   if (primaryDomainCache) return primaryDomainCache;
