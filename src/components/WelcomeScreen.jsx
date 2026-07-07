@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { useUser } from "@clerk/clerk-react";
 
 const QUICK_ACTIONS = [
   { tab: 'campaign-planner', permission: 'briefs.write', eyebrow: 'Plan', title: 'Campaign Planner', sub: 'Pick product, allocate creators, and draft performance-led scripts.' },
@@ -24,14 +23,13 @@ function setupTarget(step) {
   return { type: 'creator-view', value: 'operations' };
 }
 
-export default function WelcomeScreen({ setActiveTab, can = () => true, openCreatorWorkspace = () => setActiveTab('creators') }) {
-  const { user } = useUser();
+export default function WelcomeScreen({ setActiveTab, can = () => true, openCreatorWorkspace = () => setActiveTab('creators'), currentUser = null }) {
   const [operations, setOperations] = useState(null);
   const [health, setHealth] = useState(null);
   const [planner, setPlanner] = useState(null);
   const [loadingActions, setLoadingActions] = useState(true);
   const [actionError, setActionError] = useState('');
-  const firstName = user?.firstName || user?.username || null;
+  const firstName = currentUser?.display_name?.split(' ')?.[0] || currentUser?.email?.split('@')?.[0] || null;
   const availableActions = QUICK_ACTIONS.filter(action => can(action.permission));
   const primaryAction = availableActions.find(action => action.tab === 'from-winners')
     || availableActions.find(action => action.tab === 'launcher')

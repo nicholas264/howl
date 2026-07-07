@@ -1,5 +1,6 @@
 const CREATIVE_TOOLS = [
   { tab: 'from-winners', permission: 'briefs.write', label: 'Concept Studio', description: 'Turn proven creative patterns into grounded concepts and scripts.' },
+  { tab: 'content-studio', permission: 'briefs.write', label: 'Content Studio', description: 'Build SEO/AEO blog drafts from HOWL voice, source examples, and product context.' },
   { tab: 'ugc-editor', permission: 'assets.write', label: 'UGC Editor', description: 'Edit creator footage, captions, pacing, and exports.' },
   { tab: 'image', permission: 'assets.write', label: 'Image Ads', description: 'Build static creative from product and lifestyle assets.' },
   { tab: 'callout', permission: 'assets.write', label: 'Callout Ads', description: 'Create product feature callouts with precise visual anchors.' },

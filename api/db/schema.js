@@ -6,6 +6,7 @@ import { ensureCreativeAnalysisQueue } from '../_lib/creative-analysis-queue.js'
 import { ensureAppTables } from '../_lib/app-access.js';
 import { ensureCreatorOpsTables } from '../_lib/creator-ops.js';
 import { ensureLooxReviewTables } from '../_lib/loox-reviews.js';
+import { ensureContentStudioTables } from '../_lib/content-studio.js';
 
 export default async function handler(req, res) {
   if (!(await requireAdmin(req, res))) return;
@@ -276,6 +277,7 @@ export default async function handler(req, res) {
     await sql`CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)`;
     await ensureAppTables(sql);
     await ensureCreatorOpsTables(sql);
+    await ensureContentStudioTables(sql);
 
     return res.json({ ok: true });
   } catch (err) {

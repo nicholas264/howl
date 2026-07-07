@@ -16,6 +16,7 @@ const LaunchLogTool = lazy(() => import("./components/LaunchLogTool"));
 const UgcEditorTool = lazy(() => import("./components/UgcEditorTool"));
 const GalleryTab = lazy(() => import("./components/GalleryTab"));
 const FromWinnersTool = lazy(() => import("./components/FromWinnersTool"));
+const ContentStudio = lazy(() => import("./components/ContentStudio"));
 const LauncherTool = lazy(() => import("./components/LauncherTool"));
 const CreatorWorkspace = lazy(() => import("./components/CreatorWorkspace"));
 const CreatorPipelineFunnel = lazy(() => import("./components/CreatorPipelineFunnel"));
@@ -174,6 +175,7 @@ export default function HowlAdEngine({ appAccess }) {
         { key: 'seeding-ledger', label: 'Seeding', permission: 'creators.read' },
         { key: 'creative-analytics', label: 'Creative Analytics', permission: 'analytics.read' },
         { key: 'from-winners', label: 'Concept Studio', permission: 'briefs.write' },
+        { key: 'content-studio', label: 'Content Studio', permission: 'briefs.write' },
         { key: 'ugc-editor', label: 'UGC Editor', permission: 'assets.write' },
         { key: 'image', label: 'Image Ads', permission: 'assets.write' },
         { key: 'callout', label: 'Callout Ads', permission: 'assets.write' },
@@ -274,19 +276,23 @@ export default function HowlAdEngine({ appAccess }) {
             ))}
           </nav>
           <div className="sidebar-foot">
-            <UserButton
-              afterSignOutUrl="/"
-              appearance={{
-                variables: { colorPrimary: '#d84a17', colorBackground: '#fff', colorText: '#171717' },
-                elements: { userButtonAvatarBox: { width: 26, height: 26 } },
-              }}
-            />
+            {appAccess.localAuthBypass ? (
+              <span className="local-avatar">LD</span>
+            ) : (
+              <UserButton
+                afterSignOutUrl="/"
+                appearance={{
+                  variables: { colorPrimary: '#d84a17', colorBackground: '#fff', colorText: '#171717' },
+                  elements: { userButtonAvatarBox: { width: 26, height: 26 } },
+                }}
+              />
+            )}
             <span className="acct-lbl">{appAccess.role || 'Account'}</span>
           </div>
         </aside>
 
         <main className="main-panel">
-      {activeTab === "welcome" && <WelcomeScreen setActiveTab={navigate} can={can} openCreatorWorkspace={openCreatorWorkspace} />}
+      {activeTab === "welcome" && <WelcomeScreen setActiveTab={navigate} can={can} openCreatorWorkspace={openCreatorWorkspace} currentUser={appAccess.user} />}
 
       {activeTab === "results" && (
         variations.length > 0 ? (
@@ -336,6 +342,7 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={navigate} can={can} />}
         {activeTab === "admin" && can('admin.users') && <AdminWorkspace onOpenEditor={openEditorSession} />}
         {activeTab === "from-winners" && <FromWinnersTool setActiveTab={navigate} setVariations={setVariations} onOpenCreator={openPlannedCreator} />}
+        {activeTab === "content-studio" && <ContentStudio />}
         {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} driveAuth={driveAuth} onAddToCart={addToCart} />}
         {activeTab === "callout" && <CalloutAdTool onAddToCart={addToCart} />}
         {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} onAddToCart={addToCart} />}
