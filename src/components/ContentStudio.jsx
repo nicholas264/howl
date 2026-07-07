@@ -80,6 +80,7 @@ export default function ContentStudio() {
   const [seoAeo, setSeoAeo] = useState(null);
   const [shopify, setShopify] = useState({ configured: false, blogs: [], links: { count: 0, last_synced_at: null } });
   const [publishBlogId, setPublishBlogId] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [activePanel, setActivePanel] = useState('brief');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -562,6 +563,23 @@ export default function ContentStudio() {
     }
   };
 
+  const deleteProject = async (id) => {
+    setError('');
+    try {
+      await apiJson('/api/content-projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', id }),
+      });
+      setConfirmDeleteId(null);
+      if (Number(brief.id) === Number(id)) loadProject(null);
+      await refreshProjects();
+      setMessage('Draft deleted.');
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const importShopifyArticles = async () => {
     setSaving(true);
     setError('');
@@ -633,19 +651,43 @@ export default function ContentStudio() {
           <h1>What do you want a blog about?</h1>
           <p>Give it the topic. HOWL researches the reference library, uses the emails and blogs for voice, then writes a draft.</p>
         </div>
-        <div className="content-project-picker">
-          <button type="button" onClick={() => loadProject(null)}>New</button>
-          <select value={brief.id || ''} onChange={event => loadProject(event.target.value)}>
-            <option value="">New blog draft</option>
-            {projects.map(project => (
-              <option key={project.id} value={project.id}>{project.title}</option>
-            ))}
-          </select>
-        </div>
+        <button type="button" className="content-new-draft" onClick={() => loadProject(null)}>+ New draft</button>
       </header>
 
       {error && <div className="app-error">{error}</div>}
       {message && !error && <div className="content-note">{message}</div>}
+
+      {projects.length > 0 && (
+        <div className="content-drafts-rail">
+          {projects.map(project => {
+            const active = Number(brief.id) === Number(project.id);
+            const confirming = confirmDeleteId === project.id;
+            return (
+              <article key={project.id} className={active ? 'active' : ''}>
+                <button type="button" className="content-draft-open" onClick={() => loadProject(project.id)}>
+                  <strong>{project.title || 'Untitled'}</strong>
+                  <small>
+                    {project.shopify_state === 'published' ? 'Live on Shopify'
+                      : project.shopify_state === 'draft' ? 'Draft on Shopify'
+                      : project.draft_count > 0 ? `${project.draft_count} version${project.draft_count === 1 ? '' : 's'}`
+                      : 'No draft yet'}
+                    {' · '}
+                    {new Date(project.last_draft_at || project.updated_at).toLocaleDateString()}
+                  </small>
+                </button>
+                {confirming ? (
+                  <span className="content-draft-confirm">
+                    <button type="button" className="danger" onClick={() => deleteProject(project.id)}>Delete</button>
+                    <button type="button" onClick={() => setConfirmDeleteId(null)}>Keep</button>
+                  </span>
+                ) : (
+                  <button type="button" className="content-draft-delete" title="Delete draft" onClick={() => setConfirmDeleteId(project.id)}>&times;</button>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
 
       <section className="content-command">
         <label>

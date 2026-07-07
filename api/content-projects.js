@@ -155,6 +155,14 @@ export default async function handler(req, res) {
       return res.json({ feedback });
     }
 
+    if (action === 'delete') {
+      const id = Number(req.body?.id);
+      if (!Number.isFinite(id)) return res.status(400).json({ error: 'id required' });
+      const [project] = await sql`DELETE FROM content_projects WHERE id = ${id} RETURNING id, title`;
+      if (!project) return res.status(404).json({ error: 'Project not found' });
+      return res.json({ ok: true, deleted: project });
+    }
+
     if (action === 'archive') {
       const id = Number(req.body?.id);
       if (!Number.isFinite(id)) return res.status(400).json({ error: 'id required' });
