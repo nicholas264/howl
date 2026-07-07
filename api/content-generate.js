@@ -211,6 +211,14 @@ async function loadSourceContext(sql, ids, project) {
       ORDER BY array_position(${ids}::bigint[], id)
       LIMIT 30
     `;
+  } else {
+    sourceRows = await sql`
+      SELECT id, title, source_type, body, url, tags
+      FROM content_sources
+      WHERE source_type IN ('email', 'blog', 'landing_page')
+      ORDER BY updated_at DESC, created_at DESC
+      LIMIT 60
+    `;
   }
   return sourceRows.map(source => ({
     id: source.id,

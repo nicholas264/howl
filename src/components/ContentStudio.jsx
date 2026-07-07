@@ -92,6 +92,10 @@ export default function ContentStudio() {
     () => sources.filter(source => selectedIds.has(Number(source.id))),
     [sources, selectedIds],
   );
+  const referenceSources = useMemo(
+    () => sources.filter(source => ['email', 'blog', 'landing_page'].includes(source.source_type || '')),
+    [sources],
+  );
   const latestDraft = drafts.find(item => item.kind === 'draft');
 
   const refreshSources = useCallback(async () => {
@@ -348,6 +352,62 @@ export default function ContentStudio() {
     }
   };
 
+  const generateBlogDraft = async () => {
+    setGenerating('blog');
+    setError('');
+    setMessage('');
+    try {
+      const topic = brief.topic.trim();
+      if (!topic) {
+        setError('Enter a blog topic first.');
+        return;
+      }
+      const saved = brief.id
+        ? await saveProject({ ...brief, title: brief.title || topic, selected_source_ids: [] })
+        : await saveProject({ ...brief, title: brief.title || topic, selected_source_ids: [] });
+      if (!saved) return;
+      setMessage(`Researching ${referenceSources.length || sources.length} reference source${(referenceSources.length || sources.length) === 1 ? '' : 's'}...`);
+      const outlineData = await apiJson('/api/content-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'outline',
+          projectId: saved.id,
+          selectedSourceIds: [],
+          outline: '',
+          draft: '',
+        }),
+      });
+      const outlineResult = outlineData.result || {};
+      const nextOutline = outlineResult.markdown || outlineResult.outline_markdown || '';
+      setOutline(nextOutline);
+      setSourceInfluence(outlineResult.source_influence || []);
+      setGuardrailViolations(outlineResult.guardrail_violations || []);
+      setMessage('Outline built. Writing the draft...');
+      const draftData = await apiJson('/api/content-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'draft',
+          projectId: saved.id,
+          selectedSourceIds: [],
+          outline: nextOutline,
+          draft: '',
+        }),
+      });
+      const draftResult = draftData.result || {};
+      setDraft(draftResult.markdown || '');
+      setMetadata({ ...draftResult, model: draftData.model, provider: draftData.provider });
+      setSourceInfluence(draftResult.source_influence || outlineResult.source_influence || []);
+      setGuardrailViolations(draftResult.guardrail_violations || []);
+      setMessage(draftResult.guardrail_violations?.length ? 'Draft generated with guardrail issues to fix.' : 'Draft generated.');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGenerating('');
+    }
+  };
+
   const runChecks = async () => {
     setGenerating('export');
     setError('');
@@ -459,17 +519,17 @@ export default function ContentStudio() {
   };
 
   return (
-    <div className="content-studio workspace-page">
-      <header className="workspace-head content-head">
+    <div className="content-studio content-studio-simple workspace-page" aria-busy={loading}>
+      <header className="content-simple-head">
         <div>
-          <span className="workspace-kicker">Creative system</span>
-          <h1>Content Studio</h1>
-          <p>Build SEO and answer-engine drafts from a manual topic, HOWL voice sources, and learned editorial feedback.</p>
+          <span className="workspace-kicker">Content Studio</span>
+          <h1>What do you want a blog about?</h1>
+          <p>Give it the topic. HOWL researches the reference library, uses the emails and blogs for voice, then writes a draft.</p>
         </div>
         <div className="content-project-picker">
           <button type="button" onClick={() => loadProject(null)}>New</button>
           <select value={brief.id || ''} onChange={event => loadProject(event.target.value)}>
-            <option value="">Drafting new project</option>
+            <option value="">New blog draft</option>
             {projects.map(project => (
               <option key={project.id} value={project.id}>{project.title}</option>
             ))}
@@ -480,29 +540,72 @@ export default function ContentStudio() {
       {error && <div className="app-error">{error}</div>}
       {message && !error && <div className="content-note">{message}</div>}
 
-      <div className="content-tabs" role="tablist">
-        {['brief', 'sources', 'outline', 'draft', 'feedback', 'exports'].map(panel => (
-          <button key={panel} type="button" className={activePanel === panel ? 'active' : ''} onClick={() => setActivePanel(panel)}>
-            {panel}
+      <section className="content-command">
+        <label>
+          <span>Blog topic</span>
+          <textarea
+            rows="4"
+            value={brief.topic}
+            onChange={event => {
+              updateBrief('topic', event.target.value);
+              if (!brief.title) updateBrief('title', event.target.value.slice(0, 120));
+            }}
+            placeholder="Example: Best propane fire pits for small patios"
+          />
+        </label>
+        <div className="content-command-footer">
+          <div>
+            <strong>{referenceSources.length || sources.length}</strong>
+            <span>reference sources ready</span>
+          </div>
+          <button type="button" className="primary-action" disabled={generating === 'blog' || !brief.topic.trim()} onClick={generateBlogDraft}>
+            {generating === 'blog' ? 'Writing…' : 'Generate blog draft'}
           </button>
-        ))}
-      </div>
+        </div>
+        <details className="content-advanced">
+          <summary>Optional direction</summary>
+          <div className="content-form-grid">
+            <label>Target query<input value={brief.target_query || ''} onChange={event => updateBrief('target_query', event.target.value)} placeholder="best propane fire pit for patio" /></label>
+            <label>Product/category<input value={brief.product || ''} onChange={event => updateBrief('product', event.target.value)} placeholder="R1, R4 MKii, propane fire pits" /></label>
+            <label>Audience<textarea rows="3" value={brief.audience || ''} onChange={event => updateBrief('audience', event.target.value)} /></label>
+            <label>CTA<textarea rows="3" value={brief.desired_cta || ''} onChange={event => updateBrief('desired_cta', event.target.value)} /></label>
+            <label>Must include<textarea rows="3" value={brief.must_include || ''} onChange={event => updateBrief('must_include', event.target.value)} /></label>
+            <label>Avoid<textarea rows="3" value={brief.avoid || ''} onChange={event => updateBrief('avoid', event.target.value)} /></label>
+          </div>
+        </details>
+      </section>
 
-      <div className="content-layout">
-        <aside className="content-side">
+      <div className="content-simple-grid">
+        <section className="content-panel content-draft-panel">
+          <div className="content-panel-head">
+            <div>
+              <span>Draft</span>
+              <h2>{metadata.title || brief.title || 'Blog draft'}</h2>
+            </div>
+            <div className="content-actions">
+              <button type="button" disabled={generating === 'rewrite' || !draft.trim()} onClick={() => generate('rewrite')}>Rewrite</button>
+              <button type="button" disabled={!draft.trim()} onClick={runChecks}>Check</button>
+              <button type="button" disabled={!draft.trim() || saving || guardrailViolations.length > 0} onClick={approveDraft}>Approve</button>
+            </div>
+          </div>
+          {metadata.meta_description && <div className="content-meta"><strong>Meta</strong><span>{metadata.meta_description}</span></div>}
+          <textarea className="content-editor draft" value={draft} onChange={event => setDraft(event.target.value)} placeholder="Your generated blog draft will appear here." />
+          <div className="content-actions content-export-actions">
+            <button type="button" disabled={!draft.trim()} onClick={() => exportDraft('markdown')}>Markdown</button>
+            <button type="button" disabled={!draft.trim()} onClick={() => exportDraft('html')}>HTML</button>
+            <button type="button" disabled={!draft.trim()} onClick={copyDraft}>Copy</button>
+          </div>
+        </section>
+
+        <aside className="content-simple-aside">
           <section>
-            <span>Project</span>
-            <strong>{brief.title || brief.topic || 'Untitled draft'}</strong>
-            <small>{selectedSources.length} voice sources selected · {drafts.length} saved versions · {feedbackItems.length} feedback notes</small>
-          </section>
-          <section>
-            <span>Source influence</span>
+            <span>Research used</span>
             {sourceInfluence.length ? sourceInfluence.map((item, index) => (
               <div className="content-influence" key={`${item.source_id || index}-${item.used_for || index}`}>
                 <strong>{item.source_title || `Source ${item.source_id || index + 1}`}</strong>
                 <small>{item.used_for || 'Reference'}</small>
               </div>
-            )) : <small>No generated influence notes yet.</small>}
+            )) : <small>The next run will use the reference emails, blogs, and landing pages automatically.</small>}
           </section>
           <section>
             <span>Guardrails</span>
@@ -512,217 +615,94 @@ export default function ContentStudio() {
               </ul>
             ) : <small>No current violations.</small>}
           </section>
+          <section>
+            <span>Feedback</span>
+            <textarea rows="4" value={feedbackForm.note} onChange={event => setFeedbackForm(current => ({ ...current, note: event.target.value }))} placeholder="Tell it what to keep or change next time." />
+            <button type="button" disabled={saving || !feedbackForm.note.trim()} onClick={() => saveFeedback()}>Save feedback</button>
+          </section>
         </aside>
-
-        <main className="content-main" aria-busy={loading}>
-          {activePanel === 'brief' && (
-            <section className="content-panel">
-              <div className="content-panel-head">
-                <div>
-                  <span>Brief</span>
-                  <h2>Set the topic manually.</h2>
-                </div>
-                <button type="button" className="primary-action" disabled={saving || !brief.topic.trim()} onClick={() => saveProject()}>
-                  {saving ? 'Saving…' : 'Save brief'}
-                </button>
-              </div>
-              <div className="content-form-grid">
-                <label>Project title<input value={brief.title} onChange={event => updateBrief('title', event.target.value)} placeholder="Propane fire pit safety guide" /></label>
-                <label>Topic<input value={brief.topic} onChange={event => updateBrief('topic', event.target.value)} placeholder="How to use a propane fire pit safely" /></label>
-                <label>Target query<input value={brief.target_query || ''} onChange={event => updateBrief('target_query', event.target.value)} placeholder="are propane fire pits safe" /></label>
-                <label>Product/category<input value={brief.product || ''} onChange={event => updateBrief('product', event.target.value)} placeholder="R1, R4 MKii, propane fire pits" /></label>
-                <label>Audience<textarea rows="3" value={brief.audience || ''} onChange={event => updateBrief('audience', event.target.value)} /></label>
-                <label>Search intent<textarea rows="3" value={brief.search_intent || ''} onChange={event => updateBrief('search_intent', event.target.value)} /></label>
-                <label>Desired CTA<textarea rows="3" value={brief.desired_cta || ''} onChange={event => updateBrief('desired_cta', event.target.value)} /></label>
-                <label>Must include<textarea rows="4" value={brief.must_include || ''} onChange={event => updateBrief('must_include', event.target.value)} /></label>
-                <label className="wide">Avoid<textarea rows="4" value={brief.avoid || ''} onChange={event => updateBrief('avoid', event.target.value)} /></label>
-              </div>
-            </section>
-          )}
-
-          {activePanel === 'sources' && (
-            <section className="content-panel">
-              <div className="content-panel-head">
-                <div>
-                  <span>Sources</span>
-                  <h2>Train voice and structure.</h2>
-                </div>
-                <button type="button" className="primary-action" disabled={saving || !sourceForm.title.trim() || !sourceForm.body.trim()} onClick={addSource}>Import source</button>
-              </div>
-              <div className="content-source-import">
-                <div className="content-form-grid compact">
-                  <label>Title<input value={sourceForm.title} onChange={event => setSourceForm(current => ({ ...current, title: event.target.value }))} /></label>
-                  <label>Type<select value={sourceForm.source_type} onChange={event => setSourceForm(current => ({ ...current, source_type: event.target.value }))}>{SOURCE_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-                  <label>URL<input value={sourceForm.url} onChange={event => setSourceForm(current => ({ ...current, url: event.target.value }))} /></label>
-                  <label>Tags<input value={sourceForm.tags} onChange={event => setSourceForm(current => ({ ...current, tags: event.target.value }))} placeholder="seo, safety, r1" /></label>
-                  <label className="wide">Body<textarea rows="7" value={sourceForm.body} onChange={event => setSourceForm(current => ({ ...current, body: event.target.value }))} /></label>
-                </div>
-                <div className="content-bulk">
-                  <label>CSV or JSON import<textarea rows="8" value={importText} onChange={event => setImportText(event.target.value)} placeholder={'title,source_type,url,tags,body\nWelcome email,email,,welcome,"Paste copy here"'} /></label>
-                  <button type="button" disabled={saving || !importText.trim()} onClick={bulkImport}>Bulk import</button>
-                </div>
-              </div>
-              <div className="content-import-helpers">
-                <article>
-                  <span>Website scraper</span>
-                  <label>Page URL<input value={webImport.url} onChange={event => setWebImport(current => ({ ...current, url: event.target.value }))} placeholder="https://liveouter.com/blogs/..." /></label>
-                  <label>Sitemap URL<input value={webImport.sitemapUrl} onChange={event => setWebImport(current => ({ ...current, sitemapUrl: event.target.value }))} /></label>
-                  <label>Tags<input value={webImport.tags} onChange={event => setWebImport(current => ({ ...current, tags: event.target.value }))} /></label>
-                  <label>Limit<input type="number" min="1" max="30" value={webImport.limit} onChange={event => setWebImport(current => ({ ...current, limit: event.target.value }))} /></label>
-                  <div>
-                    <button type="button" disabled={saving || !webImport.url.trim()} onClick={scrapeUrl}>Import URL</button>
-                    <button type="button" disabled={saving || !webImport.sitemapUrl.trim()} onClick={scrapeSitemap}>Import sitemap</button>
-                  </div>
-                </article>
-                <article>
-                  <span>Klaviyo</span>
-                  <p>Import recent email campaigns into the source library using the configured Klaviyo API key.</p>
-                  <label>Campaign limit<input type="number" min="1" max="50" value={klaviyoLimit} onChange={event => setKlaviyoLimit(event.target.value)} /></label>
-                  <button type="button" disabled={saving} onClick={importKlaviyo}>Import emails</button>
-                </article>
-              </div>
-              <div className="content-source-list">
-                {sources.map(source => (
-                  <article key={source.id} className={selectedIds.has(Number(source.id)) ? 'selected' : ''}>
-                    <label>
-                      <input type="checkbox" checked={selectedIds.has(Number(source.id))} onChange={() => toggleSource(source.id)} />
-                      <span>
-                        <strong>{sourceLabel(source)}</strong>
-                        <small>{source.tags?.join(', ') || 'No tags'} · {source.chunk_count || 0} chunks</small>
-                      </span>
-                    </label>
-                    <button type="button" onClick={() => deleteSource(source.id)}>Delete</button>
-                  </article>
-                ))}
-                {!sources.length && <div className="workspace-empty"><strong>No voice sources yet.</strong><p>Import past emails, blog posts, landing pages, or copy notes to teach style, pacing, structure, and claim discipline.</p></div>}
-              </div>
-            </section>
-          )}
-
-          {activePanel === 'outline' && (
-            <section className="content-panel">
-              <div className="content-panel-head">
-                <div>
-                  <span>Outline</span>
-                  <h2>Approve the structure before drafting.</h2>
-                </div>
-                <div className="content-actions">
-                  <button type="button" disabled={generating === 'outline'} onClick={() => generate('outline')}>{generating === 'outline' ? 'Generating…' : 'Generate outline'}</button>
-                  <button type="button" disabled={!outline.trim() || saving} onClick={() => saveVersion('outline')}>Save version</button>
-                </div>
-              </div>
-              <textarea className="content-editor outline" value={outline} onChange={event => setOutline(event.target.value)} placeholder="Generate or write an SEO/AEO outline here." />
-            </section>
-          )}
-
-          {activePanel === 'draft' && (
-            <section className="content-panel">
-              <div className="content-panel-head">
-                <div>
-                  <span>Draft</span>
-                  <h2>Write, edit, and check the article.</h2>
-                </div>
-                <div className="content-actions">
-                  <button type="button" disabled={generating === 'draft' || !outline.trim()} onClick={() => generate('draft')}>{generating === 'draft' ? 'Drafting…' : 'Generate draft'}</button>
-                  <button type="button" disabled={generating === 'rewrite' || !draft.trim()} onClick={() => generate('rewrite')}>Rewrite</button>
-                  <button type="button" disabled={!draft.trim()} onClick={runChecks}>Run checks</button>
-                  <button type="button" disabled={!draft.trim() || saving || guardrailViolations.length > 0} onClick={approveDraft}>Approve</button>
-                </div>
-              </div>
-              {metadata.meta_description && <div className="content-meta"><strong>Meta</strong><span>{metadata.meta_description}</span></div>}
-              <textarea className="content-editor draft" value={draft} onChange={event => setDraft(event.target.value)} placeholder="Generate a full blog draft from the approved outline." />
-              <div className="content-feedback-quick">
-                <label>Feedback for future runs<textarea rows="3" value={feedbackForm.note} onChange={event => setFeedbackForm(current => ({ ...current, note: event.target.value }))} placeholder="Example: Make intros shorter, keep HOWL more direct, avoid generic outdoor lifestyle copy." /></label>
-                <button type="button" disabled={saving || !feedbackForm.note.trim()} onClick={() => saveFeedback()}>Save feedback</button>
-              </div>
-            </section>
-          )}
-
-          {activePanel === 'feedback' && (
-            <section className="content-panel">
-              <div className="content-panel-head">
-                <div>
-                  <span>Feedback</span>
-                  <h2>Teach the content skill over time.</h2>
-                </div>
-                <button type="button" className="primary-action" disabled={saving || !feedbackForm.note.trim()} onClick={() => saveFeedback()}>
-                  {saving ? 'Saving…' : 'Save feedback'}
-                </button>
-              </div>
-              <div className="content-feedback-form">
-                <label>Applies to<select value={feedbackForm.applies_to} onChange={event => setFeedbackForm(current => ({ ...current, applies_to: event.target.value }))}>
-                  <option value="voice">Voice</option>
-                  <option value="structure">Structure</option>
-                  <option value="seo">SEO/AEO</option>
-                  <option value="claims">Claims</option>
-                  <option value="general">General</option>
-                </select></label>
-                <label>Signal<select value={feedbackForm.rating} onChange={event => setFeedbackForm(current => ({ ...current, rating: event.target.value }))}>
-                  <option value="approved">Approved pattern</option>
-                  <option value="revise">Revise next time</option>
-                  <option value="avoid">Avoid</option>
-                </select></label>
-                <label className="wide">Feedback<textarea rows="5" value={feedbackForm.note} onChange={event => setFeedbackForm(current => ({ ...current, note: event.target.value }))} /></label>
-              </div>
-              <div className="content-feedback-list">
-                {feedbackItems.length ? feedbackItems.map(item => (
-                  <article key={item.id}>
-                    <span>{item.applies_to || 'general'} · {item.rating || 'note'}</span>
-                    <p>{item.note}</p>
-                    <small>{new Date(item.created_at).toLocaleString()}</small>
-                  </article>
-                )) : <div className="workspace-empty"><strong>No feedback saved yet.</strong><p>Approve drafts and save edit notes so future outlines and drafts learn the house style.</p></div>}
-              </div>
-            </section>
-          )}
-
-          {activePanel === 'exports' && (
-            <section className="content-panel">
-              <div className="content-panel-head">
-                <div>
-                  <span>Exports</span>
-                  <h2>Package a clean draft.</h2>
-                </div>
-                <div className="content-actions">
-                  <button type="button" disabled={!draft.trim()} onClick={runChecks}>Run checks</button>
-                  <button type="button" disabled={!draft.trim() || guardrailViolations.length > 0} onClick={() => exportDraft('markdown')}>Markdown</button>
-                  <button type="button" disabled={!draft.trim() || guardrailViolations.length > 0} onClick={() => exportDraft('html')}>HTML</button>
-                  <button type="button" disabled={!draft.trim() || guardrailViolations.length > 0} onClick={copyDraft}>Copy</button>
-                </div>
-              </div>
-              <div className="content-export-grid">
-                <article>
-                  <span>Current package</span>
-                  <strong>{metadata.title || brief.title || 'Untitled draft'}</strong>
-                  <p>{metadata.meta_description || 'Run draft generation to create title, meta, schema, and source influence notes.'}</p>
-                  {Array.isArray(metadata.schema_suggestions) && <small>Schema: {metadata.schema_suggestions.join(', ')}</small>}
-                </article>
-                <article>
-                  <span>Version history</span>
-                  {drafts.length ? drafts.map(item => (
-                    <button key={item.id} type="button" onClick={() => {
-                      if (item.kind === 'outline') {
-                        setOutline(item.body_markdown);
-                        setActivePanel('outline');
-                      } else {
-                        setDraft(item.body_markdown);
-                        setActivePanel('draft');
-                      }
-                      setMetadata(item.metadata || {});
-                      setSourceInfluence(item.source_influence || []);
-                      setGuardrailViolations(item.guardrail_violations || []);
-                    }}>
-                      <strong>{item.kind} v{item.version}</strong>
-                      <small>{new Date(item.created_at).toLocaleString()}</small>
-                    </button>
-                  )) : <p>No saved versions yet.</p>}
-                </article>
-              </div>
-              {latestDraft && <p className="content-version-note">Latest draft: v{latestDraft.version} saved {new Date(latestDraft.created_at).toLocaleString()}.</p>}
-            </section>
-          )}
-        </main>
       </div>
+
+      <details className="content-library">
+        <summary>Reference library and imports</summary>
+        <div className="content-library-inner">
+          <div className="content-source-import">
+            <div className="content-form-grid compact">
+              <label>Title<input value={sourceForm.title} onChange={event => setSourceForm(current => ({ ...current, title: event.target.value }))} /></label>
+              <label>Type<select value={sourceForm.source_type} onChange={event => setSourceForm(current => ({ ...current, source_type: event.target.value }))}>{SOURCE_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+              <label>URL<input value={sourceForm.url} onChange={event => setSourceForm(current => ({ ...current, url: event.target.value }))} /></label>
+              <label>Tags<input value={sourceForm.tags} onChange={event => setSourceForm(current => ({ ...current, tags: event.target.value }))} placeholder="seo, safety, r1" /></label>
+              <label className="wide">Body<textarea rows="6" value={sourceForm.body} onChange={event => setSourceForm(current => ({ ...current, body: event.target.value }))} /></label>
+              <button type="button" className="primary-action" disabled={saving || !sourceForm.title.trim() || !sourceForm.body.trim()} onClick={addSource}>Import source</button>
+            </div>
+            <div className="content-bulk">
+              <label>CSV or JSON import<textarea rows="7" value={importText} onChange={event => setImportText(event.target.value)} placeholder={'title,source_type,url,tags,body\nWelcome email,email,,welcome,"Paste copy here"'} /></label>
+              <button type="button" disabled={saving || !importText.trim()} onClick={bulkImport}>Bulk import</button>
+            </div>
+          </div>
+          <div className="content-import-helpers">
+            <article>
+              <span>Website scraper</span>
+              <label>Page URL<input value={webImport.url} onChange={event => setWebImport(current => ({ ...current, url: event.target.value }))} placeholder="https://liveouter.com/blogs/..." /></label>
+              <label>Sitemap URL<input value={webImport.sitemapUrl} onChange={event => setWebImport(current => ({ ...current, sitemapUrl: event.target.value }))} /></label>
+              <label>Tags<input value={webImport.tags} onChange={event => setWebImport(current => ({ ...current, tags: event.target.value }))} /></label>
+              <label>Limit<input type="number" min="1" max="30" value={webImport.limit} onChange={event => setWebImport(current => ({ ...current, limit: event.target.value }))} /></label>
+              <div>
+                <button type="button" disabled={saving || !webImport.url.trim()} onClick={scrapeUrl}>Import URL</button>
+                <button type="button" disabled={saving || !webImport.sitemapUrl.trim()} onClick={scrapeSitemap}>Import sitemap</button>
+              </div>
+            </article>
+            <article>
+              <span>Klaviyo</span>
+              <p>Import recent email campaigns into the reference library.</p>
+              <label>Campaign limit<input type="number" min="1" max="50" value={klaviyoLimit} onChange={event => setKlaviyoLimit(event.target.value)} /></label>
+              <button type="button" disabled={saving} onClick={importKlaviyo}>Import emails</button>
+            </article>
+          </div>
+          <div className="content-source-list">
+            {sources.map(source => (
+              <article key={source.id}>
+                <span>
+                  <strong>{sourceLabel(source)}</strong>
+                  <small>{source.tags?.join(', ') || 'No tags'} · {source.chunk_count || 0} chunks</small>
+                </span>
+                <button type="button" onClick={() => deleteSource(source.id)}>Delete</button>
+              </article>
+            ))}
+            {!sources.length && <div className="workspace-empty"><strong>No references yet.</strong><p>Import emails, blog posts, landing pages, or copy notes. Future drafts will use them automatically.</p></div>}
+          </div>
+        </div>
+      </details>
+
+      <details className="content-library">
+        <summary>Outline, feedback, and versions</summary>
+        <div className="content-library-inner">
+          <textarea className="content-editor outline" value={outline} onChange={event => setOutline(event.target.value)} placeholder="Generated outline appears here." />
+          <div className="content-export-grid">
+            <article>
+              <span>Saved feedback</span>
+              {feedbackItems.length ? feedbackItems.map(item => (
+                <p key={item.id}>{item.note}</p>
+              )) : <p>No saved feedback yet.</p>}
+            </article>
+            <article>
+              <span>Version history</span>
+              {drafts.length ? drafts.map(item => (
+                <button key={item.id} type="button" onClick={() => {
+                  if (item.kind === 'outline') setOutline(item.body_markdown);
+                  else setDraft(item.body_markdown);
+                  setMetadata(item.metadata || {});
+                  setSourceInfluence(item.source_influence || []);
+                  setGuardrailViolations(item.guardrail_violations || []);
+                }}>
+                  <strong>{item.kind} v{item.version}</strong>
+                  <small>{new Date(item.created_at).toLocaleString()}</small>
+                </button>
+              )) : <p>No saved versions yet.</p>}
+            </article>
+          </div>
+        </div>
+      </details>
     </div>
   );
 }
