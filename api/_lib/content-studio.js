@@ -2,6 +2,7 @@ const SOURCE_TYPES = new Set(['email', 'blog', 'landing_page', 'other']);
 const PROJECT_STATUSES = new Set(['draft', 'outlining', 'drafting', 'ready', 'archived']);
 const MAX_SOURCE_BODY = 120000;
 const MAX_CHUNK_CHARS = 2800;
+const MAX_SCRAPE_BYTES = 2_000_000;
 
 let contentTablesReady = null;
 
@@ -248,6 +249,76 @@ export function parseImportItems(body = {}) {
   if (!text) return [];
   if (text.trim().startsWith('[')) return JSON.parse(text);
   return parseCsv(text);
+}
+
+export function stripHtml(html) {
+  return cleanText(html, 300000)
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|section|article|main|h[1-6]|li)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
+export function extractHtmlTitle(html, fallback = '') {
+  const title = cleanText((html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
+    || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i)
+    || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
+    || html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
+    || [])[1], 300);
+  return stripHtml(title || fallback).slice(0, 300);
+}
+
+export function extractArticleHtml(html) {
+  const source = cleanText(html, MAX_SCRAPE_BYTES);
+  const candidates = [
+    source.match(/<article[\s\S]*?<\/article>/i)?.[0],
+    source.match(/<main[\s\S]*?<\/main>/i)?.[0],
+    source.match(/<body[\s\S]*?<\/body>/i)?.[0],
+    source,
+  ].filter(Boolean);
+  return candidates.sort((a, b) => stripHtml(b).length - stripHtml(a).length)[0] || source;
+}
+
+export async function scrapeUrlToSource(url, { sourceType = 'blog', tags = [] } = {}) {
+  const parsed = new URL(cleanText(url, 1200));
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Only http and https URLs can be imported');
+  const response = await fetch(parsed.toString(), {
+    headers: {
+      Accept: 'text/html,application/xhtml+xml',
+      'User-Agent': 'HOWL Content Studio/1.0',
+    },
+  });
+  if (!response.ok) throw new Error(`Could not fetch ${parsed.toString()} (${response.status})`);
+  const html = (await response.text()).slice(0, MAX_SCRAPE_BYTES);
+  const body = stripHtml(extractArticleHtml(html));
+  if (body.length < 120) throw new Error(`No substantial article text found at ${parsed.toString()}`);
+  return sourcePayload({
+    title: extractHtmlTitle(html, parsed.pathname.split('/').filter(Boolean).pop() || parsed.hostname),
+    source_type: sourceType,
+    body,
+    url: parsed.toString(),
+    tags,
+  });
+}
+
+export function extractSitemapUrls(xml, limit = 25) {
+  return [...cleanText(xml, MAX_SCRAPE_BYTES).matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/gi)]
+    .map(match => match[1].trim())
+    .filter(Boolean)
+    .filter(url => /\/(blog|blogs|journal|learn|pages)\//i.test(url))
+    .slice(0, limit);
 }
 
 function parseCsv(text) {

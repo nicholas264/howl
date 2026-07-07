@@ -58,6 +58,8 @@ export default function ContentStudio() {
   const [brief, setBrief] = useState(EMPTY_BRIEF);
   const [sourceForm, setSourceForm] = useState({ title: '', source_type: 'blog', url: '', tags: '', body: '' });
   const [importText, setImportText] = useState('');
+  const [webImport, setWebImport] = useState({ url: '', sitemapUrl: 'https://liveouter.com/sitemap.xml', tags: 'website,blog', limit: 10 });
+  const [klaviyoLimit, setKlaviyoLimit] = useState(12);
   const [outline, setOutline] = useState('');
   const [draft, setDraft] = useState('');
   const [metadata, setMetadata] = useState({});
@@ -189,6 +191,72 @@ export default function ContentStudio() {
       setImportText('');
       await refreshSources();
       setMessage(`${data.inserted || 0} sources imported.`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const scrapeUrl = async () => {
+    if (!webImport.url.trim()) return;
+    setSaving(true);
+    setError('');
+    try {
+      await apiJson('/api/content-sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'scrape_url', url: webImport.url, tags: webImport.tags, source_type: 'blog' }),
+      });
+      setWebImport(current => ({ ...current, url: '' }));
+      await refreshSources();
+      setMessage('Website page imported.');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const scrapeSitemap = async () => {
+    if (!webImport.sitemapUrl.trim()) return;
+    setSaving(true);
+    setError('');
+    try {
+      const data = await apiJson('/api/content-sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'scrape_sitemap',
+          url: webImport.sitemapUrl,
+          tags: webImport.tags,
+          limit: webImport.limit,
+        }),
+      });
+      await refreshSources();
+      setMessage(`${data.inserted || 0} website page${data.inserted === 1 ? '' : 's'} imported${data.errors?.length ? `; ${data.errors.length} skipped.` : '.'}`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const importKlaviyo = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      const data = await apiJson('/api/content-sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'klaviyo_import', limit: klaviyoLimit }),
+      });
+      await refreshSources();
+      if (data.configured === false) {
+        setError((data.errors || [])[0] || 'Klaviyo is not configured.');
+      } else {
+        setMessage(`${data.inserted || 0} Klaviyo email${data.inserted === 1 ? '' : 's'} imported${data.errors?.length ? `; ${data.errors.length} skipped.` : '.'}`);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -432,6 +500,25 @@ export default function ContentStudio() {
                   <label>CSV or JSON import<textarea rows="8" value={importText} onChange={event => setImportText(event.target.value)} placeholder={'title,source_type,url,tags,body\nWelcome email,email,,welcome,"Paste copy here"'} /></label>
                   <button type="button" disabled={saving || !importText.trim()} onClick={bulkImport}>Bulk import</button>
                 </div>
+              </div>
+              <div className="content-import-helpers">
+                <article>
+                  <span>Website scraper</span>
+                  <label>Page URL<input value={webImport.url} onChange={event => setWebImport(current => ({ ...current, url: event.target.value }))} placeholder="https://liveouter.com/blogs/..." /></label>
+                  <label>Sitemap URL<input value={webImport.sitemapUrl} onChange={event => setWebImport(current => ({ ...current, sitemapUrl: event.target.value }))} /></label>
+                  <label>Tags<input value={webImport.tags} onChange={event => setWebImport(current => ({ ...current, tags: event.target.value }))} /></label>
+                  <label>Limit<input type="number" min="1" max="30" value={webImport.limit} onChange={event => setWebImport(current => ({ ...current, limit: event.target.value }))} /></label>
+                  <div>
+                    <button type="button" disabled={saving || !webImport.url.trim()} onClick={scrapeUrl}>Import URL</button>
+                    <button type="button" disabled={saving || !webImport.sitemapUrl.trim()} onClick={scrapeSitemap}>Import sitemap</button>
+                  </div>
+                </article>
+                <article>
+                  <span>Klaviyo</span>
+                  <p>Import recent email campaigns into the source library using the configured Klaviyo API key.</p>
+                  <label>Campaign limit<input type="number" min="1" max="50" value={klaviyoLimit} onChange={event => setKlaviyoLimit(event.target.value)} /></label>
+                  <button type="button" disabled={saving} onClick={importKlaviyo}>Import emails</button>
+                </article>
               </div>
               <div className="content-source-list">
                 {sources.map(source => (
