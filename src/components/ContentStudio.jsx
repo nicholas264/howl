@@ -357,7 +357,7 @@ export default function ContentStudio() {
         setDraft(result.markdown || '');
         setActivePanel('draft');
       }
-      setMetadata({ ...result, model: data.model });
+      setMetadata({ ...result, model: data.model, provider: data.provider, fallback_reason: data.fallback_reason });
       setSourceInfluence(result.source_influence || []);
       setGuardrailViolations(result.guardrail_violations || []);
       setSeoAeo(result.seo_aeo || null);
@@ -414,7 +414,7 @@ export default function ContentStudio() {
       });
       const draftResult = draftData.result || {};
       setDraft(draftResult.markdown || '');
-      setMetadata({ ...draftResult, model: draftData.model, provider: draftData.provider });
+      setMetadata({ ...draftResult, model: draftData.model, provider: draftData.provider, fallback_reason: draftData.fallback_reason });
       setSourceInfluence(draftResult.source_influence || outlineResult.source_influence || []);
       setGuardrailViolations(draftResult.guardrail_violations || []);
       setSeoAeo(draftResult.seo_aeo || null);
@@ -654,8 +654,12 @@ export default function ContentStudio() {
             rows="4"
             value={brief.topic}
             onChange={event => {
-              updateBrief('topic', event.target.value);
-              if (!brief.title) updateBrief('title', event.target.value.slice(0, 120));
+              const value = event.target.value;
+              setBrief(current => ({
+                ...current,
+                topic: value,
+                title: current.id ? current.title : value.slice(0, 120),
+              }));
             }}
             placeholder="Example: Best propane fire pits for small patios"
           />
@@ -696,6 +700,12 @@ export default function ContentStudio() {
             </div>
           </div>
           {metadata.meta_description && <div className="content-meta"><strong>Meta</strong><span>{metadata.meta_description}</span></div>}
+          {metadata.model && (
+            <div className={`content-model-note${metadata.fallback_reason ? ' fallback' : ''}`}>
+              Written by {metadata.model}
+              {metadata.fallback_reason ? ` (fallback: ${metadata.fallback_reason})` : ''}
+            </div>
+          )}
           <textarea className="content-editor draft" value={draft} onChange={event => setDraft(event.target.value)} placeholder="Your generated blog draft will appear here." />
           <div className="content-actions content-export-actions">
             <button type="button" disabled={!draft.trim()} onClick={() => exportDraft('markdown')}>Markdown</button>
@@ -725,7 +735,7 @@ export default function ContentStudio() {
                       </button>
                     </div>
                   </>
-                ) : <small>{shopify.error || 'No blogs found on the store yet.'}</small>}
+                ) : <small>{shopify.blog_error || 'No blogs found on the store yet.'}</small>}
                 {brief.shopify_article_url && (
                   <small>
                     {brief.shopify_state === 'published' ? 'Live: ' : 'Draft on Shopify: '}

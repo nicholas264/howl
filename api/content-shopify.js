@@ -36,7 +36,9 @@ export default async function handler(req, res) {
       } catch (err) {
         blogError = err.message;
       }
-      return res.json({ configured: true, store, blogs, links, error: blogError });
+      // Named blog_error, not error: the client treats a top-level `error`
+      // field as a failed request and would discard the rest of the status.
+      return res.json({ configured: true, store, blogs, links, blog_error: blogError });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
