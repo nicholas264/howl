@@ -658,34 +658,47 @@ export default function ContentStudio() {
       {message && !error && <div className="content-note">{message}</div>}
 
       {projects.length > 0 && (
-        <div className="content-drafts-rail">
-          {projects.map(project => {
-            const active = Number(brief.id) === Number(project.id);
-            const confirming = confirmDeleteId === project.id;
-            return (
-              <article key={project.id} className={active ? 'active' : ''}>
-                <button type="button" className="content-draft-open" onClick={() => loadProject(project.id)}>
-                  <strong>{project.title || 'Untitled'}</strong>
-                  <small>
-                    {project.shopify_state === 'published' ? 'Live on Shopify'
-                      : project.shopify_state === 'draft' ? 'Draft on Shopify'
-                      : project.draft_count > 0 ? `${project.draft_count} version${project.draft_count === 1 ? '' : 's'}`
-                      : 'No draft yet'}
-                    {' · '}
-                    {new Date(project.last_draft_at || project.updated_at).toLocaleDateString()}
-                  </small>
-                </button>
-                {confirming ? (
-                  <span className="content-draft-confirm">
-                    <button type="button" className="danger" onClick={() => deleteProject(project.id)}>Delete</button>
-                    <button type="button" onClick={() => setConfirmDeleteId(null)}>Keep</button>
-                  </span>
-                ) : (
-                  <button type="button" className="content-draft-delete" title="Delete draft" onClick={() => setConfirmDeleteId(project.id)}>&times;</button>
-                )}
-              </article>
-            );
-          })}
+        <div className="content-drafts-shelf">
+          <span className="content-drafts-eyebrow">On the desk · {projects.length}</span>
+          <div className="content-drafts-rail">
+            {projects.map(project => {
+              const active = Number(brief.id) === Number(project.id);
+              const confirming = confirmDeleteId === project.id;
+              const state = project.shopify_state === 'published' ? 'live'
+                : project.shopify_state === 'draft' ? 'staged'
+                : project.draft_count > 0 ? 'written'
+                : 'empty';
+              const stateLabel = {
+                live: 'Live on Shopify',
+                staged: 'Staged on Shopify',
+                written: `${project.draft_count} version${project.draft_count === 1 ? '' : 's'}`,
+                empty: 'Not written yet',
+              }[state];
+              const date = new Date(project.last_draft_at || project.updated_at)
+                .toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+              return (
+                <article key={project.id} className={`${active ? 'active' : ''}${confirming ? ' confirming' : ''}`}>
+                  {confirming ? (
+                    <div className="content-draft-confirm">
+                      <span>Delete this draft?</span>
+                      <div>
+                        <button type="button" className="danger" onClick={() => deleteProject(project.id)}>Delete</button>
+                        <button type="button" onClick={() => setConfirmDeleteId(null)}>Keep</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <button type="button" className="content-draft-open" onClick={() => loadProject(project.id)}>
+                        <strong>{project.title || 'Untitled'}</strong>
+                        <small><i className={`draft-dot ${state}`} />{stateLabel} · {date}</small>
+                      </button>
+                      <button type="button" className="content-draft-delete" title="Delete draft" aria-label={`Delete ${project.title || 'draft'}`} onClick={() => setConfirmDeleteId(project.id)}>&times;</button>
+                    </>
+                  )}
+                </article>
+              );
+            })}
+          </div>
         </div>
       )}
 
