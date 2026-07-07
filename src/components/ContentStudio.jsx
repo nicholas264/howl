@@ -77,6 +77,7 @@ export default function ContentStudio() {
   const [metadata, setMetadata] = useState({});
   const [sourceInfluence, setSourceInfluence] = useState([]);
   const [guardrailViolations, setGuardrailViolations] = useState([]);
+  const [seoAeo, setSeoAeo] = useState(null);
   const [activePanel, setActivePanel] = useState('brief');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -117,6 +118,7 @@ export default function ContentStudio() {
       setMetadata({});
       setSourceInfluence([]);
       setGuardrailViolations([]);
+      setSeoAeo(null);
       setFeedbackItems([]);
       setFeedbackForm({ applies_to: 'voice', rating: 'approved', note: '' });
       return;
@@ -134,6 +136,7 @@ export default function ContentStudio() {
       setMetadata(newestDraft?.metadata || newestOutline?.metadata || {});
       setSourceInfluence(newestDraft?.source_influence || newestOutline?.source_influence || []);
       setGuardrailViolations(newestDraft?.guardrail_violations || []);
+      setSeoAeo(newestDraft?.metadata?.seo_aeo || newestOutline?.metadata?.seo_aeo || null);
       setFeedbackItems(data.feedback || []);
       setFeedbackForm({ applies_to: 'voice', rating: 'approved', note: '' });
     } catch (err) {
@@ -344,6 +347,7 @@ export default function ContentStudio() {
       setMetadata({ ...result, model: data.model });
       setSourceInfluence(result.source_influence || []);
       setGuardrailViolations(result.guardrail_violations || []);
+      setSeoAeo(result.seo_aeo || null);
       setMessage(result.guardrail_violations?.length ? 'Generated with guardrail issues to fix.' : 'Generated.');
     } catch (err) {
       setError(err.message);
@@ -400,6 +404,7 @@ export default function ContentStudio() {
       setMetadata({ ...draftResult, model: draftData.model, provider: draftData.provider });
       setSourceInfluence(draftResult.source_influence || outlineResult.source_influence || []);
       setGuardrailViolations(draftResult.guardrail_violations || []);
+      setSeoAeo(draftResult.seo_aeo || null);
       setMessage(draftResult.guardrail_violations?.length ? 'Draft generated with guardrail issues to fix.' : 'Draft generated.');
     } catch (err) {
       setError(err.message);
@@ -418,6 +423,7 @@ export default function ContentStudio() {
         body: JSON.stringify({ action: 'export', projectId: brief.id, bodyMarkdown: draft }),
       });
       setGuardrailViolations(data.guardrailViolations || []);
+      setSeoAeo(data.seoAeo || null);
       setMessage(data.guardrailViolations?.length ? 'Guardrail issues found.' : 'Checks passed.');
       return data;
     } catch (err) {
@@ -599,6 +605,20 @@ export default function ContentStudio() {
 
         <aside className="content-simple-aside">
           <section>
+            <span>SEO/AEO</span>
+            {seoAeo ? (
+              <div className="content-seo-score">
+                <strong>{seoAeo.score}</strong>
+                <small>{seoAeo.passed}/{seoAeo.total} checks · {seoAeo.word_count || 0} words</small>
+                <ul>
+                  {(seoAeo.checks || []).slice(0, 7).map(check => (
+                    <li key={check.id} className={check.ok ? 'pass' : 'fail'}>{check.label}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : <small>Generate or check a draft to score SEO/AEO structure.</small>}
+          </section>
+          <section>
             <span>Research used</span>
             {sourceInfluence.length ? sourceInfluence.map((item, index) => (
               <div className="content-influence" key={`${item.source_id || index}-${item.used_for || index}`}>
@@ -694,6 +714,7 @@ export default function ContentStudio() {
                   setMetadata(item.metadata || {});
                   setSourceInfluence(item.source_influence || []);
                   setGuardrailViolations(item.guardrail_violations || []);
+                  setSeoAeo(item.metadata?.seo_aeo || null);
                 }}>
                   <strong>{item.kind} v{item.version}</strong>
                   <small>{new Date(item.created_at).toLocaleString()}</small>

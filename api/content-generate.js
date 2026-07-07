@@ -18,6 +18,30 @@ const ALLOWED_MODELS = new Set([
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const DEFAULT_OPENAI_MODEL = 'gpt-4.1';
 
+const SEO_AEO_PLAYBOOK = `
+HOWL SEO/AEO PLAYBOOK
+Principles:
+- People-first before search-first. The article must help a real buyer make a better decision, not chase word count or keyword stuffing.
+- Answer-first structure. Each major question section should open with a concise direct answer in 1-3 sentences, then expand with nuance, examples, and HOWL-specific guidance.
+- Intent match. Identify whether the topic is informational, comparison, commercial investigation, or post-purchase support, then structure the article around that job.
+- Search and AI surfaces. Make key answers easy to extract: short answer blocks, descriptive H2s, scannable lists, comparison tables in Markdown, and clear definitions.
+- E-E-A-T. Show practical product/category knowledge, first-hand-style experience, limitations, safety caveats, and verifiable claims. Do not invent specs, test data, certifications, prices, discounts, or testimonials.
+- Entity coverage. Include relevant product/category entities, adjacent concepts, fuel type, safety, setup, portability, weather, maintenance, and decision criteria where they fit the topic.
+- Internal linking. Include placeholders like [internal link: R4 MKII product page], [internal link: propane fire pit comparison], or [internal link: safety guide] where a real HOWL link should go.
+- Schema readiness. Suggest Article schema for all posts, FAQPage when visible FAQs are present, HowTo only for actual step-by-step instructions, and Product only when the page visibly discusses a specific product with supported product data.
+- Snippet readiness. Include a direct answer near the top, concise definitions, FAQ answers under 60 words where possible, and no vague filler intros.
+
+Required article package:
+- SEO title/title tag option, meta description, slug, H1.
+- A 40-70 word intro that states the answer or decision frame quickly.
+- H2s phrased around real questions or decision criteria.
+- At least 3 snippet-ready answer blocks labeled "Short answer:" or naturally written as the first paragraph under a heading.
+- FAQ section with 3-6 questions if the topic has question intent.
+- Proof gaps and claim cautions when verified data is missing.
+- Structured data suggestions with a one-line reason for each.
+- SEO/AEO checklist with pass/fail style notes.
+`;
+
 export default async function handler(req, res) {
   const access = await requirePermission(req, res, 'briefs.write');
   if (!access) return;
@@ -47,7 +71,7 @@ export default async function handler(req, res) {
     if (action === 'export') {
       const markdown = cleanText(req.body?.bodyMarkdown || req.body?.body_markdown, 200000);
       const violations = validateBrandCopy(markdown, guidelines);
-      return res.json({ markdown, html: markdownToHtml(markdown), guardrailViolations: violations });
+      return res.json({ markdown, html: markdownToHtml(markdown), guardrailViolations: violations, seoAeo: evaluateSeoAeo(markdown, {}, project) });
     }
 
     const outline = cleanText(req.body?.outline, 80000);
@@ -67,6 +91,7 @@ export default async function handler(req, res) {
     const markdown = cleanText(parsed.markdown || parsed.outline_markdown || parsed.draft_markdown || '', 200000);
     const guardrailViolations = validateBrandCopy(markdown, guidelines);
     const sourceInfluence = normalizeSourceInfluence(parsed.source_influence, sources);
+    const seoAeo = evaluateSeoAeo(markdown, parsed, project);
     return res.json({
       action,
       model: generated.model,
@@ -78,6 +103,7 @@ export default async function handler(req, res) {
         html: markdown ? markdownToHtml(markdown) : '',
         source_influence: sourceInfluence,
         guardrail_violations: guardrailViolations,
+        seo_aeo: seoAeo,
       },
     });
   } catch (err) {
@@ -92,6 +118,54 @@ function normalizeSourceInfluence(value, sources) {
     source_title: source.title,
     used_for: 'voice reference',
   }));
+}
+
+function evaluateSeoAeo(markdown, parsed = {}, project = {}) {
+  const text = cleanText(markdown, 200000);
+  const lower = text.toLowerCase();
+  const headings = text.match(/^#{1,3}\s+.+$/gm) || [];
+  const h1Count = (text.match(/^#\s+.+$/gm) || []).length;
+  const h2Count = (text.match(/^##\s+.+$/gm) || []).length;
+  const wordCount = (text.match(/\b[\w'-]+\b/g) || []).length;
+  const hasFaq = /\bfaq\b|frequently asked questions|\n##\s+.*questions?/i.test(text);
+  const hasShortAnswers = /short answer:|quick answer:|the short version:/i.test(text);
+  const hasInternalLinks = /\[internal link:/i.test(text);
+  const hasMeta = Boolean(parsed.meta_description);
+  const hasSchema = Array.isArray(parsed.schema_suggestions) && parsed.schema_suggestions.length > 0;
+  const hasProofGaps = Array.isArray(parsed.proof_gaps) ? parsed.proof_gaps.length > 0 : /proof gap|claim caution|verify/i.test(text);
+  const hasTitle = Boolean(parsed.title || parsed.title_options?.length || project.title);
+  const hasQuestionHeading = headings.some(heading => /\?/.test(heading) || /\b(how|what|why|when|where|which|can|should|is|are|best|vs)\b/i.test(heading));
+  const intro = text.replace(/^#\s+.+\n+/, '').trim().split(/\n{2,}/)[0] || '';
+  const introWordCount = (intro.match(/\b[\w'-]+\b/g) || []).length;
+  const hasComparison = /\|.+\|.+\||\bvs\.?\b|\bcompare|\bcomparison|\bpros and cons\b/i.test(text);
+  const hasDecisionCriteria = /\bchoose|consider|best for|tradeoff|criteria|depends on|look for\b/i.test(lower);
+  const hasUnsupportedRisk = /\bguaranteed|best ever|certified|approved by|100% safe|fireproof\b/i.test(lower);
+
+  const checks = [
+    ['title_meta', hasTitle && hasMeta, 'Title/meta package is present.'],
+    ['single_h1', h1Count === 1, 'Exactly one H1.'],
+    ['scannable_h2s', h2Count >= 4, 'At least four H2 sections for scan depth.'],
+    ['answer_blocks', hasShortAnswers, 'Includes snippet-ready short answer blocks.'],
+    ['question_headings', hasQuestionHeading, 'Headings map to questions or decision criteria.'],
+    ['faq', hasFaq, 'Includes FAQ section when question intent is likely.'],
+    ['internal_links', hasInternalLinks, 'Includes internal link placeholders.'],
+    ['schema', hasSchema, 'Includes structured data suggestions.'],
+    ['proof_gaps', hasProofGaps, 'Calls out proof gaps or claim cautions.'],
+    ['decision_help', hasDecisionCriteria || hasComparison, 'Helps a buyer decide, compare, or choose.'],
+    ['tight_intro', introWordCount > 0 && introWordCount <= 90, 'Intro gets to the point quickly.'],
+    ['depth', wordCount >= 700, 'Draft has enough depth for a useful article.'],
+    ['claim_safety', !hasUnsupportedRisk, 'Avoids risky unsupported absolute claims.'],
+  ];
+  const passed = checks.filter(([, ok]) => ok).length;
+  return {
+    score: Math.round((passed / checks.length) * 100),
+    passed,
+    total: checks.length,
+    word_count: wordCount,
+    h1_count: h1Count,
+    h2_count: h2Count,
+    checks: checks.map(([id, ok, label]) => ({ id, ok, label })),
+  };
 }
 
 async function generateContentText({ action, apiKey, openaiKey, model, system, user }) {
@@ -267,6 +341,8 @@ ${(guidelines.approved_claims || []).join('\n') || 'No approved claims provided.
 Required disclosures:
 ${(guidelines.required_disclosures || []).join('\n') || 'No required disclosures provided.'}
 
+${SEO_AEO_PLAYBOOK}
+
 Prohibited phrases and claims:
 ${[...(guidelines.prohibited_phrases || []), ...(guidelines.prohibited_claims || [])].join('\n') || 'Avoid unsupported claims and generic AI phrasing.'}
 
@@ -276,6 +352,7 @@ Rules:
 - Do not invent product specs, certifications, discounts, prices, or comparative claims.
 - Include snippet-ready direct answers where the user intent calls for them.
 - Avoid em dashes, vague superlatives, fake testimonials, and invented citations.
+- Follow the HOWL SEO/AEO playbook exactly. Prefer clear answers, decision usefulness, and extractable structure over long generic prose.
 - Return only valid JSON.`;
 }
 
@@ -312,8 +389,9 @@ Return JSON with:
   "search_intent_summary": "...",
   "outline_markdown": "Markdown outline with H1/H2/H3, answer blocks, FAQ ideas, internal-link placeholders, and proof gaps",
   "source_influence": [{"source_id": 1, "source_title": "...", "used_for": "voice|structure|claim caution"}],
-  "seo_checks": ["..."],
-  "proof_gaps": ["..."]
+  "seo_checks": ["pass/fail notes from the HOWL SEO/AEO playbook"],
+  "proof_gaps": ["claims or data that must be verified before publishing"],
+  "schema_suggestions": [{"type": "Article|FAQPage|HowTo|Product", "reason": "..."}]
 }`,
     draft: `Write the full blog draft from the approved outline.
 Return JSON with:
@@ -322,9 +400,10 @@ Return JSON with:
   "meta_description": "...",
   "slug": "...",
   "markdown": "Complete article in Markdown, with H1/H2/H3 structure, answer blocks, FAQ, CTA, and internal-link placeholders",
-  "schema_suggestions": ["FAQPage", "Article"],
+  "schema_suggestions": [{"type": "Article|FAQPage|HowTo|Product", "reason": "..."}],
   "source_influence": [{"source_id": 1, "source_title": "...", "used_for": "voice|structure|claim caution"}],
-  "seo_checks": ["..."]
+  "seo_checks": ["pass/fail notes from the HOWL SEO/AEO playbook"],
+  "proof_gaps": ["claims or data that must be verified before publishing"]
 }`,
     rewrite: `Rewrite the supplied draft for clarity, brand voice, SEO/AEO structure, and factual restraint.
 Return JSON with the same shape as draft.`,
