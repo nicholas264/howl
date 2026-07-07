@@ -72,6 +72,8 @@ export default function ContentStudio() {
   const [klaviyoLimit, setKlaviyoLimit] = useState(12);
   const [outline, setOutline] = useState('');
   const [draft, setDraft] = useState('');
+  const [feedbackItems, setFeedbackItems] = useState([]);
+  const [feedbackForm, setFeedbackForm] = useState({ applies_to: 'voice', rating: 'approved', note: '' });
   const [metadata, setMetadata] = useState({});
   const [sourceInfluence, setSourceInfluence] = useState([]);
   const [guardrailViolations, setGuardrailViolations] = useState([]);
@@ -111,6 +113,8 @@ export default function ContentStudio() {
       setMetadata({});
       setSourceInfluence([]);
       setGuardrailViolations([]);
+      setFeedbackItems([]);
+      setFeedbackForm({ applies_to: 'voice', rating: 'approved', note: '' });
       return;
     }
     setLoading(true);
@@ -126,6 +130,8 @@ export default function ContentStudio() {
       setMetadata(newestDraft?.metadata || newestOutline?.metadata || {});
       setSourceInfluence(newestDraft?.source_influence || newestOutline?.source_influence || []);
       setGuardrailViolations(newestDraft?.guardrail_violations || []);
+      setFeedbackItems(data.feedback || []);
+      setFeedbackForm({ applies_to: 'voice', rating: 'approved', note: '' });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -388,11 +394,53 @@ export default function ContentStudio() {
       setDrafts(current => [data.draft, ...current]);
       setMessage(`${kind === 'outline' ? 'Outline' : 'Draft'} version saved.`);
       await refreshProjects();
+      return data.draft;
     } catch (err) {
       setError(err.message);
+      return null;
     } finally {
       setSaving(false);
     }
+  };
+
+  const saveFeedback = async (draftId = latestDraft?.id) => {
+    const note = feedbackForm.note.trim();
+    if (!note) return null;
+    const saved = brief.id ? brief : await saveProject({ ...brief, title: brief.title || brief.topic || 'Untitled content project' });
+    if (!saved?.id && !brief.id) return null;
+    setSaving(true);
+    setError('');
+    try {
+      const data = await apiJson('/api/content-projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'save_feedback',
+          projectId: saved.id || brief.id,
+          draftId,
+          applies_to: feedbackForm.applies_to,
+          rating: feedbackForm.rating,
+          note,
+        }),
+      });
+      setFeedbackItems(current => [data.feedback, ...current]);
+      setFeedbackForm(current => ({ ...current, note: '' }));
+      setMessage('Feedback saved for future runs.');
+      return data.feedback;
+    } catch (err) {
+      setError(err.message);
+      return null;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const approveDraft = async () => {
+    const savedDraft = await saveVersion('draft');
+    if (!savedDraft) return;
+    const hadFeedback = feedbackForm.note.trim();
+    if (hadFeedback) await saveFeedback(savedDraft.id);
+    setMessage(hadFeedback ? 'Draft approved and feedback saved.' : 'Draft approved and saved.');
   };
 
   const exportDraft = async (format) => {
@@ -416,7 +464,7 @@ export default function ContentStudio() {
         <div>
           <span className="workspace-kicker">Creative system</span>
           <h1>Content Studio</h1>
-          <p>Build SEO and answer-engine drafts from HOWL voice, imported source examples, and product context.</p>
+          <p>Build SEO and answer-engine drafts from a manual topic, HOWL voice sources, and learned editorial feedback.</p>
         </div>
         <div className="content-project-picker">
           <button type="button" onClick={() => loadProject(null)}>New</button>
@@ -433,7 +481,7 @@ export default function ContentStudio() {
       {message && !error && <div className="content-note">{message}</div>}
 
       <div className="content-tabs" role="tablist">
-        {['brief', 'sources', 'outline', 'draft', 'exports'].map(panel => (
+        {['brief', 'sources', 'outline', 'draft', 'feedback', 'exports'].map(panel => (
           <button key={panel} type="button" className={activePanel === panel ? 'active' : ''} onClick={() => setActivePanel(panel)}>
             {panel}
           </button>
@@ -445,7 +493,7 @@ export default function ContentStudio() {
           <section>
             <span>Project</span>
             <strong>{brief.title || brief.topic || 'Untitled draft'}</strong>
-            <small>{selectedSources.length} source examples selected · {drafts.length} saved versions</small>
+            <small>{selectedSources.length} voice sources selected · {drafts.length} saved versions · {feedbackItems.length} feedback notes</small>
           </section>
           <section>
             <span>Source influence</span>
@@ -472,7 +520,7 @@ export default function ContentStudio() {
               <div className="content-panel-head">
                 <div>
                   <span>Brief</span>
-                  <h2>Shape the assignment.</h2>
+                  <h2>Set the topic manually.</h2>
                 </div>
                 <button type="button" className="primary-action" disabled={saving || !brief.topic.trim()} onClick={() => saveProject()}>
                   {saving ? 'Saving…' : 'Save brief'}
@@ -497,7 +545,7 @@ export default function ContentStudio() {
               <div className="content-panel-head">
                 <div>
                   <span>Sources</span>
-                  <h2>Import and select examples.</h2>
+                  <h2>Train voice and structure.</h2>
                 </div>
                 <button type="button" className="primary-action" disabled={saving || !sourceForm.title.trim() || !sourceForm.body.trim()} onClick={addSource}>Import source</button>
               </div>
@@ -546,7 +594,7 @@ export default function ContentStudio() {
                     <button type="button" onClick={() => deleteSource(source.id)}>Delete</button>
                   </article>
                 ))}
-                {!sources.length && <div className="workspace-empty"><strong>No source examples yet.</strong><p>Import past emails, blog posts, landing pages, or copy notes to ground the model.</p></div>}
+                {!sources.length && <div className="workspace-empty"><strong>No voice sources yet.</strong><p>Import past emails, blog posts, landing pages, or copy notes to teach style, pacing, structure, and claim discipline.</p></div>}
               </div>
             </section>
           )}
@@ -578,11 +626,53 @@ export default function ContentStudio() {
                   <button type="button" disabled={generating === 'draft' || !outline.trim()} onClick={() => generate('draft')}>{generating === 'draft' ? 'Drafting…' : 'Generate draft'}</button>
                   <button type="button" disabled={generating === 'rewrite' || !draft.trim()} onClick={() => generate('rewrite')}>Rewrite</button>
                   <button type="button" disabled={!draft.trim()} onClick={runChecks}>Run checks</button>
-                  <button type="button" disabled={!draft.trim() || saving || guardrailViolations.length > 0} onClick={() => saveVersion('draft')}>Save version</button>
+                  <button type="button" disabled={!draft.trim() || saving || guardrailViolations.length > 0} onClick={approveDraft}>Approve</button>
                 </div>
               </div>
               {metadata.meta_description && <div className="content-meta"><strong>Meta</strong><span>{metadata.meta_description}</span></div>}
               <textarea className="content-editor draft" value={draft} onChange={event => setDraft(event.target.value)} placeholder="Generate a full blog draft from the approved outline." />
+              <div className="content-feedback-quick">
+                <label>Feedback for future runs<textarea rows="3" value={feedbackForm.note} onChange={event => setFeedbackForm(current => ({ ...current, note: event.target.value }))} placeholder="Example: Make intros shorter, keep HOWL more direct, avoid generic outdoor lifestyle copy." /></label>
+                <button type="button" disabled={saving || !feedbackForm.note.trim()} onClick={() => saveFeedback()}>Save feedback</button>
+              </div>
+            </section>
+          )}
+
+          {activePanel === 'feedback' && (
+            <section className="content-panel">
+              <div className="content-panel-head">
+                <div>
+                  <span>Feedback</span>
+                  <h2>Teach the content skill over time.</h2>
+                </div>
+                <button type="button" className="primary-action" disabled={saving || !feedbackForm.note.trim()} onClick={() => saveFeedback()}>
+                  {saving ? 'Saving…' : 'Save feedback'}
+                </button>
+              </div>
+              <div className="content-feedback-form">
+                <label>Applies to<select value={feedbackForm.applies_to} onChange={event => setFeedbackForm(current => ({ ...current, applies_to: event.target.value }))}>
+                  <option value="voice">Voice</option>
+                  <option value="structure">Structure</option>
+                  <option value="seo">SEO/AEO</option>
+                  <option value="claims">Claims</option>
+                  <option value="general">General</option>
+                </select></label>
+                <label>Signal<select value={feedbackForm.rating} onChange={event => setFeedbackForm(current => ({ ...current, rating: event.target.value }))}>
+                  <option value="approved">Approved pattern</option>
+                  <option value="revise">Revise next time</option>
+                  <option value="avoid">Avoid</option>
+                </select></label>
+                <label className="wide">Feedback<textarea rows="5" value={feedbackForm.note} onChange={event => setFeedbackForm(current => ({ ...current, note: event.target.value }))} /></label>
+              </div>
+              <div className="content-feedback-list">
+                {feedbackItems.length ? feedbackItems.map(item => (
+                  <article key={item.id}>
+                    <span>{item.applies_to || 'general'} · {item.rating || 'note'}</span>
+                    <p>{item.note}</p>
+                    <small>{new Date(item.created_at).toLocaleString()}</small>
+                  </article>
+                )) : <div className="workspace-empty"><strong>No feedback saved yet.</strong><p>Approve drafts and save edit notes so future outlines and drafts learn the house style.</p></div>}
+              </div>
             </section>
           )}
 

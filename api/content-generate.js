@@ -16,13 +16,15 @@ const ALLOWED_MODELS = new Set([
   'claude-haiku-4-5-20251001',
 ]);
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
+const DEFAULT_OPENAI_MODEL = 'gpt-4.1';
 
 export default async function handler(req, res) {
   const access = await requirePermission(req, res, 'briefs.write');
   if (!access) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey && !openaiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY or OPENAI_API_KEY required' });
 
   const { sql } = access;
   await ensureCreatorOpsTables(sql);
@@ -38,6 +40,7 @@ export default async function handler(req, res) {
     if (!project) return res.status(400).json({ error: 'project or brief payload required' });
     const sourceIds = selectedSourceIds(req.body?.selectedSourceIds || req.body?.selected_source_ids || project.selected_source_ids);
     const sources = await loadSourceContext(sql, sourceIds, project);
+    const feedback = await loadFeedbackContext(sql, project.id);
     const guidelines = await loadBrandGuidelines(sql);
     const model = ALLOWED_MODELS.has(req.body?.model) ? req.body.model : DEFAULT_MODEL;
 
@@ -50,8 +53,51 @@ export default async function handler(req, res) {
     const outline = cleanText(req.body?.outline, 80000);
     const draft = cleanText(req.body?.draft, 200000);
     const system = buildSystemPrompt(guidelines);
-    const user = buildUserPrompt({ action, project, sources, outline, draft });
+    const user = buildUserPrompt({ action, project, sources, feedback, outline, draft });
 
+    const generated = await generateContentText({ action, apiKey, openaiKey, model, system, user });
+    if (!generated.ok) {
+      return res.status(generated.status || 500).json({
+        error: generated.error,
+        detail: generated.detail,
+      });
+    }
+    const text = generated.text;
+    const parsed = parseModelJson(text);
+    const markdown = cleanText(parsed.markdown || parsed.outline_markdown || parsed.draft_markdown || '', 200000);
+    const guardrailViolations = validateBrandCopy(markdown, guidelines);
+    const sourceInfluence = normalizeSourceInfluence(parsed.source_influence, sources);
+    return res.json({
+      action,
+      model: generated.model,
+      provider: generated.provider,
+      fallback_reason: generated.fallbackReason || null,
+      result: {
+        ...parsed,
+        markdown,
+        html: markdown ? markdownToHtml(markdown) : '',
+        source_influence: sourceInfluence,
+        guardrail_violations: guardrailViolations,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+function normalizeSourceInfluence(value, sources) {
+  if (Array.isArray(value) && value.length) return value;
+  return (sources || []).slice(0, 8).map(source => ({
+    source_id: source.id,
+    source_title: source.title,
+    used_for: 'voice reference',
+  }));
+}
+
+async function generateContentText({ action, apiKey, openaiKey, model, system, user }) {
+  const maxTokens = action === 'draft' ? 12000 : 6000;
+  const temperature = action === 'draft' ? 0.45 : 0.35;
+  if (apiKey) {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -61,37 +107,64 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: action === 'draft' ? 12000 : 6000,
-        temperature: action === 'draft' ? 0.45 : 0.35,
+        max_tokens: maxTokens,
+        temperature,
         system,
         messages: [{ role: 'user', content: user }],
       }),
     });
     const data = await response.json();
-    if (!response.ok) {
-      return res.status(response.status).json({
-        error: anthropicErrorMessage(data) || `Anthropic request failed (${response.status})`,
-        detail: data?.error || data,
-      });
+    if (response.ok) {
+      return {
+        ok: true,
+        provider: 'anthropic',
+        model,
+        text: (data.content || []).filter(block => block.type === 'text').map(block => block.text).join(''),
+      };
     }
-    const text = (data.content || []).filter(block => block.type === 'text').map(block => block.text).join('');
-    const parsed = parseModelJson(text);
-    const markdown = cleanText(parsed.markdown || parsed.outline_markdown || parsed.draft_markdown || '', 200000);
-    const guardrailViolations = validateBrandCopy(markdown, guidelines);
-    return res.json({
-      action,
-      model,
-      result: {
-        ...parsed,
-        markdown,
-        html: markdown ? markdownToHtml(markdown) : '',
-        source_influence: Array.isArray(parsed.source_influence) ? parsed.source_influence : [],
-        guardrail_violations: guardrailViolations,
-      },
-    });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
+    const error = anthropicErrorMessage(data) || `Anthropic request failed (${response.status})`;
+    if (!openaiKey) return { ok: false, status: response.status, error, detail: data?.error || data };
+    const fallback = await generateOpenAiContent({ action, apiKey: openaiKey, system, user, maxTokens, temperature });
+    return {
+      ...fallback,
+      fallbackReason: error,
+      detail: fallback.ok ? undefined : { anthropic: data?.error || data, openai: fallback.detail },
+    };
   }
+  return generateOpenAiContent({ action, apiKey: openaiKey, system, user, maxTokens, temperature });
+}
+
+async function generateOpenAiContent({ apiKey, system, user, maxTokens, temperature }) {
+  if (!apiKey) return { ok: false, status: 500, error: 'OPENAI_API_KEY not configured' };
+  const model = process.env.OPENAI_CONTENT_MODEL || process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL;
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: maxTokens,
+      temperature,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    const error = data?.error?.message || data?.error?.type || `OpenAI request failed (${response.status})`;
+    return { ok: false, status: response.status, error, detail: data?.error || data, provider: 'openai', model };
+  }
+  return {
+    ok: true,
+    provider: 'openai',
+    model,
+    text: data?.choices?.[0]?.message?.content || '',
+  };
 }
 
 function anthropicErrorMessage(data) {
@@ -139,27 +212,6 @@ async function loadSourceContext(sql, ids, project) {
       LIMIT 30
     `;
   }
-  if (!sourceRows.length) {
-    const query = [
-      project.topic,
-      project.target_query,
-      project.product,
-      project.search_intent,
-    ].filter(Boolean).join(' ');
-    const terms = keywordTerms(query);
-    if (terms.length) {
-      sourceRows = await sql`
-        SELECT DISTINCT s.id, s.title, s.source_type, s.body, s.url, s.tags
-        FROM content_sources s
-        LEFT JOIN content_source_chunks c ON c.source_id = s.id
-        WHERE c.keywords && ${terms}::text[]
-           OR s.tags && ${terms}::text[]
-           OR s.title ILIKE ${`%${terms[0]}%`}
-        ORDER BY s.created_at DESC
-        LIMIT 8
-      `;
-    }
-  }
   return sourceRows.map(source => ({
     id: source.id,
     title: source.title,
@@ -170,10 +222,29 @@ async function loadSourceContext(sql, ids, project) {
   }));
 }
 
-function keywordTerms(text) {
-  const stop = new Set(['about', 'after', 'again', 'also', 'because', 'before', 'could', 'every', 'from', 'have', 'into', 'just', 'like', 'more', 'that', 'their', 'there', 'they', 'this', 'with', 'would', 'your']);
-  return [...new Set((cleanText(text, 2000).toLowerCase().match(/[a-z][a-z0-9-]{3,}/g) || [])
-    .filter(word => !stop.has(word)))].slice(0, 12);
+async function loadFeedbackContext(sql, projectId) {
+  if (!Number.isFinite(Number(projectId))) return [];
+  const rows = await sql`
+    SELECT project_id, applies_to, note, rating, created_at
+    FROM content_feedback
+    WHERE project_id = ${Number(projectId)}
+       OR project_id IN (
+         SELECT id
+         FROM content_projects
+         WHERE status <> 'archived'
+         ORDER BY updated_at DESC
+         LIMIT 20
+       )
+    ORDER BY
+      CASE WHEN project_id = ${Number(projectId)} THEN 0 ELSE 1 END,
+      created_at DESC
+    LIMIT 30
+  `;
+  return rows.map(row => ({
+    applies_to: row.applies_to || 'general',
+    note: cleanText(row.note, 1200),
+    rating: row.rating || '',
+  })).filter(item => item.note);
 }
 
 function buildSystemPrompt(guidelines) {
@@ -193,14 +264,14 @@ ${[...(guidelines.prohibited_phrases || []), ...(guidelines.prohibited_claims ||
 
 Rules:
 - Build for SEO and answer-engine usefulness, but keep the article human and useful.
-- Use source examples as voice and structure references, not as text to copy.
+- Use selected source examples only for voice, rhythm, structure, and claim discipline. Do not use them to choose the article topic.
 - Do not invent product specs, certifications, discounts, prices, or comparative claims.
 - Include snippet-ready direct answers where the user intent calls for them.
 - Avoid em dashes, vague superlatives, fake testimonials, and invented citations.
 - Return only valid JSON.`;
 }
 
-function buildUserPrompt({ action, project, sources, outline, draft }) {
+function buildUserPrompt({ action, project, sources, feedback, outline, draft }) {
   const brief = `CONTENT BRIEF
 Title: ${project.title || 'Untitled'}
 Topic: ${project.topic || 'Not specified'}
@@ -213,12 +284,16 @@ Must include: ${project.must_include || 'None'}
 Avoid: ${project.avoid || 'None'}`;
 
   const sourceText = sources.length
-    ? sources.map((source, index) => `SOURCE ${index + 1} [id=${source.id}; ${source.type}; ${source.title}]
+    ? sources.map((source, index) => `VOICE SOURCE ${index + 1} [id=${source.id}; ${source.type}; ${source.title}]
 Tags: ${(source.tags || []).join(', ') || 'none'}
 URL: ${source.url || 'n/a'}
 Excerpt:
 ${source.excerpt}`).join('\n\n-----\n\n')
-    : 'No imported source examples were selected. Use the brand guidelines and brief only.';
+    : 'No voice examples were selected. Use the brand guidelines, brief, and learned editorial feedback only.';
+
+  const feedbackText = feedback?.length
+    ? feedback.map((item, index) => `${index + 1}. [${item.applies_to}${item.rating ? `; ${item.rating}` : ''}] ${item.note}`).join('\n')
+    : 'No learned editorial feedback has been saved yet.';
 
   const shapes = {
     outline: `Generate an SEO/AEO outline before drafting.
@@ -228,7 +303,7 @@ Return JSON with:
   "meta_description": "...",
   "search_intent_summary": "...",
   "outline_markdown": "Markdown outline with H1/H2/H3, answer blocks, FAQ ideas, internal-link placeholders, and proof gaps",
-  "source_influence": [{"source_id": 1, "source_title": "...", "used_for": "voice|structure|claim caution|angle"}],
+  "source_influence": [{"source_id": 1, "source_title": "...", "used_for": "voice|structure|claim caution"}],
   "seo_checks": ["..."],
   "proof_gaps": ["..."]
 }`,
@@ -240,7 +315,7 @@ Return JSON with:
   "slug": "...",
   "markdown": "Complete article in Markdown, with H1/H2/H3 structure, answer blocks, FAQ, CTA, and internal-link placeholders",
   "schema_suggestions": ["FAQPage", "Article"],
-  "source_influence": [{"source_id": 1, "source_title": "...", "used_for": "voice|structure|claim caution|angle"}],
+  "source_influence": [{"source_id": 1, "source_title": "...", "used_for": "voice|structure|claim caution"}],
   "seo_checks": ["..."]
 }`,
     rewrite: `Rewrite the supplied draft for clarity, brand voice, SEO/AEO structure, and factual restraint.
@@ -272,7 +347,10 @@ ${outline || 'No outline supplied.'}
 CURRENT DRAFT, IF ANY:
 ${draft || 'No draft supplied.'}
 
-SOURCE EXAMPLES:
+LEARNED EDITORIAL FEEDBACK:
+${feedbackText}
+
+VOICE SOURCES:
 ${sourceText}
 
 TASK:

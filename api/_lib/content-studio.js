@@ -135,6 +135,21 @@ async function createContentStudioTables(sql) {
     )
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_content_drafts_project ON content_drafts(project_id, created_at DESC)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS content_feedback (
+      id          BIGSERIAL PRIMARY KEY,
+      project_id  BIGINT REFERENCES content_projects(id) ON DELETE CASCADE,
+      draft_id    BIGINT REFERENCES content_drafts(id) ON DELETE SET NULL,
+      applies_to  TEXT NOT NULL DEFAULT 'general',
+      note        TEXT NOT NULL,
+      rating      TEXT,
+      created_by  TEXT,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_content_feedback_project ON content_feedback(project_id, created_at DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_content_feedback_created ON content_feedback(created_at DESC)`;
 }
 
 export function chunkSourceBody(body) {

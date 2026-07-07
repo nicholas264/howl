@@ -26,7 +26,14 @@ export default async function handler(req, res) {
           ORDER BY created_at DESC
           LIMIT 50
         `;
-        return res.json({ project, drafts });
+        const feedback = await sql`
+          SELECT *
+          FROM content_feedback
+          WHERE project_id = ${projectId}
+          ORDER BY created_at DESC
+          LIMIT 50
+        `;
+        return res.json({ project, drafts, feedback });
       }
       const rows = await sql`
         SELECT
@@ -119,6 +126,33 @@ export default async function handler(req, res) {
       `;
       await sql`UPDATE content_projects SET status = 'ready', updated_at = now() WHERE id = ${projectId}`;
       return res.json({ draft });
+    }
+
+    if (action === 'save_feedback') {
+      const projectId = Number(req.body?.project_id || req.body?.projectId);
+      const draftId = Number(req.body?.draft_id || req.body?.draftId);
+      const note = cleanText(req.body?.note, 5000);
+      const appliesTo = cleanText(req.body?.applies_to || req.body?.appliesTo || 'general', 80) || 'general';
+      const rating = cleanText(req.body?.rating, 80);
+      if (!Number.isFinite(projectId) || !note) {
+        return res.status(400).json({ error: 'projectId and note required' });
+      }
+      const [project] = await sql`SELECT id FROM content_projects WHERE id = ${projectId}`;
+      if (!project) return res.status(404).json({ error: 'Project not found' });
+      const [feedback] = await sql`
+        INSERT INTO content_feedback (project_id, draft_id, applies_to, note, rating, created_by)
+        VALUES (
+          ${projectId},
+          ${Number.isFinite(draftId) ? draftId : null},
+          ${appliesTo},
+          ${note},
+          ${rating || null},
+          ${access.userId}
+        )
+        RETURNING *
+      `;
+      await sql`UPDATE content_projects SET updated_at = now() WHERE id = ${projectId}`;
+      return res.json({ feedback });
     }
 
     if (action === 'archive') {

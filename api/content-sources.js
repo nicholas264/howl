@@ -118,6 +118,23 @@ export default async function handler(req, res) {
 
 async function insertSource(sql, payload, userId) {
   if (!payload.title || !payload.body) throw new Error('title and body required');
+  if (payload.url) {
+    const [existing] = await sql`SELECT id FROM content_sources WHERE url = ${payload.url} LIMIT 1`;
+    if (existing) {
+      const [row] = await sql`
+        UPDATE content_sources
+        SET title = ${payload.title},
+            source_type = ${payload.source_type},
+            body = ${payload.body},
+            tags = ${payload.tags},
+            updated_at = now()
+        WHERE id = ${existing.id}
+        RETURNING *
+      `;
+      const chunkCount = await rebuildSourceChunks(sql, row);
+      return { ...row, chunk_count: chunkCount, updated_existing: true };
+    }
+  }
   const [row] = await sql`
     INSERT INTO content_sources (title, source_type, body, url, tags, created_by)
     VALUES (${payload.title}, ${payload.source_type}, ${payload.body}, ${payload.url || null}, ${payload.tags}, ${userId})
@@ -261,7 +278,7 @@ function klaviyoMessageToSource(campaign, message) {
     title: `${campaignAttrs.name || subject}`,
     source_type: 'email',
     body,
-    url: campaign.id ? `klaviyo://campaign/${campaign.id}` : '',
+    url: campaign.id ? `klaviyo://campaign/${campaign.id}/message/${message.id || 'primary'}` : '',
     tags: ['klaviyo', 'email', campaignAttrs.status || '', campaignAttrs.channel || ''].filter(Boolean),
   });
 }
