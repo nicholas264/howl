@@ -177,7 +177,8 @@ async function importKlaviyoSources(sql, userId, { limit }) {
 
 async function listRecentKlaviyoCampaigns(client, limit) {
   const campaigns = [];
-  let path = '/campaigns?sort=-created_at&page[size]=20';
+  const emailCampaignFilter = encodeURIComponent("equals(messages.channel,'email')");
+  let path = `/campaigns?filter=${emailCampaignFilter}&sort=-created_at&page[size]=20`;
   for (let i = 0; i < 5 && path && campaigns.length < limit; i += 1) {
     const data = await client.request(path);
     campaigns.push(...(data?.data || []));
