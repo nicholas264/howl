@@ -33,8 +33,18 @@ function normalizeProject(row) {
 async function apiJson(path, options) {
   const response = await fetch(path, options);
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.error) throw new Error(data.error || `Request failed (${response.status})`);
+  if (!response.ok || data.error) throw new Error(errorMessage(data.error) || `Request failed (${response.status})`);
   return data;
+}
+
+function errorMessage(error) {
+  if (!error) return '';
+  if (typeof error === 'string') return error;
+  if (typeof error.message === 'string') return error.message;
+  if (typeof error.detail === 'string') return error.detail;
+  if (typeof error.title === 'string') return error.title;
+  try { return JSON.stringify(error); }
+  catch { return String(error); }
 }
 
 function downloadText(filename, text, type) {

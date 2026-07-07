@@ -68,7 +68,12 @@ export default async function handler(req, res) {
       }),
     });
     const data = await response.json();
-    if (!response.ok) return res.status(response.status).json(data);
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: anthropicErrorMessage(data) || `Anthropic request failed (${response.status})`,
+        detail: data?.error || data,
+      });
+    }
     const text = (data.content || []).filter(block => block.type === 'text').map(block => block.text).join('');
     const parsed = parseModelJson(text);
     const markdown = cleanText(parsed.markdown || parsed.outline_markdown || parsed.draft_markdown || '', 200000);
@@ -87,6 +92,17 @@ export default async function handler(req, res) {
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
+}
+
+function anthropicErrorMessage(data) {
+  const error = data?.error || data;
+  if (!error) return '';
+  if (typeof error === 'string') return error;
+  if (typeof error.message === 'string') return error.message;
+  if (typeof error.detail === 'string') return error.detail;
+  if (typeof error.type === 'string') return error.type;
+  try { return JSON.stringify(error); }
+  catch { return String(error); }
 }
 
 async function loadProject(sql, body) {
