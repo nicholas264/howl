@@ -78,6 +78,8 @@ export default function ContentStudio() {
   const [sourceInfluence, setSourceInfluence] = useState([]);
   const [guardrailViolations, setGuardrailViolations] = useState([]);
   const [seoAeo, setSeoAeo] = useState(null);
+  const [shopify, setShopify] = useState({ configured: false, blogs: [], links: { count: 0, last_synced_at: null } });
+  const [publishBlogId, setPublishBlogId] = useState('');
   const [activePanel, setActivePanel] = useState('brief');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -107,6 +109,16 @@ export default function ContentStudio() {
   const refreshProjects = useCallback(async () => {
     const data = await apiJson('/api/content-projects');
     setProjects(data.rows || []);
+  }, []);
+
+  const refreshShopify = useCallback(async () => {
+    try {
+      const data = await apiJson('/api/content-shopify');
+      setShopify(data);
+      setPublishBlogId(current => current || data.blogs?.[0]?.id || '');
+    } catch {
+      setShopify(current => ({ ...current, configured: false }));
+    }
   }, []);
 
   const loadProject = useCallback(async (id) => {
@@ -151,7 +163,8 @@ export default function ContentStudio() {
       if (sourceResult.status === 'rejected') setError(sourceResult.reason.message);
       if (projectResult.status === 'rejected') setError(projectResult.reason.message);
     });
-  }, [refreshProjects, refreshSources]);
+    refreshShopify();
+  }, [refreshProjects, refreshShopify, refreshSources]);
 
   const updateBrief = (key, value) => {
     setBrief(current => ({ ...current, [key]: value }));
@@ -501,11 +514,99 @@ export default function ContentStudio() {
     }
   };
 
+  const sendToShopify = async ({ publishLive = false } = {}) => {
+    if (!draft.trim()) return;
+    if (!publishBlogId) {
+      setError('Pick a Shopify blog first.');
+      return;
+    }
+    setGenerating(publishLive ? 'publish-live' : 'publish-draft');
+    setError('');
+    try {
+      const saved = brief.id ? brief : await saveProject({ ...brief, title: brief.title || brief.topic || 'Untitled content project' });
+      if (!saved) return null;
+      const data = await apiJson('/api/content-shopify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'publish',
+          projectId: saved.id || brief.id,
+          blogId: publishBlogId,
+          bodyMarkdown: draft,
+          title: metadata.title || brief.title || brief.topic,
+          summary: metadata.meta_description || '',
+          slug: metadata.slug || '',
+          tags: brief.product ? [brief.product] : [],
+          publishLive,
+        }),
+      });
+      setBrief(current => ({
+        ...current,
+        shopify_article_id: data.article?.id,
+        shopify_article_url: data.article?.url,
+        shopify_state: publishLive ? 'published' : 'draft',
+      }));
+      const linkNote = data.internal_links_unresolved?.length
+        ? ` ${data.internal_links_unresolved.length} internal link placeholder${data.internal_links_unresolved.length === 1 ? '' : 's'} still need a URL.`
+        : '';
+      setMessage(publishLive
+        ? `Published live on Shopify.${linkNote}`
+        : `Sent to Shopify as a hidden draft. Review it in Shopify admin, then publish live.${linkNote}`);
+      await refreshProjects();
+      return data;
+    } catch (err) {
+      setError(err.message);
+      return null;
+    } finally {
+      setGenerating('');
+    }
+  };
+
+  const importShopifyArticles = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      const data = await apiJson('/api/content-shopify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'import_articles' }),
+      });
+      await refreshSources();
+      setMessage(`${data.inserted || 0} new and ${data.updated || 0} updated Shopify blog article${(data.inserted || 0) + (data.updated || 0) === 1 ? '' : 's'} in the reference library${data.errors?.length ? `; ${data.errors.length} skipped.` : '.'}`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const syncSiteLinks = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      const data = await apiJson('/api/content-shopify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync_links' }),
+      });
+      setShopify(current => ({ ...current, links: data.links || current.links }));
+      setMessage(`${data.upserted || 0} site links synced from ${data.domain}.`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const approveDraft = async () => {
     const savedDraft = await saveVersion('draft');
     if (!savedDraft) return;
     const hadFeedback = feedbackForm.note.trim();
     if (hadFeedback) await saveFeedback(savedDraft.id);
+    if (shopify.configured && publishBlogId && !brief.shopify_article_id) {
+      const sent = await sendToShopify({ publishLive: false });
+      if (sent) return;
+    }
     setMessage(hadFeedback ? 'Draft approved and feedback saved.' : 'Draft approved and saved.');
   };
 
@@ -605,6 +706,40 @@ export default function ContentStudio() {
 
         <aside className="content-simple-aside">
           <section>
+            <span>Shopify</span>
+            {shopify.configured ? (
+              <div className="content-shopify">
+                {shopify.blogs?.length ? (
+                  <>
+                    <select value={publishBlogId} onChange={event => setPublishBlogId(event.target.value)}>
+                      {shopify.blogs.map(blog => (
+                        <option key={blog.id} value={blog.id}>{blog.title}</option>
+                      ))}
+                    </select>
+                    <div className="content-actions">
+                      <button type="button" disabled={!draft.trim() || generating === 'publish-draft'} onClick={() => sendToShopify({ publishLive: false })}>
+                        {generating === 'publish-draft' ? 'Sending…' : 'Send as draft'}
+                      </button>
+                      <button type="button" disabled={!draft.trim() || generating === 'publish-live'} onClick={() => sendToShopify({ publishLive: true })}>
+                        {generating === 'publish-live' ? 'Publishing…' : 'Publish live'}
+                      </button>
+                    </div>
+                  </>
+                ) : <small>{shopify.error || 'No blogs found on the store yet.'}</small>}
+                {brief.shopify_article_url && (
+                  <small>
+                    {brief.shopify_state === 'published' ? 'Live: ' : 'Draft on Shopify: '}
+                    <a href={brief.shopify_article_url} target="_blank" rel="noreferrer">{brief.shopify_article_url.replace(/^https?:\/\//, '')}</a>
+                  </small>
+                )}
+                <small>
+                  {shopify.links?.count || 0} internal links in inventory
+                  {shopify.links?.last_synced_at ? ` · synced ${new Date(shopify.links.last_synced_at).toLocaleDateString()}` : ''}
+                </small>
+              </div>
+            ) : <small>Add SHOPIFY_ACCESS_TOKEN (with read/write content scope) to publish blogs straight to the store.</small>}
+          </section>
+          <section>
             <span>SEO/AEO</span>
             {seoAeo ? (
               <div className="content-seo-score">
@@ -677,6 +812,14 @@ export default function ContentStudio() {
               <p>Import recent email campaigns into the reference library.</p>
               <label>Campaign limit<input type="number" min="1" max="50" value={klaviyoLimit} onChange={event => setKlaviyoLimit(event.target.value)} /></label>
               <button type="button" disabled={saving} onClick={importKlaviyo}>Import emails</button>
+            </article>
+            <article>
+              <span>Shopify</span>
+              <p>Pull the store's published blog articles into the library and refresh the internal link inventory from the sitemap.</p>
+              <div>
+                <button type="button" disabled={saving || !shopify.configured} onClick={importShopifyArticles}>Import blog articles</button>
+                <button type="button" disabled={saving} onClick={syncSiteLinks}>Sync site links</button>
+              </div>
             </article>
           </div>
           <div className="content-source-list">

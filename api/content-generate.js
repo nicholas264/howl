@@ -6,16 +6,20 @@ import {
   ensureContentStudioTables,
   markdownToHtml,
   parseModelJson,
+  rankSiteLinks,
+  resolveInternalLinks,
   selectedSourceIds,
 } from './_lib/content-studio.js';
+import { loadSiteLinks, siteLinkStatus, syncSiteLinks } from './_lib/shopify-content.js';
 
 const ALLOWED_MODELS = new Set([
   'claude-sonnet-4-20250514',
   'claude-sonnet-4-6',
   'claude-opus-4-7',
+  'claude-opus-4-8',
   'claude-haiku-4-5-20251001',
 ]);
-const DEFAULT_MODEL = 'claude-sonnet-4-6';
+const DEFAULT_MODEL = 'claude-opus-4-8';
 const DEFAULT_OPENAI_MODEL = 'gpt-4.1';
 
 const SEO_AEO_PLAYBOOK = `
@@ -27,7 +31,7 @@ Principles:
 - Search and AI surfaces. Make key answers easy to extract: short answer blocks, descriptive H2s, scannable lists, comparison tables in Markdown, and clear definitions.
 - E-E-A-T. Show practical product/category knowledge, first-hand-style experience, limitations, safety caveats, and verifiable claims. Do not invent specs, test data, certifications, prices, discounts, or testimonials.
 - Entity coverage. Include relevant product/category entities, adjacent concepts, fuel type, safety, setup, portability, weather, maintenance, and decision criteria where they fit the topic.
-- Internal linking. Include placeholders like [internal link: R4 MKII product page], [internal link: propane fire pit comparison], or [internal link: safety guide] where a real HOWL link should go.
+- Internal linking. Use real internal links from the INTERNAL LINK INVENTORY as Markdown links, e.g. [R4 MKII](https://howlcampfires.com/products/r4-mkii). Aim for 3-8 internal links per article where they genuinely help the reader. Never invent URLs. Only if nothing in the inventory fits, fall back to a placeholder like [internal link: safety guide].
 - Schema readiness. Suggest Article schema for all posts, FAQPage when visible FAQs are present, HowTo only for actual step-by-step instructions, and Product only when the page visibly discusses a specific product with supported product data.
 - Snippet readiness. Include a direct answer near the top, concise definitions, FAQ answers under 60 words where possible, and no vague filler intros.
 
@@ -66,18 +70,32 @@ export default async function handler(req, res) {
     const sources = await loadSourceContext(sql, sourceIds, project);
     const feedback = await loadFeedbackContext(sql, project.id);
     const guidelines = await loadBrandGuidelines(sql);
+    const siteLinks = await loadSiteLinkInventory(sql);
     const model = ALLOWED_MODELS.has(req.body?.model) ? req.body.model : DEFAULT_MODEL;
 
     if (action === 'export') {
-      const markdown = cleanText(req.body?.bodyMarkdown || req.body?.body_markdown, 200000);
-      const violations = validateBrandCopy(markdown, guidelines);
-      return res.json({ markdown, html: markdownToHtml(markdown), guardrailViolations: violations, seoAeo: evaluateSeoAeo(markdown, {}, project) });
+      const raw = cleanText(req.body?.bodyMarkdown || req.body?.body_markdown, 200000);
+      const linked = resolveInternalLinks(raw, siteLinks);
+      const violations = validateBrandCopy(linked.markdown, guidelines);
+      return res.json({
+        markdown: linked.markdown,
+        html: markdownToHtml(linked.markdown),
+        guardrailViolations: violations,
+        seoAeo: evaluateSeoAeo(linked.markdown, {}, project),
+        internal_links_resolved: linked.resolved,
+        internal_links_unresolved: linked.unresolved,
+      });
     }
 
     const outline = cleanText(req.body?.outline, 80000);
     const draft = cleanText(req.body?.draft, 200000);
+    const promptLinks = rankSiteLinks(
+      siteLinks,
+      `${project.topic} ${project.target_query} ${project.product} ${project.title}`,
+      60,
+    );
     const system = buildSystemPrompt(guidelines);
-    const user = buildUserPrompt({ action, project, sources, feedback, outline, draft });
+    const user = buildUserPrompt({ action, project, sources, feedback, outline, draft, siteLinks: promptLinks });
 
     const generated = await generateContentText({ action, apiKey, openaiKey, model, system, user });
     if (!generated.ok) {
@@ -88,7 +106,9 @@ export default async function handler(req, res) {
     }
     const text = generated.text;
     const parsed = parseModelJson(text);
-    const markdown = cleanText(parsed.markdown || parsed.outline_markdown || parsed.draft_markdown || '', 200000);
+    const rawMarkdown = cleanText(parsed.markdown || parsed.outline_markdown || parsed.draft_markdown || '', 200000);
+    const linked = resolveInternalLinks(rawMarkdown, siteLinks);
+    const markdown = linked.markdown;
     const guardrailViolations = validateBrandCopy(markdown, guidelines);
     const sourceInfluence = normalizeSourceInfluence(parsed.source_influence, sources);
     const seoAeo = evaluateSeoAeo(markdown, parsed, project);
@@ -104,10 +124,31 @@ export default async function handler(req, res) {
         source_influence: sourceInfluence,
         guardrail_violations: guardrailViolations,
         seo_aeo: seoAeo,
+        internal_links_resolved: linked.resolved,
+        internal_links_unresolved: linked.unresolved,
       },
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
+  }
+}
+
+const SITE_LINK_STALE_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Keeps the internal-link inventory warm: syncs from the store sitemap when
+// empty or older than a week, but never fails generation over it.
+async function loadSiteLinkInventory(sql) {
+  try {
+    const status = await siteLinkStatus(sql);
+    const stale = !status.count
+      || !status.last_synced_at
+      || Date.now() - new Date(status.last_synced_at).getTime() > SITE_LINK_STALE_MS;
+    if (stale) {
+      await syncSiteLinks(sql).catch(() => {});
+    }
+    return await loadSiteLinks(sql);
+  } catch {
+    return [];
   }
 }
 
@@ -129,7 +170,8 @@ function evaluateSeoAeo(markdown, parsed = {}, project = {}) {
   const wordCount = (text.match(/\b[\w'-]+\b/g) || []).length;
   const hasFaq = /\bfaq\b|frequently asked questions|\n##\s+.*questions?/i.test(text);
   const hasShortAnswers = /short answer:|quick answer:|the short version:/i.test(text);
-  const hasInternalLinks = /\[internal link:/i.test(text);
+  const hasInternalLinks = /\[internal link:/i.test(text)
+    || /\]\((https?:\/\/(www\.)?howlcampfires\.com|\/(products|collections|blogs|pages)\/)/i.test(text);
   const hasMeta = Boolean(parsed.meta_description);
   const hasSchema = Array.isArray(parsed.schema_suggestions) && parsed.schema_suggestions.length > 0;
   const hasProofGaps = Array.isArray(parsed.proof_gaps) ? parsed.proof_gaps.length > 0 : /proof gap|claim caution|verify/i.test(text);
@@ -148,7 +190,7 @@ function evaluateSeoAeo(markdown, parsed = {}, project = {}) {
     ['answer_blocks', hasShortAnswers, 'Includes snippet-ready short answer blocks.'],
     ['question_headings', hasQuestionHeading, 'Headings map to questions or decision criteria.'],
     ['faq', hasFaq, 'Includes FAQ section when question intent is likely.'],
-    ['internal_links', hasInternalLinks, 'Includes internal link placeholders.'],
+    ['internal_links', hasInternalLinks, 'Includes internal links to the HOWL site.'],
     ['schema', hasSchema, 'Includes structured data suggestions.'],
     ['proof_gaps', hasProofGaps, 'Calls out proof gaps or claim cautions.'],
     ['decision_help', hasDecisionCriteria || hasComparison, 'Helps a buyer decide, compare, or choose.'],
@@ -356,7 +398,7 @@ Rules:
 - Return only valid JSON.`;
 }
 
-function buildUserPrompt({ action, project, sources, feedback, outline, draft }) {
+function buildUserPrompt({ action, project, sources, feedback, outline, draft, siteLinks = [] }) {
   const brief = `CONTENT BRIEF
 Title: ${project.title || 'Untitled'}
 Topic: ${project.topic || 'Not specified'}
@@ -379,6 +421,10 @@ ${source.excerpt}`).join('\n\n-----\n\n')
   const feedbackText = feedback?.length
     ? feedback.map((item, index) => `${index + 1}. [${item.applies_to}${item.rating ? `; ${item.rating}` : ''}] ${item.note}`).join('\n')
     : 'No learned editorial feedback has been saved yet.';
+
+  const linkText = siteLinks.length
+    ? siteLinks.map(link => `- [${link.title}](${link.url}) (${link.kind})`).join('\n')
+    : 'No internal link inventory is available. Use [internal link: description] placeholders instead.';
 
   const shapes = {
     outline: `Generate an SEO/AEO outline before drafting.
@@ -439,6 +485,9 @@ ${feedbackText}
 
 VOICE SOURCES:
 ${sourceText}
+
+INTERNAL LINK INVENTORY (real URLs on the HOWL site; use these for internal links, never invent URLs):
+${linkText}
 
 TASK:
 ${shapes[action] || shapes.outline}`;
