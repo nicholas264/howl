@@ -5,6 +5,7 @@ import {
   markdownToHtml,
   rebuildSourceChunks,
   resolveInternalLinks,
+  stripEmDashes,
 } from './_lib/content-studio.js';
 import {
   createShopifyArticle,
@@ -91,7 +92,7 @@ export default async function handler(req, res) {
       const publishLive = Boolean(req.body?.publishLive || req.body?.publish_live);
 
       const siteLinks = await loadSiteLinks(sql);
-      const linked = resolveInternalLinks(markdown, siteLinks);
+      const linked = resolveInternalLinks(stripEmDashes(markdown), siteLinks);
       const html = markdownToHtml(linked.markdown);
       const article = await createShopifyArticle({
         blogId,

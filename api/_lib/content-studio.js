@@ -243,6 +243,14 @@ export function rankSiteLinks(links, topicText, limit = 60) {
     .map(item => item.link);
 }
 
+// Hard brand rule: no em or en dashes anywhere in published copy. Models
+// ignore the prompt instruction often enough that this is enforced here.
+export function stripEmDashes(text) {
+  return cleanText(text, 200000)
+    .replace(/(\d)\s*[—–]\s*(\d)/g, '$1-$2')
+    .replace(/\s*[—–]+\s*/g, ' - ');
+}
+
 // Replaces [internal link: X] placeholders with real Markdown links from the
 // site inventory when a confident match exists; leaves the rest untouched so
 // unresolved placeholders stay visible to the editor.

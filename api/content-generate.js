@@ -9,6 +9,7 @@ import {
   rankSiteLinks,
   resolveInternalLinks,
   selectedSourceIds,
+  stripEmDashes,
 } from './_lib/content-studio.js';
 import { loadSiteLinks, siteLinkStatus, syncSiteLinks } from './_lib/shopify-content.js';
 import { BLOG_CONTEXT_PACKET } from './_lib/blog-context-packet.js';
@@ -75,7 +76,7 @@ export default async function handler(req, res) {
     const model = ALLOWED_MODELS.has(req.body?.model) ? req.body.model : DEFAULT_MODEL;
 
     if (action === 'export') {
-      const raw = cleanText(req.body?.bodyMarkdown || req.body?.body_markdown, 200000);
+      const raw = stripEmDashes(cleanText(req.body?.bodyMarkdown || req.body?.body_markdown, 200000));
       const linked = resolveInternalLinks(raw, siteLinks);
       const violations = validateBrandCopy(linked.markdown, guidelines);
       return res.json({
@@ -107,7 +108,7 @@ export default async function handler(req, res) {
     }
     const text = generated.text;
     const parsed = parseModelJson(text);
-    const rawMarkdown = cleanText(parsed.markdown || parsed.outline_markdown || parsed.draft_markdown || '', 200000);
+    const rawMarkdown = stripEmDashes(cleanText(parsed.markdown || parsed.outline_markdown || parsed.draft_markdown || '', 200000));
     const linked = resolveInternalLinks(rawMarkdown, siteLinks);
     const markdown = linked.markdown;
     const guardrailViolations = validateBrandCopy(markdown, guidelines);
