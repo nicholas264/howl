@@ -264,6 +264,9 @@ export default function ContentStudio() {
       await refreshSources();
       if (data.configured === false) {
         setError((data.errors || [])[0] || 'Klaviyo is not configured.');
+      } else if (!data.inserted) {
+        const detail = (data.errors || [])[0] || `${data.scanned_messages || 0} email messages scanned across ${data.scanned || 0} campaigns.`;
+        setError(`No Klaviyo emails imported. ${detail}`);
       } else {
         setMessage(`${data.inserted || 0} Klaviyo email${data.inserted === 1 ? '' : 's'} imported${data.errors?.length ? `; ${data.errors.length} skipped.` : '.'}`);
       }

@@ -160,19 +160,25 @@ async function importKlaviyoSources(sql, userId, { limit }) {
   const campaigns = await listRecentKlaviyoCampaigns(client, limit);
   const rows = [];
   const errors = [];
+  let scannedMessages = 0;
   for (const campaign of campaigns) {
     try {
       const messages = await loadKlaviyoCampaignMessages(client, campaign.id);
+      scannedMessages += messages.length;
       for (const message of messages) {
         const payload = klaviyoMessageToSource(campaign, message);
-        if (!payload) continue;
+        if (!payload) {
+          const name = campaign.attributes?.name || campaign.id;
+          errors.push(`${name}: no usable email body content found`);
+          continue;
+        }
         rows.push(await insertSource(sql, payload, userId));
       }
     } catch (err) {
       errors.push(`${campaign.attributes?.name || campaign.id}: ${err.message}`);
     }
   }
-  return { configured: true, inserted: rows.length, rows, errors, scanned: campaigns.length };
+  return { configured: true, inserted: rows.length, rows, errors, scanned: campaigns.length, scanned_messages: scannedMessages };
 }
 
 async function listRecentKlaviyoCampaigns(client, limit) {
@@ -205,38 +211,51 @@ async function loadKlaviyoCampaignMessages(client, campaignId) {
 }
 
 async function hydrateKlaviyoMessage(client, message) {
-  const ids = [
+  const messageId = [
     message.id,
     message?.relationships?.campaign_message?.data?.id,
     message?.relationships?.message?.data?.id,
-  ].filter(Boolean);
-  for (const id of ids) {
-    for (const path of [
-      `/campaign-messages/${id}`,
-      `/campaign-messages/${id}/template`,
-      `/campaign-messages/${id}/relationships/template`,
-    ]) {
-      try {
-        const data = await client.request(path);
-        return { ...message, hydrated: data?.data || data };
-      } catch {}
-    }
+  ].find(Boolean);
+  let detail = message;
+  let template = null;
+
+  if (messageId) {
+    try {
+      const data = await client.request(`/campaign-messages/${messageId}`);
+      detail = data?.data || message;
+    } catch {}
   }
-  return message;
+
+  const templateId = detail?.relationships?.template?.data?.id || message?.relationships?.template?.data?.id;
+
+  if (messageId) {
+    try {
+      const data = await client.request(`/campaign-messages/${messageId}/template`);
+      template = data?.data || null;
+    } catch {}
+  }
+
+  if (!template && templateId) {
+    try {
+      const data = await client.request(`/templates/${templateId}`);
+      template = data?.data || null;
+    } catch {}
+  }
+
+  return { ...message, detail, template };
 }
 
 function klaviyoMessageToSource(campaign, message) {
   const campaignAttrs = campaign.attributes || {};
-  const messageAttrs = {
-    ...(message.attributes || {}),
-    ...(message.hydrated?.attributes || {}),
-  };
-  const strings = collectStrings(messageAttrs).filter(Boolean);
-  const subject = messageAttrs.subject || messageAttrs.label || campaignAttrs.name || 'Klaviyo email';
-  const preview = messageAttrs.preview_text || messageAttrs.previewText || '';
-  const htmlish = strings.find(value => /<\/?[a-z][\s\S]*>/i.test(value) && value.length > 200);
-  const longest = strings.sort((a, b) => b.length - a.length)[0] || '';
-  const body = stripHtml([subject, preview, htmlish || longest].filter(Boolean).join('\n\n'));
+  const detailAttrs = message.detail?.attributes || message.attributes || {};
+  const templateAttrs = message.template?.attributes || {};
+  const content = detailAttrs.definition?.content || {};
+  const subject = content.subject || detailAttrs.subject || detailAttrs.label || campaignAttrs.name || 'Klaviyo email';
+  const preview = content.preview_text || content.previewText || detailAttrs.preview_text || detailAttrs.previewText || '';
+  const templateDefinitionText = collectStrings(templateAttrs.definition).join('\n\n');
+  const templateBody = templateAttrs.text || templateAttrs.html || templateDefinitionText;
+  const fallbackStrings = collectStrings({ detailAttrs, templateAttrs }).filter(Boolean).sort((a, b) => b.length - a.length);
+  const body = stripHtml([subject, preview, templateBody || fallbackStrings[0]].filter(Boolean).join('\n\n'));
   if (body.length < 120) return null;
   return sourcePayload({
     title: `${campaignAttrs.name || subject}`,
