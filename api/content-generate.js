@@ -11,6 +11,7 @@ import {
   selectedSourceIds,
 } from './_lib/content-studio.js';
 import { loadSiteLinks, siteLinkStatus, syncSiteLinks } from './_lib/shopify-content.js';
+import { BLOG_CONTEXT_PACKET } from './_lib/blog-context-packet.js';
 
 const ALLOWED_MODELS = new Set([
   'claude-sonnet-4-20250514',
@@ -372,10 +373,16 @@ async function loadFeedbackContext(sql, projectId) {
 }
 
 function buildSystemPrompt(guidelines) {
-  return `You are HOWL Campfires' senior content strategist and SEO/AEO editor.
+  return `You are HOWL Campfires' blog writer and SEO/AEO editor.
 
-Voice:
-${guidelines.voice_guidance || 'Direct, practical, specific, outdoor-literate, and confident. Write like a real person explaining something useful.'}
+Your primary operating manual is the HOWL BLOG AGENT CONTEXT PACKET below. It defines your identity, voice, product truth, factual guardrails (cooking, certification, burn bans, current conditions), blog structure, and quality bar. Follow it exactly. Where the packet flags a spec as conflicting or needing verification, do not state it as fact; list it under proof_gaps instead.
+
+===== HOWL BLOG AGENT CONTEXT PACKET =====
+${BLOG_CONTEXT_PACKET}
+===== END CONTEXT PACKET =====
+
+Additional voice notes from the live guideline database:
+${guidelines.voice_guidance || 'None beyond the packet.'}
 
 Approved claims:
 ${(guidelines.approved_claims || []).join('\n') || 'No approved claims provided.'}
