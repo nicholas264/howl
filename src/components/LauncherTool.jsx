@@ -30,6 +30,18 @@ import {
 const LS_CONFIG = 'howl_launcher_config';
 const LS_SELECTED = 'howl_launcher_selected_items';
 
+const DEFAULT_LAUNCHER_CONFIG = {
+  pageId: import.meta.env.VITE_META_PAGE_ID || '',
+  instagramUserId: import.meta.env.VITE_META_INSTAGRAM_USER_ID || '',
+  defaultCreator: '',
+  defaultProduct: PRODUCTS[0]?.id || '',
+  defaultPixelId: import.meta.env.VITE_META_PIXEL_ID || '3577794072540304',
+  defaultObjective: 'OUTCOME_SALES',
+  namingMode: 'batch_adsets',
+  adsetNameTemplate: 'HOWL | CT | {creator} | {asset} | {product} | {date}',
+  adNameTemplate: 'HOWL | AD | {creator} | {asset} | {product} | {date}',
+};
+
 const DRIVE_STEPS = [
   { key: 'drive_download', label: 'Download' },
   { key: 'meta_upload',    label: 'Upload' },
@@ -161,26 +173,25 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       .catch(() => {});
   }, []);
   // ── shared settings ────────────────────────────────────────────────────
-  const [config, setConfig] = useState(() => ls(LS_CONFIG, {
-    pageId: import.meta.env.VITE_META_PAGE_ID || '',
-    instagramUserId: import.meta.env.VITE_META_INSTAGRAM_USER_ID || '',
-    defaultCreator: '',
-    defaultProduct: PRODUCTS[0]?.id || '',
-    defaultPixelId: import.meta.env.VITE_META_PIXEL_ID || '3577794072540304',
-    defaultObjective: 'OUTCOME_SALES',
-    namingMode: 'batch_adsets',
-    adsetNameTemplate: 'HOWL | CT | {creator} | {asset} | {product} | {date}',
-    adNameTemplate: 'HOWL | AD | {creator} | {asset} | {product} | {date}',
-  }));
-  // Backfill the HOWL pixel for users whose localStorage config predates the field.
+  const [config, setConfig] = useState(() => ({ ...DEFAULT_LAUNCHER_CONFIG, ...ls(LS_CONFIG, {}) }));
+  // Backfill defaults for users whose localStorage config predates these fields.
   useEffect(() => {
-    if (!config.defaultPixelId) updateConfig({ defaultPixelId: '3577794072540304' });
+    const patch = {};
+    for (const [key, value] of Object.entries(DEFAULT_LAUNCHER_CONFIG)) {
+      if (config[key] === undefined || config[key] === null || config[key] === '') patch[key] = value;
+    }
+    if (Object.keys(patch).length) updateConfig(patch);
   }, []);
   const updateConfig = (patch) => {
     const next = { ...config, ...patch };
     setConfig(next);
     lsSet(LS_CONFIG, next);
   };
+  const resetNamingDefaults = () => updateConfig({
+    namingMode: DEFAULT_LAUNCHER_CONFIG.namingMode,
+    adsetNameTemplate: DEFAULT_LAUNCHER_CONFIG.adsetNameTemplate,
+    adNameTemplate: DEFAULT_LAUNCHER_CONFIG.adNameTemplate,
+  });
 
   // ── campaign / adset selection ─────────────────────────────────────────
   const [campaigns, setCampaigns] = useState([]);
@@ -442,8 +453,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   const buildNamesForItem = (item, index = 1) => {
     const ctx = nameContext(item, index);
     return {
-      adsetName: applyNameTemplate(config.adsetNameTemplate, ctx),
-      adName: applyNameTemplate(config.adNameTemplate, ctx) || buildAdName({ creator: ctx.creator, productId: meta[item.unifiedId]?.productId }),
+      adsetName: applyNameTemplate(config.adsetNameTemplate || DEFAULT_LAUNCHER_CONFIG.adsetNameTemplate, ctx),
+      adName: applyNameTemplate(config.adNameTemplate || DEFAULT_LAUNCHER_CONFIG.adNameTemplate, ctx) || buildAdName({ creator: ctx.creator, productId: meta[item.unifiedId]?.productId }),
     };
   };
 
@@ -709,12 +720,39 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     const adId = prompt('Meta ad ID (or leave blank to use "MANUAL"):', 'MANUAL');
     if (adId === null) return;
     const ids = item.kind === 'pair' ? [item.feed.id, item.story.id] : [item.id];
+    const id = item.unifiedId;
+    const m = meta[id] || {};
+    const names = buildNamesForItem(item);
+    const productUrl = destUrlFor(m.productId);
+    const attribution = sourceConfig(m.sourceType || 'external_creator');
     try {
-      for (const fileId of ids) {
+      for (let i = 0; i < ids.length; i++) {
+        const fileId = ids[i];
         const r = await fetch('/api/drive/ugc', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'mark_launched', fileId, adId: adId || 'MANUAL' }),
+          body: JSON.stringify({
+            action: 'mark_launched',
+            fileId,
+            adId: adId || 'MANUAL',
+            logLaunch: i === 0,
+            placementRole: item.kind === 'pair' ? (i === 0 ? 'feed' : 'story') : 'single',
+            adName: names.adName,
+            adsetId: selectedAdsetId && selectedAdsetId !== '__new__' ? selectedAdsetId : null,
+            campaignId: selectedCampaignId && selectedCampaignId !== '__new__' ? selectedCampaignId : null,
+            driveFileName: item.kind === 'pair' ? `${item.feed.name} + ${item.story.name}` : item.name,
+            creator: (m.creator || m.sourceLabel || attribution.label || '').trim(),
+            creatorId: attribution.requiresCreator ? (m.creatorId || null) : null,
+            sourceType: m.sourceType || 'external_creator',
+            sourceLabel: (m.sourceLabel || m.creator || attribution.label || '').trim(),
+            briefId: m.briefId || item.briefId || null,
+            deliverableId: m.deliverableId || item.deliverableId || null,
+            productId: m.productId || '',
+            angleId: m.angleId || item.angleId || null,
+            headline: m.headline || '',
+            primaryText: m.primaryText || '',
+            destUrl: productUrl || '',
+          }),
         });
         if (!r.ok) {
           const d = await r.json().catch(() => ({}));
@@ -816,6 +854,9 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         </div>
         <div style={{ marginTop: 8, color: '#88857f', fontSize: 10 }}>
           Tokens: {'{creator}'}, {'{asset}'}, {'{product}'}, {'{date}'}, {'{source}'}, {'{index}'}.
+          <button type="button" onClick={resetNamingDefaults} style={{ marginLeft: 10, padding: 0, border: 0, background: 'transparent', color: '#d84a17', font: 'inherit', cursor: 'pointer' }}>
+            Reset naming defaults
+          </button>
         </div>
 
         {selectedCampaignId === '__new__' && (

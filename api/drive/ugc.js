@@ -170,6 +170,7 @@ export default async function handler(req, res) {
       if (process.env.DATABASE_URL) {
         try {
           const sql = neon(process.env.DATABASE_URL);
+          await ensureCreatorOpsTables(sql);
           await ensureCreativeAssetTables(sql);
           for (let i = 0; i < enriched.length; i += 20) {
             await Promise.all(
@@ -942,17 +943,37 @@ export default async function handler(req, res) {
     }
 
     if (action === 'mark_launched') {
-      const { fileId, adId, newName } = req.body;
+      const {
+        fileId, adId, newName, logLaunch = true, placementRole = 'manual',
+        adName, adsetId, campaignId, driveFileName, creator, creatorId,
+        sourceType, sourceLabel, briefId, deliverableId, productId, angleId,
+        headline, primaryText, destUrl,
+      } = req.body;
       if (!fileId || !adId) return res.status(400).json({ error: 'fileId and adId required' });
 
       const launchedId = await ensureFolder(token, rootId, 'Launched');
 
       // Fetch current name + parents so we can rename + move in one call
-      const current = await driveFetch(token, `/files/${fileId}?fields=name,parents&supportsAllDrives=true`);
+      const current = await driveFetch(token, `/files/${fileId}?fields=id,name,mimeType,size,createdTime,modifiedTime,thumbnailLink,webViewLink,parents,videoMediaMetadata(width,height),imageMediaMetadata(width,height)&supportsAllDrives=true`);
       const ext = current.name.includes('.') ? current.name.substring(current.name.lastIndexOf('.')) : '';
       const base = current.name.replace(ext, '');
       const finalName = newName || `${base}__LAUNCHED__${adId}${ext}`;
       const removeParents = (current.parents || []).join(',');
+
+      let durableUrl = null;
+      try {
+        const dlRes = await fetch(`${DRIVE}/files/${fileId}?alt=media&supportsAllDrives=true`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (dlRes.ok) {
+          const buf = Buffer.from(await dlRes.arrayBuffer());
+          durableUrl = await mirrorAssetToBlob(buf, current.mimeType || dlRes.headers.get('content-type') || 'application/octet-stream', current.name);
+        } else {
+          console.error('mark_launched mirror download failed:', (await dlRes.text()).slice(0, 200));
+        }
+      } catch (err) {
+        console.error('mark_launched mirror failed:', err.message);
+      }
 
       const updated = await driveFetch(
         token,
@@ -966,12 +987,49 @@ export default async function handler(req, res) {
       if (process.env.DATABASE_URL) {
         try {
           const sql = neon(process.env.DATABASE_URL);
-          await markCreativeAssetLaunched(sql, { driveFileId: fileId, adId });
+          await ensureCreatorOpsTables(sql);
+          await ensureCreativeAssetTables(sql);
+          await upsertDriveAsset(sql, current, current.drive_folder_path || '', false);
+          const asset = await markCreativeAssetLaunched(sql, {
+            driveFileId: fileId,
+            durableUrl,
+            adId,
+            placementRole,
+            groupKey: adId,
+            creator,
+            creatorId,
+            sourceType,
+            sourceLabel,
+            briefId,
+            deliverableId,
+            productId,
+            angleId,
+          });
+          if (logLaunch) {
+            await sql`
+              INSERT INTO launch_history
+                (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, source_type, source_label, brief_id, deliverable_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
+              SELECT
+                ${adId}, ${adsetId || null}, ${campaignId || null}, ${fileId}, ${driveFileName || current.name}, ${creator || null}, ${creatorId || null}, ${sourceType || null}, ${sourceLabel || creator || null}, ${briefId || null}, ${deliverableId || null}, ${productId || null}, ${angleId || null}, ${adName || null}, ${headline || null}, ${primaryText || null}, ${destUrl || null}, ${current.mimeType || null}, ${appAccess.userId}, ${appAccess.email || null}, ${durableUrl || null}
+              WHERE NOT EXISTS (
+                SELECT 1 FROM launch_history
+                WHERE ad_id = ${adId}
+                  AND drive_file_id = ${fileId}
+              )
+            `;
+          }
+          await stampFlowLaunched(sql, {
+            adId,
+            groupKey: asset?.group_key || adId,
+            briefId,
+            deliverableId,
+          });
+          await enqueueCreativeAssetAnalysis(sql, asset?.group_key || adId, 'manual_mark_launched');
         } catch (err) {
           console.error('creative asset launch linkage failed:', err.message);
         }
       }
-      return res.json({ success: true, file: updated });
+      return res.json({ success: true, file: updated, analysisQueued: Boolean(process.env.DATABASE_URL), durableUrl });
     }
 
     return res.status(400).json({ error: `Unknown action: ${action}` });
