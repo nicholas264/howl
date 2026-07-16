@@ -65,6 +65,220 @@ async function ensureFolder(token, parentId, name) {
   return d.id;
 }
 
+async function loadHiddenUgcIds() {
+  if (!process.env.DATABASE_URL) return new Set();
+  try {
+    const sql = neon(process.env.DATABASE_URL);
+    await sql`CREATE TABLE IF NOT EXISTS ugc_hidden (file_id TEXT PRIMARY KEY, hidden_at TIMESTAMPTZ DEFAULT NOW())`;
+    const rows = await sql`SELECT file_id FROM ugc_hidden`;
+    return new Set(rows.map(r => r.file_id));
+  } catch {
+    return new Set();
+  }
+}
+
+async function collectInboxFiles(token, inboxId, hiddenIds = new Set()) {
+  const fields = encodeURIComponent('files(id,name,mimeType,size,createdTime,modifiedTime,thumbnailLink,webViewLink,parents,videoMediaMetadata(width,height),imageMediaMetadata(width,height))');
+  const folderNames = { [inboxId]: 'Inbox' };
+  const folderParents = { [inboxId]: null };
+  const files = [];
+  const queue = [inboxId];
+  while (queue.length) {
+    const batch = queue.splice(0, Math.min(10, queue.length));
+    const qParts = batch.map(id => `'${id}' in parents`).join(' or ');
+    const q = encodeURIComponent(`(${qParts}) and trashed=false`);
+    const d = await driveFetch(token, `/files?q=${q}&fields=${fields}&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true`);
+    for (const item of (d.files || [])) {
+      if (item.mimeType === 'application/vnd.google-apps.folder') {
+        folderNames[item.id] = item.name;
+        folderParents[item.id] = item.parents?.[0] || null;
+        queue.push(item.id);
+      } else if (!hiddenIds.has(item.id)) {
+        files.push(item);
+      }
+    }
+  }
+
+  const pathFor = (parentId) => {
+    const parts = [];
+    let cur = parentId;
+    while (cur && cur !== inboxId) {
+      parts.unshift(folderNames[cur] || '?');
+      cur = folderParents[cur];
+    }
+    return parts.join(' / ');
+  };
+
+  return {
+    folderNames,
+    files: files.map(f => ({ ...f, folderPath: pathFor(f.parents?.[0]) })),
+  };
+}
+
+function buildLauncherItems(enriched, folderNames, inboxId) {
+  // Group same-creative aspect variants under a shared parent. Feed assets
+  // include 1:1, 4:5, and landscape; story assets are the taller 9:16 family.
+  const dimsFor = (f) => {
+    const v = f.videoMediaMetadata, i = f.imageMediaMetadata;
+    const width = parseInt(v?.width || i?.width || 0);
+    const height = parseInt(v?.height || i?.height || 0);
+    return { width, height };
+  };
+
+  const aspectLabelFor = (f) => {
+    const n = (f.name || '').toLowerCase();
+    if (/(9\s*[x:]\s*16|916|story|stories|reel|vertical)/.test(n)) return '9:16';
+    if (/(4\s*[x:]\s*5|45|portrait|feed)/.test(n)) return '4:5';
+    if (/(1\s*[x:]\s*1|11|square)/.test(n)) return '1:1';
+    if (/(16\s*[x:]\s*9|169|landscape)/.test(n)) return '16:9';
+
+    const { width, height } = dimsFor(f);
+    if (!(width > 0 && height > 0)) return null;
+    const ratio = width / height;
+    if (ratio < 0.68) return '9:16';
+    if (ratio < 0.92) return '4:5';
+    if (ratio < 1.12) return '1:1';
+    return '16:9';
+  };
+
+  const aspectFor = (f) => {
+    const label = aspectLabelFor(f);
+    if (!label) return null;
+    return label === '9:16' ? 'story' : 'feed';
+  };
+
+  const variantKeyFor = (f) => {
+    const parent = f.parents?.[0] || inboxId;
+    const type = f.mimeType?.startsWith('video/') ? 'video' : f.mimeType?.startsWith('image/') ? 'image' : 'file';
+    const stem = (f.name || '')
+      .toLowerCase()
+      .replace(/\.[^.]+$/, '')
+      .replace(/\b(9\s*[x:]\s*16|4\s*[x:]\s*5|1\s*[x:]\s*1|16\s*[x:]\s*9|916|45|11|169)\b/g, ' ')
+      .replace(/\b(story|stories|reels?|vertical|portrait|feed|square|landscape)\b/g, ' ')
+      .replace(/\b(copy|final|export|asset|creative|video|image)\b/g, ' ')
+      .replace(/[_\-.()[\]]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return `${parent}:${type}:${stem || folderNames[parent] || parent}`;
+  };
+
+  const byParent = {};
+  for (const f of enriched) {
+    const p = f.parents?.[0] || inboxId;
+    if (!byParent[p]) byParent[p] = [];
+    byParent[p].push(f);
+  }
+
+  const pairedFileIds = new Set();
+  const pairItems = [];
+  const byCreated = (a, b) => (a.createdTime || '').localeCompare(b.createdTime || '');
+  const feedScore = (f) => {
+    const label = aspectLabelFor(f);
+    if (label === '4:5') return 0;
+    if (label === '1:1') return 1;
+    if (label === '16:9') return 2;
+    return 9;
+  };
+  const storyScore = (f) => aspectLabelFor(f) === '9:16' ? 0 : 9;
+  const makePair = (parentId, feed, story) => {
+    pairedFileIds.add(feed.id);
+    pairedFileIds.add(story.id);
+    const feedAspect = aspectLabelFor(feed) || 'Feed';
+    const storyAspect = aspectLabelFor(story) || 'Story';
+    pairItems.push({
+      kind: 'pair',
+      id: `pair:${parentId}:${feed.id}:${story.id}`,
+      folderId: parentId,
+      folderName: folderNames[parentId] || '',
+      folderPath: feed.folderPath,
+      feed,
+      story,
+      feedAspect,
+      storyAspect,
+      aspectLabel: `${feedAspect} + ${storyAspect}`,
+      mimeType: feed.mimeType,
+      createdTime: feed.createdTime > story.createdTime ? feed.createdTime : story.createdTime,
+      name: folderNames[parentId] || feed.name,
+    });
+  };
+
+  for (const [parentId, list] of Object.entries(byParent)) {
+    if (list.length < 2) continue;
+    const buckets = { video: [], image: [] };
+    for (const f of list) {
+      if (f.mimeType?.startsWith('video/')) buckets.video.push(f);
+      else if (f.mimeType?.startsWith('image/')) buckets.image.push(f);
+    }
+    for (const sameTypeList of [buckets.video, buckets.image]) {
+      if (sameTypeList.length < 2) continue;
+      const feeds = [];
+      const stories = [];
+      const unknown = [];
+      let groupedPairCount = 0;
+      for (const f of sameTypeList) {
+        const a = aspectFor(f);
+        if (a === 'feed') feeds.push(f);
+        else if (a === 'story') stories.push(f);
+        else unknown.push(f);
+      }
+      if (sameTypeList.length === 2) {
+        const [a, b] = sameTypeList;
+        let feed, story;
+        const aa = aspectFor(a), ab = aspectFor(b);
+        if (aa === 'feed' || ab === 'story') { feed = a; story = b; }
+        else if (ab === 'feed' || aa === 'story') { feed = b; story = a; }
+        else {
+          const sa = parseInt(a.size || 0), sb = parseInt(b.size || 0);
+          if (sa >= sb) { feed = a; story = b; } else { feed = b; story = a; }
+        }
+        feeds.length = 0; stories.length = 0; unknown.length = 0;
+        feeds.push(feed); stories.push(story);
+      } else {
+        const grouped = {};
+        for (const f of sameTypeList) {
+          const k = variantKeyFor(f);
+          if (!grouped[k]) grouped[k] = [];
+          grouped[k].push(f);
+        }
+        for (const group of Object.values(grouped)) {
+          if (group.length < 2) continue;
+          const groupFeeds = group.filter(f => aspectFor(f) === 'feed').sort((a, b) => feedScore(a) - feedScore(b) || byCreated(a, b));
+          const groupStories = group.filter(f => aspectFor(f) === 'story').sort((a, b) => storyScore(a) - storyScore(b) || byCreated(a, b));
+          const pairCount = Math.min(groupFeeds.length, groupStories.length);
+          for (let i = 0; i < pairCount; i++) {
+            makePair(parentId, groupFeeds[i], groupStories[i]);
+            groupedPairCount += 1;
+            feeds.splice(feeds.findIndex(f => f.id === groupFeeds[i].id), 1);
+            stories.splice(stories.findIndex(f => f.id === groupStories[i].id), 1);
+          }
+        }
+      }
+      if (sameTypeList.length > 2 && unknown.length) {
+        while (unknown.length && (feeds.length === 0 || stories.length === 0)) {
+          const u = unknown.shift();
+          if (feeds.length === 0) feeds.push(u);
+          else stories.push(u);
+        }
+      }
+      feeds.sort((a, b) => feedScore(a) - feedScore(b) || byCreated(a, b));
+      stories.sort((a, b) => storyScore(a) - storyScore(b) || byCreated(a, b));
+      const allowLoosePairing = sameTypeList.length === 2 || (groupedPairCount === 0 && feeds.length === 1 && stories.length === 1);
+      const pairCount = allowLoosePairing ? Math.min(feeds.length, stories.length) : 0;
+      for (let i = 0; i < pairCount; i++) {
+        if (pairedFileIds.has(feeds[i].id) || pairedFileIds.has(stories[i].id)) continue;
+        makePair(parentId, feeds[i], stories[i]);
+      }
+    }
+  }
+
+  const items = [
+    ...pairItems,
+    ...enriched.filter(f => !pairedFileIds.has(f.id)).map(f => ({ kind: 'single', ...f })),
+  ];
+  items.sort((a, b) => (b.createdTime || '').localeCompare(a.createdTime || ''));
+  return items;
+}
+
 export default async function handler(req, res) {
   const appAccess = await requireWorkspaceAccess(req, res);
   if (!appAccess) return;
@@ -99,22 +313,13 @@ export default async function handler(req, res) {
     }
 
     if (action === 'count') {
-      // Lightweight version of list — returns just the file count under Inbox.
+      // Count launcher-visible cards, not raw Drive files. This keeps the
+      // sidebar badge aligned with hidden filtering and feed/story grouping.
       const inboxId = await ensureFolder(token, rootId, 'Inbox');
-      const fields = encodeURIComponent('files(id,mimeType)');
-      let count = 0;
-      const queue = [inboxId];
-      while (queue.length) {
-        const batch = queue.splice(0, Math.min(10, queue.length));
-        const qParts = batch.map(id => `'${id}' in parents`).join(' or ');
-        const q = encodeURIComponent(`(${qParts}) and trashed=false`);
-        const d = await driveFetch(token, `/files?q=${q}&fields=${fields}&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true`);
-        for (const item of (d.files || [])) {
-          if (item.mimeType === 'application/vnd.google-apps.folder') queue.push(item.id);
-          else count++;
-        }
-      }
-      return res.json({ count });
+      const hiddenIds = await loadHiddenUgcIds();
+      const { files, folderNames } = await collectInboxFiles(token, inboxId, hiddenIds);
+      const items = buildLauncherItems(files, folderNames, inboxId);
+      return res.json({ count: items.length });
     }
 
     if (action === 'ensure_subfolders') {
@@ -125,48 +330,8 @@ export default async function handler(req, res) {
 
     if (action === 'list') {
       const inboxId = await ensureFolder(token, rootId, 'Inbox');
-      // Load hidden file IDs (tool-local soft-delete)
-      let hiddenIds = new Set();
-      if (process.env.DATABASE_URL) {
-        try {
-          const sql = neon(process.env.DATABASE_URL);
-          await sql`CREATE TABLE IF NOT EXISTS ugc_hidden (file_id TEXT PRIMARY KEY, hidden_at TIMESTAMPTZ DEFAULT NOW())`;
-          const rows = await sql`SELECT file_id FROM ugc_hidden`;
-          hiddenIds = new Set(rows.map(r => r.file_id));
-        } catch {}
-      }
-      const fields = encodeURIComponent('files(id,name,mimeType,size,createdTime,modifiedTime,thumbnailLink,webViewLink,parents,videoMediaMetadata(width,height),imageMediaMetadata(width,height))');
-      // BFS walk: collect all files under Inbox (any depth). Folders we care about excluded from files list.
-      const folderNames = { [inboxId]: 'Inbox' };
-      const folderParents = { [inboxId]: null };
-      const files = [];
-      const queue = [inboxId];
-      while (queue.length) {
-        const batch = queue.splice(0, Math.min(10, queue.length));
-        const qParts = batch.map(id => `'${id}' in parents`).join(' or ');
-        const q = encodeURIComponent(`(${qParts}) and trashed=false`);
-        const d = await driveFetch(token, `/files?q=${q}&fields=${fields}&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true`);
-        for (const item of (d.files || [])) {
-          if (item.mimeType === 'application/vnd.google-apps.folder') {
-            folderNames[item.id] = item.name;
-            folderParents[item.id] = item.parents?.[0] || null;
-            queue.push(item.id);
-          } else if (!hiddenIds.has(item.id)) {
-            files.push(item);
-          }
-        }
-      }
-      // Build folder path (relative to Inbox) for each file
-      const pathFor = (parentId) => {
-        const parts = [];
-        let cur = parentId;
-        while (cur && cur !== inboxId) {
-          parts.unshift(folderNames[cur] || '?');
-          cur = folderParents[cur];
-        }
-        return parts.join(' / ');
-      };
-      const enriched = files.map(f => ({ ...f, folderPath: pathFor(f.parents?.[0]) }));
+      const hiddenIds = await loadHiddenUgcIds();
+      const { files: enriched, folderNames } = await collectInboxFiles(token, inboxId, hiddenIds);
       if (process.env.DATABASE_URL) {
         try {
           const sql = neon(process.env.DATABASE_URL);
@@ -182,179 +347,7 @@ export default async function handler(req, res) {
         }
       }
 
-      // ── Pair detection ──────────────────────────────────────────────────────
-      // Group same-creative aspect variants under a shared parent. Feed assets
-      // include 1:1, 4:5, and landscape; story assets are the taller 9:16 family.
-      // Detection: filename keywords first, then Drive image/video dimensions.
-      // Filename grouping lets a folder contain several creatives without
-      // cross-pairing unrelated assets.
-      const dimsFor = (f) => {
-        const v = f.videoMediaMetadata, i = f.imageMediaMetadata;
-        const width = parseInt(v?.width || i?.width || 0);
-        const height = parseInt(v?.height || i?.height || 0);
-        return { width, height };
-      };
-
-      const aspectLabelFor = (f) => {
-        const n = (f.name || '').toLowerCase();
-        if (/(9\s*[x:]\s*16|916|story|stories|reel|vertical)/.test(n)) return '9:16';
-        if (/(4\s*[x:]\s*5|45|portrait|feed)/.test(n)) return '4:5';
-        if (/(1\s*[x:]\s*1|11|square)/.test(n)) return '1:1';
-        if (/(16\s*[x:]\s*9|169|landscape)/.test(n)) return '16:9';
-
-        const { width, height } = dimsFor(f);
-        if (!(width > 0 && height > 0)) return null;
-        const ratio = width / height;
-        if (ratio < 0.68) return '9:16';
-        if (ratio < 0.92) return '4:5';
-        if (ratio < 1.12) return '1:1';
-        return '16:9';
-      };
-
-      const aspectFor = (f) => {
-        const label = aspectLabelFor(f);
-        if (!label) return null;
-        return label === '9:16' ? 'story' : 'feed';
-      };
-
-      const variantKeyFor = (f) => {
-        const parent = f.parents?.[0] || inboxId;
-        const type = f.mimeType?.startsWith('video/') ? 'video' : f.mimeType?.startsWith('image/') ? 'image' : 'file';
-        const stem = (f.name || '')
-          .toLowerCase()
-          .replace(/\.[^.]+$/, '')
-          .replace(/\b(9\s*[x:]\s*16|4\s*[x:]\s*5|1\s*[x:]\s*1|16\s*[x:]\s*9|916|45|11|169)\b/g, ' ')
-          .replace(/\b(story|stories|reels?|vertical|portrait|feed|square|landscape)\b/g, ' ')
-          .replace(/\b(copy|final|export|asset|creative|video|image)\b/g, ' ')
-          .replace(/[_\-.()[\]]+/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-        return `${parent}:${type}:${stem || folderNames[parent] || parent}`;
-      };
-      const byParent = {};
-      for (const f of enriched) {
-        const p = f.parents?.[0] || inboxId;
-        if (!byParent[p]) byParent[p] = [];
-        byParent[p].push(f);
-      }
-
-      const pairedFileIds = new Set();
-      const pairItems = [];
-      const byCreated = (a, b) => (a.createdTime || '').localeCompare(b.createdTime || '');
-      const feedScore = (f) => {
-        const label = aspectLabelFor(f);
-        if (label === '4:5') return 0;
-        if (label === '1:1') return 1;
-        if (label === '16:9') return 2;
-        return 9;
-      };
-      const storyScore = (f) => aspectLabelFor(f) === '9:16' ? 0 : 9;
-      const makePair = (parentId, feed, story) => {
-        pairedFileIds.add(feed.id);
-        pairedFileIds.add(story.id);
-        const feedAspect = aspectLabelFor(feed) || 'Feed';
-        const storyAspect = aspectLabelFor(story) || 'Story';
-        pairItems.push({
-          kind: 'pair',
-          id: `pair:${parentId}:${feed.id}:${story.id}`,
-          folderId: parentId,
-          folderName: folderNames[parentId] || '',
-          folderPath: feed.folderPath,
-          feed,
-          story,
-          feedAspect,
-          storyAspect,
-          aspectLabel: `${feedAspect} + ${storyAspect}`,
-          mimeType: feed.mimeType,
-          createdTime: feed.createdTime > story.createdTime ? feed.createdTime : story.createdTime,
-          name: folderNames[parentId] || feed.name,
-        });
-      };
-      // For each subfolder, split by media type (video vs image) and within each
-      // type pair feed-aspect files with story-aspect files one-to-one. Extras
-      // are left as singles. This handles folders with 3+ files where only
-      // some of them form the 1:1 + 9:16 pair.
-      for (const [parentId, list] of Object.entries(byParent)) {
-        if (list.length < 2) continue;
-        const buckets = { video: [], image: [] };
-        for (const f of list) {
-          if (f.mimeType?.startsWith('video/')) buckets.video.push(f);
-          else if (f.mimeType?.startsWith('image/')) buckets.image.push(f);
-        }
-        for (const sameTypeList of [buckets.video, buckets.image]) {
-          if (sameTypeList.length < 2) continue;
-          const feeds = [];
-          const stories = [];
-          const unknown = [];
-          let groupedPairCount = 0;
-          for (const f of sameTypeList) {
-            const a = aspectFor(f);
-            if (a === 'feed') feeds.push(f);
-            else if (a === 'story') stories.push(f);
-            else unknown.push(f);
-          }
-          // SOP: exactly two same-type files in a folder are always a feed+story
-          // pair. Use aspectFor where it disagreed (one classified, the other
-          // unknown), or byte size as a tiebreaker (larger = feed at equal
-          // quality). This overrides the case where both got classified the same.
-          if (sameTypeList.length === 2) {
-            const [a, b] = sameTypeList;
-            let feed, story;
-            const aa = aspectFor(a), ab = aspectFor(b);
-            if (aa === 'feed' || ab === 'story') { feed = a; story = b; }
-            else if (ab === 'feed' || aa === 'story') { feed = b; story = a; }
-            else {
-              const sa = parseInt(a.size || 0), sb = parseInt(b.size || 0);
-              if (sa >= sb) { feed = a; story = b; } else { feed = b; story = a; }
-            }
-            feeds.length = 0; stories.length = 0; unknown.length = 0;
-            feeds.push(feed); stories.push(story);
-          } else {
-            const grouped = {};
-            for (const f of sameTypeList) {
-              const k = variantKeyFor(f);
-              if (!grouped[k]) grouped[k] = [];
-              grouped[k].push(f);
-            }
-            for (const group of Object.values(grouped)) {
-              if (group.length < 2) continue;
-              const groupFeeds = group.filter(f => aspectFor(f) === 'feed').sort((a, b) => feedScore(a) - feedScore(b) || byCreated(a, b));
-              const groupStories = group.filter(f => aspectFor(f) === 'story').sort((a, b) => storyScore(a) - storyScore(b) || byCreated(a, b));
-              const pairCount = Math.min(groupFeeds.length, groupStories.length);
-              for (let i = 0; i < pairCount; i++) {
-                makePair(parentId, groupFeeds[i], groupStories[i]);
-                groupedPairCount += 1;
-                feeds.splice(feeds.findIndex(f => f.id === groupFeeds[i].id), 1);
-                stories.splice(stories.findIndex(f => f.id === groupStories[i].id), 1);
-              }
-            }
-          }
-          if (sameTypeList.length > 2 && unknown.length) {
-            // 3+ files: pull unknowns into whichever side is empty so a pair
-            // can still be formed.
-            while (unknown.length && (feeds.length === 0 || stories.length === 0)) {
-              const u = unknown.shift();
-              if (feeds.length === 0) feeds.push(u);
-              else stories.push(u);
-            }
-          }
-          // Stable order so pairing is deterministic across refreshes.
-          feeds.sort((a, b) => feedScore(a) - feedScore(b) || byCreated(a, b));
-          stories.sort((a, b) => storyScore(a) - storyScore(b) || byCreated(a, b));
-          const allowLoosePairing = sameTypeList.length === 2 || (groupedPairCount === 0 && feeds.length === 1 && stories.length === 1);
-          const pairCount = allowLoosePairing ? Math.min(feeds.length, stories.length) : 0;
-          for (let i = 0; i < pairCount; i++) {
-            if (pairedFileIds.has(feeds[i].id) || pairedFileIds.has(stories[i].id)) continue;
-            makePair(parentId, feeds[i], stories[i]);
-          }
-        }
-      }
-
-      const items = [
-        ...pairItems,
-        ...enriched.filter(f => !pairedFileIds.has(f.id)).map(f => ({ kind: 'single', ...f })),
-      ];
-      items.sort((a, b) => (b.createdTime || '').localeCompare(a.createdTime || ''));
+      const items = buildLauncherItems(enriched, folderNames, inboxId);
 
       // Backwards-compat: also return `files` for older clients (just the singles).
       return res.json({ items, files: items.filter(i => i.kind === 'single'), inboxId });
