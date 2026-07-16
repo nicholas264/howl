@@ -227,6 +227,11 @@ const S = {
   divider: { borderTop: '1px solid #dedbd3', margin: '20px 0' },
 };
 
+function driveItemIncludesAnyId(item, ids) {
+  if (item.kind === 'pair') return ids.includes(item.feed?.id) || ids.includes(item.story?.id);
+  return ids.includes(item.id);
+}
+
 export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem, onRemoveCartItem }) {
   const [creators, setCreators] = useState([]);
   useEffect(() => {
@@ -417,6 +422,19 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       } : null,
     });
   };
+  const creatorOptionsFor = useCallback((value) => {
+    const needle = normalizedWords(value);
+    const scored = creators.map(creator => {
+      const name = normalizedWords(creator.name);
+      const handles = creatorHandles(creator).map(handle => normalizedWords(String(handle).replace(/^@/, '')));
+      const exact = needle && (name === needle || handles.some(handle => handle === needle));
+      const starts = needle && (name.startsWith(needle) || handles.some(handle => handle.startsWith(needle)));
+      const contains = needle && (name.includes(needle) || handles.some(handle => handle.includes(needle)));
+      return { creator, score: exact ? 3 : starts ? 2 : contains ? 1 : needle ? 0 : 1 };
+    }).filter(item => item.score > 0);
+    scored.sort((a, b) => b.score - a.score || a.creator.name.localeCompare(b.creator.name));
+    return scored.slice(0, 8).map(item => item.creator);
+  }, [creators]);
 
   // Seed defaults for new drive files using folder-aware creator extraction.
   useEffect(() => {
@@ -846,7 +864,13 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           throw new Error(d.error || `mark_launched failed (${r.status})`);
         }
       }
-      setDriveItems(prev => prev.filter(d => !ids.includes(d.id)));
+      setDriveItems(prev => prev.filter(d => !driveItemIncludesAnyId(d, ids)));
+      setSelectedItems(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        lsSet(LS_SELECTED, [...next]);
+        return next;
+      });
     } catch (err) {
       alert(`Mark launched failed: ${err.message}`);
     }
@@ -855,6 +879,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   // ── library (saved variants) ──────────────────────────────────────────
   const library = useCopyLibrary();
   const [focusedItemId, setFocusedItemId] = useState(null);
+  const [openCreatorPickerId, setOpenCreatorPickerId] = useState(null);
 
   // ── render ────────────────────────────────────────────────────────────
   return (
@@ -1145,10 +1170,72 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                   <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, lineHeight: 1.35 }}>{attribution.hint}</div>
                 </div>
                 {attribution.requiresCreator ? (
-                  <div>
+                  <div style={{ position: 'relative' }}>
                     <label style={S.label}>Creator</label>
-                    <input style={S.input} list="howl-creators" value={m.creator || ''} onChange={e => updateCreator(id, e.target.value)} placeholder="Search creator" />
-                    <datalist id="howl-creators">{creators.map(creator => <option key={creator.id} value={creator.name} />)}</datalist>
+                    <input
+                      style={{ ...S.input, paddingRight: 28 }}
+                      value={m.creator || ''}
+                      onFocus={() => setOpenCreatorPickerId(id)}
+                      onBlur={() => setTimeout(() => setOpenCreatorPickerId(current => current === id ? null : current), 130)}
+                      onChange={e => {
+                        updateCreator(id, e.target.value);
+                        setOpenCreatorPickerId(id);
+                      }}
+                      placeholder="Search creator"
+                      autoComplete="off"
+                    />
+                    <span style={{ position: 'absolute', top: 29, right: 10, color: '#77746f', fontSize: 12, pointerEvents: 'none' }}>v</span>
+                    {openCreatorPickerId === id && creatorOptionsFor(m.creator || '').length > 0 && (
+                      <div style={{
+                        position: 'absolute',
+                        zIndex: 30,
+                        top: 58,
+                        left: 0,
+                        right: 0,
+                        maxHeight: 238,
+                        overflowY: 'auto',
+                        background: '#fff',
+                        border: '1px solid #d8d4ca',
+                        borderRadius: 6,
+                        boxShadow: '0 14px 35px rgba(45, 40, 30, .16)',
+                        padding: 4,
+                      }}>
+                        {creatorOptionsFor(m.creator || '').map(creator => {
+                          const social = Array.isArray(creator.social_accounts)
+                            ? creator.social_accounts.find(account => account?.handle)?.handle
+                            : null;
+                          return (
+                            <button
+                              type="button"
+                              key={creator.id}
+                              onMouseDown={e => {
+                                e.preventDefault();
+                                updateCreator(id, creator.name);
+                                setOpenCreatorPickerId(null);
+                              }}
+                              style={{
+                                width: '100%',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                gap: 10,
+                                padding: '8px 9px',
+                                background: 'transparent',
+                                border: 0,
+                                borderRadius: 4,
+                                color: '#171717',
+                                fontFamily: 'inherit',
+                                fontSize: 11,
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{creator.name}</span>
+                              {social && <span style={{ flex: 'none', color: '#88857f', fontSize: 9 }}>{social}</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                     {item.source === 'drive' && (
                       <div style={S.linkedHint(isCreatorLinked)}>
                         {isCreatorLinked
