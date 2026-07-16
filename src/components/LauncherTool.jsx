@@ -126,6 +126,69 @@ function normalizeCreatorName(name = '') {
   return String(name).trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+function normalizedWords(value) {
+  return (value || '')
+    .toString()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function creatorHandles(creator = {}) {
+  const direct = Array.isArray(creator.handles) ? creator.handles : [];
+  const socials = Array.isArray(creator.social_accounts)
+    ? creator.social_accounts.map(account => account?.handle)
+    : [];
+  return [...direct, ...socials].filter(Boolean);
+}
+
+function creatorMatchIndex(creators = []) {
+  const entries = [];
+  const frequency = new Map();
+  creators.forEach(creator => {
+    const fullName = normalizedWords(creator.name);
+    const firstName = fullName.split(' ')[0];
+    const aliases = [
+      fullName && { value: fullName, kind: fullName.includes(' ') ? 'full_name' : 'name' },
+      firstName?.length >= 4 && fullName.includes(' ') && { value: firstName, kind: 'first_name' },
+      ...creatorHandles(creator).map(handle => ({ value: normalizedWords(String(handle).replace(/^@/, '')), kind: 'handle' })),
+    ].filter(alias => alias?.value?.length >= 4);
+    aliases.forEach(alias => frequency.set(alias.value, (frequency.get(alias.value) || 0) + 1));
+    entries.push({ creator, aliases });
+  });
+  return entries.map(entry => ({
+    ...entry,
+    aliases: entry.aliases.filter(alias => frequency.get(alias.value) === 1),
+  }));
+}
+
+function suggestedCreatorFromAsset(name, index) {
+  const haystack = ` ${normalizedWords(name)} `;
+  const matches = [];
+  index.forEach(({ creator, aliases }) => {
+    aliases.forEach(alias => {
+      if (!haystack.includes(` ${alias.value} `)) return;
+      const score = alias.kind === 'full_name' || alias.kind === 'name' ? 100 : alias.kind === 'handle' ? 90 : 75;
+      matches.push({ creator, alias, score });
+    });
+  });
+  matches.sort((a, b) => b.score - a.score || a.creator.name.localeCompare(b.creator.name));
+  if (!matches.length || (matches[1] && matches[1].score === matches[0].score && matches[1].creator.id !== matches[0].creator.id)) return null;
+  const best = matches[0];
+  return {
+    creatorId: Number(best.creator.id),
+    creatorName: best.creator.name,
+    sourceType: 'external_creator',
+    sourceLabel: best.creator.name,
+    confidence: best.score >= 90 ? 'high' : 'review',
+    reason: best.alias.kind === 'handle'
+      ? `Matched @${best.alias.value} in asset name`
+      : `Matched ${best.alias.kind === 'first_name' ? 'first name' : 'creator name'} in asset name`,
+  };
+}
+
 function sourceConfig(value) {
   return SOURCE_ATTRIBUTIONS.find(item => item.value === value) || SOURCE_ATTRIBUTIONS[0];
 }
@@ -339,6 +402,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     if (!needle) return null;
     return creators.find(item => normalizeCreatorName(item.name) === needle) || null;
   }, [creators]);
+  const matchIndex = useMemo(() => creatorMatchIndex(creators), [creators]);
+  const autoMatchCreator = useCallback((assetName) => suggestedCreatorFromAsset(assetName, matchIndex), [matchIndex]);
   const updateCreator = (id, name) => {
     const creator = findCreatorByName(name);
     updateMeta(id, {
@@ -346,6 +411,10 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       creatorId: creator?.id || null,
       sourceType: 'external_creator',
       sourceLabel: creator?.name || name,
+      creatorMatch: creator ? {
+        confidence: 'manual',
+        reason: 'Selected from creator database',
+      } : null,
     });
   };
 
@@ -358,31 +427,49 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         if (!next[id]) {
           const topFolder = f.kind === 'pair' ? f.folderName : (f.folderPath || '').split(' / ')[0];
           const filePrefix = (f.name || '').split(/[_\-\s]/)[0] || '';
-          const creatorName = topFolder || filePrefix || config.defaultCreator;
-          const creator = findCreatorByName(creatorName);
+          const assetName = f.kind === 'pair'
+            ? `${f.folderName || ''} ${f.feed?.name || ''} ${f.story?.name || ''}`.trim()
+            : `${f.folderPath || ''} ${f.name || ''}`.trim();
+          const suggestion = autoMatchCreator(assetName);
+          const creatorName = suggestion?.creatorName || topFolder || filePrefix || config.defaultCreator;
+          const creator = suggestion ? { id: suggestion.creatorId, name: suggestion.creatorName } : findCreatorByName(creatorName);
           next[id] = {
             creator: creator?.name || creatorName,
             creatorId: creator?.id || null,
             sourceType: 'external_creator',
             sourceLabel: creator?.name || creatorName,
+            creatorMatch: suggestion,
             productId: config.defaultProduct,
             headline: '',
             primaryText: '',
           };
         } else if (next[id].creator && !next[id].creatorId) {
-          const creator = findCreatorByName(next[id].creator);
-          if (creator) next[id] = { ...next[id], creator: creator.name, creatorId: creator.id };
+          const assetName = f.kind === 'pair'
+            ? `${f.folderName || ''} ${f.feed?.name || ''} ${f.story?.name || ''}`.trim()
+            : `${f.folderPath || ''} ${f.name || ''}`.trim();
+          const suggestion = autoMatchCreator(assetName);
+          const creator = suggestion ? { id: suggestion.creatorId, name: suggestion.creatorName } : findCreatorByName(next[id].creator);
+          if (creator) next[id] = {
+            ...next[id],
+            creator: creator.name,
+            creatorId: creator.id,
+            sourceType: 'external_creator',
+            sourceLabel: creator.name,
+            creatorMatch: suggestion || next[id].creatorMatch || { confidence: 'exact', reason: 'Matched saved creator name' },
+          };
         }
       }
       // seed cart defaults from item.hook / item.body if user hasn't edited
       for (const c of cart) {
         const id = `cart:${c.id}`;
         if (!next[id]) {
+          const suggestion = c.creatorId ? null : autoMatchCreator(`${c.creator || ''} ${c.name || ''} ${c.title || ''} ${c.sourceLabel || ''}`.trim());
           next[id] = {
-            creator: c.creator || config.defaultCreator || 'Static Builder',
-            creatorId: c.creatorId || null,
-            sourceType: c.creatorId ? 'external_creator' : (c.sourceType || 'tool_generated'),
-            sourceLabel: c.sourceLabel || c.creator || 'In-app builder',
+            creator: c.creator || suggestion?.creatorName || config.defaultCreator || 'Static Builder',
+            creatorId: c.creatorId || suggestion?.creatorId || null,
+            sourceType: c.creatorId || suggestion ? 'external_creator' : (c.sourceType || 'tool_generated'),
+            sourceLabel: c.sourceLabel || c.creator || suggestion?.creatorName || 'In-app builder',
+            creatorMatch: suggestion,
             briefId: c.briefId || null,
             deliverableId: c.deliverableId || null,
             productId: config.defaultProduct,
@@ -393,7 +480,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       }
       return next;
     });
-  }, [driveItems, cart, config.defaultCreator, config.defaultProduct, findCreatorByName]);
+  }, [driveItems, cart, config.defaultCreator, config.defaultProduct, findCreatorByName, autoMatchCreator]);
 
   // ── unified queue ─────────────────────────────────────────────────────
   const queue = useMemo(() => {
@@ -960,6 +1047,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         const isCreatorLinked = Boolean(m.creatorId);
         const missingExternalCreator = attribution.requiresCreator && !isCreatorLinked;
         const missingSourceLabel = attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim();
+        const creatorMatch = m.creatorMatch;
         const launchDisabled = status.status === 'pushing'
           || missingExternalCreator
           || missingSourceLabel;
@@ -1063,7 +1151,14 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                     <datalist id="howl-creators">{creators.map(creator => <option key={creator.id} value={creator.name} />)}</datalist>
                     {item.source === 'drive' && (
                       <div style={S.linkedHint(isCreatorLinked)}>
-                        {isCreatorLinked ? 'Linked to creator record.' : 'Not linked. Pick the exact creator before launch.'}
+                        {isCreatorLinked
+                          ? (creatorMatch?.reason ? `${creatorMatch.confidence === 'review' ? 'Review match' : 'Linked'}: ${creatorMatch.reason}.` : 'Linked to creator record.')
+                          : 'Not linked. Pick the exact creator before launch.'}
+                      </div>
+                    )}
+                    {item.source !== 'drive' && isCreatorLinked && creatorMatch?.reason && (
+                      <div style={S.linkedHint(true)}>
+                        {creatorMatch.confidence === 'review' ? 'Review match' : 'Linked'}: {creatorMatch.reason}.
                       </div>
                     )}
                   </div>
