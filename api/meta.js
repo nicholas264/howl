@@ -84,37 +84,83 @@ async function logLaunch(row) {
   }
 }
 
+async function uploadVideoBufferResumable(videoBuffer, { name, mimeType = 'video/mp4', adAccountId, accessToken, BASE }) {
+  const startForm = new URLSearchParams({
+    upload_phase: 'start',
+    file_size: String(videoBuffer.length),
+    access_token: accessToken,
+  });
+  const startRes = await fetch(`${BASE}/${adAccountId}/advideos`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: startForm,
+  });
+  const startData = await startRes.json();
+  if (startData.error) throw new Error(startData.error.error_user_msg || startData.error.message);
+  const uploadSessionId = startData.upload_session_id;
+  const videoId = startData.video_id;
+  if (!uploadSessionId || !videoId) throw new Error('Video upload did not return a session');
+
+  let startOffset = parseInt(startData.start_offset, 10);
+  let endOffset = parseInt(startData.end_offset, 10);
+  while (startOffset < endOffset) {
+    const transferForm = new FormData();
+    transferForm.append('access_token', accessToken);
+    transferForm.append('upload_phase', 'transfer');
+    transferForm.append('upload_session_id', uploadSessionId);
+    transferForm.append('start_offset', String(startOffset));
+    transferForm.append('video_file_chunk', new Blob([videoBuffer.slice(startOffset, endOffset)], { type: mimeType }), `chunk-${startOffset}`);
+    const transferRes = await fetch(`${BASE}/${adAccountId}/advideos`, { method: 'POST', body: transferForm });
+    const transferData = await transferRes.json();
+    if (transferData.error) throw new Error(transferData.error.error_user_msg || transferData.error.message);
+    startOffset = parseInt(transferData.start_offset, 10);
+    endOffset = parseInt(transferData.end_offset, 10);
+  }
+
+  const finishForm = new URLSearchParams({
+    upload_phase: 'finish',
+    upload_session_id: uploadSessionId,
+    title: name || `howl-video-${Date.now()}`,
+    access_token: accessToken,
+  });
+  const finishRes = await fetch(`${BASE}/${adAccountId}/advideos`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: finishForm,
+  });
+  const finishData = await finishRes.json();
+  if (finishData.error) throw new Error(finishData.error.error_user_msg || finishData.error.message);
+  return videoId;
+}
+
 // Returns { videoId, blobUrl } — blobUrl is best-effort and may be null.
 async function uploadVideo(base64, name, adAccountId, accessToken, BASE) {
   const clean = base64.replace(/^data:video\/\w+;base64,/, '');
   const videoBuffer = Buffer.from(clean, 'base64');
-  const form = new FormData();
-  form.append('access_token', accessToken);
-  form.append('title', name || `howl-video-${Date.now()}`);
-  form.append('source', new Blob([videoBuffer], { type: 'video/mp4' }), 'video.mp4');
-  const r = await fetch(`${BASE}/${adAccountId}/advideos`, { method: 'POST', body: form });
-  const d = await r.json();
-  if (d.error) throw new Error(d.error.message);
-  if (!d.id) throw new Error('Video upload returned no ID');
+  const videoId = await uploadVideoBufferResumable(videoBuffer, {
+    name,
+    mimeType: 'video/mp4',
+    adAccountId,
+    accessToken,
+    BASE,
+  });
   const blobUrl = await mirrorVideoToBlob(videoBuffer, 'video/mp4', name || 'howl-video');
-  return { videoId: d.id, blobUrl };
+  return { videoId, blobUrl };
 }
 
 async function uploadVideoFromUrl(videoUrl, name, adAccountId, accessToken, BASE) {
-  const params = new URLSearchParams({
-    access_token: accessToken,
-    title: name || `howl-video-${Date.now()}`,
-    file_url: videoUrl,
+  const sourceRes = await fetch(videoUrl);
+  if (!sourceRes.ok) throw new Error(`Could not fetch Blob video (${sourceRes.status})`);
+  const mimeType = sourceRes.headers.get('content-type') || 'video/mp4';
+  const videoBuffer = Buffer.from(await sourceRes.arrayBuffer());
+  const videoId = await uploadVideoBufferResumable(videoBuffer, {
+    name,
+    mimeType,
+    adAccountId,
+    accessToken,
+    BASE,
   });
-  const response = await fetch(`${BASE}/${adAccountId}/advideos`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params,
-  });
-  const data = await response.json();
-  if (data.error) throw new Error(data.error.error_user_msg || data.error.message);
-  if (!data.id) throw new Error('Video upload returned no ID');
-  return { videoId: data.id, blobUrl: videoUrl };
+  return { videoId, blobUrl: videoUrl };
 }
 
 async function uploadImage(base64, adAccountId, accessToken, BASE) {
@@ -155,7 +201,7 @@ function pickPurchaseMetric(arr) {
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: '4mb',
+      sizeLimit: '20mb',
     },
   },
 };
@@ -561,6 +607,7 @@ export default async function handler(req, res) {
         // Returns { creativeId } so the client can call create_ad_from_creative next.
         const { imageHash, videoId: preUploadedVideoId, cards, adName, headline, primaryText, destUrl } = req.body;
         const pageId = req.body.pageId || defaultPageId;
+        const instagramUserId = (req.body.instagramUserId || '').trim() || undefined;
 
         let creativeParams;
         if (cards && cards.length >= 2) {
@@ -575,6 +622,7 @@ export default async function handler(req, res) {
             name: `${adName} Creative`,
             object_story_spec: JSON.stringify({
               page_id: pageId,
+              ...(instagramUserId ? { instagram_user_id: instagramUserId } : {}),
               link_data: {
                 link: destUrl,
                 message: primaryText || headline,
@@ -589,6 +637,7 @@ export default async function handler(req, res) {
             name: `${adName} Creative`,
             object_story_spec: JSON.stringify({
               page_id: pageId,
+              ...(instagramUserId ? { instagram_user_id: instagramUserId } : {}),
               video_data: {
                 video_id: preUploadedVideoId,
                 message: primaryText || headline,
@@ -603,6 +652,7 @@ export default async function handler(req, res) {
             name: `${adName} Creative`,
             object_story_spec: JSON.stringify({
               page_id: pageId,
+              ...(instagramUserId ? { instagram_user_id: instagramUserId } : {}),
               link_data: {
                 image_hash: imageHash,
                 link: destUrl,

@@ -28,6 +28,7 @@ import {
 } from './launcher/shared';
 
 const LS_CONFIG = 'howl_launcher_config';
+const LS_SELECTED = 'howl_launcher_selected_items';
 
 const DRIVE_STEPS = [
   { key: 'drive_download', label: 'Download' },
@@ -68,6 +69,41 @@ function buildAdName({ creator, productId }) {
   const product = PRODUCTS.find(p => p.id === productId)?.name || productId || 'product';
   const c = (creator || 'creator').trim().replace(/\s+/g, '-');
   return `HOWL | UGC | ${c} | ${product} | ${todayISO()}`;
+}
+
+function assetLabel(item = {}) {
+  const name = item.source === 'drive'
+    ? (item.kind === 'pair' ? (item.folderName || item.name) : item.name)
+    : (item.name || item.title || 'Creative');
+  return String(name || 'Creative')
+    .replace(/\.[a-z0-9]{2,5}$/i, '')
+    .replace(/__LAUNCHED__.*$/i, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function cleanNamePart(value, fallback = 'NA') {
+  const cleaned = String(value || '')
+    .replace(/\.[a-z0-9]{2,5}$/i, '')
+    .replace(/[|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || fallback;
+}
+
+function applyNameTemplate(template, { creator, product, asset, date, source, index }) {
+  return String(template || '')
+    .replaceAll('{creator}', cleanNamePart(creator, 'Creator'))
+    .replaceAll('{product}', cleanNamePart(product, 'Product'))
+    .replaceAll('{asset}', cleanNamePart(asset, 'Asset'))
+    .replaceAll('{date}', cleanNamePart(date, todayISO()))
+    .replaceAll('{source}', cleanNamePart(source, 'Source'))
+    .replaceAll('{index}', String(index || 1).padStart(2, '0'))
+    .replace(/\s+\|/g, ' |')
+    .replace(/\|\s+/g, '| ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function destUrlFor(productId) {
@@ -132,6 +168,9 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     defaultProduct: PRODUCTS[0]?.id || '',
     defaultPixelId: import.meta.env.VITE_META_PIXEL_ID || '3577794072540304',
     defaultObjective: 'OUTCOME_SALES',
+    namingMode: 'batch_adsets',
+    adsetNameTemplate: 'HOWL | CT | {creator} | {asset} | {product} | {date}',
+    adNameTemplate: 'HOWL | AD | {creator} | {asset} | {product} | {date}',
   }));
   // Backfill the HOWL pixel for users whose localStorage config predates the field.
   useEffect(() => {
@@ -153,11 +192,14 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   const [selectedAdsetId, setSelectedAdsetId] = useState(() => ls('howl_launcher_adset', ''));
   const [newCampaign, setNewCampaign] = useState({ name: '', objective: 'OUTCOME_SALES', pixelId: '' });
   const [newAdset, setNewAdset] = useState({ name: '', budget: '50' });
+  const [batchAdsetBudget, setBatchAdsetBudget] = useState(() => ls('howl_launcher_batch_budget', '50'));
   const [creatingCampaign, setCreatingCampaign] = useState(false);
   const [creatingAdset, setCreatingAdset] = useState(false);
+  const [batchLaunching, setBatchLaunching] = useState(false);
 
   useEffect(() => { lsSet('howl_launcher_campaign', selectedCampaignId); }, [selectedCampaignId]);
   useEffect(() => { lsSet('howl_launcher_adset', selectedAdsetId); }, [selectedAdsetId]);
+  useEffect(() => { lsSet('howl_launcher_batch_budget', batchAdsetBudget); }, [batchAdsetBudget]);
 
   const loadCampaigns = async () => {
     setLoadingCampaigns(true);
@@ -219,29 +261,36 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId);
   const effectiveObjective = selectedCampaign?.objective || config.defaultObjective || 'OUTCOME_SALES';
 
-  const createAdset = async () => {
-    if (!selectedCampaignId || selectedCampaignId === '__new__') return alert('Pick a campaign first.');
-    if (!newAdset.name.trim()) return alert('Ad set name required.');
-    const budgetDollars = parseFloat(newAdset.budget);
-    if (!(budgetDollars > 0)) return alert('Daily budget must be greater than 0.');
+  const createAdsetRequest = async ({ name, budget, select = false }) => {
+    if (!selectedCampaignId || selectedCampaignId === '__new__') throw new Error('Pick a campaign first.');
+    if (!name.trim()) throw new Error('Ad set name required.');
+    const budgetDollars = parseFloat(budget);
+    if (!(budgetDollars > 0)) throw new Error('Daily budget must be greater than 0.');
     const pixelId = (config.defaultPixelId || '').trim();
     if (effectiveObjective === 'OUTCOME_SALES' && !pixelId) {
-      return alert('Pixel ID required for sales ad sets. Set Default Pixel ID in launcher settings.');
+      throw new Error('Pixel ID required for sales ad sets. Set Default Pixel ID in launcher settings.');
     }
+    const r = await fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      action: 'create_adset',
+      campaign_id: selectedCampaignId,
+      name: name.trim(),
+      daily_budget_dollars: budgetDollars,
+      objective: effectiveObjective,
+      pixel_id: pixelId,
+    }) });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error.message || d.error);
+    if (select) {
+      setSelectedAdsetId(d.id);
+    }
+    return d.id;
+  };
+
+  const createAdset = async () => {
     setCreatingAdset(true);
     try {
-      const r = await fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-        action: 'create_adset',
-        campaign_id: selectedCampaignId,
-        name: newAdset.name.trim(),
-        daily_budget_dollars: budgetDollars,
-        objective: effectiveObjective,
-        pixel_id: pixelId,
-      }) });
-      const d = await r.json();
-      if (d.error) throw new Error(d.error.message || d.error);
+      await createAdsetRequest({ name: newAdset.name, budget: newAdset.budget, select: true });
       await loadAdsets(selectedCampaignId);
-      setSelectedAdsetId(d.id);
       setNewAdset({ name: '', budget: '50' });
     } catch (err) {
       alert('Create ad set failed: ' + err.message);
@@ -342,6 +391,25 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     return [...driveRows, ...cartRows];
   }, [driveItems, cart]);
 
+  const [selectedItems, setSelectedItems] = useState(() => new Set(ls(LS_SELECTED, [])));
+  useEffect(() => {
+    const available = new Set(queue.map(item => item.unifiedId));
+    setSelectedItems(prev => {
+      const next = new Set([...prev].filter(id => available.has(id)));
+      lsSet(LS_SELECTED, [...next]);
+      return next;
+    });
+  }, [queue]);
+  const toggleSelected = (id) => {
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      lsSet(LS_SELECTED, [...next]);
+      return next;
+    });
+  };
+  const selectedQueue = useMemo(() => queue.filter(item => selectedItems.has(item.unifiedId)), [queue, selectedItems]);
+
   // ── per-item launch status / streaming timeline ───────────────────────
   const [statuses, setStatuses] = useState({}); // unifiedId -> { status, message, steps, currentStep }
   const [globalError, setGlobalError] = useState('');
@@ -357,11 +425,34 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   };
 
   // ── Drive launch (streams NDJSON from /api/drive/ugc) ─────────────────
-  const launchDriveItem = async (item) => {
+  const nameContext = (item, index = 1) => {
+    const id = item.unifiedId;
+    const m = meta[id] || {};
+    const product = PRODUCTS.find(p => p.id === m.productId)?.name || m.productId || 'Product';
+    return {
+      creator: m.creator || m.sourceLabel || (item.source === 'cart' ? 'Static Builder' : 'Creator'),
+      product,
+      asset: assetLabel(item),
+      date: todayISO(),
+      source: item.source === 'drive' ? 'Drive' : 'Cart',
+      index,
+    };
+  };
+
+  const buildNamesForItem = (item, index = 1) => {
+    const ctx = nameContext(item, index);
+    return {
+      adsetName: applyNameTemplate(config.adsetNameTemplate, ctx),
+      adName: applyNameTemplate(config.adNameTemplate, ctx) || buildAdName({ creator: ctx.creator, productId: meta[item.unifiedId]?.productId }),
+    };
+  };
+
+  const launchDriveItem = async (item, options = {}) => {
     const id = item.unifiedId;
     const m = meta[id] || {};
     const attribution = sourceConfig(m.sourceType || 'external_creator');
-    if (!selectedAdsetId || selectedAdsetId === '__new__') return setGlobalError('Pick an ad set first.');
+    const adsetId = options.adsetId || selectedAdsetId;
+    if (!adsetId || adsetId === '__new__') return setGlobalError('Pick an ad set first.');
     const productUrl = destUrlFor(m.productId);
     if (!productUrl) return setItemStatus(id, 'error', 'Selected product has no URL set in data/products.js');
     if (attribution.requiresCreator && !m.creatorId) return setItemStatus(id, 'error', 'Choose an exact creator record before launching creator UGC');
@@ -371,10 +462,10 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     setItemStatus(id, 'pushing', '');
     setStatuses(prev => ({ ...prev, [id]: { status: 'pushing', steps: {}, currentStep: null } }));
 
-    const adName = buildAdName({ creator: m.creator, productId: m.productId });
+    const adName = options.adName || buildNamesForItem(item, options.index || 1).adName;
     const body = {
       action: 'launch_meta_ad',
-      adsetId: selectedAdsetId,
+      adsetId,
       pageId: config.pageId.trim(),
       instagramUserId: (config.instagramUserId || '').trim(),
       destUrl: productUrl,
@@ -431,11 +522,12 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   };
 
   // ── Cart launch (3 calls to /api/meta) ────────────────────────────────
-  const launchCartItem = async (item) => {
+  const launchCartItem = async (item, options = {}) => {
     const id = item.unifiedId;
     const m = meta[id] || {};
     const attribution = sourceConfig(m.sourceType || (m.creatorId ? 'external_creator' : 'tool_generated'));
-    if (!selectedAdsetId || selectedAdsetId === '__new__') return setGlobalError('Pick an ad set first.');
+    const adsetId = options.adsetId || selectedAdsetId;
+    if (!adsetId || adsetId === '__new__') return setGlobalError('Pick an ad set first.');
     if (!config.pageId.trim()) return setGlobalError('Pick a Facebook Page.');
     const productUrl = destUrlFor(m.productId);
     if (!productUrl) return setItemStatus(id, 'error', 'Selected product has no URL set in data/products.js');
@@ -444,7 +536,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     if (attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim()) return setItemStatus(id, 'error', 'Add the internal/founder name before launching');
 
     setStatuses(prev => ({ ...prev, [id]: { status: 'pushing', steps: {}, currentStep: null } }));
-    const adName = buildAdName({ creator: m.creator || 'Static Builder', productId: m.productId });
+    const adName = options.adName || buildNamesForItem(item, options.index || 1).adName;
     const mimeType = item.type === 'video' ? 'video/mp4' : 'image';
     const hasFeedImage = !!(item.squareUrl || item.url);
     const isPairedImage = hasFeedImage && !!item.storyUrl && item.type !== 'video';
@@ -470,7 +562,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           headline: m.headline,
           primaryText: m.primaryText || m.headline,
           destUrl: productUrl,
-          adsetId: selectedAdsetId,
+          adsetId,
           pageId: config.pageId,
           instagramUserId: (config.instagramUserId || '').trim() || undefined,
           creator: m.creator || 'Static Builder',
@@ -538,7 +630,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           action: 'create_ad_from_creative',
           creativeId: cd.creativeId,
           adName,
-          adsetId: selectedAdsetId,
+          adsetId,
           headline: m.headline,
           primaryText: m.primaryText || m.headline,
           destUrl: productUrl,
@@ -562,7 +654,45 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     }
   };
 
-  const launch = (item) => item.source === 'drive' ? launchDriveItem(item) : launchCartItem(item);
+  const launch = (item, options = {}) => item.source === 'drive' ? launchDriveItem(item, options) : launchCartItem(item, options);
+
+  const canLaunchItem = (item) => {
+    const id = item.unifiedId;
+    const m = meta[id] || {};
+    const attribution = sourceConfig(m.sourceType || (item.source === 'drive' ? 'external_creator' : (m.creatorId ? 'external_creator' : 'tool_generated')));
+    if ((statuses[id] || {}).status === 'pushing') return false;
+    if (attribution.requiresCreator && !m.creatorId) return false;
+    if (attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim()) return false;
+    return true;
+  };
+
+  const launchSelected = async () => {
+    setGlobalError('');
+    const items = selectedQueue.filter(canLaunchItem);
+    if (!items.length) return setGlobalError('Select at least one launch-ready item.');
+    if (!selectedCampaignId || selectedCampaignId === '__new__') return setGlobalError('Pick a campaign first.');
+    if (!config.pageId.trim()) return setGlobalError('Pick a Facebook Page.');
+    const oneAdsetPerItem = config.namingMode !== 'existing_adset';
+    if (!oneAdsetPerItem && (!selectedAdsetId || selectedAdsetId === '__new__')) return setGlobalError('Pick an ad set or switch batch mode to one ad set per creative.');
+    setBatchLaunching(true);
+    try {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const names = buildNamesForItem(item, i + 1);
+        let adsetId = selectedAdsetId;
+        if (oneAdsetPerItem) {
+          setItemStatus(item.unifiedId, 'pushing', `Creating ad set: ${names.adsetName}`);
+          adsetId = await createAdsetRequest({ name: names.adsetName, budget: batchAdsetBudget, select: false });
+        }
+        await launch(item, { adsetId, adName: names.adName, index: i + 1 });
+      }
+      if (oneAdsetPerItem) await loadAdsets(selectedCampaignId);
+    } catch (err) {
+      setGlobalError(err.message);
+    } finally {
+      setBatchLaunching(false);
+    }
+  };
 
   // ── drive-only actions: hide from inbox, open in Drive ────────────────
   const hideDriveFile = async (fileId) => {
@@ -661,6 +791,33 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           </div>
         </div>
 
+        <div style={{ ...S.divider, margin: '16px 0' }} />
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(190px, .7fr) minmax(210px, 1fr) minmax(210px, 1fr) minmax(110px, .4fr)', gap: 10, alignItems: 'flex-end' }}>
+          <div>
+            <label style={S.label}>Launch structure</label>
+            <select style={S.select} value={config.namingMode || 'batch_adsets'} onChange={e => updateConfig({ namingMode: e.target.value })}>
+              <option value="batch_adsets">One new ad set per creative</option>
+              <option value="existing_adset">Use selected ad set</option>
+            </select>
+          </div>
+          <div>
+            <label style={S.label}>Ad set name template</label>
+            <input style={S.input} value={config.adsetNameTemplate || ''} onChange={e => updateConfig({ adsetNameTemplate: e.target.value })} />
+          </div>
+          <div>
+            <label style={S.label}>Ad name template</label>
+            <input style={S.input} value={config.adNameTemplate || ''} onChange={e => updateConfig({ adNameTemplate: e.target.value })} />
+          </div>
+          <div>
+            <label style={S.label}>Budget/ad set</label>
+            <input style={S.input} type="number" min="1" step="1" value={batchAdsetBudget} onChange={e => setBatchAdsetBudget(e.target.value)} disabled={(config.namingMode || 'batch_adsets') === 'existing_adset'} />
+          </div>
+        </div>
+        <div style={{ marginTop: 8, color: '#88857f', fontSize: 10 }}>
+          Tokens: {'{creator}'}, {'{asset}'}, {'{product}'}, {'{date}'}, {'{source}'}, {'{index}'}.
+        </div>
+
         {selectedCampaignId === '__new__' && (
           <div style={{ marginTop: 12, padding: 12, border: '1px dashed #dedbd3', borderRadius: 6 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 8, alignItems: 'flex-end' }}>
@@ -716,14 +873,31 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       />
 
       {/* QUEUE TOOLBAR */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '14px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '14px 0', flexWrap: 'wrap' }}>
         <button onClick={refreshDrive} disabled={loadingDrive} style={S.ghost}>
           {loadingDrive ? 'Refreshing…' : 'Refresh from Drive'}
+        </button>
+        <button onClick={() => {
+          const next = new Set(queue.map(item => item.unifiedId));
+          setSelectedItems(next);
+          lsSet(LS_SELECTED, [...next]);
+        }} style={S.ghost}>
+          Select all
+        </button>
+        <button onClick={() => {
+          setSelectedItems(new Set());
+          lsSet(LS_SELECTED, []);
+        }} style={S.ghost}>
+          Clear
+        </button>
+        <button onClick={launchSelected} disabled={batchLaunching || selectedQueue.length === 0} style={S.btn(batchLaunching || selectedQueue.length === 0)}>
+          {batchLaunching ? 'Launching…' : `Launch selected (${selectedQueue.length})`}
         </button>
         <div style={{ fontSize: 11, color: '#77746f' }}>
           {queue.length} item{queue.length === 1 ? '' : 's'} ·
           <span style={{ color: '#d84a17', marginLeft: 4 }}>{driveItems.length} Drive</span> ·
-          <span style={{ color: '#256b35', marginLeft: 4 }}>{cart.filter(c => c.metaStatus !== 'pushed').length} Cart</span>
+          <span style={{ color: '#256b35', marginLeft: 4 }}>{cart.filter(c => c.metaStatus !== 'pushed').length} Cart</span> ·
+          <span style={{ color: '#171717', marginLeft: 4 }}>{selectedQueue.length} selected</span>
         </div>
       </div>
 
@@ -750,9 +924,13 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           || missingSourceLabel;
 
         return (
-          <div key={id} style={S.card}>
+          <div key={id} style={{ ...S.card, borderColor: selectedItems.has(id) ? '#d84a17' : '#dedbd3', boxShadow: selectedItems.has(id) ? 'inset 3px 0 #d84a17' : 'none' }}>
             {/* THUMB COL */}
             <div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8, color: '#77746f', fontSize: 10, cursor: 'pointer' }}>
+                <input type="checkbox" checked={selectedItems.has(id)} onChange={() => toggleSelected(id)} style={{ accentColor: '#d84a17' }} />
+                Include
+              </label>
               {item.source === 'drive' ? (
                 item.kind === 'pair' ? (
                   <div style={{ position: 'relative', width: 140, height: 140 }}>
@@ -807,6 +985,16 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                       ? `${item.feed.mimeType} · ${item.feed.name} + ${item.story.name}`
                       : `${item.mimeType} · ${(parseInt(item.size || 0) / 1024 / 1024).toFixed(2)} MB`)
                   : (item.type || 'image')}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+                <div style={{ padding: '7px 8px', background: '#faf9f6', border: '1px solid #ebe8e1', borderRadius: 4, color: '#77746f', fontSize: 9, minWidth: 0 }}>
+                  <strong style={{ display: 'block', color: '#171717', fontSize: 10, marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{buildNamesForItem(item).adsetName}</strong>
+                  Ad set preview
+                </div>
+                <div style={{ padding: '7px 8px', background: '#faf9f6', border: '1px solid #ebe8e1', borderRadius: 4, color: '#77746f', fontSize: 9, minWidth: 0 }}>
+                  <strong style={{ display: 'block', color: '#171717', fontSize: 10, marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{buildNamesForItem(item).adName}</strong>
+                  Ad preview
+                </div>
               </div>
               <div style={S.row}>
                 <div>
