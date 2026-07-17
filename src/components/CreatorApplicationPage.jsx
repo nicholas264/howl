@@ -50,9 +50,9 @@ export default function CreatorApplicationPage() {
 
   if (status === 'complete') {
     return (
-      <main className="creator-apply-page">
+      <main className="creator-apply-page apply-complete-page">
         <section className="apply-success">
-          <img src="/logos/howl-horizontal-wht.png" alt="HOWL Campfires" />
+          <img src="/logos/howl-stacked-blk.png" alt="HOWL Campfires" />
           <span>Application received</span>
           <h1>Thanks for applying.</h1>
           <p>We will review your info and reach out if there is a fit for an upcoming creator brief.</p>
