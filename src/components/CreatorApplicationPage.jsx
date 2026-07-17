@@ -110,19 +110,25 @@ export default function CreatorApplicationPage() {
               <label>Turnaround time<input required placeholder="Example: 7 days" value={form.availability} onChange={event => update('availability', event.target.value)} /></label>
               <label>
                 Open to product for content?
-                <select required value={form.open_to_product_for_content} onChange={event => update('open_to_product_for_content', event.target.value)}>
-                  <option value="">Choose one</option>
-                  <option value="yes">Yes</option>
-                  <option value="no">No</option>
-                </select>
+                <small>Product for content means you are open to creating in exchange for free product instead of a paid fee.</small>
+                <span className="apply-select-wrap">
+                  <select required value={form.open_to_product_for_content} onChange={event => update('open_to_product_for_content', event.target.value)}>
+                    <option value="">Choose one</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </span>
               </label>
               <label>
                 Open to whitelisting?
-                <select required value={form.open_to_whitelisting} onChange={event => update('open_to_whitelisting', event.target.value)}>
-                  <option value="">Choose one</option>
-                  <option value="yes">Yes</option>
-                  <option value="no">No</option>
-                </select>
+                <small>Whitelisting means you allow HOWL to run paid ads through your social handle with approved content.</small>
+                <span className="apply-select-wrap">
+                  <select required value={form.open_to_whitelisting} onChange={event => update('open_to_whitelisting', event.target.value)}>
+                    <option value="">Choose one</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </span>
               </label>
             </div>
           </fieldset>
