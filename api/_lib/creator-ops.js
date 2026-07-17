@@ -105,6 +105,8 @@ async function createCreatorOpsTables(sql) {
       why_howl            TEXT,
       rate_expectations   TEXT,
       availability        TEXT,
+      open_to_product_for_content BOOLEAN,
+      open_to_whitelisting BOOLEAN,
       referral_source     TEXT,
       socials             JSONB NOT NULL DEFAULT '[]'::jsonb,
       enrichment          JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -126,6 +128,8 @@ async function createCreatorOpsTables(sql) {
   await sql`ALTER TABLE creator_applications ADD COLUMN IF NOT EXISTS enrichment JSONB NOT NULL DEFAULT '{}'::jsonb`;
   await sql`ALTER TABLE creator_applications ADD COLUMN IF NOT EXISTS review_scorecard JSONB NOT NULL DEFAULT '{}'::jsonb`;
   await sql`ALTER TABLE creator_applications ADD COLUMN IF NOT EXISTS audience_psychographics TEXT`;
+  await sql`ALTER TABLE creator_applications ADD COLUMN IF NOT EXISTS open_to_product_for_content BOOLEAN`;
+  await sql`ALTER TABLE creator_applications ADD COLUMN IF NOT EXISTS open_to_whitelisting BOOLEAN`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS creator_candidates (

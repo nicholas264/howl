@@ -1,11 +1,17 @@
 import { useState } from 'react';
 
 const INITIAL = {
-  name: '', email: '', phone: '', location: '', timezone: '', niche: '', strengths: '',
-  activities: '', audience_description: '', audience_psychographics: '', creator_experience: '',
-  why_howl: '', rate_expectations: '', availability: '', referral_source: '', instagram: '',
-  tiktok: '', youtube: '', other_social: '', sample_urls: '', age_confirmed: false,
-  consent_confirmed: false, website: '',
+  first_name: '',
+  last_name: '',
+  email: '',
+  instagram: '',
+  youtube: '',
+  rate_expectations: '',
+  availability: '',
+  open_to_product_for_content: '',
+  open_to_whitelisting: '',
+  consent_confirmed: false,
+  website: '',
 };
 
 export default function CreatorApplicationPage() {
@@ -15,6 +21,7 @@ export default function CreatorApplicationPage() {
   const [code, setCode] = useState('');
 
   const update = (key, value) => setForm(current => ({ ...current, [key]: value }));
+
   const submit = async event => {
     event.preventDefault();
     setStatus('submitting');
@@ -25,8 +32,10 @@ export default function CreatorApplicationPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
-          activities: form.activities.split(',').map(item => item.trim()).filter(Boolean),
-          sample_urls: form.sample_urls.split(/\n|,/).map(item => item.trim()).filter(Boolean),
+          name: `${form.first_name} ${form.last_name}`.trim(),
+          age_confirmed: true,
+          open_to_product_for_content: form.open_to_product_for_content === 'yes',
+          open_to_whitelisting: form.open_to_whitelisting === 'yes',
         }),
       });
       const data = await response.json();
@@ -45,8 +54,8 @@ export default function CreatorApplicationPage() {
         <section className="apply-success">
           <img src="/logos/howl-horizontal-wht.png" alt="HOWL Campfires" />
           <span>Application received</span>
-          <h1>Thanks for stepping into the circle.</h1>
-          <p>Our team reviews every application for creator fit, audience alignment, and upcoming campaign needs.</p>
+          <h1>Thanks for applying.</h1>
+          <p>We will review your info and reach out if there is a fit for an upcoming creator brief.</p>
           {code && <div><small>Reference</small><strong>{code}</strong></div>}
         </section>
       </main>
@@ -58,71 +67,67 @@ export default function CreatorApplicationPage() {
       <aside className="apply-story">
         <img src="/logos/howl-horizontal-wht.png" alt="HOWL Campfires" />
         <div>
-          <span>Creator network</span>
-          <h1>Make work people can feel.</h1>
-          <p>We partner with creators who live close to the product: camping, hunting, overlanding, outdoor cooking, backyards, events, and the rituals that bring people together.</p>
+          <span>Creator application</span>
+          <h1>Create with HOWL.</h1>
+          <p>Share the basics so we can match you to the right UGC brief, rate, timeline, and usage needs.</p>
         </div>
         <dl>
-          <div><dt>01</dt><dd>Real product use</dd></div>
-          <div><dt>02</dt><dd>Clear point of view</dd></div>
-          <div><dt>03</dt><dd>Reliable production</dd></div>
+          <div><dt>01</dt><dd>Simple intake</dd></div>
+          <div><dt>02</dt><dd>Clear rates</dd></div>
+          <div><dt>03</dt><dd>Fast matching</dd></div>
         </dl>
       </aside>
 
       <section className="apply-form-shell">
         <header>
           <span>Apply to create with HOWL</span>
-          <h2>Tell us what you make and why you make it.</h2>
-          <p>Specific beats polished. Share the work, activities, and audience that make you distinctly you.</p>
+          <h2>Creator basics</h2>
+          <p>Keep it simple. We only need enough to evaluate fit and start a conversation.</p>
         </header>
         <form onSubmit={submit}>
           <input className="apply-honeypot" tabIndex="-1" autoComplete="off" value={form.website} onChange={event => update('website', event.target.value)} />
           <fieldset>
-            <legend><b>01</b> Basics</legend>
+            <legend><b>01</b> Contact</legend>
             <div className="apply-grid">
-              <label className="wide">Name<input required value={form.name} onChange={event => update('name', event.target.value)} /></label>
-              <label>Email<input required type="email" value={form.email} onChange={event => update('email', event.target.value)} /></label>
-              <label>Phone<input value={form.phone} onChange={event => update('phone', event.target.value)} /></label>
-              <label>Location<input required placeholder="City, State" value={form.location} onChange={event => update('location', event.target.value)} /></label>
-              <label>Timezone<input placeholder="Mountain, Central..." value={form.timezone} onChange={event => update('timezone', event.target.value)} /></label>
+              <label>First name<input required autoComplete="given-name" value={form.first_name} onChange={event => update('first_name', event.target.value)} /></label>
+              <label>Last name<input required autoComplete="family-name" value={form.last_name} onChange={event => update('last_name', event.target.value)} /></label>
+              <label className="wide">Email<input required type="email" autoComplete="email" value={form.email} onChange={event => update('email', event.target.value)} /></label>
             </div>
           </fieldset>
 
           <fieldset>
-            <legend><b>02</b> Your world</legend>
+            <legend><b>02</b> Social</legend>
             <div className="apply-grid">
-              <label className="wide">Creator niche<input required placeholder="Outdoor cooking, overlanding, hunting..." value={form.niche} onChange={event => update('niche', event.target.value)} /></label>
-              <label className="wide">Activities<input placeholder="Comma-separated" value={form.activities} onChange={event => update('activities', event.target.value)} /></label>
-              <label className="wide">What are you strongest at?<textarea required rows="3" value={form.strengths} onChange={event => update('strengths', event.target.value)} /></label>
-              <label className="wide">Who follows you and what do they care about?<textarea rows="3" value={form.audience_description} onChange={event => update('audience_description', event.target.value)} /></label>
-              <label className="wide">What does your audience believe, want, avoid, or aspire to?<textarea rows="3" value={form.audience_psychographics} onChange={event => update('audience_psychographics', event.target.value)} /></label>
+              <label>Instagram handle<input placeholder="@handle" value={form.instagram} onChange={event => update('instagram', event.target.value)} /></label>
+              <label>YouTube handle<input placeholder="@channel or channel URL" value={form.youtube} onChange={event => update('youtube', event.target.value)} /></label>
             </div>
           </fieldset>
 
           <fieldset>
-            <legend><b>03</b> Work</legend>
+            <legend><b>03</b> Terms</legend>
             <div className="apply-grid">
-              <label>Instagram<input placeholder="@handle" value={form.instagram} onChange={event => update('instagram', event.target.value)} /></label>
-              <label>TikTok<input placeholder="@handle" value={form.tiktok} onChange={event => update('tiktok', event.target.value)} /></label>
-              <label>YouTube<input placeholder="Channel URL" value={form.youtube} onChange={event => update('youtube', event.target.value)} /></label>
-              <label>Other social<input placeholder="Profile URL" value={form.other_social} onChange={event => update('other_social', event.target.value)} /></label>
-              <label className="wide">Best examples of your work<textarea required rows="3" placeholder="One URL per line" value={form.sample_urls} onChange={event => update('sample_urls', event.target.value)} /></label>
-              <label className="wide">Creator experience<textarea rows="3" placeholder="Brand work, production setup, editing capabilities..." value={form.creator_experience} onChange={event => update('creator_experience', event.target.value)} /></label>
-            </div>
-          </fieldset>
-
-          <fieldset>
-            <legend><b>04</b> Fit</legend>
-            <div className="apply-grid">
-              <label className="wide">Why HOWL?<textarea required rows="4" value={form.why_howl} onChange={event => update('why_howl', event.target.value)} /></label>
-              <label>Rate expectations<input placeholder="Per video or package" value={form.rate_expectations} onChange={event => update('rate_expectations', event.target.value)} /></label>
-              <label>Availability<input placeholder="Typical turnaround" value={form.availability} onChange={event => update('availability', event.target.value)} /></label>
-              <label className="wide">How did you hear about us?<input value={form.referral_source} onChange={event => update('referral_source', event.target.value)} /></label>
+              <label>Rate<input required placeholder="$ per video or package" value={form.rate_expectations} onChange={event => update('rate_expectations', event.target.value)} /></label>
+              <label>Turnaround time<input required placeholder="Example: 7 days" value={form.availability} onChange={event => update('availability', event.target.value)} /></label>
+              <label>
+                Open to product for content?
+                <select required value={form.open_to_product_for_content} onChange={event => update('open_to_product_for_content', event.target.value)}>
+                  <option value="">Choose one</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </label>
+              <label>
+                Open to whitelisting?
+                <select required value={form.open_to_whitelisting} onChange={event => update('open_to_whitelisting', event.target.value)}>
+                  <option value="">Choose one</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </label>
             </div>
           </fieldset>
 
           <div className="apply-consent">
-            <label><input required type="checkbox" checked={form.age_confirmed} onChange={event => update('age_confirmed', event.target.checked)} /> I confirm I am at least 18 years old.</label>
             <label><input required type="checkbox" checked={form.consent_confirmed} onChange={event => update('consent_confirmed', event.target.checked)} /> I consent to HOWL storing this information to evaluate and contact me about creator opportunities.</label>
           </div>
           {error && <div className="apply-error">{error}</div>}

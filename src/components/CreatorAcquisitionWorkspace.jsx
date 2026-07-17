@@ -36,7 +36,15 @@ function socialUrl(account) {
 
 function readiness(record) {
   const social = socialLine(record);
-  const checks = [
+  const checks = record.application_code ? [
+    ['Identity', record.name],
+    ['Contact', record.email],
+    ['Social profile', social?.handle],
+    ['Rates', record.rate_expectations],
+    ['Turnaround', record.availability],
+    ['Product terms', record.open_to_product_for_content !== null && record.open_to_product_for_content !== undefined],
+    ['Whitelisting', record.open_to_whitelisting !== null && record.open_to_whitelisting !== undefined],
+  ] : [
     ['Identity', record.name],
     ['Contact', record.email],
     ['Social profile', social?.handle],
@@ -442,6 +450,9 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
               {selected.creator_experience && <div><dt>Experience</dt><dd>{selected.creator_experience}</dd></div>}
               {selected.fit_notes && <div><dt>Scout note</dt><dd>{selected.fit_notes}</dd></div>}
               {selected.rate_expectations && <div><dt>Rates</dt><dd>{selected.rate_expectations}</dd></div>}
+              {selected.availability && <div><dt>Turnaround</dt><dd>{selected.availability}</dd></div>}
+              {selected.open_to_product_for_content !== null && selected.open_to_product_for_content !== undefined && <div><dt>Product for content</dt><dd>{selected.open_to_product_for_content ? 'Open' : 'Not open'}</dd></div>}
+              {selected.open_to_whitelisting !== null && selected.open_to_whitelisting !== undefined && <div><dt>Whitelisting</dt><dd>{selected.open_to_whitelisting ? 'Open' : 'Not open'}</dd></div>}
             </dl>
             {(selected.socials || []).length > 0 && (
               <div className="talent-links">

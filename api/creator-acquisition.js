@@ -127,6 +127,8 @@ async function promote(sql, access, sourceType, record) {
     acquisition_review: record.review_scorecard || {},
     application_why_howl: record.why_howl || null,
     application_availability: record.availability || null,
+    application_open_to_product_for_content: record.open_to_product_for_content,
+    application_open_to_whitelisting: record.open_to_whitelisting,
     application_referral_source: record.referral_source || null,
     application_sample_urls: Array.isArray(record.sample_urls) ? record.sample_urls : [],
     review_notes: record.review_notes || null,

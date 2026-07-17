@@ -28,6 +28,10 @@ function social(platform, value) {
   return handle ? { platform, handle } : null;
 }
 
+function bool(value) {
+  return value === true || value === 'true' || value === 'yes';
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
   if (process.env.CREATOR_APPLICATIONS_ENABLED === 'false') {
@@ -35,7 +39,10 @@ export default async function handler(req, res) {
   }
   if (text(req.body?.website, 500)) return res.status(201).json({ ok: true });
 
-  const name = text(req.body?.name, 200);
+  const firstName = text(req.body?.first_name, 100);
+  const lastName = text(req.body?.last_name, 100);
+  const fallbackName = text(req.body?.name, 200);
+  const name = [firstName, lastName].filter(Boolean).join(' ') || fallbackName;
   const email = text(req.body?.email, 320)?.toLowerCase();
   if (!name || !email || !email.includes('@')) {
     return res.status(400).json({ error: 'Name and a valid email are required.' });
@@ -77,21 +84,18 @@ export default async function handler(req, res) {
     }
 
     const socials = [
-      social('instagram', req.body?.instagram),
-      social('tiktok', req.body?.tiktok),
-      social('youtube', req.body?.youtube),
-      social('other', req.body?.other_social),
+      social('instagram', req.body?.instagram || req.body?.ig_handle),
+      social('youtube', req.body?.youtube || req.body?.youtube_handle),
     ].filter(Boolean);
+    if (!socials.length) return res.status(400).json({ error: 'Add an Instagram or YouTube handle.' });
     const sampleUrls = urls(req.body?.sample_urls);
-    if (!sampleUrls.length) {
-      return res.status(400).json({ error: 'Add at least one valid HTTPS work sample.' });
-    }
     const applicationCode = `HOWL-${randomBytes(4).toString('hex').toUpperCase()}`;
     await sql`
       INSERT INTO creator_applications (
         application_code, name, email, phone, location, timezone, niche, strengths,
         activities, audience_description, audience_psychographics, creator_experience, why_howl,
-        rate_expectations, availability, referral_source, socials, sample_urls,
+        rate_expectations, availability, open_to_product_for_content, open_to_whitelisting,
+        referral_source, socials, sample_urls,
         age_confirmed, consent_confirmed, ip_hash
       ) VALUES (
         ${applicationCode}, ${name}, ${email}, ${text(req.body?.phone, 100)},
@@ -101,6 +105,7 @@ export default async function handler(req, res) {
         ${text(req.body?.audience_psychographics, 2000)},
         ${text(req.body?.creator_experience, 3000)}, ${text(req.body?.why_howl, 3000)},
         ${text(req.body?.rate_expectations, 1000)}, ${text(req.body?.availability, 1000)},
+        ${bool(req.body?.open_to_product_for_content)}, ${bool(req.body?.open_to_whitelisting)},
         ${text(req.body?.referral_source, 500)}, ${JSON.stringify(socials)}::jsonb,
         ${sampleUrls}, true, true, ${ipHash}
       )
