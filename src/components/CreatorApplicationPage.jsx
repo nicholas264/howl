@@ -6,6 +6,7 @@ const INITIAL = {
   email: '',
   instagram: '',
   youtube: '',
+  sample_urls: '',
   rate_expectations: '',
   availability: '',
   open_to_product_for_content: '',
@@ -34,6 +35,7 @@ export default function CreatorApplicationPage() {
           ...form,
           name: `${form.first_name} ${form.last_name}`.trim(),
           age_confirmed: true,
+          sample_urls: [form.sample_urls.trim()].filter(Boolean),
           open_to_product_for_content: form.open_to_product_for_content === 'yes',
           open_to_whitelisting: form.open_to_whitelisting === 'yes',
         }),
@@ -100,6 +102,7 @@ export default function CreatorApplicationPage() {
             <div className="apply-grid">
               <label>Instagram handle<input placeholder="@handle" value={form.instagram} onChange={event => update('instagram', event.target.value)} /></label>
               <label>YouTube handle<input placeholder="@channel or channel URL" value={form.youtube} onChange={event => update('youtube', event.target.value)} /></label>
+              <label className="wide">Past creative work or UGC link<input required type="url" placeholder="https://..." value={form.sample_urls} onChange={event => update('sample_urls', event.target.value)} /></label>
             </div>
           </fieldset>
 
