@@ -288,6 +288,50 @@ export default function CreatorWorkspace({
     title: agreementPreview(agreement.title, selected, selectedEngagement),
     body: agreementPreview(agreement.agreement_body, selected, selectedEngagement),
   }), [agreement.title, agreement.agreement_body, selected, selectedEngagement]);
+  const selectedPrimarySocial = useMemo(
+    () => strongestSocial(selected?.social_accounts || []),
+    [selected?.social_accounts],
+  );
+  const creatorSignalCards = useMemo(() => {
+    if (!selected) return [];
+    const spend = Number(selected.performance?.spend || 0);
+    const revenue = Number(selected.performance?.revenue || 0);
+    const latestMessage = workflow.outreach?.[0];
+    const nextFollowUp = workflow.outreach
+      ?.map(item => item.next_follow_up_at)
+      .filter(Boolean)
+      .sort((a, b) => new Date(a) - new Date(b))[0];
+    return [
+      {
+        label: 'Audience',
+        value: displayMetric(selectedPrimarySocial?.followers),
+        detail: selectedPrimarySocial?.handle
+          ? `@${selectedPrimarySocial.handle.replace(/^@/, '')}`
+          : selectedPrimarySocial?.platform || 'No social profile',
+      },
+      {
+        label: 'Fit',
+        value: selected.niche || selected.tags?.[0] || 'Unscored',
+        detail: selected.strengths || selected.activities?.slice(0, 2).join(', ') || 'Add creator strengths',
+      },
+      {
+        label: 'Performance',
+        value: spend > 0 ? `${(revenue / spend).toFixed(2)}x` : 'No spend',
+        detail: `${selected.launch_count || 0} launches · $${spend.toLocaleString(undefined, { maximumFractionDigits: 0 })} spend`,
+      },
+      {
+        label: 'Comms',
+        value: latestMessage
+          ? (latestMessage.direction === 'inbound' ? 'Replied' : latestMessage.status)
+          : 'No outreach',
+        detail: nextFollowUp
+          ? `Follow up ${new Date(nextFollowUp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+          : latestMessage
+            ? new Date(latestMessage.sent_at || latestMessage.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+            : 'Start the thread',
+      },
+    ];
+  }, [selected, selectedPrimarySocial, workflow.outreach]);
 
   const openCreator = async (creator, targetTab = 'profile') => {
     setError('');
@@ -1164,6 +1208,15 @@ export default function CreatorWorkspace({
                 </select>
               </label>
             </div>
+            <div className="creator-signal-strip">
+              {creatorSignalCards.map(card => (
+                <div key={card.label}>
+                  <span>{card.label}</span>
+                  <strong title={card.value}>{card.value}</strong>
+                  <small title={card.detail}>{card.detail}</small>
+                </div>
+              ))}
+            </div>
             {workflow.guidance?.next_action && (
               <section className={`creator-next-action ${workflow.guidance.next_action.urgent ? 'urgent' : ''} ${workflow.guidance.next_action.waiting ? 'waiting' : ''}`}>
                 <div className="creator-lifecycle">
@@ -1203,9 +1256,17 @@ export default function CreatorWorkspace({
             </div>
 
             <div className="creator-detail-tabs">
-              {['profile', 'products', 'agreements', 'briefs', 'outreach', 'deliverables', 'performance'].map(tab => (
+              {[
+                ['profile', 'Profile'],
+                ['products', 'Products'],
+                ['agreements', 'Terms'],
+                ['briefs', `Briefs${workflow.briefs.length ? ` ${workflow.briefs.length}` : ''}`],
+                ['outreach', 'Comms'],
+                ['deliverables', 'Assets'],
+                ['performance', 'Results'],
+              ].map(([tab, label]) => (
                 <button key={tab} className={detailTab === tab ? 'active' : ''} onClick={() => setDetailTab(tab)}>
-                  {tab}{tab === 'briefs' && workflow.briefs.length ? ` ${workflow.briefs.length}` : ''}
+                  {label}
                 </button>
               ))}
             </div>
@@ -1590,7 +1651,7 @@ export default function CreatorWorkspace({
               <section className="creator-detail-section workflow-section">
                 {canWriteBriefs && (
                   <form className="workflow-form" onSubmit={saveOutreach}>
-                    <div className="detail-section-head"><span>Outreach</span><small>Email connection is credential-ready</small></div>
+                    <div className="detail-section-head"><span>Creator conversation</span><small>{gmailConnected ? 'Gmail send + reply sync ready' : 'Connect Gmail to send and sync'}</small></div>
                     <div className="workflow-two">
                       <select value={outreach.channel} onChange={event => setOutreach({ ...outreach, channel: event.target.value })}><option value="email">Email</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="phone">Phone</option></select>
                       <select value={outreach.status} onChange={event => setOutreach({ ...outreach, status: event.target.value })}><option value="draft">Save draft</option><option value="sent">Mark sent</option></select>
@@ -1610,9 +1671,9 @@ export default function CreatorWorkspace({
                     </div>
                   </form>
                 )}
-                <div className="workflow-list">
+                <div className="workflow-list outreach-thread">
                   {workflow.outreach.map(message => (
-                    <article className="workflow-card outreach-card" key={message.id}>
+                    <article className={`workflow-card outreach-card ${message.direction === 'inbound' ? 'inbound' : 'outbound'}`} key={message.id}>
                       <header>
                         <span>
                           <strong>{message.direction === 'inbound' ? `Reply: ${message.subject || message.channel}` : message.subject || `${message.channel} outreach`}</strong>
