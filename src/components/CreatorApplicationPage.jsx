@@ -70,14 +70,12 @@ export default function CreatorApplicationPage() {
         <img src="/logos/howl-horizontal-wht.png" alt="HOWL Campfires" />
         <div>
           <span>Creator application</span>
-          <h1>Create with HOWL.</h1>
-          <p>Share the basics so we can match you to the right UGC brief, rate, timeline, and usage needs.</p>
+          <h1>Howdy!</h1>
+          <p>Thanks for your interest in being a content creator for HOWL.</p>
+          <p>We're excited to potentially have your help sharing what’s good about HOWL and inviting folks to the campfire through your unique perspective & personality.</p>
+          <p>Please fill out this application so we can learn more about you. We'll reach out with next steps if you're a fit!</p>
+          <p>Keep carrying the fire,<br />-- Randall, Alex, Kelly, and Nicholas (the founders)</p>
         </div>
-        <dl>
-          <div><dt>01</dt><dd>Simple intake</dd></div>
-          <div><dt>02</dt><dd>Clear rates</dd></div>
-          <div><dt>03</dt><dd>Fast matching</dd></div>
-        </dl>
       </aside>
 
       <section className="apply-form-shell">
