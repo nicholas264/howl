@@ -32,6 +32,9 @@ async function createCreatorOpsTables(sql) {
       shipping_postal_code TEXT,
       shipping_country_code TEXT NOT NULL DEFAULT 'US',
       product_seeding_required BOOLEAN NOT NULL DEFAULT true,
+      archived_at         TIMESTAMPTZ,
+      archived_by         TEXT,
+      archive_reason      TEXT,
       created_by          TEXT,
       created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -52,6 +55,11 @@ async function createCreatorOpsTables(sql) {
   await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS shipping_postal_code TEXT`;
   await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS shipping_country_code TEXT NOT NULL DEFAULT 'US'`;
   await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS product_seeding_required BOOLEAN NOT NULL DEFAULT true`;
+  await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS archived_by TEXT`;
+  await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS archive_reason TEXT`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creators_active_stage ON creators(stage) WHERE archived_at IS NULL`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creators_archived_at ON creators(archived_at) WHERE archived_at IS NOT NULL`;
   await sql`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_creators_source_external
     ON creators(source, source_external_id)

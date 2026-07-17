@@ -12,6 +12,7 @@ async function loadSetup(sql) {
         count(*)::int AS count
       FROM creators
       WHERE source_metadata->>'clickup_status' IS NOT NULL
+        AND archived_at IS NULL
       GROUP BY source_metadata->>'clickup_status', stage, status
       ORDER BY count(*) DESC
     `,
@@ -19,6 +20,7 @@ async function loadSetup(sql) {
       SELECT
         count(*) FILTER (
           WHERE status <> 'inactive' AND stage <> 'alumni'
+            AND archived_at IS NULL
             AND stage IN ('interested', 'briefing', 'producing', 'active')
             AND (
               email IS NULL OR niche IS NULL OR strengths IS NULL
@@ -27,12 +29,14 @@ async function loadSetup(sql) {
         )::int AS priority_profile_gaps,
         count(*) FILTER (
           WHERE source = 'clickup' AND email IS NULL
+            AND archived_at IS NULL
         )::int AS clickup_missing_email,
         (
           SELECT count(*)::int FROM (
             SELECT lower(email)
             FROM creators
             WHERE email IS NOT NULL
+              AND archived_at IS NULL
             GROUP BY lower(email)
             HAVING count(*) > 1
             UNION ALL
@@ -280,7 +284,8 @@ export default async function handler(req, res) {
       const statuses = await sql`
         SELECT DISTINCT source_metadata->>'clickup_status' AS raw_status
         FROM creators
-        WHERE source_metadata->>'clickup_status' IS NOT NULL
+        WHERE archived_at IS NULL
+          AND source_metadata->>'clickup_status' IS NOT NULL
       `;
       let updated = 0;
       for (const row of statuses) {
@@ -298,6 +303,7 @@ export default async function handler(req, res) {
             })}::jsonb,
             updated_at = now()
           WHERE source_metadata->>'clickup_status' = ${row.raw_status}
+            AND archived_at IS NULL
             AND (stage <> ${mapping.stage} OR status <> ${mapping.status})
           RETURNING id
         `;
@@ -475,7 +481,7 @@ export default async function handler(req, res) {
           ORDER BY d.completed_at DESC NULLS LAST, d.updated_at DESC
           LIMIT 1
         ) launch_queue ON true
-        WHERE c.status <> 'inactive' AND c.stage <> 'alumni'
+        WHERE c.status <> 'inactive' AND c.stage <> 'alumni' AND c.archived_at IS NULL
       ),
       classified AS (
         SELECT *,

@@ -201,6 +201,7 @@ export default async function handler(req, res) {
                 THEN e.asset_commitment ELSE 0 END), 0)::float AS oneoff_assets
             FROM creators c
             LEFT JOIN creator_engagements e ON e.creator_id = c.id
+            WHERE c.archived_at IS NULL
             GROUP BY c.id, c.stage
           ),
           deliv AS (
@@ -256,6 +257,7 @@ export default async function handler(req, res) {
       }
       const search = text(req.query.search, 200);
       const stage = STAGES.has(req.query.stage) ? req.query.stage : null;
+      const archived = req.query.archived === 'true';
       const rows = await sql`
         WITH attributed_groups AS (
           SELECT a.creator_id, cp.group_key, max(cp.created_time) AS last_launch_at
@@ -301,7 +303,9 @@ export default async function handler(req, res) {
         LEFT JOIN creator_rollups rollup ON rollup.creator_id = c.id
         WHERE (${search}::text IS NULL OR c.name ILIKE ${search ? `%${search}%` : null} OR c.email ILIKE ${search ? `%${search}%` : null})
           AND (${stage}::text IS NULL OR c.stage = ${stage})
+          AND (${archived}::boolean = (c.archived_at IS NOT NULL))
         ORDER BY
+          c.archived_at DESC NULLS LAST,
           next_follow_up_at ASC NULLS LAST,
           CASE c.stage
             WHEN 'active' THEN 1 WHEN 'producing' THEN 2 WHEN 'briefing' THEN 3
@@ -387,6 +391,46 @@ export default async function handler(req, res) {
 
       const current = await creatorDetail(sql, id);
       if (!current) return res.status(404).json({ error: 'Creator not found' });
+      if (body.action === 'archive') {
+        const reason = text(body.reason, 1000) || 'Archived from creator database cleanup';
+        await sql`
+          UPDATE creators
+          SET archived_at = COALESCE(archived_at, now()),
+              archived_by = ${access.userId},
+              archive_reason = ${reason},
+              status = 'inactive',
+              updated_at = now()
+          WHERE id = ${id}
+        `;
+        await sql`
+          INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+          VALUES (
+            ${id}, 'creator_archived', ${`Creator archived: ${reason}`},
+            ${JSON.stringify({ reason })}::jsonb, ${access.userId}
+          )
+        `;
+        return res.json({ creator: await creatorDetail(sql, id) });
+      }
+      if (body.action === 'restore') {
+        await sql`
+          UPDATE creators
+          SET archived_at = NULL,
+              archived_by = NULL,
+              archive_reason = NULL,
+              status = CASE WHEN status = 'inactive' THEN 'prospect' ELSE status END,
+              updated_at = now()
+          WHERE id = ${id}
+        `;
+        await sql`
+          INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+          VALUES (
+            ${id}, 'creator_restored', 'Creator restored from archive',
+            ${JSON.stringify({ previous_archive_reason: current.archive_reason || null })}::jsonb,
+            ${access.userId}
+          )
+        `;
+        return res.json({ creator: await creatorDetail(sql, id) });
+      }
       const stage = body.stage === undefined ? current.stage : (STAGES.has(body.stage) ? body.stage : current.stage);
       const status = body.status === undefined ? current.status : (STATUSES.has(body.status) ? body.status : current.status);
       const [updated] = await sql`

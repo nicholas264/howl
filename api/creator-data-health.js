@@ -6,7 +6,7 @@ function normalizeHandle(value) {
 }
 
 async function loadHealth(sql) {
-  const [summaryRows, emailRows, socialRows, gapRows] = await Promise.all([
+  const [summaryRows, emailRows, socialRows, gapRows, archiveRows] = await Promise.all([
     sql`
       SELECT
         count(*)::int AS total,
@@ -31,6 +31,7 @@ async function loadHealth(sql) {
         )::numeric / 7 * 100))::int, 0) AS average_completeness
       FROM creators
       WHERE status <> 'inactive'
+        AND archived_at IS NULL
     `,
     sql`
       SELECT lower(email) AS match_key,
@@ -43,6 +44,7 @@ async function loadHealth(sql) {
         ) ORDER BY updated_at DESC) AS records
       FROM creators
       WHERE email IS NOT NULL
+        AND archived_at IS NULL
       GROUP BY lower(email)
       HAVING count(*) > 1
       ORDER BY count(*) DESC, lower(email)
@@ -71,6 +73,7 @@ async function loadHealth(sql) {
         ON s.platform = d.platform
         AND lower(regexp_replace(trim(s.handle), '^@', '')) = d.match_key
       JOIN creators c ON c.id = s.creator_id
+      WHERE c.archived_at IS NULL
       GROUP BY d.platform, d.match_key
       ORDER BY count(DISTINCT c.id) DESC, d.platform, d.match_key
     `,
@@ -100,6 +103,7 @@ async function loadHealth(sql) {
         ) AS complete_fields
       FROM creators c
       WHERE c.status <> 'inactive'
+        AND c.archived_at IS NULL
       ORDER BY complete_fields ASC,
         CASE c.stage
           WHEN 'active' THEN 0 WHEN 'producing' THEN 1 WHEN 'briefing' THEN 2
@@ -108,9 +112,44 @@ async function loadHealth(sql) {
         c.updated_at DESC
       LIMIT 150
     `,
+    sql`
+      SELECT c.id, c.name, c.email, c.stage, c.status, c.location, c.avatar_url,
+        c.source, c.source_external_id, c.archived_at, c.archive_reason,
+        c.source_metadata->>'clickup_status' AS clickup_status,
+        COALESCE((
+          SELECT json_build_object(
+            'platform', s.platform, 'handle', s.handle, 'followers', s.followers
+          )
+          FROM creator_social_accounts s
+          WHERE s.creator_id = c.id
+          ORDER BY s.followers DESC NULLS LAST
+          LIMIT 1
+        ), '{}'::json) AS primary_social,
+        (
+          SELECT count(*)::int FROM creator_activity a WHERE a.creator_id = c.id
+        ) AS relationship_count
+      FROM creators c
+      WHERE c.archived_at IS NOT NULL
+      ORDER BY c.archived_at DESC
+      LIMIT 300
+    `,
   ]);
 
-  const summary = summaryRows[0] || {};
+  const [archiveSummary] = await sql`
+    SELECT
+      count(*) FILTER (WHERE archived_at IS NOT NULL)::int AS archived_total,
+      count(*) FILTER (
+        WHERE archived_at IS NULL
+          AND (
+            source IN ('clickup', 'clickup_import')
+            OR source_metadata->>'clickup_status' IS NOT NULL
+            OR source_metadata->>'clickup_url' IS NOT NULL
+          )
+      )::int AS legacy_import_candidates
+    FROM creators
+  `;
+
+  const summary = { ...(summaryRows[0] || {}), ...(archiveSummary || {}) };
   const duplicateGroups = [
     ...emailRows.map(group => ({
       type: 'email', platform: 'email', match_key: group.match_key, records: group.records,
@@ -138,7 +177,62 @@ async function loadHealth(sql) {
         !row.rate_notes && 'Rates',
       ].filter(Boolean),
     })),
+    archived_creators: archiveRows,
   };
+}
+
+async function archiveLegacyImports(sql, access, reason) {
+  const archiveReason = reason || 'Archived legacy ClickUp/imported creator data for clean database reset';
+  const archived = await sql`
+    UPDATE creators
+    SET archived_at = now(),
+        archived_by = ${access.userId},
+        archive_reason = ${archiveReason},
+        status = 'inactive',
+        updated_at = now()
+    WHERE archived_at IS NULL
+      AND (
+        source IN ('clickup', 'clickup_import')
+        OR source_metadata->>'clickup_status' IS NOT NULL
+        OR source_metadata->>'clickup_url' IS NOT NULL
+      )
+    RETURNING id, name
+  `;
+  if (archived.length) {
+    await sql`
+      INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+      SELECT id, 'creator_archived', ${`Creator archived: ${archiveReason}`},
+        ${JSON.stringify({ reason: archiveReason, batch_action: 'archive_legacy_imports' })}::jsonb,
+        ${access.userId}
+      FROM (SELECT unnest(${archived.map(item => item.id)}::bigint[]) AS id) archived_ids
+    `;
+  }
+  return { count: archived.length, creators: archived.slice(0, 20) };
+}
+
+async function restoreCreator(sql, access, creatorId) {
+  const [creator] = await sql`
+    SELECT id, archive_reason FROM creators
+    WHERE id = ${creatorId} AND archived_at IS NOT NULL
+  `;
+  if (!creator) throw new Error('Archived creator not found.');
+  await sql`
+    UPDATE creators
+    SET archived_at = NULL,
+        archived_by = NULL,
+        archive_reason = NULL,
+        status = CASE WHEN status = 'inactive' THEN 'prospect' ELSE status END,
+        updated_at = now()
+    WHERE id = ${creatorId}
+  `;
+  await sql`
+    INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+    VALUES (
+      ${creatorId}, 'creator_restored', 'Creator restored from archive',
+      ${JSON.stringify({ previous_archive_reason: creator.archive_reason || null })}::jsonb,
+      ${access.userId}
+    )
+  `;
 }
 
 async function mergeCreators(sql, access, primaryId, duplicateId) {
@@ -256,7 +350,25 @@ export default async function handler(req, res) {
   try {
     await ensureCreatorOpsTables(sql);
     if (req.method === 'GET') return res.json(await loadHealth(sql));
-    if (req.method !== 'POST' || req.body?.action !== 'merge') return res.status(405).end();
+    if (req.method !== 'POST') return res.status(405).end();
+
+    if (req.body?.action === 'archive_legacy_imports') {
+      const expectedConfirmation = 'ARCHIVE LEGACY CREATORS';
+      if (req.body?.confirmation !== expectedConfirmation) {
+        return res.status(400).json({ error: `Type ${expectedConfirmation} to confirm this archive.` });
+      }
+      const archive = await archiveLegacyImports(sql, access, req.body?.reason);
+      return res.json({ ok: true, archive, health: await loadHealth(sql) });
+    }
+
+    if (req.body?.action === 'restore') {
+      const creatorId = Number(req.body?.creator_id);
+      if (!creatorId) return res.status(400).json({ error: 'creator_id required' });
+      await restoreCreator(sql, access, creatorId);
+      return res.json({ ok: true, health: await loadHealth(sql) });
+    }
+
+    if (req.body?.action !== 'merge') return res.status(405).end();
 
     const primaryId = Number(req.body?.primary_id);
     const duplicateId = Number(req.body?.duplicate_id);
