@@ -248,8 +248,8 @@ export default function MapMonitorWorkspace({ canManage = false }) {
     <section className="workspace-page map-monitor-workspace">
       <header className="workspace-head">
         <div>
-          <span className="workspace-kicker">Dealer MAP Monitor</span>
-          <h1>Price Watch</h1>
+          <span className="workspace-kicker">MAP Policy Monitor</span>
+          <h1>Dealer Price Watch</h1>
           <p>Daily R1 dealer scans use the dealer registry, resolve websites automatically, verify product-page pricing, and flag only below-MAP evidence that needs follow-up.</p>
         </div>
         {canManage && (

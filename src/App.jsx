@@ -167,10 +167,15 @@ export default function HowlAdEngine({ appAccess }) {
 
   const NAV_SECTIONS = [
     {
+      label: 'Policy',
+      items: [
+        { key: 'map-monitor', label: 'MAP Policy', permission: 'analytics.read' },
+      ],
+    },
+    {
       label: 'Workspace',
       items: [
         { key: 'welcome', label: 'Home' },
-        { key: 'map-monitor', label: 'MAP Monitor', permission: 'analytics.read' },
         { key: 'creators', label: 'Creators', permission: 'creators.read' },
         { key: 'campaign-planner', label: 'Campaign Planner', permission: 'briefs.write' },
         { key: 'creative-plan', label: 'Creative Forecast', permission: 'creators.read' },
