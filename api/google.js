@@ -22,6 +22,14 @@ import { requirePermission } from './_lib/app-access.js';
 const GOOGLE_ADS_API_VERSION = 'v20';
 const SCOPE = 'https://www.googleapis.com/auth/adwords';
 
+function requiredEnv(keys) {
+  return keys.filter(key => !process.env[key]);
+}
+
+function normalizeCustomerId(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
 function redirectUri() {
   return process.env.GOOGLE_OAUTH_REDIRECT_URI
     || 'https://howl-teal.vercel.app/api/google?action=callback';
@@ -65,7 +73,7 @@ function googleAdsErrorMessage(status, text) {
   try {
     payload = JSON.parse(text);
   } catch {}
-  const root = payload?.error || {};
+  const root = (Array.isArray(payload) ? payload[0]?.error : payload?.error) || {};
   const details = Array.isArray(root.details) ? root.details : [];
   const googleAdsFailure = details.find(d => Array.isArray(d?.errors));
   const firstFailure = googleAdsFailure?.errors?.[0];
@@ -94,7 +102,7 @@ async function searchStream(customerId, query, accessToken) {
     'Content-Type': 'application/json',
   };
   if (process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID) {
-    headers['login-customer-id'] = process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID;
+    headers['login-customer-id'] = normalizeCustomerId(process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID);
   }
   const r = await fetch(url, {
     method: 'POST',
@@ -115,11 +123,23 @@ async function searchStream(customerId, query, accessToken) {
 }
 
 async function upsertMonthly(sql, monthsArr) {
+  await sql`
+    CREATE TABLE IF NOT EXISTS monthly_metrics (
+      month      TEXT PRIMARY KEY,
+      shopify    JSONB,
+      meta       JSONB,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`ALTER TABLE monthly_metrics ADD COLUMN IF NOT EXISTS shopify_dealer JSONB`;
+  await sql`ALTER TABLE monthly_metrics ADD COLUMN IF NOT EXISTS google JSONB`;
+  await sql`ALTER TABLE monthly_metrics ADD COLUMN IF NOT EXISTS klaviyo JSONB`;
+
   for (const m of monthsArr) {
-    const existing = await sql`SELECT shopify, shopify_dealer, meta, google FROM monthly_metrics WHERE month = ${m.month}`;
+    const existing = await sql`SELECT shopify, shopify_dealer, meta, klaviyo FROM monthly_metrics WHERE month = ${m.month}`;
     const prev = existing[0] || {};
     await sql`
-      INSERT INTO monthly_metrics (month, shopify, shopify_dealer, meta, google, updated_at)
+      INSERT INTO monthly_metrics (month, shopify, shopify_dealer, meta, google, klaviyo, updated_at)
       VALUES (
         ${m.month},
         ${prev.shopify ? JSON.stringify(prev.shopify) : null}::jsonb,
@@ -130,6 +150,7 @@ async function upsertMonthly(sql, monthsArr) {
           conversions: m.conversions, conversionValue: m.conversionValue,
           snapshotAt: new Date().toISOString(),
         })}::jsonb,
+        ${prev.klaviyo ? JSON.stringify(prev.klaviyo) : null}::jsonb,
         now()
       )
       ON CONFLICT (month) DO UPDATE SET
@@ -144,6 +165,8 @@ export default async function handler(req, res) {
 
   // OAuth init — public (no Clerk), but leak-safe: reads only env vars.
   if (req.method === 'GET' && action === 'auth') {
+    const missing = requiredEnv(['GOOGLE_ADS_CLIENT_ID', 'GOOGLE_ADS_CLIENT_SECRET']);
+    if (missing.length) return res.status(500).send(`Missing Google Ads OAuth env: ${missing.join(', ')}`);
     const params = new URLSearchParams({
       client_id: process.env.GOOGLE_ADS_CLIENT_ID || '',
       redirect_uri: redirectUri(),
@@ -183,10 +206,21 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   if (action === 'get_monthly') {
-    const customerId = process.env.GOOGLE_ADS_CUSTOMER_ID;
-    if (!customerId) return res.status(500).json({ error: 'GOOGLE_ADS_CUSTOMER_ID not set' });
-    if (!process.env.GOOGLE_ADS_DEVELOPER_TOKEN) return res.status(500).json({ error: 'GOOGLE_ADS_DEVELOPER_TOKEN not set' });
-    if (!process.env.GOOGLE_ADS_REFRESH_TOKEN) return res.status(500).json({ error: 'GOOGLE_ADS_REFRESH_TOKEN not set — run /api/google?action=auth first' });
+    const missing = requiredEnv([
+      'GOOGLE_ADS_CLIENT_ID',
+      'GOOGLE_ADS_CLIENT_SECRET',
+      'GOOGLE_ADS_REFRESH_TOKEN',
+      'GOOGLE_ADS_DEVELOPER_TOKEN',
+      'GOOGLE_ADS_CUSTOMER_ID',
+    ]);
+    if (missing.length) {
+      const reconnect = missing.includes('GOOGLE_ADS_REFRESH_TOKEN')
+        ? ' Run /api/google?action=auth first, then add GOOGLE_ADS_REFRESH_TOKEN in Vercel.'
+        : '';
+      return res.status(500).json({ error: `Missing Google Ads env: ${missing.join(', ')}.${reconnect}` });
+    }
+    const customerId = normalizeCustomerId(process.env.GOOGLE_ADS_CUSTOMER_ID);
+    if (!customerId) return res.status(500).json({ error: 'GOOGLE_ADS_CUSTOMER_ID must contain digits' });
 
     try {
       const accessToken = await getAccessToken();
@@ -217,7 +251,7 @@ export default async function handler(req, res) {
           metrics.conversions_value
         FROM customer
         WHERE segments.date BETWEEN '${fmt(start)}' AND '${fmt(end)}'
-          AND segments.conversion_action_category = 'PURCHASE'
+          AND segments.conversion_action_category = PURCHASE
       `.replace(/\s+/g, ' ').trim();
 
       const [spendRows, purchaseRows] = await Promise.all([
@@ -242,17 +276,15 @@ export default async function handler(req, res) {
       }
       const monthsArr = Object.values(byMonth).sort((a, b) => a.month.localeCompare(b.month));
 
-      // Upsert into monthly_metrics.
-      try {
-        if (process.env.DATABASE_URL && monthsArr.length) {
-          const sql = neon(process.env.DATABASE_URL);
-          await upsertMonthly(sql, monthsArr);
-        }
-      } catch (err) {
-        console.error('google upsert failed:', err.message);
+      if (!process.env.DATABASE_URL) {
+        return res.status(500).json({ error: 'DATABASE_URL not set; Google data was fetched but cannot be pushed into the CFO dashboard.' });
+      }
+      if (monthsArr.length) {
+        const sql = neon(process.env.DATABASE_URL);
+        await upsertMonthly(sql, monthsArr);
       }
 
-      return res.json({ months: monthsArr, customerId });
+      return res.json({ months: monthsArr, customerId, persisted: true });
     } catch (err) {
       const hint = /invalid_grant|expired|revoked|Refresh token exchange failed/i.test(err.message)
         ? 'Reconnect Google Ads with /api/google?action=auth, then update GOOGLE_ADS_REFRESH_TOKEN in Vercel.'

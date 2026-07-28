@@ -955,9 +955,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
     if (!snapshotsLoaded || autoTried) return;
     if (metaIsStale && !data && !loading) loadDashboard();
     if (shopifyIsStale && !shopifyData && !shopifyLoading) loadShopify();
+    if (googleIsStale && !googleData && !googleLoading) loadGoogle();
     if (klaviyoIsStale && !klaviyoData && !klaviyoLoading) loadKlaviyo();
     setAutoTried(true);
-  }, [snapshotsLoaded, autoTried, metaIsStale, shopifyIsStale, klaviyoIsStale, data, shopifyData, klaviyoData, loading, shopifyLoading, klaviyoLoading, loadDashboard, loadShopify, loadKlaviyo]);
+  }, [snapshotsLoaded, autoTried, metaIsStale, shopifyIsStale, googleIsStale, klaviyoIsStale, data, shopifyData, googleData, klaviyoData, loading, shopifyLoading, googleLoading, klaviyoLoading, loadDashboard, loadShopify, loadGoogle, loadKlaviyo]);
 
   // ── Derived stats ──────────────────────────────────────────────────────────
   const ads = data?.ads || [];
