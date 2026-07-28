@@ -2106,6 +2106,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const recent24 = allMonthKeys.slice(-24);
         const defaultOpex = assumptionNumber(s.monthlyOpex, 0);
         const opexFor = (mk) => {
+          if (mk >= currentMonthKey) return defaultOpex;
           const v = opexByMonth[mk];
           return (v == null || v === '') ? defaultOpex : Number(v);
         };
@@ -3411,6 +3412,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const offPlatformOrdersByMonth = settings?.offPlatformOrdersByMonth || {};
         const defaultOpex = assumptionNumber(settings?.monthlyOpex, 0);
         const opexForMonth = (month) => {
+          if (month >= currentMonthKey) return defaultOpex;
           const override = opexByMonth[month];
           return override == null || override === '' ? defaultOpex : Number(override);
         };
