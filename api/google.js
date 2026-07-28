@@ -19,7 +19,7 @@
 import { neon } from '@neondatabase/serverless';
 import { requirePermission } from './_lib/app-access.js';
 
-const GOOGLE_ADS_API_VERSION = 'v20';
+const GOOGLE_ADS_API_VERSION = 'v25';
 const SCOPE = 'https://www.googleapis.com/auth/adwords';
 
 function requiredEnv(keys) {
