@@ -3237,6 +3237,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const offPlatformRevenueByMonth = settings?.offPlatformRevenueByMonth || {};
         const offPlatformOrdersByMonth = settings?.offPlatformOrdersByMonth || {};
         const defaultOpex = assumptionNumber(settings?.monthlyOpex, 0);
+        const opexForMonth = (month) => {
+          const override = opexByMonth[month];
+          return override == null || override === '' ? defaultOpex : Number(override);
+        };
         const s = settings || {};
         const grossMarginPct = assumptionNumber(s?.grossMarginPct, 60);
         const dealerGrossMarginPct = wholesaleGrossMarginPct(grossMarginPct, assumptionNumber(s?.dealerWholesaleRetailPct, 70));
@@ -3284,8 +3288,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const actMetaSpend = meta.spend || 0;
           const actGoogleSpend = Number(googleByMonth[f.month] || 0);
           const actCac = actMetaSpend + actGoogleSpend;
-          const actOpex = opexByMonth[f.month] != null && opexByMonth[f.month] !== ''
-            ? Number(opexByMonth[f.month]) : defaultOpex;
+          const actOpex = opexForMonth(f.month);
           const actFees = actNetRevenue * (paymentFeePct / 100) + orders * paymentFeeFixed;
           const actShip = orders * shippingCostPerOrder;
           const actPick = orders * fulfillmentCostPerOrder;
@@ -3304,8 +3307,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           // Targets pace against gross sales/topline revenue for the CFO view.
           const tgtRevenue = f.dtcRevenue ?? f.netRevenue ?? 0;
           const tgtCac = f.cac || 0;
-          const tgtCm3 = f.contributionProfit || 0;
-          const tgtOpex = f.totalOpex || 0;
+          const workbookTgtOpex = Number(f.totalOpex || 0);
+          const workbookTgtCm3 = Number(f.contributionProfit || 0);
+          const tgtOpex = opexForMonth(f.month);
+          const tgtCm3 = workbookTgtCm3 + workbookTgtOpex - tgtOpex;
 
           return {
             month: f.month, isCurrent, isPast,
