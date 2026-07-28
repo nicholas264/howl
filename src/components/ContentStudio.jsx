@@ -592,7 +592,10 @@ export default function ContentStudio() {
         body: JSON.stringify({ action: 'import_articles' }),
       });
       await refreshSources();
-      setMessage(`${data.inserted || 0} new and ${data.updated || 0} updated Shopify blog article${(data.inserted || 0) + (data.updated || 0) === 1 ? '' : 's'} in the reference library${data.errors?.length ? `; ${data.errors.length} skipped.` : '.'}`);
+      await refreshShopify();
+      const method = data.source === 'public_sitemap' ? ' from the public sitemap' : '';
+      const warning = data.warning ? ` ${data.warning}` : '';
+      setMessage(`${data.inserted || 0} new and ${data.updated || 0} updated Shopify blog article${(data.inserted || 0) + (data.updated || 0) === 1 ? '' : 's'} imported${method} into the reference library${data.errors?.length ? `; ${data.errors.length} skipped.` : '.'}${warning}`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -886,7 +889,7 @@ export default function ContentStudio() {
               <span>Shopify</span>
               <p>Pull the store's published blog articles into the library and refresh the internal link inventory from the sitemap.</p>
               <div>
-                <button type="button" disabled={saving || !shopify.configured} onClick={importShopifyArticles}>Import blog articles</button>
+                <button type="button" disabled={saving} onClick={importShopifyArticles}>Import blog articles</button>
                 <button type="button" disabled={saving} onClick={syncSiteLinks}>Sync site links</button>
               </div>
             </article>
