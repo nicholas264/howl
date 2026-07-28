@@ -68,7 +68,7 @@ export default function ContentStudio() {
   const [brief, setBrief] = useState(EMPTY_BRIEF);
   const [sourceForm, setSourceForm] = useState({ title: '', source_type: 'blog', url: '', tags: '', body: '' });
   const [importText, setImportText] = useState('');
-  const [webImport, setWebImport] = useState({ url: '', sitemapUrl: 'https://liveouter.com/sitemap.xml', tags: 'website,blog', limit: 10 });
+  const [webImport, setWebImport] = useState({ url: '', sitemapUrl: 'https://howlcampfires.com/sitemap.xml', tags: 'website,shopify', limit: 50 });
   const [klaviyoLimit, setKlaviyoLimit] = useState(12);
   const [outline, setOutline] = useState('');
   const [draft, setDraft] = useState('');
@@ -243,10 +243,11 @@ export default function ContentStudio() {
       await apiJson('/api/content-sources', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'scrape_url', url: webImport.url, tags: webImport.tags, source_type: 'blog' }),
+        body: JSON.stringify({ action: 'scrape_url', url: webImport.url, tags: webImport.tags, source_type: 'auto' }),
       });
       setWebImport(current => ({ ...current, url: '' }));
       await refreshSources();
+      await refreshShopify();
       setMessage('Website page imported.');
     } catch (err) {
       setError(err.message);
@@ -271,7 +272,8 @@ export default function ContentStudio() {
         }),
       });
       await refreshSources();
-      setMessage(`${data.inserted || 0} website page${data.inserted === 1 ? '' : 's'} imported${data.errors?.length ? `; ${data.errors.length} skipped.` : '.'}`);
+      await refreshShopify();
+      setMessage(`${data.inserted || 0} website page${data.inserted === 1 ? '' : 's'} imported and added to internal linking${data.errors?.length ? `; ${data.errors.length} skipped.` : '.'}`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -865,10 +867,10 @@ export default function ContentStudio() {
           <div className="content-import-helpers">
             <article>
               <span>Website scraper</span>
-              <label>Page URL<input value={webImport.url} onChange={event => setWebImport(current => ({ ...current, url: event.target.value }))} placeholder="https://liveouter.com/blogs/..." /></label>
+              <label>Page URL<input value={webImport.url} onChange={event => setWebImport(current => ({ ...current, url: event.target.value }))} placeholder="https://howlcampfires.com/blogs/..." /></label>
               <label>Sitemap URL<input value={webImport.sitemapUrl} onChange={event => setWebImport(current => ({ ...current, sitemapUrl: event.target.value }))} /></label>
               <label>Tags<input value={webImport.tags} onChange={event => setWebImport(current => ({ ...current, tags: event.target.value }))} /></label>
-              <label>Limit<input type="number" min="1" max="30" value={webImport.limit} onChange={event => setWebImport(current => ({ ...current, limit: event.target.value }))} /></label>
+              <label>Limit<input type="number" min="1" max="75" value={webImport.limit} onChange={event => setWebImport(current => ({ ...current, limit: event.target.value }))} /></label>
               <div>
                 <button type="button" disabled={saving || !webImport.url.trim()} onClick={scrapeUrl}>Import URL</button>
                 <button type="button" disabled={saving || !webImport.sitemapUrl.trim()} onClick={scrapeSitemap}>Import sitemap</button>
