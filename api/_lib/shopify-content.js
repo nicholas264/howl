@@ -7,16 +7,65 @@ import {
 } from './content-studio.js';
 
 const API_VERSION = '2026-04';
+const SHOPIFY_TOKEN_TTL_SKEW_MS = 5 * 60 * 1000;
+
+let generatedTokenCache = null;
 
 export function shopifyContentConfig() {
   const store = process.env.SHOPIFY_STORE || 'howl-campfires.myshopify.com';
   const token = process.env.SHOPIFY_ACCESS_TOKEN;
-  return { store, token, configured: Boolean(token) };
+  const clientId = process.env.SHOPIFY_CLIENT_ID;
+  const clientSecret = process.env.SHOPIFY_CLIENT_SECRET;
+  return {
+    store,
+    token,
+    clientId,
+    clientSecret,
+    configured: Boolean(token || (clientId && clientSecret)),
+    uses_client_credentials: Boolean(clientId && clientSecret),
+  };
+}
+
+export async function getShopifyAccessToken() {
+  const { store, token, clientId, clientSecret } = shopifyContentConfig();
+  if (clientId && clientSecret) {
+    const now = Date.now();
+    if (
+      generatedTokenCache?.token
+      && generatedTokenCache.store === store
+      && generatedTokenCache.expiresAt > now + SHOPIFY_TOKEN_TTL_SKEW_MS
+    ) {
+      return generatedTokenCache.token;
+    }
+    const response = await fetch(`https://${store}/admin/oauth/access_token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.access_token) {
+      throw new Error(`Shopify token exchange failed (${response.status}): ${data.error || data.error_description || JSON.stringify(data).slice(0, 300)}`);
+    }
+    generatedTokenCache = {
+      store,
+      token: data.access_token,
+      expiresAt: now + Math.max(Number(data.expires_in || 86400) * 1000, 60 * 1000),
+      scope: data.scope || '',
+    };
+    return data.access_token;
+  }
+  if (token) return token;
+  throw new Error('SHOPIFY_CLIENT_ID/SHOPIFY_CLIENT_SECRET or SHOPIFY_ACCESS_TOKEN required');
 }
 
 export async function shopifyGql(query, variables = {}) {
-  const { store, token, configured } = shopifyContentConfig();
-  if (!configured) throw new Error('SHOPIFY_ACCESS_TOKEN not configured');
+  const { store, configured } = shopifyContentConfig();
+  if (!configured) throw new Error('Shopify credentials not configured');
+  const token = await getShopifyAccessToken();
   const response = await fetch(`https://${store}/admin/api/${API_VERSION}/graphql.json`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': token },
@@ -40,9 +89,10 @@ let accessScopesCache = null;
 
 export async function getAccessScopes() {
   if (accessScopesCache) return accessScopesCache;
-  const { store, token, configured } = shopifyContentConfig();
+  const { store, configured } = shopifyContentConfig();
   if (!configured) return [];
   try {
+    const token = await getShopifyAccessToken();
     const response = await fetch(`https://${store}/admin/oauth/access_scopes.json`, {
       headers: { 'X-Shopify-Access-Token': token },
     });

@@ -1,9 +1,10 @@
 import { requirePermission } from './_lib/app-access.js';
+import { getShopifyAccessToken, shopifyContentConfig } from './_lib/shopify-content.js';
 
 async function shopifyGraphql(query, variables = {}) {
-  const store = process.env.SHOPIFY_STORE || 'howl-campfires.myshopify.com';
-  const token = process.env.SHOPIFY_ACCESS_TOKEN;
-  if (!token) throw new Error('Shopify store is not connected');
+  const { store, configured } = shopifyContentConfig();
+  if (!configured) throw new Error('Shopify store is not connected');
+  const token = await getShopifyAccessToken();
   const response = await fetch(`https://${store}/admin/api/2026-04/graphql.json`, {
     method: 'POST',
     headers: {

@@ -78,11 +78,11 @@ export function getIntegrationHealth() {
     },
     shopify: {
       ready: Boolean(
-        process.env.SHOPIFY_ACCESS_TOKEN
+        (process.env.SHOPIFY_ACCESS_TOKEN || (process.env.SHOPIFY_CLIENT_ID && process.env.SHOPIFY_CLIENT_SECRET))
         && process.env.SHOPIFY_SEEDING_ACCESS_TOKEN
         && process.env.SHOPIFY_SEEDING_ENABLED === 'true'
       ),
-      state: process.env.SHOPIFY_ACCESS_TOKEN
+      state: (process.env.SHOPIFY_ACCESS_TOKEN || (process.env.SHOPIFY_CLIENT_ID && process.env.SHOPIFY_CLIENT_SECRET))
         && process.env.SHOPIFY_SEEDING_ACCESS_TOKEN
         && process.env.SHOPIFY_SEEDING_ENABLED === 'true' ? 'ready' : 'setup',
       label: 'Shopify creator seeding',
@@ -91,7 +91,7 @@ export function getIntegrationHealth() {
         : 'Catalog sync is read-only. Creator order creation is disabled by the Shopify safety switch.',
       action: 'Use a separate token limited to draft orders, then enable the seeding safety switch only when ready.',
       env: [
-        'SHOPIFY_STORE', 'SHOPIFY_ACCESS_TOKEN', 'SHOPIFY_SEEDING_ACCESS_TOKEN',
+        'SHOPIFY_STORE', 'SHOPIFY_CLIENT_ID', 'SHOPIFY_CLIENT_SECRET', 'SHOPIFY_ACCESS_TOKEN', 'SHOPIFY_SEEDING_ACCESS_TOKEN',
         'SHOPIFY_SEEDING_ENABLED', 'SHOPIFY_SEEDING_MAX_QUANTITY', 'SHOPIFY_SEEDING_DAILY_LIMIT',
       ],
     },

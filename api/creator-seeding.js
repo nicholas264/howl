@@ -1,5 +1,6 @@
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+import { getShopifyAccessToken } from './_lib/shopify-content.js';
 
 function clean(value, max = 1000) {
   const result = (value || '').toString().trim();
@@ -89,12 +90,13 @@ export default async function handler(req, res) {
     ].filter(([, value]) => !value).map(([label]) => label);
     if (missing.length) return res.status(400).json({ error: `Creator shipping ${missing.join(', ')} required` });
 
+    const catalogToken = await getShopifyAccessToken();
     const { data: catalogData } = await shopifyGraphql(`query ValidateCreatorSeedVariant($id: ID!) {
       productVariant(id: $id) {
         id title sku availableForSale inventoryQuantity
         product { id title status }
       }
-    }`, { id: variantId }, process.env.SHOPIFY_ACCESS_TOKEN);
+    }`, { id: variantId }, catalogToken);
     const catalogVariant = catalogData.productVariant;
     if (!catalogVariant || catalogVariant.product?.status !== 'ACTIVE' || !catalogVariant.availableForSale) {
       return res.status(400).json({ error: 'This Shopify variant is not active and available for sale.' });

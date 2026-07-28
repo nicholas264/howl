@@ -1,4 +1,5 @@
 import { requirePermission } from './_lib/app-access.js';
+import { getShopifyAccessToken, shopifyContentConfig } from './_lib/shopify-content.js';
 import { createHash } from 'node:crypto';
 
 function customerKey(order, store) {
@@ -551,8 +552,9 @@ export default async function handler(req, res) {
   // Configure stores. Primary is required. Dealer is optional — only added
   // when both env vars are present.
   const stores = [];
-  if (process.env.SHOPIFY_ACCESS_TOKEN) {
-    stores.push({ role: 'primary', store: process.env.SHOPIFY_STORE || 'howl-campfires.myshopify.com', token: process.env.SHOPIFY_ACCESS_TOKEN });
+  const primaryConfig = shopifyContentConfig();
+  if (primaryConfig.configured) {
+    stores.push({ role: 'primary', store: primaryConfig.store, token: await getShopifyAccessToken() });
   }
   if (process.env.SHOPIFY_DEALER_ACCESS_TOKEN && process.env.SHOPIFY_DEALER_STORE) {
     stores.push({ role: 'dealer', store: process.env.SHOPIFY_DEALER_STORE, token: process.env.SHOPIFY_DEALER_ACCESS_TOKEN });
