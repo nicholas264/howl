@@ -34,7 +34,10 @@ export async function enqueueCreativeAnalyses(sql, source = 'meta_sync') {
   // attempted keep their retry/backoff state, and processing jobs keep leases.
   await sql`DELETE FROM creative_analysis_queue WHERE status = 'pending' AND attempts = 0`;
   const rows = await sql`
-    WITH metrics AS (
+    WITH latest AS (
+      SELECT max(date)::date AS max_date FROM creative_insights_daily
+    ),
+    metrics AS (
       SELECT
         cp.group_key,
         COALESCE(SUM(i.spend), 0)::numeric AS spend,
@@ -44,7 +47,9 @@ export async function enqueueCreativeAnalyses(sql, source = 'meta_sync') {
           SELECT 1 FROM creative_assets a WHERE a.group_key = cp.group_key
         ) AS has_drive_asset
       FROM creative_performance cp
-      LEFT JOIN creative_insights_daily i ON i.ad_id = cp.ad_id
+      LEFT JOIN creative_insights_daily i
+        ON i.ad_id = cp.ad_id
+       AND i.date >= (SELECT max_date - interval '30 days' FROM latest)
       LEFT JOIN creative_analysis ca ON ca.group_key = cp.group_key
       WHERE cp.group_key IS NOT NULL
         AND ca.group_key IS NULL
@@ -60,7 +65,7 @@ export async function enqueueCreativeAnalyses(sql, source = 'meta_sync') {
       now()
     FROM metrics
     WHERE has_drive_asset
-       OR spend >= 1000
+       OR spend > 0
        OR (purchases >= 2 AND spend > 0 AND purchase_value / spend >= 2)
     ON CONFLICT (group_key) DO UPDATE SET
       priority = GREATEST(creative_analysis_queue.priority, EXCLUDED.priority),
@@ -220,7 +225,30 @@ export async function getCreativeAnalysisQueueStatus(sql) {
       q.updated_at DESC
     LIMIT 12
   `;
+  const [throughput] = await sql`
+    SELECT
+      COUNT(*) FILTER (WHERE status = 'completed' AND completed_at > now() - interval '24 hours')::int AS completed_24h,
+      COUNT(*) FILTER (WHERE status = 'completed' AND completed_at > now() - interval '7 days')::int AS completed_7d,
+      MAX(completed_at) FILTER (WHERE status = 'completed') AS last_completed_at,
+      MIN(available_at) FILTER (WHERE status = 'pending') AS next_available_at
+    FROM creative_analysis_queue
+  `;
   const summary = { pending: 0, processing: 0, completed: 0, failed: 0 };
   for (const row of counts) summary[row.status] = Number(row.count) || 0;
-  return { summary, recent };
+  const completed24h = Number(throughput?.completed_24h || 0);
+  const completed7d = Number(throughput?.completed_7d || 0);
+  const dailyRate = Math.max(completed24h, completed7d > 0 ? completed7d / 7 : 0);
+  const etaDays = summary.pending > 0 && dailyRate > 0 ? Math.ceil(summary.pending / dailyRate) : null;
+  return {
+    summary,
+    recent,
+    throughput: {
+      completed24h,
+      completed7d,
+      dailyRate: Number(dailyRate.toFixed(1)),
+      etaDays,
+      lastCompletedAt: throughput?.last_completed_at || null,
+      nextAvailableAt: throughput?.next_available_at || null,
+    },
+  };
 }

@@ -61,6 +61,8 @@ export default async function handler(req, res) {
           count(*) FILTER (WHERE status = 'pending')::int AS pending,
           count(*) FILTER (WHERE status = 'processing')::int AS processing,
           count(*) FILTER (WHERE status = 'failed')::int AS failed,
+          count(*) FILTER (WHERE status = 'completed' AND completed_at > now() - interval '24 hours')::int AS completed_24h,
+          count(*) FILTER (WHERE status = 'completed' AND completed_at > now() - interval '7 days')::int AS completed_7d,
           max(completed_at) FILTER (WHERE status = 'completed') AS last_completed_at
         FROM creative_analysis_queue
       `;

@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo, Suspense, lazy } from "react";
 import { UserButton } from "@clerk/clerk-react";
+import { apiJson } from "./lib/api";
 // Always-visible shell components stay eagerly imported.
 import ResultsPanel from "./components/ResultsPanel";
 import WelcomeScreen from "./components/WelcomeScreen";
@@ -26,6 +27,7 @@ const CreativePlanningWorkspace = lazy(() => import("./components/CreativePlanni
 const CreatorCampaignPlanner = lazy(() => import("./components/CreatorCampaignPlanner"));
 const AdminWorkspace = lazy(() => import("./components/AdminWorkspace"));
 const WorkspaceHub = lazy(() => import("./components/WorkspaceHub"));
+const MapMonitorWorkspace = lazy(() => import("./components/MapMonitorWorkspace"));
 import { useDriveAuth } from "./hooks/useDriveAuth";
 import { cartGetAll, cartPut, cartDelete } from "./utils/cartDb";
 import "./styles.css";
@@ -38,8 +40,15 @@ const TabFallback = () => (
 
 export default function HowlAdEngine({ appAccess }) {
   const driveAuth = useDriveAuth();
+  const initialTab = useMemo(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('tab') || 'welcome';
+    } catch {
+      return 'welcome';
+    }
+  }, []);
   const [variations, setVariations] = useState([]);
-  const [activeTab, setActiveTab] = useState("welcome");
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [filterAngle, setFilterAngle] = useState("all");
   const [filterProduct, setFilterProduct] = useState("all");
   const [videoText, setVideoText] = useState(null);
@@ -143,11 +152,10 @@ export default function HowlAdEngine({ appAccess }) {
   const [ugcCount, setUgcCount] = useState(0);
   const refreshUgcCount = useCallback(async () => {
     try {
-      const r = await fetch('/api/drive/ugc', {
+      const d = await apiJson('/api/drive/ugc', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'count' }),
-      });
-      const d = await r.json();
+      }, 'UGC count failed');
       if (typeof d.count === 'number') setUgcCount(d.count);
     } catch {}
   }, []);
@@ -162,6 +170,7 @@ export default function HowlAdEngine({ appAccess }) {
       label: 'Workspace',
       items: [
         { key: 'welcome', label: 'Home' },
+        { key: 'map-monitor', label: 'MAP Monitor', permission: 'analytics.read' },
         { key: 'creators', label: 'Creators', permission: 'creators.read' },
         { key: 'campaign-planner', label: 'Campaign Planner', permission: 'briefs.write' },
         { key: 'creative-plan', label: 'Creative Forecast', permission: 'creators.read' },
@@ -231,7 +240,14 @@ export default function HowlAdEngine({ appAccess }) {
   }, [NAV_SECTIONS, can, variations.length]);
 
   const navigate = useCallback((tab) => {
-    setActiveTab(allowedTabs.has(tab) ? tab : 'welcome');
+    const nextTab = allowedTabs.has(tab) ? tab : 'welcome';
+    setActiveTab(nextTab);
+    try {
+      const url = new URL(window.location.href);
+      if (nextTab === 'welcome') url.searchParams.delete('tab');
+      else url.searchParams.set('tab', nextTab);
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    } catch {}
   }, [allowedTabs]);
 
   useEffect(() => {
@@ -353,6 +369,7 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "dashboard-growth" && <DashboardTool setActiveTab={navigate} view="growth" />}
         {activeTab === "dashboard-meta" && <DashboardTool setActiveTab={navigate} view="meta" />}
         {activeTab === "dashboard-shopify" && <DashboardTool setActiveTab={navigate} view="shopify" />}
+        {activeTab === "map-monitor" && <MapMonitorWorkspace canManage={can('admin.users')} />}
         {activeTab === "dashboard-creative" && <DashboardTool setActiveTab={navigate} view="creative" canManageCreators={can('creators.write')} />}
         {activeTab === "creative-analytics" && <DashboardTool setActiveTab={navigate} view="creative" canManageCreators={can('creators.write')} />}
         {activeTab === "dashboard-forecast" && <DashboardTool setActiveTab={navigate} view="forecast" />}

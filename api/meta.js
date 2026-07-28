@@ -1,6 +1,7 @@
 import { mirrorVideoToBlob } from './_lib/blob/mirror.js';
 import { backfillCreativeAssetsFromLaunchHistory, ensureCreativeAssetTables } from './_lib/creative-assets.js';
 import { enqueueCreativeAnalyses, enqueueCreativeAssetAnalysis, ensureCreativeAnalysisQueue } from './_lib/creative-analysis-queue.js';
+import { normalizeCreativeAsset, normalizeCreativeAssetBatch } from './_lib/creative-asset-normalizer.js';
 
 async function stampFlowLaunched(sql, { adId, groupKey, briefId, deliverableId }) {
   if (!briefId && !deliverableId) return;
@@ -52,13 +53,14 @@ async function logLaunch(row) {
         INSERT INTO creative_assets
           (drive_file_name, mime_type, durable_url, ad_id, creator, creator_id,
            source_type, source_label, brief_id, deliverable_id, product_id, angle_id, placement_role, group_key,
-           transcript_status, updated_at)
+           transcript_status, playable_url, playback_status, playback_checked_at, updated_at)
         VALUES
           (${row.ad_name || null}, ${row.mime_type || 'video/mp4'}, ${row.source_video_url},
            ${row.ad_id}, ${row.creator || null}, ${row.creator_id || null},
            ${row.source_type || null}, ${row.source_label || null},
            ${row.brief_id || null}, ${row.deliverable_id || null}, ${row.product_id || null},
-           ${row.angle_id || null}, 'launched', ${groupKey || null}, 'pending', now())
+           ${row.angle_id || null}, 'launched', ${groupKey || null}, 'pending',
+           ${row.source_video_url}, 'ready', now(), now())
         RETURNING id
       `;
       await enqueueCreativeAssetAnalysis(sql, groupKey, 'launch');
@@ -209,6 +211,8 @@ export const config = {
 import { hasPermission, requireWorkspaceAccess } from './_lib/app-access.js';
 import { assertBrandSafe } from './_lib/brand-guardrails.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+import { ensureCreativeAuditTables, logCreativeOperatorEvent } from './_lib/creative-audit.js';
+import { ensureCreativeEvidenceTaskTables, normalizeEvidenceTaskType, upsertCreativeEvidenceTask } from './_lib/creative-evidence-tasks.js';
 import {
   analyzeCreativeGroup,
   dismissAnalyzedWinner,
@@ -271,6 +275,50 @@ function suggestCreator(name, index) {
       ? `Social handle appears in "${name}"`
       : `${best.alias.kind === 'first_name' ? 'First name' : 'Creator name'} appears in "${name}"`,
   };
+}
+
+function suggestSourceTag(name) {
+  const words = normalizedWords(name);
+  if (!words) return null;
+  const toolSignals = [
+    'static', 'graphic', 'product callout', 'callout', 'bfcm', 'black friday',
+    'sale', 'top performer', 'carousel', 'image', 'catalog', 'giveaway launch',
+  ];
+  const internalSignals = ['walkaround', 'build ep', 'founder', 'alex'];
+  const toolSignal = toolSignals.find(signal => words.includes(signal));
+  if (toolSignal) {
+    return {
+      sourceType: 'tool_generated',
+      sourceLabel: 'Made in HOWL',
+      confidence: 'high',
+      reason: `Name includes "${toolSignal}", which usually indicates an in-house static/tool-generated asset.`,
+    };
+  }
+  const internalSignal = internalSignals.find(signal => words.includes(signal));
+  if (internalSignal) {
+    return {
+      sourceType: internalSignal === 'founder' || internalSignal === 'alex' ? 'founder' : 'internal_employee',
+      sourceLabel: internalSignal === 'founder' || internalSignal === 'alex' ? 'Founder' : 'HOWL team',
+      confidence: 'review',
+      reason: `Name includes "${internalSignal}", which may indicate a founder/internal source.`,
+    };
+  }
+  return null;
+}
+
+function inferAssetKind({ name, mimeType, playableUrl, video3sViews, videoThruplays }) {
+  const mime = (mimeType || '').toLowerCase();
+  if (mime.startsWith('video/') || /\.(mp4|mov|m4v|webm)(\?|$)/i.test(playableUrl || '')) return 'video';
+  const words = normalizedWords(name);
+  if ((Number(video3sViews) || 0) > 0 || (Number(videoThruplays) || 0) > 0) return 'video';
+  if (/^v[\s_-]/i.test(name || '') || words.includes('video') || words.includes('ugc') || words.includes('stop motion') || words.includes('stopmotion')) return 'video';
+  return 'image';
+}
+
+function metaVideoEmbedUrl(videoId) {
+  if (!videoId) return null;
+  const href = encodeURIComponent(`https://www.facebook.com/reel/${videoId}/`);
+  return `https://www.facebook.com/plugins/video.php?href=${href}&show_text=false&width=560`;
 }
 
 export default async function handler(req, res) {
@@ -1463,12 +1511,18 @@ export default async function handler(req, res) {
         if (!process.env.DATABASE_URL) return res.json({ error: 'DATABASE_URL not configured' });
         const { neon } = await import('@neondatabase/serverless');
         const sql = neon(process.env.DATABASE_URL);
+        await ensureCreativeAssetTables(sql);
         await ensureCreativeAnalysisQueue(sql);
         await ensureCreatorOpsTables(sql);
+        await ensureCreativeEvidenceTaskTables(sql);
 
         const sinceDays = Math.max(1, Math.min(365, parseInt(req.body.sinceDays || 14, 10)));
         const fmtYmd = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        const tsNow = new Date();
+        const [latestInsight] = await sql`
+          SELECT max(date)::text AS latest_date
+          FROM creative_insights_daily
+        `;
+        const tsNow = latestInsight?.latest_date ? new Date(`${latestInsight.latest_date}T00:00:00Z`) : new Date();
         const tsSince = new Date(tsNow.getTime() - sinceDays * 24 * 60 * 60 * 1000);
         const since = fmtYmd(tsSince);
         const until = fmtYmd(tsNow);
@@ -1493,6 +1547,7 @@ export default async function handler(req, res) {
           meta AS (
             SELECT DISTINCT ON (cp.group_key)
               cp.group_key,
+              cp.video_id,
               cp.ad_name        AS name,
               cp.thumbnail_url,
               MIN(cp.created_time) OVER (PARTITION BY cp.group_key) AS first_launch_date,
@@ -1501,7 +1556,7 @@ export default async function handler(req, res) {
             ORDER BY cp.group_key, cp.created_time ASC
           )
           SELECT
-            m.group_key, m.name, m.thumbnail_url, m.first_launch_date, m.ad_count,
+            m.group_key, m.video_id, m.name, m.thumbnail_url, m.first_launch_date, m.ad_count,
             COALESCE(a.spend, 0)              AS spend,
             COALESCE(a.purchase_value, 0)     AS purchase_value,
             COALESCE(a.purchases, 0)          AS purchases,
@@ -1514,6 +1569,34 @@ export default async function handler(req, res) {
             attribution.creator_name,
             attribution.source_type,
             attribution.source_label,
+            asset_media.asset_id,
+            COALESCE(asset_media.meta_video_id, m.video_id) AS meta_video_id,
+            asset_media.mime_type,
+            asset_media.playable_url,
+            asset_media.preview_url,
+            asset_media.playback_status,
+            asset_media.playback_error,
+            asset_media.transcript_status,
+            asset_media.transcript_error,
+            asset_media.analyzed_at,
+            analysis.angle AS analysis_angle,
+            analysis.format AS analysis_format,
+            analysis.hook_type AS analysis_hook_type,
+            analysis.confidence AS analysis_confidence,
+            analysis.operator_summary AS analysis_operator_summary,
+            analysis.recommended_next_step AS analysis_recommended_next_step,
+            analysis.structured_analysis AS analysis_structured,
+            analysis.generated_at AS analysis_generated_at,
+            transcript_task.status AS transcript_task_status,
+            transcript_task.owner AS transcript_task_owner,
+            transcript_task.note AS transcript_task_note,
+            transcript_task.due_date::text AS transcript_task_due_date,
+            transcript_task.updated_at AS transcript_task_updated_at,
+            source_task.status AS source_task_status,
+            source_task.owner AS source_task_owner,
+            source_task.note AS source_task_note,
+            source_task.due_date::text AS source_task_due_date,
+            source_task.updated_at AS source_task_updated_at,
             COALESCE(attribution.creator_count, 0)::int AS creator_count,
             EXISTS (SELECT 1 FROM creative_analysis ca WHERE ca.group_key = m.group_key) AS is_analyzed,
             (SELECT q.status FROM creative_analysis_queue q WHERE q.group_key = m.group_key) AS analysis_queue_status
@@ -1546,6 +1629,47 @@ export default async function handler(req, res) {
             ) linked
             LEFT JOIN creators c ON c.id = linked.creator_id
           ) attribution ON true
+          LEFT JOIN LATERAL (
+            SELECT
+              asset.id AS asset_id,
+              asset.meta_video_id,
+              asset.mime_type,
+              COALESCE(asset.playable_url, asset.durable_url) AS playable_url,
+              COALESCE(asset.preview_url, asset.drive_thumbnail_url, m.thumbnail_url) AS preview_url,
+              asset.playback_status,
+              asset.playback_error,
+              asset.transcript_status,
+              asset.transcript_error,
+              asset.analyzed_at
+            FROM creative_assets asset
+            WHERE asset.group_key = m.group_key
+               OR asset.ad_id IN (SELECT cp2.ad_id FROM creative_performance cp2 WHERE cp2.group_key = m.group_key)
+            ORDER BY
+              (COALESCE(asset.playable_url, asset.durable_url) IS NOT NULL) DESC,
+              (asset.placement_role = 'feed') DESC,
+              asset.updated_at DESC
+            LIMIT 1
+          ) asset_media ON true
+          LEFT JOIN LATERAL (
+            SELECT
+              ca.angle,
+              ca.format,
+              ca.hook_type,
+              ca.confidence,
+              ca.operator_summary,
+              ca.recommended_next_step,
+              ca.structured_analysis,
+              ca.generated_at
+            FROM creative_analysis ca
+            WHERE ca.group_key = m.group_key
+            LIMIT 1
+          ) analysis ON true
+          LEFT JOIN creative_evidence_tasks transcript_task
+            ON transcript_task.group_key = m.group_key
+           AND transcript_task.task_type = 'transcript'
+          LEFT JOIN creative_evidence_tasks source_task
+            ON source_task.group_key = m.group_key
+           AND source_task.task_type = 'source_review'
           WHERE COALESCE(a.spend, 0) > 0 OR COALESCE(a.impressions, 0) > 0
           ORDER BY spend DESC NULLS LAST
           LIMIT 500
@@ -1568,10 +1692,29 @@ export default async function handler(req, res) {
           const v3s = Number(r.video_3s_views) || 0;
           const vThru = Number(r.video_thruplays) || 0;
           const suggestion = !r.creator_id && !r.source_type ? suggestCreator(r.name, matchIndex) : null;
+          const sourceSuggestion = !r.creator_id && !r.source_type && !suggestion ? suggestSourceTag(r.name) : null;
+          const assetKind = inferAssetKind({
+            name: r.name,
+            mimeType: r.mime_type,
+            playableUrl: r.playable_url,
+            video3sViews: v3s,
+            videoThruplays: vThru,
+          });
           return {
             groupKey: r.group_key,
             name: r.name,
             thumbnailUrl: r.thumbnail_url,
+            assetId: r.asset_id ? Number(r.asset_id) : null,
+            assetKind,
+            mimeType: r.mime_type || null,
+            playableUrl: r.playable_url || null,
+            playbackEmbedUrl: assetKind === 'video' ? metaVideoEmbedUrl(r.meta_video_id || r.group_key) : null,
+            previewUrl: r.preview_url || r.thumbnail_url || null,
+            playbackStatus: r.playback_status || (r.playable_url ? 'ready' : 'missing'),
+            playbackError: r.playback_error || null,
+            transcriptStatus: r.transcript_status || null,
+            transcriptError: r.transcript_error || null,
+            analyzedAt: r.analyzed_at || null,
             firstLaunchDate: r.first_launch_date,
             adCount: Number(r.ad_count) || 0,
             spend,
@@ -1594,7 +1737,29 @@ export default async function handler(req, res) {
             suggestedCreatorName: suggestion?.creatorName || null,
             suggestionConfidence: suggestion?.confidence || null,
             suggestionReason: suggestion?.reason || null,
+            suggestedSourceType: sourceSuggestion?.sourceType || null,
+            suggestedSourceLabel: sourceSuggestion?.sourceLabel || null,
+            suggestedSourceConfidence: sourceSuggestion?.confidence || null,
+            suggestedSourceReason: sourceSuggestion?.reason || null,
             isAnalyzed: !!r.is_analyzed,
+            analysisAngle: r.analysis_angle || null,
+            analysisFormat: r.analysis_format || null,
+            analysisHookType: r.analysis_hook_type || null,
+            analysisConfidence: r.analysis_confidence == null ? null : Number(r.analysis_confidence),
+            analysisOperatorSummary: r.analysis_operator_summary || null,
+            analysisRecommendedNextStep: r.analysis_recommended_next_step || null,
+            analysisStructured: r.analysis_structured || null,
+            analysisGeneratedAt: r.analysis_generated_at || null,
+            transcriptTaskStatus: r.transcript_task_status || null,
+            transcriptTaskOwner: r.transcript_task_owner || null,
+            transcriptTaskNote: r.transcript_task_note || null,
+            transcriptTaskDueDate: r.transcript_task_due_date || null,
+            transcriptTaskUpdatedAt: r.transcript_task_updated_at || null,
+            sourceTaskStatus: r.source_task_status || null,
+            sourceTaskOwner: r.source_task_owner || null,
+            sourceTaskNote: r.source_task_note || null,
+            sourceTaskDueDate: r.source_task_due_date || null,
+            sourceTaskUpdatedAt: r.source_task_updated_at || null,
             analysisQueueStatus: r.analysis_queue_status || null,
           };
         });
@@ -1615,7 +1780,13 @@ export default async function handler(req, res) {
         }
         const sql = appAccess.sql;
         await ensureCreatorOpsTables(sql);
+        await ensureCreativeAuditTables(sql);
         let creator = null;
+        const [previousAssignment] = await sql`
+          SELECT creator_id, source_type, source_label
+          FROM creative_creator_assignments
+          WHERE group_key = ${groupKey}
+        `;
         const resolvedSourceLabel = creatorId ? null : (sourceLabel || (sourceType === 'tool_generated' ? 'Made in HOWL' : null));
         if (creatorId) {
           [creator] = await sql`SELECT id, name FROM creators WHERE id = ${creatorId}`;
@@ -1676,6 +1847,21 @@ export default async function handler(req, res) {
             )
           `;
         }
+        await logCreativeOperatorEvent(sql, {
+          eventType: creatorId ? 'creator_assigned' : (sourceType ? 'source_tagged' : 'assignment_removed'),
+          groupKey,
+          creatorId,
+          creatorName: creator?.name || null,
+          sourceType: creatorId ? 'external_creator' : sourceType,
+          sourceLabel: creator?.name || resolvedSourceLabel,
+          userId: appAccess.userId,
+          userEmail: appAccess.email,
+          metadata: {
+            assets_updated: assets.length,
+            launches_updated: launches.length,
+            previous_assignment: previousAssignment || null,
+          },
+        });
         return res.json({
           creator: creator || null,
           sourceType: creatorId ? 'external_creator' : sourceType,
@@ -1696,6 +1882,7 @@ export default async function handler(req, res) {
         if (!assignments.length) return res.status(400).json({ error: 'assignments required' });
         const sql = appAccess.sql;
         await ensureCreatorOpsTables(sql);
+        await ensureCreativeAuditTables(sql);
         const creatorIds = [...new Set(assignments.map(item => item.creatorId))];
         const creatorRows = await sql`
           SELECT id, name FROM creators WHERE id = ANY(${creatorIds}::bigint[])
@@ -1706,6 +1893,11 @@ export default async function handler(req, res) {
         const completed = [];
         for (const assignment of assignments) {
           const creator = creatorsById.get(assignment.creatorId);
+          const [previousAssignment] = await sql`
+            SELECT creator_id, source_type, source_label
+            FROM creative_creator_assignments
+            WHERE group_key = ${assignment.groupKey}
+          `;
           await sql`
             INSERT INTO creative_creator_assignments (group_key, creator_id, assigned_by)
             VALUES (${assignment.groupKey}, ${assignment.creatorId}, ${appAccess.userId})
@@ -1738,6 +1930,20 @@ export default async function handler(req, res) {
             creatorId: assignment.creatorId,
             creatorName: creator.name,
           });
+          await logCreativeOperatorEvent(sql, {
+            eventType: 'creator_assigned_batch',
+            groupKey: assignment.groupKey,
+            creatorId: assignment.creatorId,
+            creatorName: creator.name,
+            sourceType: 'external_creator',
+            sourceLabel: creator.name,
+            userId: appAccess.userId,
+            userEmail: appAccess.email,
+            metadata: {
+              batch_size: assignments.length,
+              previous_assignment: previousAssignment || null,
+            },
+          });
         }
         for (const creatorId of creatorIds) {
           const count = completed.filter(item => item.creatorId === creatorId).length;
@@ -1752,6 +1958,54 @@ export default async function handler(req, res) {
           `;
         }
         return res.json({ assignments: completed });
+      }
+
+      case 'get_creative_operator_audit': {
+        const sql = appAccess.sql;
+        await ensureCreativeAuditTables(sql);
+        const limit = Math.max(1, Math.min(50, parseInt(req.body.limit || 12, 10)));
+        const events = await sql`
+          SELECT id, event_type, group_key, group_name, creator_id, creator_name,
+                 source_type, source_label, metadata, user_id, user_email, created_at
+          FROM creative_operator_events
+          ORDER BY created_at DESC
+          LIMIT ${limit}
+        `;
+        return res.json({ events });
+      }
+
+      case 'update_creative_evidence_task': {
+        const groupKey = (req.body.groupKey || '').toString().trim();
+        const taskType = normalizeEvidenceTaskType(req.body.taskType);
+        if (!groupKey || !taskType) return res.status(400).json({ error: 'groupKey and valid taskType required' });
+        const row = await upsertCreativeEvidenceTask(appAccess.sql, {
+          groupKey,
+          taskType,
+          status: req.body.status,
+          owner: (req.body.owner || '').toString().trim() || null,
+          note: (req.body.note || '').toString().trim() || null,
+          dueDate: (req.body.dueDate || '').toString().trim() || null,
+          groupName: (req.body.groupName || '').toString().trim() || null,
+          spend: req.body.spend == null ? null : Number(req.body.spend),
+          userId: appAccess.userId,
+          userEmail: appAccess.email,
+        });
+        await logCreativeOperatorEvent(appAccess.sql, {
+          eventType: 'evidence_task_updated',
+          groupKey,
+          groupName: row.group_name,
+          sourceType: taskType,
+          sourceLabel: row.status,
+          userId: appAccess.userId,
+          userEmail: appAccess.email,
+          metadata: {
+            task_type: taskType,
+            status: row.status,
+            owner: row.owner || null,
+            due_date: row.due_date || null,
+          },
+        });
+        return res.json({ task: row });
       }
 
       case 'get_creative_group_ads': {
@@ -1786,11 +2040,28 @@ export default async function handler(req, res) {
       }
 
       case 'analyze_creative_group': {
+        const manualTranscript = (req.body.manualTranscript || '').trim();
         const out = await analyzeCreativeGroup({
           groupKey: req.body.groupKey,
-          manualTranscript: (req.body.manualTranscript || '').trim(),
+          assetId: req.body.assetId || null,
+          manualTranscript,
           ctx: { BASE, accessToken, adAccountId },
         });
+        if (manualTranscript && out.status >= 200 && out.status < 300 && !out.body?.error) {
+          await logCreativeOperatorEvent(appAccess.sql, {
+            eventType: 'manual_transcript_analyzed',
+            groupKey: req.body.groupKey,
+            sourceType: 'transcript',
+            sourceLabel: 'Manual script',
+            userId: appAccess.userId,
+            userEmail: appAccess.email,
+            metadata: {
+              transcript_chars: manualTranscript.length,
+              asset_id: req.body.assetId || null,
+              confidence: out.body?.analysis?.confidence ?? null,
+            },
+          });
+        }
         return res.status(out.status).json(out.body);
       }
 
@@ -1824,6 +2095,23 @@ export default async function handler(req, res) {
 
       case 'retry_creative_analysis_queue': {
         const out = await retryCreativeAnalysisQueue();
+        return res.status(out.status).json(out.body);
+      }
+
+      case 'normalize_creative_asset': {
+        const out = await normalizeCreativeAsset({
+          groupKey: req.body.groupKey,
+          assetId: req.body.assetId || null,
+          ctx: { BASE, accessToken, adAccountId },
+        });
+        return res.status(out.status).json(out.body);
+      }
+
+      case 'normalize_creative_asset_batch': {
+        const out = await normalizeCreativeAssetBatch({
+          ctx: { BASE, accessToken, adAccountId },
+          limit: req.body.limit,
+        });
         return res.status(out.status).json(out.body);
       }
       default:

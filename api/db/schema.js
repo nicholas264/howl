@@ -7,6 +7,9 @@ import { ensureAppTables } from '../_lib/app-access.js';
 import { ensureCreatorOpsTables } from '../_lib/creator-ops.js';
 import { ensureLooxReviewTables } from '../_lib/loox-reviews.js';
 import { ensureContentStudioTables } from '../_lib/content-studio.js';
+import { ensureMapMonitorTables } from '../_lib/map-monitor.js';
+import { ensureCreativeAuditTables } from '../_lib/creative-audit.js';
+import { ensureCreativeEvidenceTaskTables } from '../_lib/creative-evidence-tasks.js';
 
 export default async function handler(req, res) {
   if (!(await requireAdmin(req, res))) return;
@@ -243,7 +246,14 @@ export default async function handler(req, res) {
     await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS source_asset_id BIGINT`;
     await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS vision_frame_count INTEGER`;
     await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS transcription_status TEXT`;
+    await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS structured_analysis JSONB`;
+    await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS evidence JSONB`;
+    await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS confidence NUMERIC(5,4)`;
+    await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS operator_summary TEXT`;
+    await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS recommended_next_step TEXT`;
     await ensureCreativeAnalysisQueue(sql);
+    await ensureCreativeAuditTables(sql);
+    await ensureCreativeEvidenceTaskTables(sql);
     await ensureLooxReviewTables(sql);
 
     // Attribution columns on launch_history (idempotent).
@@ -278,6 +288,7 @@ export default async function handler(req, res) {
     await ensureAppTables(sql);
     await ensureCreatorOpsTables(sql);
     await ensureContentStudioTables(sql);
+    await ensureMapMonitorTables(sql);
 
     return res.json({ ok: true });
   } catch (err) {

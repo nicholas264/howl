@@ -367,7 +367,10 @@ export default function AdminWorkspace({ onOpenEditor }) {
           <div className={data.health.creative_analysis.failed ? 'attention' : ''}>
             <span>Creative analysis</span>
             <strong>{data.health.creative_analysis.failed || 0} failed</strong>
-            <small>{data.health.creative_analysis.pending || 0} waiting · {data.health.creative_analysis.processing || 0} running</small>
+            <small>
+              {data.health.creative_analysis.pending || 0} waiting · {data.health.creative_analysis.processing || 0} running
+              {' · '}{data.health.creative_analysis.completed_24h || 0} done 24h
+            </small>
           </div>
           <div className={(data.health.ugc.failed || data.health.ugc.stale) ? 'attention' : ''}>
             <span>UGC processing</span>

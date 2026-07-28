@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:vercel": "vercel dev --listen 127.0.0.1:5175",
     "build": "vite build",
     "preview": "vite preview",
     "verify:ugc-infra": "AUTH_DISABLED=true NODE_ENV=development node scripts/verify-ugc-infra.mjs",

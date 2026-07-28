@@ -327,6 +327,16 @@ export function extractKeywords(text, tags = []) {
   ])].slice(0, 20);
 }
 
+export function sourceTypeForUrl(url) {
+  const pathname = (() => {
+    try { return new URL(cleanText(url, 1200)).pathname.toLowerCase(); }
+    catch { return cleanText(url, 1200).toLowerCase(); }
+  })();
+  if (/\/blogs?\//i.test(pathname)) return 'blog';
+  if (/\/(products?|collections?|pages?)\//i.test(pathname)) return 'landing_page';
+  return 'other';
+}
+
 export async function rebuildSourceChunks(sql, source) {
   await sql`DELETE FROM content_source_chunks WHERE source_id = ${source.id}`;
   const chunks = chunkSourceBody(source.body);
@@ -500,11 +510,14 @@ export async function scrapeUrlToSource(url, { sourceType = 'blog', tags = [] } 
   });
 }
 
-export function extractSitemapUrls(xml, limit = 25) {
+export function extractSitemapUrls(xml, limit = 25, { includeSitemaps = false, includePages = true } = {}) {
+  const pagePattern = includePages
+    ? /\/(blog|blogs|journal|learn|pages|products|collections)\//i
+    : /\/(blog|blogs|journal|learn)\//i;
   return [...cleanText(xml, MAX_SCRAPE_BYTES).matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/gi)]
     .map(match => match[1].trim())
     .filter(Boolean)
-    .filter(url => /\/(blog|blogs|journal|learn|pages)\//i.test(url))
+    .filter(url => (includeSitemaps && /sitemap[^/]*\.xml(?:\?|$)/i.test(url)) || pagePattern.test(url))
     .slice(0, limit);
 }
 

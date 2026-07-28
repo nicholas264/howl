@@ -41,6 +41,12 @@ export async function ensureCreativeAssetTables(sql) {
   await sql`ALTER TABLE creative_assets ADD COLUMN IF NOT EXISTS deliverable_id BIGINT`;
   await sql`ALTER TABLE creative_assets ADD COLUMN IF NOT EXISTS source_type TEXT`;
   await sql`ALTER TABLE creative_assets ADD COLUMN IF NOT EXISTS source_label TEXT`;
+  await sql`ALTER TABLE creative_assets ADD COLUMN IF NOT EXISTS playable_url TEXT`;
+  await sql`ALTER TABLE creative_assets ADD COLUMN IF NOT EXISTS preview_url TEXT`;
+  await sql`ALTER TABLE creative_assets ADD COLUMN IF NOT EXISTS playback_status TEXT NOT NULL DEFAULT 'unknown'`;
+  await sql`ALTER TABLE creative_assets ADD COLUMN IF NOT EXISTS playback_error TEXT`;
+  await sql`ALTER TABLE creative_assets ADD COLUMN IF NOT EXISTS playback_checked_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE creative_assets ADD COLUMN IF NOT EXISTS duration_seconds NUMERIC`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creative_assets_creator_id ON creative_assets(creator_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creative_assets_brief_id ON creative_assets(brief_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creative_assets_deliverable_id ON creative_assets(deliverable_id)`;
@@ -75,6 +81,11 @@ export async function backfillCreativeAssetsFromLaunchHistory(sql) {
       drive_file_name = COALESCE(EXCLUDED.drive_file_name, creative_assets.drive_file_name),
       mime_type = COALESCE(EXCLUDED.mime_type, creative_assets.mime_type),
       durable_url = COALESCE(EXCLUDED.durable_url, creative_assets.durable_url),
+      playable_url = COALESCE(creative_assets.playable_url, EXCLUDED.durable_url),
+      playback_status = CASE
+        WHEN COALESCE(creative_assets.playable_url, EXCLUDED.durable_url) IS NOT NULL THEN 'ready'
+        ELSE creative_assets.playback_status
+      END,
       ad_id = COALESCE(EXCLUDED.ad_id, creative_assets.ad_id),
       meta_video_id = COALESCE(EXCLUDED.meta_video_id, creative_assets.meta_video_id),
       meta_image_hash = COALESCE(EXCLUDED.meta_image_hash, creative_assets.meta_image_hash),
@@ -114,6 +125,7 @@ export async function upsertDriveAsset(sql, file, folderPath = '', ensureTable =
       drive_modified_at = EXCLUDED.drive_modified_at,
       drive_web_view_url = EXCLUDED.drive_web_view_url,
       drive_thumbnail_url = EXCLUDED.drive_thumbnail_url,
+      preview_url = COALESCE(creative_assets.preview_url, EXCLUDED.drive_thumbnail_url),
       updated_at = now()
     RETURNING *
   `;
@@ -141,6 +153,19 @@ export async function markCreativeAssetLaunched(sql, {
   const [row] = await sql`
     UPDATE creative_assets SET
       durable_url = COALESCE(${durableUrl || null}, durable_url),
+      playable_url = COALESCE(${durableUrl || null}, playable_url),
+      playback_status = CASE
+        WHEN COALESCE(${durableUrl || null}, playable_url) IS NOT NULL THEN 'ready'
+        ELSE playback_status
+      END,
+      playback_error = CASE
+        WHEN COALESCE(${durableUrl || null}, playable_url) IS NOT NULL THEN NULL
+        ELSE playback_error
+      END,
+      playback_checked_at = CASE
+        WHEN COALESCE(${durableUrl || null}, playable_url) IS NOT NULL THEN now()
+        ELSE playback_checked_at
+      END,
       meta_video_id = COALESCE(${metaVideoId || null}, meta_video_id),
       meta_image_hash = COALESCE(${metaImageHash || null}, meta_image_hash),
       ad_id = COALESCE(${adId || null}, ad_id),

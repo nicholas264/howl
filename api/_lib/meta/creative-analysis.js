@@ -28,6 +28,7 @@ import { getGoogleAccessToken } from '../gcp-auth.js';
 
 const DRIVE = 'https://www.googleapis.com/drive/v3';
 const WHISPER_MAX_BYTES = 24 * 1024 * 1024;
+const ANALYSIS_MODEL = process.env.CREATIVE_ANALYSIS_MODEL || 'claude-sonnet-4-6';
 
 async function ensureCreativeAnalysisColumns(sql) {
   await ensureCreativeAssetTables(sql);
@@ -35,6 +36,11 @@ async function ensureCreativeAnalysisColumns(sql) {
   await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS source_asset_id BIGINT`;
   await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS vision_frame_count INTEGER`;
   await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS transcription_status TEXT`;
+  await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS structured_analysis JSONB`;
+  await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS evidence JSONB`;
+  await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS confidence NUMERIC(5,4)`;
+  await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS operator_summary TEXT`;
+  await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS recommended_next_step TEXT`;
 }
 
 async function runFfmpeg(args) {
@@ -144,7 +150,7 @@ async function prepareVideoAsset(source, { transcribe = true } = {}) {
   }
 }
 
-export async function analyzeCreativeGroup({ groupKey, manualTranscript = '', ctx }) {
+export async function analyzeCreativeGroup({ groupKey, assetId = null, manualTranscript = '', ctx }) {
   if (!groupKey) return { status: 400, body: { error: 'groupKey required' } };
   if (!process.env.DATABASE_URL) return { status: 200, body: { error: 'DATABASE_URL not configured' } };
   if (!process.env.ANTHROPIC_API_KEY) return { status: 200, body: { error: 'ANTHROPIC_API_KEY not configured' } };
@@ -197,11 +203,16 @@ export async function analyzeCreativeGroup({ groupKey, manualTranscript = '', ct
   const [sourceAsset] = await sql`
     SELECT *
     FROM creative_assets
-    WHERE group_key = ${groupKey}
+    WHERE (${assetId || null}::bigint IS NOT NULL AND id = ${assetId || null})
+       OR group_key = ${groupKey}
        OR ad_id = ${topAd.ad_id}
        OR (${topAd.video_id || null}::text IS NOT NULL AND meta_video_id = ${topAd.video_id || null})
        OR (${topAd.image_hash || null}::text IS NOT NULL AND meta_image_hash = ${topAd.image_hash || null})
-    ORDER BY (placement_role = 'feed') DESC, durable_url IS NULL, updated_at DESC
+    ORDER BY
+      (id = ${assetId || null}::bigint) DESC,
+      (COALESCE(playable_url, durable_url) IS NOT NULL) DESC,
+      (placement_role = 'feed') DESC,
+      updated_at DESC
     LIMIT 1
   `;
   if (sourceAsset) debug.asset = `creative_assets:${sourceAsset.id}`;
@@ -327,6 +338,35 @@ export async function analyzeCreativeGroup({ groupKey, manualTranscript = '', ct
   } else if (isVideo) {
     debug.videoFieldsResolved = videoSource ? 'using creative_assets durable URL' : 'no Meta video id available';
   }
+  if (sourceAsset && isVideo) {
+    await sql`
+      UPDATE creative_assets SET
+        playable_url = COALESCE(${videoSource || null}, playable_url, durable_url),
+        preview_url = COALESCE(${imageUrl || null}, preview_url, drive_thumbnail_url),
+        playback_status = CASE
+          WHEN COALESCE(${videoSource || null}, playable_url, durable_url) IS NOT NULL THEN 'ready'
+          WHEN ${sourceAsset.drive_file_id || null}::text IS NOT NULL THEN 'drive-only'
+          ELSE 'missing'
+        END,
+        playback_error = CASE
+          WHEN COALESCE(${videoSource || null}, playable_url, durable_url) IS NOT NULL THEN NULL
+          ELSE COALESCE(playback_error, 'No playable video URL could be resolved from Meta, Blob, or Drive.')
+        END,
+        playback_checked_at = now(),
+        updated_at = now()
+      WHERE id = ${sourceAsset.id}
+    `;
+  } else if (sourceAsset && !isVideo) {
+    await sql`
+      UPDATE creative_assets SET
+        preview_url = COALESCE(${imageUrl || null}, preview_url, drive_thumbnail_url),
+        playback_status = 'not-needed',
+        playback_error = NULL,
+        playback_checked_at = now(),
+        updated_at = now()
+      WHERE id = ${sourceAsset.id}
+    `;
+  }
 
   let imageB64 = null;
   let mediaType = 'image/jpeg';
@@ -348,36 +388,11 @@ export async function analyzeCreativeGroup({ groupKey, manualTranscript = '', ct
     debug.image = 'no image URL';
   }
 
-  if (isVideo && !transcript) {
-    return {
-      status: 422,
-      body: {
-        error: 'Video transcription is incomplete. The creative was not analyzed or saved.',
-        step: 'transcription_quality_gate',
-        debug,
-      },
-    };
-  }
-  if (isVideo && visionFrames.length === 0) {
-    return {
-      status: 422,
-      body: {
-        error: 'No chronological video frames could be extracted. The creative was not analyzed or saved.',
-        step: 'vision_quality_gate',
-        debug,
-      },
-    };
-  }
-  if (!isVideo && !imageB64) {
-    return {
-      status: 422,
-      body: {
-        error: 'The creative image could not be loaded. The creative was not analyzed or saved.',
-        step: 'vision_quality_gate',
-        debug,
-      },
-    };
-  }
+  const visualSignalCount = visionFrames.length + (imageB64 ? 1 : 0);
+  const missingSignals = [
+    isVideo && !transcript ? 'transcript' : null,
+    visualSignalCount === 0 ? 'visual' : null,
+  ].filter(Boolean);
 
   const perf = {
     spend: Number(topAd.spend) || 0,
@@ -409,10 +424,23 @@ Return ONLY a single valid JSON object with these exact fields:
   "angle": "short label (<=6 words) for the persuasive angle, e.g. 'burn ban anywhere'",
   "talent_description": "1 sentence on who is on camera (or 'no on-camera talent' for static)",
   "visual_summary": "2-3 sentences describing the visual sequence: opening frame, setting, framing, visible on-screen text, product actions, and progression",
+  "offer": "the offer or promise being sold, or null if absent",
+  "objection_handled": "the objection this creative addresses, or null",
+  "cta": "the explicit or implied call to action, or null",
+  "proof_type": "one of: demo | testimonial | social-proof | founder-credibility | product-visual | comparison | urgency | none | other",
+  "opening_visual": "what the viewer sees first, concrete and short",
+  "pattern_summary": "one reusable creative pattern from this ad in <=24 words",
+  "risk_flags": ["array of concrete risks, missing evidence, or claim concerns; empty array if none"],
+  "evidence": [
+    { "claim": "specific conclusion", "basis": "transcript | frame | performance | metadata", "reference": "timecode, frame number, or metric", "confidence": 0.0 }
+  ],
+  "confidence": 0.0,
+  "operator_summary": "2-3 sentences written for a creative/growth operator making a decision",
+  "recommended_next_step": "one concrete next action: scale, iterate hook, fix offer, request transcript, pause, brief variants, or source review",
   "why_it_worked": "3-5 sentences. Concrete reasoning that ties THIS creative's available signals (transcript if present, visual format, performance) to its results. If no transcript, acknowledge the limitation and reason from format/visual/performance only. Avoid generic ad-school platitudes."
 }
 
-No prose outside the JSON. No markdown fences.`;
+Evidence references must be honest: use transcript excerpts, frame order, or exact performance metrics. Do not invent timecodes if no timecoded transcript was provided. No prose outside the JSON. No markdown fences.`;
 
   const userText = `Performance (last 30d, this creative group):
 - Spend: $${perf.spend.toFixed(2)}
@@ -424,6 +452,10 @@ ${perf.cpa != null ? `- CPA: $${perf.cpa.toFixed(2)}` : ''}
 ${haveTranscript ? `Transcript (full):\n${transcript}` : (isVideo
   ? 'NO TRANSCRIPT AVAILABLE. You may inspect the sampled video frames, but cannot determine the spoken hook. hook_text_verbatim must be null.'
   : 'Static image ad, no transcript needed.')}
+
+${visualSignalCount
+  ? ''
+  : 'NO VISUAL ASSET AVAILABLE. Analyze only from ad metadata and performance. Set confidence low, include a risk flag for missing visual evidence, and recommend source review or asset repair.'}
 
 Analyze this creative.`;
 
@@ -442,7 +474,7 @@ Analyze this creative.`;
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: ANALYSIS_MODEL,
       max_tokens: 2000,
       system: systemPrompt,
       messages: [{ role: 'user', content: claudeContent }],
@@ -460,11 +492,32 @@ Analyze this creative.`;
     return { status: 500, body: { error: 'Failed to parse analysis JSON', raw: text } };
   }
 
+  const structuredAnalysis = {
+    offer: parsed.offer || null,
+    objection_handled: parsed.objection_handled || null,
+    cta: parsed.cta || null,
+    proof_type: parsed.proof_type || null,
+    opening_visual: parsed.opening_visual || null,
+    pattern_summary: parsed.pattern_summary || null,
+    risk_flags: [
+      ...(Array.isArray(parsed.risk_flags) ? parsed.risk_flags.slice(0, 12) : []),
+      ...(missingSignals.includes('transcript') ? ['Transcript unavailable; spoken hook cannot be verified.'] : []),
+      ...(missingSignals.includes('visual') ? ['Visual asset unavailable; analysis is based on metadata and performance only.'] : []),
+    ].slice(0, 12),
+    operator_summary: parsed.operator_summary || null,
+    recommended_next_step: parsed.recommended_next_step || (missingSignals.length ? 'source review' : null),
+  };
+  const evidence = Array.isArray(parsed.evidence) ? parsed.evidence.slice(0, 12) : [];
+  const rawConfidence = Number.isFinite(Number(parsed.confidence)) ? Math.max(0, Math.min(1, Number(parsed.confidence))) : null;
+  const confidence = missingSignals.length
+    ? Math.min(rawConfidence ?? 0.45, missingSignals.includes('visual') ? 0.35 : 0.55)
+    : rawConfidence;
+
   await sql`
     INSERT INTO creative_analysis
-      (group_key, asset_kind, transcript, hook_text_verbatim, hook_type, format, angle, talent_description, visual_summary, why_it_worked, performance_snapshot, model, source_asset_id, vision_frame_count, transcription_status, generated_at)
+      (group_key, asset_kind, transcript, hook_text_verbatim, hook_type, format, angle, talent_description, visual_summary, why_it_worked, performance_snapshot, model, source_asset_id, vision_frame_count, transcription_status, structured_analysis, evidence, confidence, operator_summary, recommended_next_step, generated_at)
     VALUES
-      (${groupKey}, ${assetKind}, ${transcript || null}, ${parsed.hook_text_verbatim || null}, ${parsed.hook_type || null}, ${parsed.format || null}, ${parsed.angle || null}, ${parsed.talent_description || null}, ${parsed.visual_summary || null}, ${parsed.why_it_worked || null}, ${JSON.stringify(perf)}::jsonb, ${'claude-sonnet-4-20250514'}, ${sourceAsset?.id || null}, ${visionFrames.length || (imageB64 ? 1 : 0)}, ${transcript ? 'complete' : (isVideo ? 'missing' : 'not-needed')}, NOW())
+      (${groupKey}, ${assetKind}, ${transcript || null}, ${parsed.hook_text_verbatim || null}, ${parsed.hook_type || null}, ${parsed.format || null}, ${parsed.angle || null}, ${parsed.talent_description || null}, ${parsed.visual_summary || null}, ${parsed.why_it_worked || null}, ${JSON.stringify(perf)}::jsonb, ${ANALYSIS_MODEL}, ${sourceAsset?.id || null}, ${visionFrames.length || (imageB64 ? 1 : 0)}, ${transcript ? 'complete' : (isVideo ? 'missing' : 'not-needed')}, ${JSON.stringify(structuredAnalysis)}::jsonb, ${JSON.stringify(evidence)}::jsonb, ${confidence}, ${structuredAnalysis.operator_summary}, ${structuredAnalysis.recommended_next_step}, NOW())
     ON CONFLICT (group_key) DO UPDATE SET
       asset_kind = EXCLUDED.asset_kind,
       transcript = EXCLUDED.transcript,
@@ -480,6 +533,11 @@ Analyze this creative.`;
       source_asset_id = EXCLUDED.source_asset_id,
       vision_frame_count = EXCLUDED.vision_frame_count,
       transcription_status = EXCLUDED.transcription_status,
+      structured_analysis = EXCLUDED.structured_analysis,
+      evidence = EXCLUDED.evidence,
+      confidence = EXCLUDED.confidence,
+      operator_summary = EXCLUDED.operator_summary,
+      recommended_next_step = EXCLUDED.recommended_next_step,
       generated_at = NOW()
   `;
   if (sourceAsset) {
@@ -501,6 +559,11 @@ Analyze this creative.`;
         talentDescription: parsed.talent_description,
         visualSummary: parsed.visual_summary,
         whyItWorked: parsed.why_it_worked,
+        structuredAnalysis,
+        evidence,
+        confidence,
+        operatorSummary: structuredAnalysis.operator_summary,
+        recommendedNextStep: structuredAnalysis.recommended_next_step,
         performance: perf,
         sourceAssetId: sourceAsset?.id || null,
         visionFrameCount: visionFrames.length || (imageB64 ? 1 : 0),
@@ -514,7 +577,7 @@ Analyze this creative.`;
 
 export async function processCreativeAnalysisQueue({ ctx, batchSize: rawBatchSize = 2 }) {
   if (!process.env.DATABASE_URL) return { status: 200, body: { error: 'DATABASE_URL not configured' } };
-  const batchSize = Math.max(1, Math.min(5, parseInt(rawBatchSize || 2, 10)));
+  const batchSize = Math.max(1, Math.min(8, parseInt(rawBatchSize || 2, 10)));
   const sql = neon(process.env.DATABASE_URL);
   await ensureCreativeAnalysisColumns(sql);
   await enqueueCreativeAnalyses(sql, 'worker');
@@ -566,7 +629,34 @@ export async function getCreativeAnalysis({ groupKey }) {
   const sql = neon(process.env.DATABASE_URL);
   await ensureCreativeAnalysisColumns(sql);
   const [row] = await sql`SELECT * FROM creative_analysis WHERE group_key = ${groupKey}`;
-  return { status: 200, body: { analysis: row || null } };
+  const [asset] = await sql`
+    SELECT
+      id,
+      drive_file_name,
+      mime_type,
+      COALESCE(playable_url, durable_url) AS playable_url,
+      COALESCE(preview_url, drive_thumbnail_url) AS preview_url,
+      drive_web_view_url,
+      playback_status,
+      playback_error,
+      transcript_status,
+      transcript_error,
+      analyzed_at,
+      updated_at
+    FROM creative_assets
+    WHERE group_key = ${groupKey}
+       OR ad_id = ${groupKey}
+       OR meta_video_id = ${groupKey}
+       OR meta_image_hash = ${groupKey}
+       OR id = ${row?.source_asset_id || null}
+    ORDER BY
+      (id = ${row?.source_asset_id || null}) DESC,
+      (COALESCE(playable_url, durable_url) IS NOT NULL) DESC,
+      (placement_role = 'feed') DESC,
+      updated_at DESC
+    LIMIT 1
+  `;
+  return { status: 200, body: { analysis: row || null, asset: asset || null } };
 }
 
 export async function listAnalyzedWinners({ sinceDays: rawSince }) {
@@ -588,7 +678,8 @@ export async function listAnalyzedWinners({ sinceDays: rawSince }) {
       ca.group_key, ca.hook_text_verbatim, ca.hook_type, ca.format, ca.angle,
       ca.talent_description, ca.visual_summary, ca.why_it_worked, ca.transcript,
       ca.asset_kind, ca.generated_at, ca.source_asset_id, ca.vision_frame_count,
-      ca.transcription_status,
+      ca.transcription_status, ca.structured_analysis, ca.evidence, ca.confidence,
+      ca.operator_summary, ca.recommended_next_step,
       (SELECT thumbnail_url FROM creative_performance cp WHERE cp.group_key = ca.group_key ORDER BY thumbnail_url IS NULL LIMIT 1) AS thumbnail_url,
       (SELECT ad_name FROM creative_performance cp WHERE cp.group_key = ca.group_key ORDER BY created_time ASC LIMIT 1) AS name,
       COALESCE((

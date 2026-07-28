@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import DealerCsvImport from './DealerCsvImport';
 import CreativePerformanceWorkspace from './CreativePerformanceWorkspace';
+import { apiJson } from '../lib/api';
 import { getAnnualRevenuePace } from '../utils/forecastPace';
 
 const TYPE_COLORS = {
@@ -325,8 +326,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
 
   const loadLaunches = useCallback(async () => {
     try {
-      const r = await fetch('/api/db/launch-history?limit=1000');
-      const d = await r.json();
+      const d = await apiJson('/api/db/launch-history?limit=1000', undefined, 'Launch history failed');
       if (d.error) throw new Error(d.error);
       setLaunches(d.rows || []);
     } catch (err) {
@@ -352,16 +352,17 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
   const [analysisQueueLoading, setAnalysisQueueLoading] = useState(false);
   const [analysisQueueMessage, setAnalysisQueueMessage] = useState('');
   const [analysisBatchRunning, setAnalysisBatchRunning] = useState(false);
+  const [playbackRepairRunning, setPlaybackRepairRunning] = useState(false);
+  const [playbackRepairMessage, setPlaybackRepairMessage] = useState('');
   const creativeWorkspaceMode = 'motion';
 
   const loadCreativeTable = useCallback(async (days) => {
     setCreativeTableLoading(true); setCreativeTableError('');
     try {
-      const r = await fetch('/api/meta', {
+      const d = await apiJson('/api/meta', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'get_creative_table', sinceDays: days }),
-      });
-      const d = await r.json();
+      }, 'Creative performance failed');
       if (d.error) throw new Error(d.error);
       setCreativeTable(d);
     } catch (err) { setCreativeTableError(err.message); }
@@ -377,11 +378,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
   const loadAnalysisQueue = useCallback(async () => {
     setAnalysisQueueLoading(true);
     try {
-      const r = await fetch('/api/meta', {
+      const d = await apiJson('/api/meta', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'get_creative_analysis_queue' }),
-      });
-      const d = await r.json();
+      }, 'Creative analysis queue failed');
       if (d.error) throw new Error(d.error);
       setAnalysisQueue(d.queue || null);
     } catch (err) {
@@ -401,8 +401,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
   const initCreativeTables = useCallback(async () => {
     setCreativeIniting(true); setCreativeInitMsg('');
     try {
-      const r = await fetch('/api/db/schema', { method: 'POST' });
-      const d = await r.json();
+      const d = await apiJson('/api/db/schema', { method: 'POST' }, 'Schema init failed');
       if (!d.ok) throw new Error(d.error || 'Schema init failed');
       setCreativeInitMsg('Tables ready. Click Sync from Meta to pull data.');
       setCreativeTableError('');
@@ -415,11 +414,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
   const syncCreativeAnalytics = useCallback(async () => {
     setCreativeSyncing(true); setCreativeSyncMsg('');
     try {
-      const r = await fetch('/api/meta', {
+      const d = await apiJson('/api/meta', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'sync_creative_analytics', sinceDays: 30, force: true }),
-      });
-      const d = await r.json();
+      }, 'Creative sync failed');
       if (d.error) throw new Error(d.error);
       setCreativeSyncMsg(`Synced ${d.adsUpserted || 0} ads · ${d.insightsUpserted || 0} daily rows · ${d.queuedForAnalysis || 0} queued`);
       await loadCreativeTable(creativeWindowDays);
@@ -429,7 +427,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
   }, [creativeWindowDays, loadAnalysisQueue, loadCreativeTable]);
 
   const assignCreativeCreator = useCallback(async (groupKey, creatorId, source = {}) => {
-    const r = await fetch('/api/meta', {
+    const d = await apiJson('/api/meta', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -439,9 +437,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         sourceType: source.sourceType || null,
         sourceLabel: source.sourceLabel || null,
       }),
-    });
-    const d = await r.json();
-    if (!r.ok || d.error) throw new Error(d.error || 'Could not assign creative source');
+    }, 'Could not assign creative source');
+    if (d.error) throw new Error(d.error || 'Could not assign creative source');
     setCreativeTable(prev => prev ? {
       ...prev,
       groups: prev.groups.map(group => group.groupKey === groupKey ? {
@@ -455,19 +452,22 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         suggestedCreatorName: d.creator?.id ? null : group.suggestedCreatorName,
         suggestionConfidence: d.creator?.id ? null : group.suggestionConfidence,
         suggestionReason: d.creator?.id ? null : group.suggestionReason,
+        suggestedSourceType: d.sourceType ? null : group.suggestedSourceType,
+        suggestedSourceLabel: d.sourceType ? null : group.suggestedSourceLabel,
+        suggestedSourceConfidence: d.sourceType ? null : group.suggestedSourceConfidence,
+        suggestedSourceReason: d.sourceType ? null : group.suggestedSourceReason,
       } : group),
     } : prev);
     return d;
   }, []);
 
   const assignCreativeCreators = useCallback(async (assignments) => {
-    const r = await fetch('/api/meta', {
+    const d = await apiJson('/api/meta', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'assign_creative_creators', assignments }),
-    });
-    const d = await r.json();
-    if (!r.ok || d.error) throw new Error(d.error || 'Could not assign creators');
+    }, 'Could not assign creators');
+    if (d.error) throw new Error(d.error || 'Could not assign creators');
     const updates = new Map((d.assignments || []).map(item => [item.groupKey, item]));
     setCreativeTable(prev => prev ? {
       ...prev,
@@ -494,11 +494,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
     setAnalysisBatchRunning(true);
     setAnalysisQueueMessage('');
     try {
-      const r = await fetch('/api/meta', {
+      const d = await apiJson('/api/meta', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'process_creative_analysis_queue', batchSize: 3 }),
-      });
-      const d = await r.json();
+        body: JSON.stringify({ action: 'process_creative_analysis_queue', batchSize: 5 }),
+      }, 'Creative analysis batch failed');
       if (d.error) throw new Error(d.error);
       setAnalysisQueue(d.queue || null);
       const completed = (d.results || []).filter(item => item.status === 'completed').length;
@@ -516,11 +515,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
   const retryAnalysisBatch = useCallback(async () => {
     setAnalysisQueueMessage('');
     try {
-      const r = await fetch('/api/meta', {
+      const d = await apiJson('/api/meta', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'retry_creative_analysis_queue' }),
-      });
-      const d = await r.json();
+      }, 'Creative analysis retry failed');
       if (d.error) throw new Error(d.error);
       setAnalysisQueue(d.queue || null);
       setAnalysisQueueMessage(`${d.retried || 0} failed job${d.retried === 1 ? '' : 's'} returned to the queue`);
@@ -529,55 +527,118 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
     }
   }, []);
 
+  const normalizeCreativeAssetForPlayback = useCallback(async (groupKey, assetId = null) => {
+    setPlaybackRepairMessage('');
+    const d = await apiJson('/api/meta', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'normalize_creative_asset', groupKey, assetId }),
+    }, 'Playback repair failed');
+    if (d.error) throw new Error(d.error || 'Playback repair failed');
+    await loadCreativeTable(creativeWindowDays);
+    setPlaybackRepairMessage(d.ok
+      ? `Playback ready for ${d.asset?.drive_file_name || groupKey}.`
+      : `Playback repair could not finish: ${d.message || d.error || 'source unavailable'}`);
+    return d;
+  }, [creativeWindowDays, loadCreativeTable]);
+
+  const normalizeCreativePlaybackBatch = useCallback(async () => {
+    setPlaybackRepairRunning(true);
+    setPlaybackRepairMessage('');
+    try {
+      const d = await apiJson('/api/meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'normalize_creative_asset_batch', limit: 3 }),
+      }, 'Playback repair batch failed');
+      if (d.error) throw new Error(d.error || 'Playback repair batch failed');
+      const repaired = (d.results || []).filter(item => item.ok).length;
+      const failed = (d.results || []).filter(item => !item.ok).length;
+      setPlaybackRepairMessage(`Playback repair processed ${d.processed || 0}: ${repaired} ready${failed ? ` · ${failed} need source` : ''}`);
+      await loadCreativeTable(creativeWindowDays);
+    } catch (err) {
+      setPlaybackRepairMessage(`Playback repair failed: ${err.message}`);
+    } finally {
+      setPlaybackRepairRunning(false);
+    }
+  }, [creativeWindowDays, loadCreativeTable]);
+
   // Creative DNA — per-group AI analysis. Drawer shows on demand.
   const [analyzingGroup, setAnalyzingGroup] = useState(null);   // groupKey currently being analyzed
-  const [analysisDrawer, setAnalysisDrawer] = useState(null);   // { groupKey, name, analysis, loading, error }
-  const openAnalysis = useCallback(async (groupKey, name) => {
-    setAnalysisDrawer({ groupKey, name, analysis: null, loading: true, error: '' });
+  const [analysisDrawer, setAnalysisDrawer] = useState(null);   // { groupKey, name, media, analysis, loading, error }
+  const openAnalysis = useCallback(async (groupKey, name, media = null) => {
+    setAnalysisDrawer({ groupKey, name, media, analysis: null, loading: true, error: '' });
     try {
-      const r = await fetch('/api/meta', {
+      const d = await apiJson('/api/meta', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'get_creative_analysis', groupKey }),
-      });
-      const d = await r.json();
-      setAnalysisDrawer({ groupKey, name, analysis: d.analysis, loading: false, error: d.error || '' });
+      }, 'Creative analysis failed');
+      const asset = d.asset ? {
+        assetId: d.asset.id ? Number(d.asset.id) : media?.assetId || null,
+        assetKind: ((d.asset.mime_type || '').toLowerCase().startsWith('video/') || /\.(mp4|mov|m4v|webm)(\?|$)/i.test(d.asset.playable_url || '')) ? 'video' : 'image',
+        mimeType: d.asset.mime_type || media?.mimeType || null,
+        playableUrl: d.asset.playable_url || media?.playableUrl || null,
+        playbackEmbedUrl: media?.playbackEmbedUrl || null,
+        previewUrl: d.asset.preview_url || media?.previewUrl || null,
+        driveWebViewUrl: d.asset.drive_web_view_url || null,
+        playbackStatus: d.asset.playback_status || media?.playbackStatus || null,
+        playbackError: d.asset.playback_error || media?.playbackError || null,
+        transcriptStatus: d.asset.transcript_status || media?.transcriptStatus || null,
+        transcriptError: d.asset.transcript_error || media?.transcriptError || null,
+        analyzedAt: d.asset.analyzed_at || media?.analyzedAt || null,
+      } : media;
+      setAnalysisDrawer({ groupKey, name, media: asset, analysis: d.analysis, loading: false, error: d.error || '' });
     } catch (err) {
-      setAnalysisDrawer({ groupKey, name, analysis: null, loading: false, error: err.message });
+      setAnalysisDrawer({ groupKey, name, media, analysis: null, loading: false, error: err.message });
     }
   }, []);
-  const runAnalysis = useCallback(async (groupKey, name, manualTranscript) => {
+  const runAnalysis = useCallback(async (groupKey, name, manualTranscript, assetId = null) => {
     setAnalyzingGroup(groupKey);
-    setAnalysisDrawer({ groupKey, name, analysis: null, loading: true, error: '' });
+    setAnalysisDrawer(prev => ({ groupKey, name, media: prev?.groupKey === groupKey ? prev.media : null, analysis: null, loading: true, error: '' }));
     try {
-      const r = await fetch('/api/meta', {
+      const d = await apiJson('/api/meta', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'analyze_creative_group', groupKey, manualTranscript }),
-      });
-      const d = await r.json();
+        body: JSON.stringify({ action: 'analyze_creative_group', groupKey, assetId, manualTranscript }),
+      }, 'Creative analysis failed');
       if (d.error) throw new Error(d.error);
       // Reshape API response to DB row shape so the drawer renders the same way for fresh + cached analyses.
       const a = d.analysis;
-      setAnalysisDrawer({
+      setAnalysisDrawer(prev => ({
         groupKey, name, loading: false, error: '',
+        media: prev?.groupKey === groupKey ? prev.media : null,
         analysis: {
           group_key: a.groupKey, asset_kind: a.assetKind, transcript: a.transcript,
           hook_text_verbatim: a.hookTextVerbatim, hook_type: a.hookType,
           format: a.format, angle: a.angle, talent_description: a.talentDescription,
           visual_summary: a.visualSummary, why_it_worked: a.whyItWorked,
+          structured_analysis: a.structuredAnalysis || null, evidence: a.evidence || [], confidence: a.confidence ?? null,
+          operator_summary: a.operatorSummary || null, recommended_next_step: a.recommendedNextStep || null,
           performance_snapshot: a.performance, generated_at: a.generatedAt,
         },
         debug: d.debug || null,
-      });
-      // Reflect the new analyzed status on the row without a full refetch.
+      }));
+      await loadAnalysisQueue();
+      // Reflect the new evidence state on the row without forcing a full refetch.
       setCreativeTable(prev => prev ? {
         ...prev,
         groups: prev.groups.map(g => g.groupKey === groupKey
-          ? { ...g, isAnalyzed: true, analysisQueueStatus: 'completed' }
+          ? {
+            ...g,
+            isAnalyzed: true,
+            analysisQueueStatus: 'completed',
+            transcriptStatus: manualTranscript?.trim() ? 'complete' : (a.transcriptionStatus || g.transcriptStatus),
+            transcriptError: manualTranscript?.trim() ? null : g.transcriptError,
+            analysisConfidence: a.confidence ?? g.analysisConfidence,
+            analysisOperatorSummary: a.operatorSummary || g.analysisOperatorSummary,
+            analysisRecommendedNextStep: a.recommendedNextStep || g.analysisRecommendedNextStep,
+            analysisGeneratedAt: a.generatedAt || g.analysisGeneratedAt,
+          }
           : g),
       } : prev);
-      await loadAnalysisQueue();
+      return d;
     } catch (err) {
-      setAnalysisDrawer({ groupKey, name, analysis: null, loading: false, error: err.message });
+      setAnalysisDrawer(prev => ({ groupKey, name, media: prev?.groupKey === groupKey ? prev.media : null, analysis: null, loading: false, error: err.message }));
+      throw err;
     } finally { setAnalyzingGroup(null); }
   }, [loadAnalysisQueue]);
 
@@ -591,11 +652,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
     });
     if (creativeExpanded[groupKey]?.ads) return;
     try {
-      const r = await fetch('/api/meta', {
+      const d = await apiJson('/api/meta', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'get_creative_group_ads', groupKey, sinceDays: creativeWindowDays }),
-      });
-      const d = await r.json();
+      }, 'Creative ads failed');
       setCreativeExpanded(prev => ({ ...prev, [groupKey]: { loading: false, ads: d.ads || [] } }));
     } catch {
       setCreativeExpanded(prev => ({ ...prev, [groupKey]: { loading: false, ads: [] } }));
@@ -653,7 +713,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
   const [forecastError, setForecastError] = useState('');
   // Hydrate cached forecast on mount.
   useEffect(() => {
-    fetch('/api/forecast').then(r => r.json()).then(d => {
+    apiJson('/api/forecast', undefined, 'Forecast failed').then(d => {
       if (d.forecast) setForecast(d.forecast);
       if (d.updatedAt) setForecastUpdatedAt(new Date(d.updatedAt));
     }).catch(() => {});
@@ -662,15 +722,14 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
     setForecastLoading(true); setForecastError('');
     try {
       const eff = overrideSettings || settings || {};
-      const r = await fetch('/api/forecast', {
+      const d = await apiJson('/api/forecast', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'refresh',
           sheetId: eff.forecastSheetId || undefined,
           sheetName: eff.forecastSheetName || undefined,
         }),
-      });
-      const d = await r.json();
+      }, 'Forecast refresh failed');
       if (d.error) throw new Error(d.error);
       setForecast(d.forecast);
       setForecastUpdatedAt(new Date());
@@ -685,7 +744,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
   const [historySnapshots, setHistorySnapshots] = useState([]); // [{month, shopify, meta, updated_at}]
   const [snapshotsLoaded, setSnapshotsLoaded] = useState(false);
   useEffect(() => {
-    fetch('/api/db/monthly-metrics').then(r => r.json()).then(d => {
+    apiJson('/api/db/monthly-metrics', undefined, 'Monthly metrics failed').then(d => {
       if (Array.isArray(d.rows)) setHistorySnapshots(d.rows);
     }).catch(() => {}).finally(() => setSnapshotsLoaded(true));
   }, []);
@@ -719,7 +778,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
   const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
-    fetch('/api/db/dashboard-settings').then(r => r.json()).then(d => {
+    apiJson('/api/db/dashboard-settings', undefined, 'Dashboard settings failed').then(d => {
       if (d.settings) setSettings(d.settings);
     }).catch(() => {});
   }, []);
@@ -769,11 +828,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
     }
     const snapshots = [...byMonth.values()];
     if (!snapshots.length) return;
-    fetch('/api/db/monthly-metrics', {
+    apiJson('/api/db/monthly-metrics', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'snapshot', snapshots }),
-    }).then(() => fetch('/api/db/monthly-metrics'))
-      .then(r => r?.json()).then(d => { if (Array.isArray(d?.rows)) setHistorySnapshots(d.rows); })
+    }, 'Shopify snapshot failed').then(() => apiJson('/api/db/monthly-metrics', undefined, 'Monthly metrics failed'))
+      .then(d => { if (Array.isArray(d?.rows)) setHistorySnapshots(d.rows); })
       .catch(() => {});
   }, [shopifyData]);
 
@@ -785,22 +844,21 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
       month: m.month,
       meta: { spend: m.spend, impressions: m.impressions, clicks: m.clicks, purchases: m.purchases, cpa: m.cpa, roas: m.roas, snapshotAt },
     }));
-    fetch('/api/db/monthly-metrics', {
+    apiJson('/api/db/monthly-metrics', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'snapshot', snapshots }),
-    }).then(() => fetch('/api/db/monthly-metrics'))
-      .then(r => r?.json()).then(d => { if (Array.isArray(d?.rows)) setHistorySnapshots(d.rows); })
+    }, 'Meta snapshot failed').then(() => apiJson('/api/db/monthly-metrics', undefined, 'Monthly metrics failed'))
+      .then(d => { if (Array.isArray(d?.rows)) setHistorySnapshots(d.rows); })
       .catch(() => {});
   }, [data]);
 
   const saveSettings = useCallback(async (next) => {
     setSavingSettings(true);
     try {
-      const r = await fetch('/api/db/dashboard-settings', {
+      const d = await apiJson('/api/db/dashboard-settings', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ settings: next }),
-      });
-      const d = await r.json();
+      }, 'Dashboard settings save failed');
       if (d.settings) setSettings(d.settings);
     } finally { setSavingSettings(false); }
   }, []);
@@ -809,12 +867,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
     setLoading(true);
     setError('');
     try {
-      const r = await fetch('/api/meta', {
+      const d = await apiJson('/api/meta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'get_dashboard' }),
-      });
-      const d = await r.json();
+      }, 'Meta dashboard failed');
       if (d.error) throw new Error(d.error);
       setData(d);
       setLastUpdated(new Date());
@@ -829,19 +886,17 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
     setGoogleLoading(true);
     setGoogleError('');
     try {
-      const r = await fetch('/api/google', {
+      const d = await apiJson('/api/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'get_monthly' }),
-      });
-      const d = await r.json();
+      }, 'Google Ads failed');
       if (d.error) throw new Error(d.error);
       setGoogleData(d);
       setGoogleUpdated(new Date());
       // Refresh snapshots so the merged view reflects the upsert.
       try {
-        const r2 = await fetch('/api/db/monthly-metrics');
-        const d2 = await r2.json();
+        const d2 = await apiJson('/api/db/monthly-metrics', undefined, 'Monthly metrics failed');
         if (Array.isArray(d2.rows)) setHistorySnapshots(d2.rows);
       } catch {}
     } catch (err) {
@@ -855,18 +910,16 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
     setKlaviyoLoading(true);
     setKlaviyoError('');
     try {
-      const r = await fetch('/api/klaviyo', {
+      const d = await apiJson('/api/klaviyo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'get_monthly' }),
-      });
-      const d = await r.json();
+      }, 'Klaviyo failed');
       if (d.error && d.configured !== false) throw new Error(d.error);
       setKlaviyoData(d);
       setKlaviyoUpdated(new Date());
       try {
-        const r2 = await fetch('/api/db/monthly-metrics');
-        const d2 = await r2.json();
+        const d2 = await apiJson('/api/db/monthly-metrics', undefined, 'Monthly metrics failed');
         if (Array.isArray(d2.rows)) setHistorySnapshots(d2.rows);
       } catch {}
     } catch (err) {
@@ -880,12 +933,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
     setShopifyLoading(true);
     setShopifyError('');
     try {
-      const r = await fetch('/api/shopify', {
+      const d = await apiJson('/api/shopify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'get_analytics' }),
-      });
-      const d = await r.json();
+      }, 'Shopify failed');
       if (d.error) throw new Error(d.error);
       setShopifyData(d);
       setShopifyUpdated(new Date());
@@ -1110,6 +1162,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           onProcessAnalysisBatch={processAnalysisBatch}
           onRetryAnalysisBatch={retryAnalysisBatch}
           onRefreshAnalysisQueue={loadAnalysisQueue}
+          onNormalizeAsset={normalizeCreativeAssetForPlayback}
+          onNormalizeAssetBatch={normalizeCreativePlaybackBatch}
+          playbackRepairRunning={playbackRepairRunning}
+          playbackRepairMessage={playbackRepairMessage}
           onAnalyze={runAnalysis}
           onOpenAnalysis={openAnalysis}
           onAssignCreator={assignCreativeCreator}
@@ -1681,6 +1737,52 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
               }}>Close</button>
             </div>
 
+            {analysisDrawer.media && (
+              <div className="motion-review-media">
+                <div className="motion-review-player">
+                  {analysisDrawer.media.assetKind === 'video' && analysisDrawer.media.playableUrl ? (
+                    <video
+                      src={analysisDrawer.media.playableUrl}
+                      poster={analysisDrawer.media.previewUrl || undefined}
+                      controls
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : analysisDrawer.media.assetKind === 'video' && analysisDrawer.media.playbackEmbedUrl ? (
+                    <iframe
+                      src={analysisDrawer.media.playbackEmbedUrl}
+                      title={`${analysisDrawer.name || 'Creative'} playback`}
+                      allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                      allowFullScreen
+                    />
+                  ) : analysisDrawer.media.previewUrl ? (
+                    <img src={analysisDrawer.media.previewUrl} alt="" />
+                  ) : (
+                    <div>No media preview available</div>
+                  )}
+                </div>
+                <div className="motion-review-readiness">
+                  <div className={analysisDrawer.media.playableUrl || analysisDrawer.media.playbackEmbedUrl || analysisDrawer.media.assetKind !== 'video' ? 'ready' : 'warn'}>
+                    <span>Playback</span>
+                    <strong>
+                      {analysisDrawer.media.playableUrl || analysisDrawer.media.playbackEmbedUrl || analysisDrawer.media.assetKind !== 'video'
+                        ? 'Ready'
+                        : (analysisDrawer.media.playbackStatus || 'Missing').replaceAll('-', ' ')}
+                    </strong>
+                    {analysisDrawer.media.playbackError ? <small>{analysisDrawer.media.playbackError}</small> : null}
+                  </div>
+                  <div className={analysisDrawer.media.transcriptStatus === 'complete' ? 'ready' : 'warn'}>
+                    <span>Transcript</span>
+                    <strong>{(analysisDrawer.media.transcriptStatus || (analysisDrawer.media.assetKind === 'video' ? 'Needed' : 'N/A')).replaceAll('-', ' ')}</strong>
+                    {analysisDrawer.media.transcriptError ? <small>{analysisDrawer.media.transcriptError}</small> : null}
+                  </div>
+                  {analysisDrawer.media.driveWebViewUrl ? (
+                    <a href={analysisDrawer.media.driveWebViewUrl} target="_blank" rel="noreferrer">Open source file</a>
+                  ) : null}
+                </div>
+              </div>
+            )}
+
             {analysisDrawer.loading && (
               <div style={{ fontSize: 11, color: '#77746f', padding: '20px 0' }}>
                 {analyzingGroup === analysisDrawer.groupKey
@@ -1695,7 +1797,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
             {!analysisDrawer.loading && !analysisDrawer.analysis && !analysisDrawer.error && (
               <div style={{ fontSize: 11, color: '#77746f', padding: '14px 0' }}>
                 Not analyzed yet.{' '}
-                <button onClick={() => runAnalysis(analysisDrawer.groupKey, analysisDrawer.name)} style={S.ghostBtn}>
+                <button onClick={() => runAnalysis(analysisDrawer.groupKey, analysisDrawer.name, '', analysisDrawer.media?.assetId || null)} style={S.ghostBtn}>
                   Analyze now
                 </button>
               </div>
@@ -1703,6 +1805,24 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
 
             {analysisDrawer.analysis && (() => {
               const a = analysisDrawer.analysis;
+              const structured = a.structured_analysis || a.structuredAnalysis || {};
+              const evidence = Array.isArray(a.evidence) ? a.evidence : [];
+              const riskFlags = Array.isArray(structured.risk_flags) ? structured.risk_flags : [];
+              const confidence = a.confidence != null ? Number(a.confidence) : null;
+              const perf = a.performance_snapshot || a.performance || {};
+              const spend = Number(perf.spend) || 0;
+              const revenue = Number(perf.purchaseValue ?? perf.purchase_value) || 0;
+              const purchases = Number(perf.purchases) || 0;
+              const confidenceLabel = confidence == null
+                ? 'Unknown confidence'
+                : confidence < 0.45 ? 'Limited evidence'
+                  : confidence < 0.7 ? 'Usable with caveats'
+                    : 'High confidence';
+              const sendDrawerWinnerToConcepts = () => {
+                sessionStorage.setItem('howl:selected-winners', JSON.stringify([analysisDrawer.groupKey]));
+                setAnalysisDrawer(null);
+                setActiveTab?.('from-winners');
+              };
               const Field = ({ label, value }) => value ? (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 9, letterSpacing: 2, color: '#88857f', textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
@@ -1719,16 +1839,61 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
 
               return (
                 <>
+                  <div className="motion-review-decision">
+                    <div>
+                      <span>Decision</span>
+                      <strong>{a.recommended_next_step || structured.recommended_next_step || 'Review creative evidence, then choose scale, iterate, or source repair.'}</strong>
+                    </div>
+                    <div>
+                      <span>Confidence</span>
+                      <strong>{confidence == null ? 'Not scored' : `${Math.round(confidence * 100)}% · ${confidenceLabel}`}</strong>
+                    </div>
+                  </div>
+
+                  <div className="motion-review-scorecard">
+                    <div><span>Spend</span><strong>${Math.round(spend).toLocaleString()}</strong></div>
+                    <div><span>Revenue</span><strong>${Math.round(revenue).toLocaleString()}</strong></div>
+                    <div><span>ROAS</span><strong>{spend ? `${(revenue / spend).toFixed(2)}x` : '—'}</strong></div>
+                    <div><span>CPA</span><strong>{purchases ? `$${Math.round(spend / purchases).toLocaleString()}` : '—'}</strong></div>
+                  </div>
+
                   <div style={{ marginBottom: 18 }}>
                     <Pill label="Hook" value={a.hook_type} />
                     <Pill label="Format" value={a.format} />
                     <Pill label="Angle" value={a.angle} />
+                    <Pill label="Proof" value={structured.proof_type} />
+                    <Pill label="Confidence" value={confidence != null ? `${Math.round(confidence * 100)}%` : null} />
                   </div>
 
+                  <Field label="Operator summary" value={a.operator_summary || structured.operator_summary} />
                   <Field label="Hook (verbatim)" value={a.hook_text_verbatim ? `"${a.hook_text_verbatim}"` : null} />
                   <Field label="Why it worked" value={a.why_it_worked} />
                   <Field label="Visual summary" value={a.visual_summary} />
                   <Field label="Talent" value={a.talent_description} />
+                  <Field label="Offer / promise" value={structured.offer} />
+                  <Field label="Objection handled" value={structured.objection_handled} />
+                  <Field label="CTA" value={structured.cta} />
+                  <Field label="Opening visual" value={structured.opening_visual} />
+                  <Field label="Reusable pattern" value={structured.pattern_summary} />
+
+                  {riskFlags.length > 0 && (
+                    <div className="motion-evidence-box warn">
+                      <div className="motion-evidence-title">Risk flags</div>
+                      {riskFlags.map((flag, index) => <span key={`${flag}-${index}`}>{flag}</span>)}
+                    </div>
+                  )}
+
+                  {evidence.length > 0 && (
+                    <div className="motion-evidence-box">
+                      <div className="motion-evidence-title">Evidence</div>
+                      {evidence.map((item, index) => (
+                        <div className="motion-evidence-row" key={`${item.claim || 'claim'}-${index}`}>
+                          <strong>{item.claim || 'Evidence'}</strong>
+                          <p>{item.basis || 'basis'}{item.reference ? ` · ${item.reference}` : ''}{item.confidence != null ? ` · ${Math.round(Number(item.confidence) * 100)}%` : ''}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {a.transcript && (
                     <div style={{ marginBottom: 16 }}>
@@ -1755,20 +1920,25 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                         groupKey={analysisDrawer.groupKey}
                         name={analysisDrawer.name}
                         analyzing={analyzingGroup === analysisDrawer.groupKey}
-                        onSubmit={(text) => runAnalysis(analysisDrawer.groupKey, analysisDrawer.name, text)}
+                        onSubmit={(text) => runAnalysis(analysisDrawer.groupKey, analysisDrawer.name, text, analysisDrawer.media?.assetId || null)}
                       />
                     </div>
                   )}
 
-                  <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid #dedbd3', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div className="motion-review-actions">
                     <div style={{ fontSize: 9, color: '#88857f', letterSpacing: 1 }}>
                       {a.generated_at ? `Analyzed ${new Date(a.generated_at).toLocaleString()}` : ''}
                     </div>
-                    <button onClick={() => runAnalysis(analysisDrawer.groupKey, analysisDrawer.name)}
-                            disabled={analyzingGroup === analysisDrawer.groupKey}
-                            style={S.ghostBtn}>
-                      {analyzingGroup === analysisDrawer.groupKey ? 'Re-analyzing…' : 'Re-analyze'}
-                    </button>
+                    <div>
+                      <button onClick={sendDrawerWinnerToConcepts} style={S.ghostBtn}>
+                        Generate iterations
+                      </button>
+                      <button onClick={() => runAnalysis(analysisDrawer.groupKey, analysisDrawer.name, '', analysisDrawer.media?.assetId || null)}
+                              disabled={analyzingGroup === analysisDrawer.groupKey}
+                              style={S.ghostBtn}>
+                        {analyzingGroup === analysisDrawer.groupKey ? 'Re-analyzing…' : 'Re-analyze'}
+                      </button>
+                    </div>
                   </div>
                 </>
               );
@@ -2277,7 +2447,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
             setPerformanceChatError('');
             setPerformanceAnswer('');
             try {
-              const response = await fetch('/api/performance-chat', {
+              const payload = await apiJson('/api/performance-chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -2331,9 +2501,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                     },
                   },
                 }),
-              });
-              const payload = await response.json();
-              if (!response.ok || payload.error) throw new Error(payload.error || 'Analysis failed');
+              }, 'Performance analysis failed');
+              if (payload.error) throw new Error(payload.error || 'Analysis failed');
               setPerformanceAnswer(payload.answer || '');
             } catch (err) {
               setPerformanceChatError(err.message);
@@ -3865,7 +4034,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
 
       {view === 'shopify' && (
         <DealerCsvImport onUploaded={() => {
-          fetch('/api/db/monthly-metrics').then(r => r.json()).then(d => {
+          apiJson('/api/db/monthly-metrics', undefined, 'Monthly metrics failed').then(d => {
             if (Array.isArray(d.rows)) setHistorySnapshots(d.rows);
           }).catch(() => {});
         }} />
@@ -4111,12 +4280,11 @@ function ManualTranscriptPaste({ groupKey, name, analyzing, onSubmit }) {
     setUploadErr("");
     setUploading(true);
     try {
-      const r = await fetch("/api/transcribe", {
+      const data = await apiJson("/api/transcribe", {
         method: "POST",
         headers: { "Content-Type": file.type || "video/mp4" },
         body: file,
-      });
-      const data = await r.json();
+      }, "Transcription failed");
       if (data.error) throw new Error(typeof data.error === "string" ? data.error : (data.error.message || "Transcription failed"));
       const t = (data.text || "").trim();
       if (!t) throw new Error("Whisper returned an empty transcript.");
@@ -4172,7 +4340,15 @@ function ManualTranscriptPaste({ groupKey, name, analyzing, onSubmit }) {
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
         <button
           type="button"
-          onClick={() => text.trim() && onSubmit(text.trim())}
+          onClick={async () => {
+            if (!text.trim()) return;
+            setUploadErr("");
+            try {
+              await onSubmit(text.trim());
+            } catch (err) {
+              setUploadErr(err.message || "Re-analysis failed");
+            }
+          }}
           disabled={!text.trim() || analyzing || uploading}
           style={{
             padding: "6px 14px", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700,

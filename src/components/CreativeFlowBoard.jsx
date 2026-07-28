@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { apiJson } from '../lib/api';
 
 const STAGE_LABELS = {
   ideate: 'Ideate', match: 'Match', brief: 'Brief', produce: 'Produce',
@@ -37,9 +38,7 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      const res = await fetch('/api/creative-flow');
-      if (!res.ok) throw new Error('Failed to load board');
-      setData(await res.json());
+      setData(await apiJson('/api/creative-flow', undefined, 'Failed to load board'));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -48,14 +47,12 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
   }, []);
   const loadAttrib = useCallback(async () => {
     try {
-      const res = await fetch('/api/attribution-autopilot');
-      if (res.ok) setAttrib(await res.json());
+      setAttrib(await apiJson('/api/attribution-autopilot', undefined, 'Attribution failed'));
     } catch { /* non-fatal */ }
   }, []);
   const loadOps = useCallback(async () => {
     try {
-      const res = await fetch('/api/creator-operations');
-      if (res.ok) setOps(await res.json());
+      setOps(await apiJson('/api/creator-operations', undefined, 'Operations failed'));
     } catch { /* non-fatal */ }
   }, []);
   useEffect(() => { load(); loadAttrib(); loadOps(); }, [load, loadAttrib, loadOps]);
@@ -89,11 +86,10 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
     e?.preventDefault();
     setMatching(true); setError('');
     try {
-      const res = await fetch('/api/concept-creator-match', {
+      const data = await apiJson('/api/concept-creator-match', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(concept),
-      });
-      if (!res.ok) throw new Error((await res.json()).error || 'Match failed');
-      setResults(await res.json());
+      }, 'Match failed');
+      setResults(data);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -106,16 +102,15 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
     setBusyId(creator.creator_id);
     setError('');
     try {
-      const briefRes = await fetch('/api/creator-workflow', {
+      const briefData = await apiJson('/api/creator-workflow', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           creator_id: creator.creator_id, action: 'generate_brief',
           product: concept.product, objective: concept.objective, angle: concept.angle,
           direction: '', strategy_mode: 'past_performers',
         }),
-      });
-      if (!briefRes.ok) throw new Error((await briefRes.json()).error || 'Brief generation failed');
-      const { brief } = await briefRes.json();
+      }, 'Brief generation failed');
+      const { brief } = briefData;
 
       const payload = {
         stage: 'brief', creator_id: creator.creator_id, brief_id: brief?.id || null,
@@ -178,7 +173,9 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
           ? { label: 'Open brief', fn: () => onOpenCreator?.(card.creator_id, 'briefs') }
           : { label: 'Match creator', fn: () => openMatcher(card) };
       case 'produce':
-        return { label: 'Open production', fn: () => onOpenCreator?.(card.creator_id, 'deliverables') };
+        return card.creator_id
+          ? { label: 'Open production', fn: () => onOpenCreator?.(card.creator_id, 'deliverables') }
+          : { label: 'Match creator', fn: () => openMatcher(card) };
       case 'launch':
         return { label: 'Open launcher', fn: () => setActiveTab?.('launcher') };
       case 'analyze':
@@ -196,6 +193,34 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
   const cols = data?.columns || {};
   const counts = data?.counts || {};
   const winners = data?.availableWinners || [];
+  const workItems = (ops?.items || []).filter(item => item.category !== 'data');
+  const setup = ops?.setup || {};
+  const setupItems = [
+    setup.clickup_missing_email > 0 && {
+      key: 'emails',
+      label: 'Creator emails',
+      value: setup.clickup_missing_email,
+      detail: 'Missing from ClickUp API. Upload the ClickUp CSV to restore them.',
+      action: 'Open data health',
+      fn: () => setActiveTab?.('creators'),
+    },
+    setup.creative_unassigned_groups > 0 && {
+      key: 'attribution',
+      label: 'Source attribution',
+      value: setup.creative_unassigned_groups,
+      detail: 'Live ads need creator or source tags before Flow can learn from them.',
+      action: 'Review attribution',
+      fn: () => setAttribOpen(true),
+    },
+    setup.duplicate_groups > 0 && {
+      key: 'duplicates',
+      label: 'Duplicates',
+      value: setup.duplicate_groups,
+      detail: 'Merge duplicate creator records so attribution and production history roll up.',
+      action: 'Open data health',
+      fn: () => setActiveTab?.('creators'),
+    },
+  ].filter(Boolean);
 
   return (
     <div className="flow-page">
@@ -216,9 +241,22 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
       {error && <div className="seed-flag" style={{ marginTop: 14 }}>{error}</div>}
 
       {/* guided next-step rail */}
-      {ops?.items?.length > 0 && (() => {
+      {setupItems.length > 0 && (
+        <div className="flow-health-grid">
+          {setupItems.map(item => (
+            <button type="button" className="flow-health-card" key={item.key} onClick={item.fn}>
+              <span>{item.label}</span>
+              <strong>{item.value.toLocaleString()}</strong>
+              <small>{item.detail}</small>
+              <b>{item.action}</b>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {workItems.length > 0 && (() => {
         const dot = { urgent: '#d84a17', waiting: '#9a958c', blocked: '#b42318', action: '#2ea98f' };
-        const shown = (opsOpen ? ops.items.slice(0, 24) : ops.items.slice(0, 6));
+        const shown = (opsOpen ? workItems.slice(0, 24) : workItems.slice(0, 6));
         const route = it => (it.creator_id ? onOpenCreator?.(it.creator_id, it.target_tab || 'profile') : null);
         return (
           <div className="flow-rail">
@@ -226,10 +264,10 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
               <span className="flow-rail-title">Up next</span>
               <span className="flow-rail-sub">
                 {ops.summary.urgent ? <b style={{ color: '#d84a17' }}>{ops.summary.urgent} urgent</b> : null}
-                {ops.summary.urgent ? ' · ' : ''}{ops.summary.action || 0} ready · {ops.summary.waiting || 0} waiting
+                {ops.summary.urgent ? ' · ' : ''}{workItems.filter(item => item.action_state === 'action').length} ready · {workItems.filter(item => item.action_state === 'waiting').length} waiting
               </span>
-              {ops.items.length > 6 && (
-                <button type="button" className="flow-btn" onClick={() => setOpsOpen(v => !v)}>{opsOpen ? 'Less' : `All ${ops.items.length}`}</button>
+              {workItems.length > 6 && (
+                <button type="button" className="flow-btn" onClick={() => setOpsOpen(v => !v)}>{opsOpen ? 'Less' : `All ${workItems.length}`}</button>
               )}
             </div>
             <div className="flow-rail-chips">
@@ -300,6 +338,9 @@ export default function CreativeFlowBoard({ setActiveTab, onOpenCreator, canMana
                 {attrib.summary.groups} ads · ${attrib.summary.spend.toLocaleString()} spend unattributed ·{' '}
                 {attrib.summary.high} ready to auto-link (${attrib.summary.high_spend.toLocaleString()})
               </span>
+              {attrib.summary.high === 0 && (
+                <p className="flow-attrib-note">No confident name match yet. Review manually, or tag founder, internal, and tool-made ads in Creative Analytics.</p>
+              )}
             </div>
             {canManage && (
               <div style={{ display: 'flex', gap: 8 }}>

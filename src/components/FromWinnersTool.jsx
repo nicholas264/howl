@@ -144,27 +144,31 @@ export default function FromWinnersTool({ setActiveTab, setVariations, onOpenCre
       setGenerateError('Select at least one analyzed winner before generating iterations.');
       return;
     }
-    const incompleteVideos = selectedWinners.filter(
-      winner => winner.asset_kind === 'video' && winner.transcription_status !== 'complete',
-    );
-    if (incompleteVideos.length) {
-      setGenerateError(
-        `${incompleteVideos.length} selected video winner${incompleteVideos.length === 1 ? ' needs' : 's need'} a complete transcript. Re-analyze ${incompleteVideos.length === 1 ? 'it' : 'them'} in Creative Analytics before generating.`,
-      );
-      return;
-    }
     const references = selectedWinners.map((winner, index) => {
       const spend = Number(winner.spend) || 0;
       const revenue = Number(winner.purchase_value) || 0;
       const purchases = Number(winner.purchases) || 0;
+      const structured = winner.structured_analysis || {};
+      const evidence = Array.isArray(winner.evidence) ? winner.evidence.slice(0, 5) : [];
+      const riskFlags = Array.isArray(structured.risk_flags) ? structured.risk_flags : [];
+      const transcriptMissing = winner.asset_kind === 'video' && winner.transcription_status !== 'complete';
       return [
         `WINNER ${index + 1}: ${winner.name || 'Untitled'}`,
         `Performance: spend ${money(spend)}, purchase value ${money(revenue)}, ROAS ${spend ? (revenue / spend).toFixed(2) : 'n/a'}, purchases ${purchases}, CPA ${purchases ? money(spend / purchases) : 'n/a'}`,
-        `DNA: format=${winner.format || 'unknown'}; hook_type=${winner.hook_type || 'unknown'}; angle=${winner.angle || 'unknown'}`,
+        `DNA: format=${winner.format || 'unknown'}; hook_type=${winner.hook_type || 'unknown'}; angle=${winner.angle || 'unknown'}; proof=${structured.proof_type || 'unknown'}; confidence=${winner.confidence != null ? `${Math.round(Number(winner.confidence) * 100)}%` : 'unknown'}`,
+        transcriptMissing ? 'Evidence limitation: transcript is missing. Do not invent spoken claims, dialogue, or exact verbal hooks from this winner.' : null,
+        winner.operator_summary ? `Operator read: ${winner.operator_summary}` : null,
+        winner.recommended_next_step ? `Recommended next step from analysis: ${winner.recommended_next_step}` : null,
+        structured.pattern_summary ? `Reusable pattern: ${structured.pattern_summary}` : null,
+        structured.offer ? `Offer/promise: ${structured.offer}` : null,
+        structured.objection_handled ? `Objection handled: ${structured.objection_handled}` : null,
+        structured.cta ? `CTA: ${structured.cta}` : null,
         winner.hook_text_verbatim ? `Opening: "${winner.hook_text_verbatim}"` : null,
         winner.visual_summary ? `Visual system: ${winner.visual_summary}` : null,
         winner.talent_description ? `Talent: ${winner.talent_description}` : null,
         winner.why_it_worked ? `Observed reason it worked: ${winner.why_it_worked}` : null,
+        evidence.length ? `Evidence:\n${evidence.map(item => `- ${item.claim || 'claim'} (${item.basis || 'basis'}${item.reference ? `, ${item.reference}` : ''})`).join('\n')}` : null,
+        riskFlags.length ? `Known risks / caveats: ${riskFlags.join('; ')}` : null,
         winner.transcript ? `Transcript:\n${winner.transcript}` : null,
       ].filter(Boolean).join('\n');
     }).join('\n\n-----\n\n');
@@ -185,6 +189,7 @@ Rules:
 - ${strategyInstruction}
 - Every concept needs a falsifiable hypothesis and one clearly named primary variable.
 - Ground claims in proof that can be filmed or shown.
+- If a reference has missing transcript or low confidence, use only its visual/performance pattern and clearly avoid copying unknown spoken claims.
 - The first three seconds must be visually specific, not just a spoken hook.
 - Avoid em dashes, fake testimonials, invented specs, and generic AI copy patterns.
 - Scripts must sound spoken, use short sentences, and include a clear product reveal and CTA.

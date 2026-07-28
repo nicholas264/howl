@@ -5,6 +5,7 @@ import {
   parseImportItems,
   rebuildSourceChunks,
   scrapeUrlToSource,
+  sourceTypeForUrl,
   sourcePayload,
   stripHtml,
 } from './_lib/content-studio.js';
@@ -77,17 +78,16 @@ export default async function handler(req, res) {
 
     if (action === 'scrape_sitemap') {
       const sitemapUrl = req.body?.url || req.body?.sitemapUrl;
-      const limit = Math.min(Math.max(Number(req.body?.limit) || 10, 1), 30);
-      const response = await fetch(sitemapUrl, {
-        headers: { Accept: 'application/xml,text/xml,text/plain', 'User-Agent': 'HOWL Content Studio/1.0' },
-      });
-      if (!response.ok) throw new Error(`Could not fetch sitemap (${response.status})`);
-      const urls = extractSitemapUrls(await response.text(), limit);
+      const limit = Math.min(Math.max(Number(req.body?.limit) || 10, 1), 75);
+      const urls = await collectSitemapPageUrls(sitemapUrl, limit);
       const rows = [];
       const errors = [];
       for (const url of urls) {
         try {
-          const payload = await scrapeUrlToSource(url, { sourceType: 'blog', tags: req.body?.tags || ['website'] });
+          const payload = await scrapeUrlToSource(url, {
+            sourceType: sourceTypeForUrl(url),
+            tags: req.body?.tags || ['website'],
+          });
           rows.push(await insertSource(sql, payload, access.userId));
         } catch (err) {
           errors.push({ url, error: err.message });
@@ -114,6 +114,38 @@ export default async function handler(req, res) {
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
+}
+
+async function fetchSitemapXml(url) {
+  const parsed = new URL(url);
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Only http and https sitemap URLs can be imported');
+  const response = await fetch(parsed.toString(), {
+    headers: { Accept: 'application/xml,text/xml,text/plain', 'User-Agent': 'HOWL Content Studio/1.0' },
+  });
+  if (!response.ok) throw new Error(`Could not fetch sitemap (${response.status})`);
+  return response.text();
+}
+
+async function collectSitemapPageUrls(sitemapUrl, limit) {
+  const rootXml = await fetchSitemapXml(sitemapUrl);
+  const directUrls = extractSitemapUrls(rootXml, limit, { includeSitemaps: false, includePages: true });
+  if (directUrls.length) return uniqueUrls(directUrls).slice(0, limit);
+
+  const childSitemaps = extractSitemapUrls(rootXml, 12, { includeSitemaps: true, includePages: false })
+    .filter(url => /sitemap_(blogs?|pages?|products?|collections?)|blogs?_sitemap|pages?_sitemap|products?_sitemap|collections?_sitemap/i.test(url));
+  const urls = [];
+  for (const childUrl of childSitemaps) {
+    if (urls.length >= limit) break;
+    try {
+      const childXml = await fetchSitemapXml(childUrl);
+      urls.push(...extractSitemapUrls(childXml, limit - urls.length, { includeSitemaps: false, includePages: true }));
+    } catch {}
+  }
+  return uniqueUrls(urls).slice(0, limit);
+}
+
+function uniqueUrls(urls) {
+  return [...new Set((urls || []).map(url => url.trim()).filter(Boolean))];
 }
 
 async function insertSource(sql, payload, userId) {

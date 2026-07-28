@@ -9,6 +9,12 @@ const STOP = new Set([
   'v1', 'v2', 'v3', 'v4', 'a1', 'b1', 'carousel', 'image', 'photo', 'reel', 'ad',
 ]);
 
+const TOOL_SOURCE_SIGNALS = [
+  'static', 'graphic', 'product callout', 'callout', 'bfcm', 'black friday',
+  'sale', 'top performer', 'carousel', 'image', 'catalog', 'giveaway launch',
+  'giveaway static',
+];
+
 function tokenize(s) {
   return (s || '').toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length >= 2);
 }
@@ -60,6 +66,18 @@ function matchCreator(adName, creators) {
   };
 }
 
+function sourceTagSuggestion(adName) {
+  const words = tokenize(adName).join(' ');
+  const signal = TOOL_SOURCE_SIGNALS.find(item => words.includes(item));
+  if (!signal) return null;
+  return {
+    source_type: 'tool_generated',
+    source_label: 'Made in HOWL',
+    confidence: 'high',
+    matched_on: signal,
+  };
+}
+
 // Mirrors the assign_creative_creator cascade in api/meta.js so attribution
 // writes the same three sources of truth + activity log.
 async function assignGroup(sql, groupKey, creatorId, creatorName, userId) {
@@ -88,14 +106,39 @@ async function assignGroup(sql, groupKey, creatorId, creatorName, userId) {
   `;
 }
 
+async function assignSourceGroup(sql, groupKey, sourceType, sourceLabel, userId) {
+  await sql`
+    INSERT INTO creative_creator_assignments (group_key, creator_id, source_type, source_label, assigned_by)
+    VALUES (${groupKey}, null, ${sourceType}, ${sourceLabel}, ${userId})
+    ON CONFLICT (group_key) DO UPDATE SET
+      creator_id = null, source_type = EXCLUDED.source_type,
+      source_label = EXCLUDED.source_label, assigned_by = EXCLUDED.assigned_by, updated_at = now()
+  `;
+  await sql`
+    UPDATE creative_assets SET creator_id = null, creator = null,
+      source_type = ${sourceType}, source_label = ${sourceLabel}, updated_at = now()
+    WHERE group_key = ${groupKey}
+  `;
+  await sql`
+    UPDATE launch_history SET creator_id = null, creator = null,
+      source_type = ${sourceType}, source_label = ${sourceLabel}
+    WHERE ad_id IN (SELECT ad_id FROM creative_performance WHERE group_key = ${groupKey})
+  `;
+}
+
 async function unattributedGroups(sql) {
   return sql`
+    WITH latest AS (
+      SELECT max(date)::date AS max_date FROM creative_insights_daily
+    )
     SELECT cp.group_key, min(cp.ad_name) AS ad_name, min(cp.thumbnail_url) AS thumbnail_url,
       COALESCE(SUM(i.spend), 0)::float AS spend,
       COALESCE(SUM(i.purchases), 0)::int AS purchases,
       COALESCE(SUM(i.purchase_value), 0)::float AS revenue
     FROM creative_performance cp
-    LEFT JOIN creative_insights_daily i ON i.ad_id = cp.ad_id
+    JOIN creative_insights_daily i
+      ON i.ad_id = cp.ad_id
+     AND i.date BETWEEN (SELECT max_date - interval '14 days' FROM latest) AND (SELECT max_date FROM latest)
     WHERE NOT EXISTS (SELECT 1 FROM creative_creator_assignments a WHERE a.group_key = cp.group_key)
     GROUP BY cp.group_key
     HAVING COALESCE(SUM(i.spend), 0) > 0
@@ -105,8 +148,19 @@ async function unattributedGroups(sql) {
 }
 
 async function loadRoster(sql) {
-  const creators = await sql`SELECT id, name FROM creators WHERE name IS NOT NULL AND stage <> 'alumni'`;
-  return creators.map(c => ({ id: c.id, name: c.name, tokens: tokenize(c.name) }));
+  const creators = await sql`
+    SELECT c.id, c.name,
+      COALESCE(array_agg(s.handle) FILTER (WHERE s.handle IS NOT NULL), '{}') AS handles
+    FROM creators c
+    LEFT JOIN creator_social_accounts s ON s.creator_id = c.id
+    WHERE c.name IS NOT NULL AND COALESCE(c.stage, '') <> 'alumni'
+    GROUP BY c.id, c.name
+  `;
+  return creators.map(c => ({
+    id: c.id,
+    name: c.name,
+    tokens: [...tokenize(c.name), ...(Array.isArray(c.handles) ? c.handles.flatMap(tokenize) : [])],
+  }));
 }
 
 export default async function handler(req, res) {
@@ -124,14 +178,17 @@ export default async function handler(req, res) {
         group_key: g.group_key, ad_name: g.ad_name, thumbnail_url: g.thumbnail_url,
         spend: g.spend, purchases: g.purchases, revenue: g.revenue,
         match: matchCreator(g.ad_name, roster),
+        source_match: sourceTagSuggestion(g.ad_name),
       }));
       const summary = {
         groups: suggestions.length,
         spend: Math.round(suggestions.reduce((a, s) => a + s.spend, 0)),
         high: suggestions.filter(s => s.match?.confidence === 'high').length,
         high_spend: Math.round(suggestions.filter(s => s.match?.confidence === 'high').reduce((a, s) => a + s.spend, 0)),
+        high_source: suggestions.filter(s => !s.match && s.source_match?.confidence === 'high').length,
+        high_source_spend: Math.round(suggestions.filter(s => !s.match && s.source_match?.confidence === 'high').reduce((a, s) => a + s.spend, 0)),
         review: suggestions.filter(s => s.match && s.match.confidence !== 'high').length,
-        unmatched: suggestions.filter(s => !s.match).length,
+        unmatched: suggestions.filter(s => !s.match && !s.source_match).length,
       };
       return res.json({ suggestions, summary, creators: roster.map(c => ({ id: c.id, name: c.name })) });
     }
@@ -144,14 +201,21 @@ export default async function handler(req, res) {
       if (body.apply_high_confidence) {
         const groups = await unattributedGroups(sql);
         let applied = 0;
+        let sourceApplied = 0;
         for (const g of groups) {
           const m = matchCreator(g.ad_name, roster);
           if (m && m.confidence === 'high') {
             await assignGroup(sql, g.group_key, m.creator_id, m.creator_name, userId);
             applied++;
+            continue;
+          }
+          const source = sourceTagSuggestion(g.ad_name);
+          if (source && source.confidence === 'high') {
+            await assignSourceGroup(sql, g.group_key, source.source_type, source.source_label, userId);
+            sourceApplied++;
           }
         }
-        return res.json({ applied });
+        return res.json({ applied, source_applied: sourceApplied });
       }
 
       // Apply an explicit list of {group_key, creator_id}.
@@ -164,7 +228,17 @@ export default async function handler(req, res) {
         await assignGroup(sql, groupKey, creatorId, nameById.get(creatorId), userId);
         applied++;
       }
-      return res.json({ applied });
+      const sourceAssignments = Array.isArray(body.source_assignments) ? body.source_assignments : [];
+      let sourceApplied = 0;
+      for (const a of sourceAssignments) {
+        const groupKey = (a.group_key || '').toString().trim();
+        const sourceType = (a.source_type || '').toString().trim();
+        const sourceLabel = (a.source_label || '').toString().trim() || (sourceType === 'tool_generated' ? 'Made in HOWL' : null);
+        if (!groupKey || !['tool_generated', 'internal_employee', 'founder'].includes(sourceType) || !sourceLabel) continue;
+        await assignSourceGroup(sql, groupKey, sourceType, sourceLabel, userId);
+        sourceApplied++;
+      }
+      return res.json({ applied, source_applied: sourceApplied });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
