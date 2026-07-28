@@ -143,6 +143,7 @@ export default function CreatorWorkspace({
   });
   const [preparedAgreement, setPreparedAgreement] = useState(null);
   const [gmailConnected, setGmailConnected] = useState(false);
+  const [emailProvider, setEmailProvider] = useState(null);
   const [deliverable, setDeliverable] = useState({
     title: '', due_at: '', source_url: '', brief_id: '', engagement_id: '', expected_asset_count: '1',
   });
@@ -171,8 +172,14 @@ export default function CreatorWorkspace({
   useEffect(() => {
     fetch('/api/creator-email')
       .then(response => response.json())
-      .then(data => setGmailConnected(Boolean(data.connected)))
-      .catch(() => setGmailConnected(false));
+      .then(data => {
+        setGmailConnected(Boolean(data.gmailConnected));
+        setEmailProvider(data.sendProvider || null);
+      })
+      .catch(() => {
+        setGmailConnected(false);
+        setEmailProvider(null);
+      });
   }, []);
 
   const connectGmail = async () => {
@@ -432,7 +439,10 @@ export default function CreatorWorkspace({
       });
       const data = await response.json();
       if (!response.ok) {
-        if (data.reconnect_required) setGmailConnected(false);
+        if (data.reconnect_required) {
+          setGmailConnected(false);
+          setEmailProvider(current => current === 'gmail' ? null : current);
+        }
         throw new Error(data.error || 'Could not send email');
       }
       setOutreach({ channel: 'email', subject: '', body: '', status: 'draft', next_follow_up_at: defaultFollowUpDate() });
@@ -456,7 +466,10 @@ export default function CreatorWorkspace({
       });
       const data = await response.json();
       if (!response.ok) {
-        if (data.reconnect_required) setGmailConnected(false);
+        if (data.reconnect_required) {
+          setGmailConnected(false);
+          setEmailProvider(current => current === 'gmail' ? null : current);
+        }
         throw new Error(data.error || 'Could not sync Gmail replies');
       }
       await refreshWorkflow(selected.id);
@@ -568,7 +581,10 @@ export default function CreatorWorkspace({
       });
       const data = await response.json();
       if (!response.ok) {
-        if (data.reconnect_required) setGmailConnected(false);
+        if (data.reconnect_required) {
+          setGmailConnected(false);
+          setEmailProvider(current => current === 'gmail' ? null : current);
+        }
         throw new Error(data.error || 'Could not send agreement');
       }
       setPreparedAgreement(null);
@@ -1543,8 +1559,8 @@ export default function CreatorWorkspace({
                     {preparedAgreement && (
                       <div className="agreement-ready">
                         <input readOnly value={preparedAgreement.url} onFocus={event => event.target.select()} />
-                        {gmailConnected
-                          ? <button type="button" disabled={saving || !selected.email} title={!selected.email ? 'Add the creator email before sending.' : ''} onClick={sendAgreement}>Send with Gmail</button>
+                        {emailProvider
+                          ? <button type="button" disabled={saving || !selected.email} title={!selected.email ? 'Add the creator email before sending.' : ''} onClick={sendAgreement}>Send email</button>
                           : <button type="button" disabled={saving} onClick={connectGmail}>Connect Gmail</button>}
                       </div>
                     )}
@@ -1651,7 +1667,7 @@ export default function CreatorWorkspace({
               <section className="creator-detail-section workflow-section">
                 {canWriteBriefs && (
                   <form className="workflow-form" onSubmit={saveOutreach}>
-                    <div className="detail-section-head"><span>Creator conversation</span><small>{gmailConnected ? 'Gmail send + reply sync ready' : 'Connect Gmail to send and sync'}</small></div>
+                    <div className="detail-section-head"><span>Creator conversation</span><small>{emailProvider === 'resend' ? 'Resend send ready' : gmailConnected ? 'Gmail send + reply sync ready' : 'Connect Gmail or configure Resend'}</small></div>
                     <div className="workflow-two">
                       <select value={outreach.channel} onChange={event => setOutreach({ ...outreach, channel: event.target.value })}><option value="email">Email</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="phone">Phone</option></select>
                       <select value={outreach.status} onChange={event => setOutreach({ ...outreach, status: event.target.value })}><option value="draft">Save draft</option><option value="sent">Mark sent</option></select>
@@ -1662,12 +1678,9 @@ export default function CreatorWorkspace({
                     <div className="outreach-actions">
                       <button className="primary-action" disabled={saving}>Save outreach</button>
                       <button type="button" disabled={saving} onClick={draftOutreach}>Draft with AI</button>
-                      {gmailConnected
-                        ? <>
-                          <button type="button" disabled={saving || outreach.channel !== 'email'} onClick={sendEmail}>Send with Gmail</button>
-                          <button type="button" disabled={saving} onClick={syncOutreachReplies}>Sync replies</button>
-                        </>
-                        : <button type="button" disabled={saving} onClick={connectGmail}>Connect Gmail</button>}
+                      {emailProvider && <button type="button" disabled={saving || outreach.channel !== 'email'} onClick={sendEmail}>Send email</button>}
+                      {gmailConnected && <button type="button" disabled={saving} onClick={syncOutreachReplies}>Sync replies</button>}
+                      {!emailProvider && <button type="button" disabled={saving} onClick={connectGmail}>Connect Gmail</button>}
                     </div>
                   </form>
                 )}

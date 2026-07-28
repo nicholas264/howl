@@ -1,11 +1,7 @@
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import { getGoogleConnection, getUserGoogleAccessToken } from './_lib/google-user-oauth.js';
-
-function validEmail(value) {
-  const email = (value || '').toString().trim();
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
-}
+import { resendConfigured, sendResendEmail, validEmail } from './_lib/resend-email.js';
 
 function encodeHeader(value) {
   return `=?UTF-8?B?${Buffer.from(value || '', 'utf8').toString('base64')}?=`;
@@ -131,7 +127,14 @@ export default async function handler(req, res) {
   if (!access) return;
   if (req.method === 'GET') {
     const connection = await getGoogleConnection(access.sql, access.userId);
-    return res.json({ connected: Boolean(connection), connection });
+    const sendProvider = resendConfigured() ? 'resend' : (connection ? 'gmail' : null);
+    return res.json({
+      connected: Boolean(sendProvider),
+      gmailConnected: Boolean(connection),
+      resendConfigured: resendConfigured(),
+      sendProvider,
+      connection,
+    });
   }
   if (req.method !== 'POST') return res.status(405).end();
   const { sql } = access;
@@ -167,32 +170,55 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'A draft agreement for this creator is required' });
       }
     }
-    const accessToken = await getUserGoogleAccessToken(sql, access.userId);
     const followUpAt = timestamp(req.body?.next_follow_up_at);
     if (followUpAt === undefined) return res.status(400).json({ error: 'Follow-up date is invalid' });
 
-    const raw = [
-      `To: ${to}`,
-      `Subject: ${encodeHeader(subject)}`,
-      'MIME-Version: 1.0',
-      'Content-Type: text/plain; charset="UTF-8"',
-      'Content-Transfer-Encoding: 8bit',
-      '',
-      body,
-    ].join('\r\n');
-    const gmailResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ raw: base64Url(raw) }),
-    });
-    const gmailData = await gmailResponse.json();
-    if (!gmailResponse.ok) {
-      const message = gmailData.error?.message || 'Gmail send failed';
-      const reconnect = /scope|permission|credential|auth/i.test(message);
-      return res.status(reconnect ? 401 : 502).json({ error: message, reconnect_required: reconnect });
+    let provider = 'gmail';
+    let externalId = null;
+    let externalThreadId = null;
+    let providerMessageId = null;
+
+    if (resendConfigured()) {
+      provider = 'resend';
+      const email = await sendResendEmail({
+        from: process.env.CREATOR_EMAIL_FROM || process.env.EMAIL_FROM || 'HOWL Campfires <creators@howlcampfires.com>',
+        to,
+        subject,
+        text: body,
+        replyTo: validEmail(access.email),
+      });
+      if (email.skipped) {
+        return res.status(502).json({ error: email.reason || 'Resend send failed' });
+      }
+      providerMessageId = email.id || null;
+    } else {
+      const accessToken = await getUserGoogleAccessToken(sql, access.userId);
+      const raw = [
+        `To: ${to}`,
+        `Subject: ${encodeHeader(subject)}`,
+        'MIME-Version: 1.0',
+        'Content-Type: text/plain; charset="UTF-8"',
+        'Content-Transfer-Encoding: 8bit',
+        '',
+        body,
+      ].join('\r\n');
+      const gmailResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ raw: base64Url(raw) }),
+      });
+      const gmailData = await gmailResponse.json();
+      if (!gmailResponse.ok) {
+        const message = gmailData.error?.message || 'Gmail send failed';
+        const reconnect = /scope|permission|credential|auth/i.test(message);
+        return res.status(reconnect ? 401 : 502).json({ error: message, reconnect_required: reconnect });
+      }
+      externalId = gmailData.id || null;
+      externalThreadId = gmailData.threadId || null;
+      providerMessageId = externalId;
     }
 
     const [message] = await sql`
@@ -201,7 +227,7 @@ export default async function handler(req, res) {
         external_id, external_thread_id, recipient, sent_at, next_follow_up_at, created_by
       ) VALUES (
         ${creatorId}, 'email', 'outbound', ${subject}, ${body}, 'sent',
-        ${gmailData.id || null}, ${gmailData.threadId || null}, ${to}, now(), ${followUpAt}, ${access.userId}
+        ${externalId}, ${externalThreadId}, ${to}, now(), ${followUpAt}, ${access.userId}
       )
       RETURNING *
     `;
@@ -209,7 +235,7 @@ export default async function handler(req, res) {
       INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
       VALUES (
         ${creatorId}, 'outreach', 'Email sent',
-        ${JSON.stringify({ outreach_id: message.id, gmail_message_id: gmailData.id, to })}::jsonb,
+        ${JSON.stringify({ outreach_id: message.id, provider, external_id: providerMessageId, to })}::jsonb,
         ${access.userId}
       )
     `;
@@ -223,7 +249,7 @@ export default async function handler(req, res) {
         INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
         VALUES (
           ${creatorId}, 'agreement_sent', 'Usage agreement sent',
-          ${JSON.stringify({ agreement_id: agreementId, gmail_message_id: gmailData.id, to })}::jsonb,
+          ${JSON.stringify({ agreement_id: agreementId, provider, external_id: providerMessageId, to })}::jsonb,
           ${access.userId}
         )
       `;

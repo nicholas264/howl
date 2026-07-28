@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { HOWL_DEALERS } from '../_data/howl-dealers.js';
+import { sendResendEmail } from './resend-email.js';
 
 const DEFAULT_MAP_PRICE = 374;
 const DEFAULT_PRODUCTS = [
@@ -10,9 +11,6 @@ const DEFAULT_PRODUCTS = [
     terms: ['HOWL R1', 'HOWL Campfires R1', 'HOWL Campfire R1'],
   },
 ];
-const KLAVIYO_API_ROOT = 'https://a.klaviyo.com/api';
-const KLAVIYO_REVISION = '2026-04-15';
-const KLAVIYO_MAP_ALERT_METRIC = 'HOWL MAP Violation Alert';
 const FALLBACK_DISCOVERY_TARGETS = [
   { name: 'CampSaver', url: 'https://www.campsaver.com/howl-campfires-the-howl-r1-773ce090.html' },
   { name: 'Tacoma Lifestyle', url: 'https://www.tacomalifestyle.com/products/howl-campfires-the-howl-r1' },
@@ -307,17 +305,14 @@ function parseJsonEnv(name, fallback) {
 }
 
 function configuredAlertProvider() {
-  const requested = cleanText(process.env.MAP_ALERT_PROVIDER || 'auto', 40).toLowerCase();
-  if (requested === 'resend') return process.env.RESEND_API_KEY ? 'resend' : '';
-  if (requested === 'klaviyo') return process.env.KLAVIYO_API_KEY ? 'klaviyo' : '';
+  const requested = cleanText(process.env.MAP_ALERT_PROVIDER || 'resend', 40).toLowerCase();
+  if (requested && requested !== 'auto' && requested !== 'resend') return '';
   if (process.env.RESEND_API_KEY) return 'resend';
-  if (process.env.KLAVIYO_API_KEY) return 'klaviyo';
   return '';
 }
 
 function alertProviderLabel(provider = configuredAlertProvider()) {
   if (provider === 'resend') return 'Resend email';
-  if (provider === 'klaviyo') return 'Klaviyo event';
   return 'Not configured';
 }
 
@@ -1439,117 +1434,24 @@ function violationRowsText(violations) {
   return violations.map(v => `${v.dealer_name || hostLabel(v.evidence_url)}: ${v.product_name} at $${Number(v.observed_price).toFixed(2)} (MAP $${Number(v.map_price).toFixed(2)})\n${v.evidence_url}`).join('\n\n');
 }
 
-function violationEventPayload({ violations, run }) {
-  return {
-    runId: String(run.id),
-    violationCount: violations.length,
-    source: 'howl-map-monitor',
-    monitorUrl: 'https://howl-teal.vercel.app/',
-    violations: violations.slice(0, 20).map(v => ({
-      dealerName: cleanText(v.dealer_name || hostLabel(v.evidence_url), 180),
-      dealerUrl: cleanText(v.dealer_url || '', 1000),
-      productName: cleanText(v.product_name || 'R1', 160),
-      observedPrice: Number(v.observed_price),
-      mapPrice: Number(v.map_price),
-      evidenceUrl: cleanText(v.evidence_url || '', 1000),
-      evidence: cleanText(v.evidence || '', 700),
-    })),
-    summary: violationRowsText(violations).slice(0, 5000),
-  };
-}
-
 async function sendResendViolationEmail({ violations, run, settings }) {
-  if (!process.env.RESEND_API_KEY) return { skipped: true, reason: 'RESEND_API_KEY not configured' };
   if (!violations.length || !settings.alertEmails.length) return { skipped: true };
   const from = process.env.MAP_ALERT_FROM || 'HOWL MAP Monitor <alerts@howlcampfires.com>';
   const subject = `${violations.length} HOWL MAP violation${violations.length === 1 ? '' : 's'} found`;
   const rows = violationRowsText(violations);
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from,
-      to: settings.alertEmails,
-      subject,
-      text: `The morning MAP scan finished with ${violations.length} violation(s).\n\n${rows}\n\nRun ID: ${run.id}`,
-    }),
+  return sendResendEmail({
+    from,
+    to: settings.alertEmails,
+    subject,
+    text: `The morning MAP scan finished with ${violations.length} violation(s).\n\n${rows}\n\nRun ID: ${run.id}`,
   });
-  if (!response.ok) return { skipped: true, reason: `Resend HTTP ${response.status}` };
-  const payload = await response.json();
-  return { provider: 'resend', ...payload };
-}
-
-async function sendKlaviyoViolationEvents({ violations, run, settings }) {
-  if (!process.env.KLAVIYO_API_KEY) return { skipped: true, reason: 'KLAVIYO_API_KEY not configured' };
-  if (!violations.length || !settings.alertEmails.length) return { skipped: true };
-  const metricName = process.env.MAP_ALERT_KLAVIYO_METRIC || KLAVIYO_MAP_ALERT_METRIC;
-  const revision = process.env.KLAVIYO_REVISION || KLAVIYO_REVISION;
-  const properties = violationEventPayload({ violations, run });
-  const results = [];
-
-  for (const email of settings.alertEmails) {
-    const response = await fetch(`${KLAVIYO_API_ROOT}/events`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/vnd.api+json',
-        'Content-Type': 'application/vnd.api+json',
-        Authorization: `Klaviyo-API-Key ${process.env.KLAVIYO_API_KEY}`,
-        revision,
-      },
-      body: JSON.stringify({
-        data: {
-          type: 'event',
-          attributes: {
-            properties,
-            time: new Date().toISOString(),
-            unique_id: `map-alert-${run.id}-${email}`,
-            metric: {
-              data: {
-                type: 'metric',
-                attributes: { name: metricName },
-              },
-            },
-            profile: {
-              data: {
-                type: 'profile',
-                attributes: {
-                  email,
-                  properties: {
-                    HOWL_MAP_ALERT_RECIPIENT: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      }),
-    });
-    const text = await response.text();
-    if (!response.ok) {
-      let detail = text.slice(0, 300);
-      try {
-        const parsed = JSON.parse(text);
-        detail = parsed?.errors?.[0]?.detail || parsed?.errors?.[0]?.title || detail;
-      } catch {}
-      return { skipped: true, provider: 'klaviyo', reason: `Klaviyo HTTP ${response.status}: ${detail}` };
-    }
-    results.push({ email, status: response.status });
-  }
-
-  return {
-    provider: 'klaviyo',
-    metricName,
-    accepted: results.length,
-    recipients: results.map(item => item.email),
-  };
 }
 
 async function sendViolationAlert({ violations, run, settings }) {
   if (!violations.length || !settings.alertEmails.length) return { skipped: true };
   const provider = configuredAlertProvider();
   if (provider === 'resend') return sendResendViolationEmail({ violations, run, settings });
-  if (provider === 'klaviyo') return sendKlaviyoViolationEvents({ violations, run, settings });
-  return { skipped: true, reason: 'No MAP alert provider configured' };
+  return { skipped: true, reason: 'RESEND_API_KEY not configured' };
 }
 
 export async function sendMapMonitorTestAlert({ sql = neon(process.env.DATABASE_URL) } = {}) {
