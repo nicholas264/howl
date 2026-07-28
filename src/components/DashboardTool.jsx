@@ -2194,7 +2194,6 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                                 - classifiedNewCustomers * (paymentFeeFixed + shippingCostPerOrder + fulfillmentCostPerOrder);
           const firstOrderPayback = adSpend > 0 ? newOrderMargin / adSpend : null;
           const opexThis = opexFor(mk);
-          const opexCoverage = opexThis > 0 ? cm3 / opexThis : null;
           const klaviyoRevenue = Number(klaviyo.revenue || 0);
           const klaviyoOrders = Number(klaviyo.orders || 0);
           const klaviyoRevenuePct = netRevenue > 0 ? klaviyoRevenue / netRevenue : null;
@@ -2214,7 +2213,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const smsUnsubscribeRate = smsSends > 0 ? smsUnsubscribes / smsSends : null;
           const isCurrent = mk === currentMonthKey;
           const projectedCm3 = isCurrent ? cm3 * paceFactor : cm3;
-          const netProfit = cm3 - opexThis;
+          const mtdOpex = isCurrent ? opexThis / paceFactor : opexThis;
+          const opexCoverage = mtdOpex > 0 ? cm3 / mtdOpex : null;
+          const netProfit = cm3 - mtdOpex;
           const projectedNetProfit = projectedCm3 - opexThis;
           const newCustomers = classifiedNewCustomers;
           const returningCustomers = Number(sh.returningCustomers || 0) + addReturningCust;
@@ -2232,7 +2233,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
             metaSpend, googleSpend, adSpend, metaPurchaseValue, googleConvValue,
             metaRoasReported, googleRoasReported, cogs, cogsActualPct, paymentFees,
             shipCost, fulfill, cm3, ncac, blendedNcac, blendedRoas, newRoas,
-            firstOrderPayback, opex: opexThis, opexCoverage, netProfit, projectedNetProfit, isCurrent,
+            firstOrderPayback, opex: mtdOpex, monthlyOpexBudget: opexThis, opexCoverage, netProfit, projectedNetProfit, isCurrent,
             klaviyoRevenue, klaviyoOrders, klaviyoFlowRevenue: Number(klaviyo.flowRevenue || 0),
             klaviyoCampaignRevenue: Number(klaviyo.campaignRevenue || 0), klaviyoRevenuePct,
             emailSends, emailOpens, emailClicks, emailOpenRate, emailClickRate,
@@ -2253,9 +2254,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           newCustomers: Math.round(currentRow.newCustomers * paceFactor),
           returningCustomers: Math.round(currentRow.returningCustomers * paceFactor),
           cm3: currentRow.cm3 * paceFactor,
-          netProfit: currentRow.cm3 * paceFactor - currentRow.opex,
-          opex: currentRow.opex,
-          opexCoverage: currentRow.opex > 0 ? (currentRow.cm3 * paceFactor) / currentRow.opex : null,
+          netProfit: currentRow.cm3 * paceFactor - currentRow.monthlyOpexBudget,
+          mtdOpex: currentRow.opex,
+          opex: currentRow.monthlyOpexBudget,
+          opexCoverage: currentRow.monthlyOpexBudget > 0 ? (currentRow.cm3 * paceFactor) / currentRow.monthlyOpexBudget : null,
           ncac: currentRow.newCustomers > 0 ? currentRow.adSpend / currentRow.newCustomers : null,
         } : null;
 
@@ -2282,6 +2284,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           projectedNetProfit: a.projectedNetProfit + r.projectedNetProfit,
           newRevenue: a.newRevenue + r.newRevenue,
           opex: a.opex + r.opex,
+          monthlyOpexBudget: a.monthlyOpexBudget + (r.monthlyOpexBudget || r.opex),
           klaviyoRevenue: a.klaviyoRevenue + r.klaviyoRevenue,
           klaviyoOrders: a.klaviyoOrders + r.klaviyoOrders,
           klaviyoFlowRevenue: a.klaviyoFlowRevenue + r.klaviyoFlowRevenue,
@@ -2293,7 +2296,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           smsSends: a.smsSends + r.smsSends,
           smsClicks: a.smsClicks + r.smsClicks,
           smsUnsubscribes: a.smsUnsubscribes + r.smsUnsubscribes,
-        }), { revenue: 0, netRevenue: 0, dtcRevenue: 0, dtcNetRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, shopifyOrders: 0, sessions: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, netProfit: 0, projectedNetProfit: 0, newRevenue: 0, opex: 0, klaviyoRevenue: 0, klaviyoOrders: 0, klaviyoFlowRevenue: 0, klaviyoCampaignRevenue: 0, emailSends: 0, emailOpens: 0, emailClicks: 0, emailUnsubscribes: 0, smsSends: 0, smsClicks: 0, smsUnsubscribes: 0 });
+        }), { revenue: 0, netRevenue: 0, dtcRevenue: 0, dtcNetRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, shopifyOrders: 0, sessions: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, netProfit: 0, projectedNetProfit: 0, newRevenue: 0, opex: 0, monthlyOpexBudget: 0, klaviyoRevenue: 0, klaviyoOrders: 0, klaviyoFlowRevenue: 0, klaviyoCampaignRevenue: 0, emailSends: 0, emailOpens: 0, emailClicks: 0, emailUnsubscribes: 0, smsSends: 0, smsClicks: 0, smsUnsubscribes: 0 });
         const priorClosedNetProfit = rollupRows
           .filter(r => !r.isCurrent)
           .reduce((sum, r) => sum + r.netProfit, 0);
@@ -2358,8 +2361,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const ltmSmsUnsubscribeRate = ltm.smsSends > 0 ? ltm.smsUnsubscribes / ltm.smsSends : null;
         const ltmCmMargin = ltm.netRevenue > 0 ? ltm.cm3 / ltm.netRevenue : 0;
         const ltmOpexCoverage = ltm.opex > 0 ? ltm.cm3 / ltm.opex : null;
-        // For UI: show the default opex if no per-month overrides, else "$X avg"
-        const opex = ltm.opex / Math.max(rollupRows.length, 1);
+        // For UI: show the average full-month OpEx budget, even while current-month actuals are MTD prorated.
+        const opex = ltm.monthlyOpexBudget / Math.max(rollupRows.length, 1);
 
         const fmtPct = (n) => (n == null || isNaN(n)) ? '—' : (n * 100).toFixed(1) + '%';
         const fmt$ = (n) => (n == null || isNaN(n)) ? '—' : '$' + Math.round(n).toLocaleString();
@@ -2979,8 +2982,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                         { label: 'Projected Revenue', value: fmt$(pace.revenue), sub: fmt$(currentRow.revenue) + ' MTD' },
                         { label: 'Projected Ad Spend', value: fmt$(pace.adSpend), sub: fmt$(currentRow.adSpend) + ' MTD' },
                         { label: 'Projected CM3', value: fmt$(pace.cm3), color: pace.cm3 >= 0 ? '#256b35' : '#b42318', sub: fmt$(currentRow.cm3) + ' MTD' },
-                        { label: 'Projected Net Profit', value: fmt$(pace.netProfit), color: pace.netProfit >= 0 ? '#256b35' : '#b42318', sub: 'after ' + fmt$(pace.opex) + ' OpEx' },
-                        { label: 'OpEx Coverage', value: pace.opexCoverage == null ? '—' : fmtPct(pace.opexCoverage), color: (pace.opexCoverage || 0) >= 1 ? '#256b35' : (pace.opexCoverage || 0) >= 0.5 ? '#9a6a0a' : '#b42318', sub: 'vs ' + fmt$(pace.opex) },
+                        { label: 'MTD OpEx', value: fmt$(pace.mtdOpex), sub: fmt$(pace.opex) + ' monthly budget' },
+                        { label: 'Projected Net Profit', value: fmt$(pace.netProfit), color: pace.netProfit >= 0 ? '#256b35' : '#b42318', sub: 'after full-month ' + fmt$(pace.opex) + ' OpEx' },
+                        { label: 'OpEx Coverage', value: pace.opexCoverage == null ? '—' : fmtPct(pace.opexCoverage), color: (pace.opexCoverage || 0) >= 1 ? '#256b35' : (pace.opexCoverage || 0) >= 0.5 ? '#9a6a0a' : '#b42318', sub: 'vs full-month ' + fmt$(pace.opex) },
                         { label: 'Projected New', value: pace.newCustomers.toLocaleString(), sub: currentRow.newCustomers + ' MTD' },
                         { label: 'NCAC (run rate)', value: pace.ncac == null ? '—' : '$' + pace.ncac.toFixed(0), sub: currentRow.newCustomers ? '' : 'no new yet' },
                         { label: 'MER (MTD)', value: currentRow.blendedRoas == null ? '—' : currentRow.blendedRoas.toFixed(2) + 'x', color: (currentRow.blendedRoas || 0) >= 2 ? '#256b35' : (currentRow.blendedRoas || 0) >= 1 ? '#9a6a0a' : '#b42318' },
@@ -3291,7 +3295,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                     </table>
                   </div>
                   <div style={{ fontSize: 9, color: '#88857f', marginTop: 8, letterSpacing: 1 }}>
-                    CM3 = Net Revenue − COGS − Payment Fees − Shipping − Pick/Pack − (Meta + Google) Spend. Estimated net profit = CM3 − OpEx. COGS uses Shopify per-unit cost when set, GM% assumption otherwise. Dealer COGS uses the wholesale margin assumption. NCAC = (Meta + Google) spend ÷ new lifetime customers. OpEx column = monthly P&L override or default. Bold OpEx = override set; dim = default.
+                    CM3 = Net Revenue − COGS − Payment Fees − Shipping − Pick/Pack − (Meta + Google) Spend. Estimated net profit = CM3 − OpEx. COGS uses Shopify per-unit cost when set, GM% assumption otherwise. Dealer COGS uses the wholesale margin assumption. NCAC = (Meta + Google) spend ÷ new lifetime customers. OpEx column = monthly P&L override or default; current month is prorated MTD. Bold OpEx = override set; dim = default.
                   </div>
                 </div>
               </>
