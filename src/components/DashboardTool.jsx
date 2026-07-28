@@ -948,6 +948,14 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
     }
   }, []);
 
+  const syncCoreData = useCallback(async () => {
+    await Promise.allSettled([
+      loadDashboard(),
+      loadShopify(),
+      loadGoogle(),
+    ]);
+  }, [loadDashboard, loadShopify, loadGoogle]);
+
   // Auto-refresh when snapshots are missing or >24h stale. Runs once after
   // the snapshot fetch resolves so we know whether to auto-pull.
   const [autoTried, setAutoTried] = useState(false);
@@ -1110,14 +1118,12 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
               {' · '}Klaviyo {sourceAgeLabel(newestKlaviyoSnapshotAt)}
             </span>
           )}
-          <button onClick={loadDashboard} disabled={loading} style={loading ? { ...S.ghostBtn, cursor: 'not-allowed' } : (data ? S.ghostBtn : S.btn)}>
-            {loading ? 'Loading…' : data ? 'Refresh Meta' : 'Load Meta'}
-          </button>
-          <button onClick={loadShopify} disabled={shopifyLoading} style={shopifyLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : (shopifyData ? S.ghostBtn : S.btn)}>
-            {shopifyLoading ? 'Loading…' : shopifyData ? 'Refresh Shopify' : 'Load Shopify'}
-          </button>
-          <button onClick={loadGoogle} disabled={googleLoading} style={googleLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : (googleData ? S.ghostBtn : S.btn)}>
-            {googleLoading ? 'Loading…' : googleData ? 'Refresh Google' : 'Load Google'}
+          <button
+            onClick={syncCoreData}
+            disabled={loading || shopifyLoading || googleLoading}
+            style={(loading || shopifyLoading || googleLoading) ? { ...S.ghostBtn, cursor: 'not-allowed' } : ((data || shopifyData || googleData) ? S.ghostBtn : S.btn)}
+          >
+            {(loading || shopifyLoading || googleLoading) ? 'Syncing…' : (data || shopifyData || googleData) ? 'Refresh Data' : 'Sync Data'}
           </button>
           {view === 'growth' && (
             <button onClick={loadKlaviyo} disabled={klaviyoLoading} style={klaviyoLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : (klaviyoData ? S.ghostBtn : S.btn)}>
@@ -2000,7 +2006,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
 	        if (!hasAnyData) {
 	          return (
 	            <div style={{ ...S.card, color: '#77746f', fontSize: 12 }}>
-	              {(loading || shopifyLoading) ? 'Loading…' : `No data yet. Click Load Meta or Load Shopify above to populate the ${view === 'growth' ? 'Growth Data' : 'CFO'} view.`}
+	              {(loading || shopifyLoading || googleLoading) ? 'Loading…' : `No data yet. Click Sync Data above to populate the ${view === 'growth' ? 'Growth Data' : 'CFO'} view.`}
 	            </div>
 	          );
 	        }
