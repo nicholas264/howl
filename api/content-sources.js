@@ -5,6 +5,7 @@ import {
   parseImportItems,
   rebuildSourceChunks,
   scrapeUrlToSource,
+  classifySiteUrl,
   sourceTypeForUrl,
   sourcePayload,
   stripHtml,
@@ -68,8 +69,10 @@ export default async function handler(req, res) {
     }
 
     if (action === 'scrape_url') {
+      const url = req.body?.url;
+      const requestedType = req.body?.source_type || req.body?.sourceType;
       const payload = await scrapeUrlToSource(req.body?.url, {
-        sourceType: req.body?.source_type || req.body?.sourceType || 'blog',
+        sourceType: requestedType && requestedType !== 'auto' ? requestedType : sourceTypeForUrl(url),
         tags: req.body?.tags,
       });
       const row = await insertSource(sql, payload, access.userId);
@@ -164,6 +167,7 @@ async function insertSource(sql, payload, userId) {
         RETURNING *
       `;
       const chunkCount = await rebuildSourceChunks(sql, row);
+      await upsertInternalLink(sql, row);
       return { ...row, chunk_count: chunkCount, updated_existing: true };
     }
   }
@@ -173,7 +177,33 @@ async function insertSource(sql, payload, userId) {
     RETURNING *
   `;
   const chunkCount = await rebuildSourceChunks(sql, row);
+  await upsertInternalLink(sql, row);
   return { ...row, chunk_count: chunkCount };
+}
+
+async function upsertInternalLink(sql, source) {
+  if (!source?.url || !/^https?:\/\//i.test(source.url)) return;
+  if (!['blog', 'landing_page'].includes(source.source_type)) return;
+  await sql`
+    INSERT INTO content_site_links (url, title, kind, handle, last_seen_at)
+    VALUES (
+      ${source.url},
+      ${source.title},
+      ${classifySiteUrl(source.url)},
+      ${siteHandle(source.url)},
+      now()
+    )
+    ON CONFLICT (url) DO UPDATE
+    SET title = EXCLUDED.title,
+        kind = EXCLUDED.kind,
+        handle = EXCLUDED.handle,
+        last_seen_at = now()
+  `;
+}
+
+function siteHandle(url) {
+  try { return new URL(url).pathname.split('/').filter(Boolean).pop() || null; }
+  catch { return null; }
 }
 
 class KlaviyoSourceClient {

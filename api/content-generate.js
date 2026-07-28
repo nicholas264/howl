@@ -33,7 +33,7 @@ Principles:
 - Search and AI surfaces. Make key answers easy to extract: short answer blocks, descriptive H2s, scannable lists, comparison tables in Markdown, and clear definitions.
 - E-E-A-T. Show practical product/category knowledge, first-hand-style experience, limitations, safety caveats, and verifiable claims. Do not invent specs, test data, certifications, prices, discounts, or testimonials.
 - Entity coverage. Include relevant product/category entities, adjacent concepts, fuel type, safety, setup, portability, weather, maintenance, and decision criteria where they fit the topic.
-- Internal linking. Use real internal links from the INTERNAL LINK INVENTORY as Markdown links, e.g. [R4 MKII](https://howlcampfires.com/products/r4-mkii). Aim for 3-8 internal links per article where they genuinely help the reader. Never invent URLs. Only if nothing in the inventory fits, fall back to a placeholder like [internal link: safety guide].
+- Internal linking. Use real internal links from the INTERNAL LINK INVENTORY as Markdown links, e.g. [R4 MKII](https://howlcampfires.com/products/r4-mkii). Aim for 4-8 internal links per article where they genuinely help the reader. Never invent URLs. If nothing in the inventory fits, skip the link instead of using placeholders.
 - Schema readiness. Suggest Article schema for all posts, FAQPage when visible FAQs are present, HowTo only for actual step-by-step instructions, and Product only when the page visibly discusses a specific product with supported product data.
 - Snippet readiness. Include a direct answer near the top, concise definitions, FAQ answers under 60 words where possible, and no vague filler intros.
 
@@ -45,6 +45,7 @@ Required article package:
 - FAQ section with 3-6 questions if the topic has question intent.
 - Proof gaps and claim cautions when verified data is missing.
 - Structured data suggestions with a one-line reason for each.
+- 4-8 contextual internal links from the HOWL inventory when relevant links are available.
 - SEO/AEO checklist with pass/fail style notes.
 `;
 
@@ -172,8 +173,7 @@ function evaluateSeoAeo(markdown, parsed = {}, project = {}) {
   const wordCount = (text.match(/\b[\w'-]+\b/g) || []).length;
   const hasFaq = /\bfaq\b|frequently asked questions|\n##\s+.*questions?/i.test(text);
   const hasShortAnswers = /short answer:|quick answer:|the short version:/i.test(text);
-  const hasInternalLinks = /\[internal link:/i.test(text)
-    || /\]\((https?:\/\/(www\.)?howlcampfires\.com|\/(products|collections|blogs|pages)\/)/i.test(text);
+  const hasInternalLinks = /\]\((https?:\/\/(www\.)?howlcampfires\.com|\/(products|collections|blogs|pages)\/)/i.test(text);
   const hasMeta = Boolean(parsed.meta_description);
   const hasSchema = Array.isArray(parsed.schema_suggestions) && parsed.schema_suggestions.length > 0;
   const hasProofGaps = Array.isArray(parsed.proof_gaps) ? parsed.proof_gaps.length > 0 : /proof gap|claim caution|verify/i.test(text);
@@ -192,7 +192,7 @@ function evaluateSeoAeo(markdown, parsed = {}, project = {}) {
     ['answer_blocks', hasShortAnswers, 'Includes snippet-ready short answer blocks.'],
     ['question_headings', hasQuestionHeading, 'Headings map to questions or decision criteria.'],
     ['faq', hasFaq, 'Includes FAQ section when question intent is likely.'],
-    ['internal_links', hasInternalLinks, 'Includes internal links to the HOWL site.'],
+    ['internal_links', hasInternalLinks, 'Includes real contextual internal links to the HOWL site.'],
     ['schema', hasSchema, 'Includes structured data suggestions.'],
     ['proof_gaps', hasProofGaps, 'Calls out proof gaps or claim cautions.'],
     ['decision_help', hasDecisionCriteria || hasComparison, 'Helps a buyer decide, compare, or choose.'],
@@ -401,6 +401,7 @@ Rules:
 - Use selected source examples only for voice, rhythm, structure, and claim discipline. Do not use them to choose the article topic.
 - Do not invent product specs, certifications, discounts, prices, or comparative claims.
 - Include snippet-ready direct answers where the user intent calls for them.
+- Use only URLs from the supplied internal link inventory for internal links. If no relevant URL exists, skip it instead of inventing one or leaving a placeholder.
 - Avoid em dashes, vague superlatives, fake testimonials, and invented citations.
 - Follow the HOWL SEO/AEO playbook exactly. Prefer clear answers, decision usefulness, and extractable structure over long generic prose.
 - Return only valid JSON.`;
@@ -432,7 +433,7 @@ ${source.excerpt}`).join('\n\n-----\n\n')
 
   const linkText = siteLinks.length
     ? siteLinks.map(link => `- [${link.title}](${link.url}) (${link.kind})`).join('\n')
-    : 'No internal link inventory is available. Use [internal link: description] placeholders instead.';
+    : 'No internal link inventory is available. Do not invent internal links or placeholders.';
 
   const shapes = {
     outline: `Generate an SEO/AEO outline before drafting.
@@ -441,7 +442,8 @@ Return JSON with:
   "title_options": ["..."],
   "meta_description": "...",
   "search_intent_summary": "...",
-  "outline_markdown": "Markdown outline with H1/H2/H3, answer blocks, FAQ ideas, internal-link placeholders, and proof gaps",
+  "outline_markdown": "Markdown outline with H1/H2/H3, answer blocks, FAQ ideas, planned real internal links from the inventory, and proof gaps",
+  "internal_links": [{"anchor": "...", "url": "...", "reason": "..."}],
   "source_influence": [{"source_id": 1, "source_title": "...", "used_for": "voice|structure|claim caution"}],
   "seo_checks": ["pass/fail notes from the HOWL SEO/AEO playbook"],
   "proof_gaps": ["claims or data that must be verified before publishing"],
@@ -453,7 +455,8 @@ Return JSON with:
   "title": "...",
   "meta_description": "...",
   "slug": "...",
-  "markdown": "Complete article in Markdown, with H1/H2/H3 structure, answer blocks, FAQ, CTA, and internal-link placeholders",
+  "markdown": "Complete article in Markdown, with H1/H2/H3 structure, answer blocks, FAQ, CTA, and contextual real internal links from the inventory",
+  "internal_links": [{"anchor": "...", "url": "...", "reason": "..."}],
   "schema_suggestions": [{"type": "Article|FAQPage|HowTo|Product", "reason": "..."}],
   "source_influence": [{"source_id": 1, "source_title": "...", "used_for": "voice|structure|claim caution"}],
   "seo_checks": ["pass/fail notes from the HOWL SEO/AEO playbook"],

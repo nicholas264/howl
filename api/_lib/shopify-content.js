@@ -139,7 +139,7 @@ export async function createShopifyArticle({ blogId, title, html, summary, slug,
 
 // Refreshes content_site_links from the store's public sitemap so drafts can
 // use real internal URLs. Safe to call often; upserts by URL.
-export async function syncSiteLinks(sql, { maxChildSitemaps = 8 } = {}) {
+export async function syncSiteLinks(sql, { maxChildSitemaps = 30 } = {}) {
   const domain = await getPrimaryDomain();
   const fetchXml = async (url) => {
     const response = await fetch(url, {
@@ -153,6 +153,7 @@ export async function syncSiteLinks(sql, { maxChildSitemaps = 8 } = {}) {
   let entries = [];
   if (childUrls.length) {
     childUrls = childUrls
+      .filter(url => /sitemap_(products?|collections?|blogs?|pages?)|products?_sitemap|collections?_sitemap|blogs?_sitemap|pages?_sitemap/i.test(url))
       .sort((a, b) => sitemapPriority(a) - sitemapPriority(b))
       .slice(0, maxChildSitemaps);
     for (const childUrl of childUrls) {
