@@ -117,8 +117,6 @@ export default function MapMonitorWorkspace({ canManage = false }) {
   const dealerCount = data.settings?.dealers?.length || 0;
   const dealerCoverage = data.settings?.dealerCoverage || {};
   const dealerUrlCount = dealerCoverage.resolved ?? (data.settings?.dealers || []).filter(dealer => dealer.url).length;
-  const noWebsiteDealers = (data.settings?.dealers || []).filter(dealer => !dealer.url && dealer.resolutionStatus === 'no_public_website');
-  const unresolvedDealers = (data.settings?.dealers || []).filter(dealer => !dealer.url && dealer.resolutionStatus !== 'no_public_website');
   const resolvedDealers = (data.settings?.dealers || []).filter(dealer => dealer.url);
   const latestFindingsByHost = useMemo(() => {
     const map = new Map();
@@ -130,7 +128,7 @@ export default function MapMonitorWorkspace({ canManage = false }) {
   }, [latestFindings]);
   const siteRows = useMemo(() => {
     const query = siteQuery.trim().toLowerCase();
-    return (data.settings?.dealers || []).map(dealer => {
+    return resolvedDealers.map(dealer => {
       const url = dealer.productUrl || dealer.websiteUrl || dealer.url;
       const host = hostLabel(url);
       const finding = url
@@ -140,11 +138,9 @@ export default function MapMonitorWorkspace({ canManage = false }) {
       const state = scanState({ ...dealer, url }, latestRun);
       return { dealer, url, host, finding, state };
     }).filter(row => {
-      if (siteFilter === 'priced' && !row.finding) return false;
-      if (siteFilter === 'unpriced' && (!row.url || row.finding)) return false;
-      if (siteFilter === 'non-web' && row.state !== 'non-web') return false;
-      if (siteFilter === 'missing' && row.state !== 'missing') return false;
-      if (siteFilter === 'scannable' && !row.url) return false;
+      if (siteFilter === 'violations' && row.finding?.status !== 'violation') return false;
+      if (siteFilter === 'scanned' && row.state !== 'scanned') return false;
+      if (siteFilter === 'new' && row.state !== 'queued' && row.state !== 'stale') return false;
       if (!query) return true;
       return [
         row.dealer.name,
@@ -155,9 +151,8 @@ export default function MapMonitorWorkspace({ canManage = false }) {
         row.dealer.resolutionNote,
       ].filter(Boolean).join(' ').toLowerCase().includes(query);
     });
-  }, [data.settings?.dealers, latestFindings, latestFindingsByHost, latestRun, siteFilter, siteQuery]);
+  }, [resolvedDealers, latestFindings, latestFindingsByHost, latestRun, siteFilter, siteQuery]);
   const scannedSiteCount = siteRows.filter(row => row.state === 'scanned').length;
-  const unpricedScannableCount = resolvedDealers.length - priceEvidence.length;
 
   const runNow = async () => {
     setRunning(true);
@@ -271,59 +266,59 @@ export default function MapMonitorWorkspace({ canManage = false }) {
           <small>{latestRun?.status || 'not started'} / {fmtDuration(latestRun?.started_at, latestRun?.finished_at)} / run #{latestRun?.id || '—'}</small>
         </div>
         <div>
-          <span>Outcome</span>
+          <span>MAP Result</span>
           <strong>{violations.length ? `${violations.length} below MAP` : 'Clear'}</strong>
-          <small>{latestRun?.scanned_count || 0} unique sources checked, {priceEvidence.length} price pages verified</small>
+          <small>{priceEvidence.length} verified price page{priceEvidence.length === 1 ? '' : 's'} at or above ${data.settings?.mapPrice || mapPrice}</small>
         </div>
         <div>
-          <span>Registry Coverage</span>
-          <strong>{dealerCoverage.coveragePct || 0}%</strong>
-          <small>{dealerUrlCount} websites, {dealerCoverage.noWebsite || noWebsiteDealers.length} non-web, {unresolvedDealers.length} missing</small>
+          <span>Dealer Sites</span>
+          <strong>{scannedSiteCount}/{dealerUrlCount}</strong>
+          <small>{dealerCount} dealers in registry / {data.settings?.alertProviderLabel || 'alerts not configured'}</small>
         </div>
       </section>
 
-      <div className="map-scorecard">
-        <div className={violations.length ? 'risk' : ''}><span>Active violations</span><strong>{violations.length}</strong><small>latest run below MAP</small></div>
-        <div><span>MAP threshold</span><strong>{fmtMoney(data.settings?.mapPrice || mapPrice)}</strong><small>R1 minimum advertised price</small></div>
-        <div><span>Dealer registry</span><strong>{dealerCount}</strong><small>source-of-truth records</small></div>
-        <div className={dealerCoverage.unresolved || dealerCoverage.failed ? 'warning' : ''}><span>Registry classified</span><strong>{(dealerUrlCount + (dealerCoverage.noWebsite || noWebsiteDealers.length)) || 0}</strong><small>{dealerUrlCount} websites, {dealerCoverage.noWebsite || noWebsiteDealers.length} non-web records</small></div>
-        <div><span>Sources checked</span><strong>{latestRun?.scanned_count || 0}</strong><small>{latestRun ? fmtDate(latestRun.started_at) : 'No scan yet'}</small></div>
-        <div className={data.settings?.emailConfigured ? '' : 'warning'}><span>Alert sender</span><strong>{data.settings?.emailConfigured ? 'Ready' : 'Sender needed'}</strong><small>{data.settings?.alertProviderLabel || 'Not configured'} / {(data.settings?.alertEmails || []).length || 0} recipients</small></div>
-      </div>
+      <section className="map-scan-strip" aria-label="Recent scan history">
+        {(data.runs || []).slice(0, 6).map(run => (
+          <div key={run.id} className={run.violation_count ? 'risk' : ''}>
+            <span>{fmtDate(run.started_at)}</span>
+            <strong>{run.violation_count ? `${run.violation_count} below MAP` : 'Clear'}</strong>
+            <small>{run.scanned_count || 0} sites / {run.status}</small>
+          </div>
+        ))}
+        {!data.runs?.length && <div><span>No scans yet</span><strong>Waiting</strong><small>Morning scan will appear here</small></div>}
+      </section>
 
       <div className="map-layout">
         <div className="map-main">
           <section className="map-panel map-sites-panel">
             <header>
               <strong>Daily Site Scan</strong>
-              <small>{siteRows.length} records shown / {resolvedDealers.length} scannable sites / {scannedSiteCount} scanned in the latest run</small>
+              <small>{siteRows.length} sites shown / {resolvedDealers.length} dealer websites / {scannedSiteCount} scanned in the latest run</small>
             </header>
             <div className="map-site-toolbar">
-              <input value={siteQuery} onChange={event => setSiteQuery(event.target.value)} placeholder="Search dealer, site, city, status..." />
+              <input value={siteQuery} onChange={event => setSiteQuery(event.target.value)} placeholder="Search dealer or website..." />
               <div className="map-segments" aria-label="Site filter">
                 {[
-                  ['all', 'All'],
-                  ['scannable', 'Sites'],
-                  ['priced', 'Priced'],
-                  ['unpriced', 'No price'],
-                  ['non-web', 'Non-web'],
-                  ['missing', 'Missing'],
+                  ['all', 'All Sites'],
+                  ['violations', 'Violations'],
+                  ['scanned', 'Scanned'],
+                  ['new', 'New'],
                 ].map(([value, label]) => (
                   <button key={value} type="button" className={siteFilter === value ? 'active' : ''} onClick={() => setSiteFilter(value)}>{label}</button>
                 ))}
               </div>
             </div>
             <div className="map-site-table">
-              <div className="map-site-head"><span>Dealer / site</span><span>Latest scan</span><span>Price</span><span>Evidence</span></div>
+              <div className="map-site-head"><span>Dealer website</span><span>Last scan</span><span>MAP check</span><span>Open</span></div>
               {siteRows.map(({ dealer, url, host, finding, state }) => {
                 const rowClass = finding?.status === 'violation' ? 'violation' : state;
                 const evidenceUrl = finding?.evidence_url || url;
                 return (
                   <a key={dealer.id} className={`map-site-row ${rowClass}`} href={evidenceUrl || undefined} target={evidenceUrl ? '_blank' : undefined} rel="noreferrer">
                     <span><strong>{dealer.name}</strong><small>{url || dealer.resolutionNote || [dealer.city, dealer.region].filter(Boolean).join(', ') || 'No public website'}</small></span>
-                    <span><b>{state.replace('-', ' ')}</b><small>{dealer.lastScannedAt ? fmtDate(dealer.lastScannedAt) : dealer.resolutionStatus || 'not scanned'}</small></span>
-                    <span><b>{finding ? fmtMoney(finding.observed_price) : '—'}</b><small>{finding ? `${finding.product_name} / MAP ${fmtMoney(finding.map_price)}` : host || dealer.resolutionSource || 'not applicable'}</small></span>
-                    <i>{finding ? 'Open price' : url ? 'Open site' : state === 'missing' ? 'Needs site' : 'N/A'}</i>
+                    <span><b>{state === 'scanned' ? 'OK' : 'NEW'}</b><small>{dealer.lastScannedAt ? fmtDate(dealer.lastScannedAt) : 'not scanned yet'}</small></span>
+                    <span><b>{finding?.status === 'violation' ? fmtMoney(finding.observed_price) : 'Clear'}</b><small>{finding?.status === 'violation' ? `MAP ${fmtMoney(finding.map_price)}` : host}</small></span>
+                    <i>{finding?.status === 'violation' ? 'Evidence' : 'Site'}</i>
                   </a>
                 );
               })}
@@ -347,27 +342,11 @@ export default function MapMonitorWorkspace({ canManage = false }) {
               {!loading && !violations.length && <div className="map-empty">No MAP violations found in the latest scan.</div>}
             </div>
           </section>
-
-          <section className="map-panel">
-            <header><strong>Verified Price Evidence</strong><small>{priceEvidence.length} product page{priceEvidence.length === 1 ? '' : 's'} at or above MAP, {Math.max(0, unpricedScannableCount)} scannable records without price evidence</small></header>
-            <div className="map-table compact">
-              <div className="map-table-head"><span>Dealer</span><span>Product</span><span>Observed</span><span>Evidence</span></div>
-              {priceEvidence.slice(0, 60).map(finding => (
-                <a key={finding.id} className="map-row" href={finding.evidence_url} target="_blank" rel="noreferrer">
-                  <span><strong>{finding.dealer_name || 'Unknown dealer'}</strong><small>{finding.product_name}</small></span>
-                  <span>{finding.product_name}</span>
-                  <b>{fmtMoney(finding.observed_price)}</b>
-                  <i>Open</i>
-                </a>
-              ))}
-              {!loading && !priceEvidence.length && <div className="map-empty">No product-page prices were verified in the latest scan. The next scan will keep searching the web and known dealer seeds.</div>}
-            </div>
-          </section>
         </div>
 
         <aside className="map-side">
           <section className="map-panel">
-            <header><strong>Dealer Websites</strong><small>{dealerUrlCount} resolved, {noWebsiteDealers.length} non-web, {unresolvedDealers.length} missing</small></header>
+            <header><strong>Dealer Websites</strong><small>{dealerUrlCount} sites monitored</small></header>
             <div className="map-runs">
               {resolvedDealers.map(dealer => (
                 <a key={dealer.id} href={dealer.url} target="_blank" rel="noreferrer">
@@ -375,32 +354,7 @@ export default function MapMonitorWorkspace({ canManage = false }) {
                   <b>{dealer.lastScannedAt ? 'OK' : 'NEW'}</b>
                 </a>
               ))}
-              {unresolvedDealers.map(dealer => (
-                <div key={dealer.id} className="warning">
-                  <span><strong>{dealer.name}</strong><small>{[dealer.city, dealer.region].filter(Boolean).join(', ') || dealer.resolutionStatus || 'missing website'}</small></span>
-                  <b>...</b>
-                </div>
-              ))}
-              {noWebsiteDealers.map(dealer => (
-                <div key={dealer.id}>
-                  <span><strong>{dealer.name}</strong><small>{dealer.resolutionNote || 'No public website to scan'}</small></span>
-                  <b>N/A</b>
-                </div>
-              ))}
               {!data.settings?.dealers?.length && <p>No dealer registry loaded yet.</p>}
-            </div>
-          </section>
-
-          <section className="map-panel">
-            <header><strong>Run History</strong><small>morning cron and manual scans</small></header>
-            <div className="map-runs">
-              {(data.runs || []).map(run => (
-                <div key={run.id} className={run.violation_count ? 'risk' : ''}>
-                  <span><strong>{fmtDate(run.started_at)}</strong><small>{run.status}</small></span>
-                  <b>{run.violation_count || 0}</b>
-                </div>
-              ))}
-              {!data.runs?.length && <p>No scans have run yet.</p>}
             </div>
           </section>
 
