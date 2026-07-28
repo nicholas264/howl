@@ -649,7 +649,7 @@ export default function ContentStudio() {
     <div className="content-studio content-studio-simple workspace-page" aria-busy={loading}>
       <header className="content-simple-head">
         <div>
-          <span className="workspace-kicker">Content Studio</span>
+          <span className="workspace-kicker">Blog Studio</span>
           <h1>What do you want a blog about?</h1>
           <p>Give it the topic. HOWL researches the reference library, uses the emails and blogs for voice, then writes a draft.</p>
         </div>

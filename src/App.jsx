@@ -189,7 +189,7 @@ export default function HowlAdEngine({ appAccess }) {
         { key: 'seeding-ledger', label: 'Seeding', permission: 'creators.read' },
         { key: 'creative-analytics', label: 'Creative Analytics', permission: 'analytics.read' },
         { key: 'from-winners', label: 'Concept Studio', permission: 'briefs.write' },
-        { key: 'content-studio', label: 'Content Studio', permission: 'briefs.write' },
+        { key: 'content-studio', label: 'Blog Studio', permission: 'briefs.write' },
         { key: 'ugc-editor', label: 'UGC Editor', permission: 'assets.write' },
         { key: 'image', label: 'Image Ads', permission: 'assets.write' },
         { key: 'callout', label: 'Callout Ads', permission: 'assets.write' },
