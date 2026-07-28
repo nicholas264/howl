@@ -86,6 +86,7 @@ export default function MapMonitorWorkspace({ canManage = false }) {
   const [useSearch, setUseSearch] = useState(true);
   const [siteFilter, setSiteFilter] = useState('all');
   const [siteQuery, setSiteQuery] = useState('');
+  const [selectedRunId, setSelectedRunId] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -97,6 +98,10 @@ export default function MapMonitorWorkspace({ canManage = false }) {
       setEmailDraft((result.settings?.alertEmails || []).join(', '));
       setMapPrice(Number(result.settings?.mapPrice || 374));
       setUseSearch(result.settings?.useSearch !== false);
+      setSelectedRunId(current => {
+        if (current && result.runs?.some(run => String(run.id) === String(current))) return current;
+        return result.runs?.[0]?.id || null;
+      });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -108,36 +113,46 @@ export default function MapMonitorWorkspace({ canManage = false }) {
 
   const latestRun = data.runs?.[0] || null;
   const latestRunId = latestRun?.id;
+  const selectedRun = data.runs?.find(run => String(run.id) === String(selectedRunId)) || latestRun;
+  const selectedRunIdValue = selectedRun?.id;
   const latestFindings = useMemo(
     () => data.findings.filter(finding => !latestRunId || String(finding.run_id) === String(latestRunId)),
     [data.findings, latestRunId],
   );
-  const violations = latestFindings.filter(finding => finding.status === 'violation');
-  const priceEvidence = latestFindings.filter(finding => finding.status === 'ok');
+  const selectedFindings = useMemo(
+    () => data.findings.filter(finding => !selectedRunIdValue || String(finding.run_id) === String(selectedRunIdValue)),
+    [data.findings, selectedRunIdValue],
+  );
+  const latestViolations = latestFindings.filter(finding => finding.status === 'violation');
+  const latestPriceEvidence = latestFindings.filter(finding => finding.status === 'ok');
+  const violations = selectedFindings.filter(finding => finding.status === 'violation');
   const dealerCount = data.settings?.dealers?.length || 0;
   const dealerCoverage = data.settings?.dealerCoverage || {};
   const dealerUrlCount = dealerCoverage.resolved ?? (data.settings?.dealers || []).filter(dealer => dealer.url).length;
   const resolvedDealers = (data.settings?.dealers || []).filter(dealer => dealer.url);
   const latestFindingsByHost = useMemo(() => {
     const map = new Map();
-    for (const finding of latestFindings) {
+    for (const finding of selectedFindings) {
       const key = hostLabel(finding.dealer_url || finding.evidence_url);
       if (key && !map.has(key)) map.set(key, finding);
     }
     return map;
-  }, [latestFindings]);
-  const siteRows = useMemo(() => {
-    const query = siteQuery.trim().toLowerCase();
+  }, [selectedFindings]);
+  const allSiteRows = useMemo(() => {
     return resolvedDealers.map(dealer => {
       const url = dealer.productUrl || dealer.websiteUrl || dealer.url;
       const host = hostLabel(url);
       const finding = url
-        ? latestFindings.find(item => sameHost(item.evidence_url, url) || sameHost(item.dealer_url, url))
+        ? selectedFindings.find(item => sameHost(item.evidence_url, url) || sameHost(item.dealer_url, url))
           || latestFindingsByHost.get(host)
         : null;
-      const state = scanState({ ...dealer, url }, latestRun);
+      const state = scanState({ ...dealer, url }, selectedRun);
       return { dealer, url, host, finding, state };
-    }).filter(row => {
+    });
+  }, [resolvedDealers, selectedFindings, latestFindingsByHost, selectedRun]);
+  const siteRows = useMemo(() => {
+    const query = siteQuery.trim().toLowerCase();
+    return allSiteRows.filter(row => {
       if (siteFilter === 'violations' && row.finding?.status !== 'violation') return false;
       if (siteFilter === 'scanned' && row.state !== 'scanned') return false;
       if (siteFilter === 'new' && row.state !== 'queued' && row.state !== 'stale') return false;
@@ -151,8 +166,8 @@ export default function MapMonitorWorkspace({ canManage = false }) {
         row.dealer.resolutionNote,
       ].filter(Boolean).join(' ').toLowerCase().includes(query);
     });
-  }, [resolvedDealers, latestFindings, latestFindingsByHost, latestRun, siteFilter, siteQuery]);
-  const scannedSiteCount = siteRows.filter(row => row.state === 'scanned').length;
+  }, [allSiteRows, siteFilter, siteQuery]);
+  const scannedSiteCount = allSiteRows.filter(row => row.state === 'scanned').length;
 
   const runNow = async () => {
     setRunning(true);
@@ -259,7 +274,7 @@ export default function MapMonitorWorkspace({ canManage = false }) {
       {error && <div className="app-error">{error}</div>}
       {message && <div className="map-message">{message}</div>}
 
-      <section className={`map-daily ${violations.length ? 'risk' : ''}`}>
+      <section className={`map-daily ${latestViolations.length ? 'risk' : ''}`}>
         <div>
           <span>Latest Daily Scan</span>
           <strong>{latestRun ? fmtFullDate(latestRun.started_at) : 'Waiting for first scan'}</strong>
@@ -267,8 +282,8 @@ export default function MapMonitorWorkspace({ canManage = false }) {
         </div>
         <div>
           <span>MAP Result</span>
-          <strong>{violations.length ? `${violations.length} below MAP` : 'Clear'}</strong>
-          <small>{priceEvidence.length} verified price page{priceEvidence.length === 1 ? '' : 's'} at or above ${data.settings?.mapPrice || mapPrice}</small>
+          <strong>{latestViolations.length ? `${latestViolations.length} below MAP` : 'Clear'}</strong>
+          <small>{latestPriceEvidence.length} verified price page{latestPriceEvidence.length === 1 ? '' : 's'} at or above ${data.settings?.mapPrice || mapPrice}</small>
         </div>
         <div>
           <span>Dealer Sites</span>
@@ -279,11 +294,11 @@ export default function MapMonitorWorkspace({ canManage = false }) {
 
       <section className="map-scan-strip" aria-label="Recent scan history">
         {(data.runs || []).slice(0, 6).map(run => (
-          <div key={run.id} className={run.violation_count ? 'risk' : ''}>
+          <button key={run.id} type="button" className={`${run.violation_count ? 'risk' : ''} ${String(selectedRun?.id) === String(run.id) ? 'active' : ''}`} onClick={() => setSelectedRunId(run.id)}>
             <span>{fmtDate(run.started_at)}</span>
             <strong>{run.violation_count ? `${run.violation_count} below MAP` : 'Clear'}</strong>
             <small>{run.scanned_count || 0} sites / {run.status}</small>
-          </div>
+          </button>
         ))}
         {!data.runs?.length && <div><span>No scans yet</span><strong>Waiting</strong><small>Morning scan will appear here</small></div>}
       </section>
@@ -327,7 +342,7 @@ export default function MapMonitorWorkspace({ canManage = false }) {
           </section>
 
           <section className="map-panel">
-            <header><strong>Violations</strong><small>{violations.length ? 'Evidence needing dealer follow-up' : 'No below-MAP prices in the latest scan'}</small></header>
+            <header><strong>Violations</strong><small>{selectedRun ? `${fmtFullDate(selectedRun.started_at)} / run #${selectedRun.id}` : 'Select a scan from history'}</small></header>
             <div className="map-table">
               <div className="map-table-head"><span>Dealer</span><span>Product</span><span>Observed</span><span>MAP</span><span>Evidence</span></div>
               {violations.map(finding => (
@@ -339,12 +354,28 @@ export default function MapMonitorWorkspace({ canManage = false }) {
                   <i>Open</i>
                 </a>
               ))}
-              {!loading && !violations.length && <div className="map-empty">No MAP violations found in the latest scan.</div>}
+              {!loading && !violations.length && <div className="map-empty">No MAP violations found in this scan.</div>}
             </div>
           </section>
         </div>
 
         <aside className="map-side">
+          <section className="map-panel">
+            <header><strong>Scan History</strong><small>{data.runs?.length || 0} recent runs</small></header>
+            <div className="map-history-log">
+              {(data.runs || []).map(run => (
+                <button key={run.id} type="button" className={`${run.violation_count ? 'risk' : ''} ${String(selectedRun?.id) === String(run.id) ? 'active' : ''}`} onClick={() => setSelectedRunId(run.id)}>
+                  <span>
+                    <strong>{fmtFullDate(run.started_at)}</strong>
+                    <small>{run.scanned_count || 0} sites / {fmtDuration(run.started_at, run.finished_at)} / run #{run.id}</small>
+                  </span>
+                  <b>{run.violation_count ? `${run.violation_count}` : 'OK'}</b>
+                </button>
+              ))}
+              {!data.runs?.length && <p>No scans have run yet.</p>}
+            </div>
+          </section>
+
           <section className="map-panel">
             <header><strong>Dealer Websites</strong><small>{dealerUrlCount} sites monitored</small></header>
             <div className="map-runs">
