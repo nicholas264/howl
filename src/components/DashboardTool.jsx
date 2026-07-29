@@ -1985,7 +1985,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           </ul>
         </div>
       )}
-      {shopifyData && shopifyData?._meta?.dealerStorePresent && !shopifyData?._meta?.dealerConfigured && (
+      {shopifyData && shopifyData?._meta?.dealerStorePresent && (!shopifyData?._meta?.dealerConfigured || shopifyData?._meta?.dealerReconnectRequired) && (
         <div style={{ ...S.err, marginBottom: 20, color: '#b42318', borderColor: 'rgba(248,81,73,0.5)', background: 'rgba(248,81,73,0.1)' }}>
           Dealer Shopify is disconnected or the app is not installed on the dealer store. Dealer revenue will only include previously imported CSV snapshots until it is reconnected.{' '}
           <a

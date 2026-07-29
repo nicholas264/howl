@@ -575,7 +575,7 @@ export default async function handler(req, res) {
       }
       catch (err) {
         console.error(`Shopify ${role} (${store}) failed:`, err.message);
-        return { role, store, error: err.message };
+        return { role, store, error: err.message, code: err.code || null };
       }
     };
 
@@ -586,7 +586,7 @@ export default async function handler(req, res) {
       const ok = results.filter(r => r.result);
       if (!ok.length) return res.status(500).json({ error: results.map(r => `${r.role}: ${r.error}`).join(' | ') });
       const merged = mergeInventoryResults(ok);
-      merged._meta.errors = results.filter(r => r.error).map(r => ({ role: r.role, store: r.store, error: r.error }));
+      merged._meta.errors = results.filter(r => r.error).map(r => ({ role: r.role, store: r.store, error: r.error, code: r.code || null }));
       return res.json(merged);
     }
 
@@ -597,7 +597,10 @@ export default async function handler(req, res) {
       const ok = results.filter(r => r.result);
       if (!ok.length) return res.status(500).json({ error: results.map(r => `${r.role}: ${r.error}`).join(' | ') });
       const merged = mergeStoreResults(ok);
-      merged._meta.errors = results.filter(r => r.error).map(r => ({ role: r.role, store: r.store, error: r.error }));
+      merged._meta.errors = results
+        .filter(r => r.error && !(r.role === 'dealer' && r.code === 'SHOPIFY_DEALER_RECONNECT_REQUIRED'))
+        .map(r => ({ role: r.role, store: r.store, error: r.error, code: r.code || null }));
+      merged._meta.dealerReconnectRequired = results.some(r => r.role === 'dealer' && r.code === 'SHOPIFY_DEALER_RECONNECT_REQUIRED');
       merged._meta.dealerConfigured = ok.some(r => r.role === 'dealer');
       merged._meta.dealerStorePresent = !!dealerConfig.store;
       merged._meta.dealerStore = dealerConfig.store || null;

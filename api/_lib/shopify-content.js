@@ -11,6 +11,21 @@ const SHOPIFY_TOKEN_TTL_SKEW_MS = 5 * 60 * 1000;
 
 const generatedTokenCache = new Map();
 
+function stripTags(value) {
+  return String(value || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function shopifyTokenExchangeError(role, status, text, data) {
+  const title = text.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
+  const detail = data.error || data.error_description || stripTags(title || text).slice(0, 300) || 'empty response';
+  if (role === 'dealer' && /Oauth error\s+(invalid_request|app_not_installed)|app_not_installed/i.test(detail)) {
+    const error = new Error('Dealer Shopify app is not installed or has not approved this app. Reconnect dealer Shopify.');
+    error.code = 'SHOPIFY_DEALER_RECONNECT_REQUIRED';
+    return error;
+  }
+  return new Error(`Shopify token exchange failed (${status}): ${detail}`);
+}
+
 export function shopifyContentConfig(role = 'primary') {
   const isDealer = role === 'dealer';
   const store = isDealer
@@ -59,8 +74,7 @@ export async function getShopifyAccessToken(role = 'primary') {
     let data = {};
     try { data = JSON.parse(text); } catch {}
     if (!response.ok || !data.access_token) {
-      const detail = data.error || data.error_description || text.slice(0, 300) || 'empty response';
-      throw new Error(`Shopify token exchange failed (${response.status}): ${detail}`);
+      throw shopifyTokenExchangeError(role, response.status, text, data);
     }
     generatedTokenCache.set(cacheKey, {
       store,
