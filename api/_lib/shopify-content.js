@@ -9,14 +9,22 @@ import {
 const API_VERSION = '2026-04';
 const SHOPIFY_TOKEN_TTL_SKEW_MS = 5 * 60 * 1000;
 
-let generatedTokenCache = null;
+const generatedTokenCache = new Map();
 
-export function shopifyContentConfig() {
-  const store = process.env.SHOPIFY_STORE || 'howl-campfires.myshopify.com';
-  const token = process.env.SHOPIFY_ACCESS_TOKEN;
-  const clientId = process.env.SHOPIFY_CLIENT_ID;
-  const clientSecret = process.env.SHOPIFY_CLIENT_SECRET;
+export function shopifyContentConfig(role = 'primary') {
+  const isDealer = role === 'dealer';
+  const store = isDealer
+    ? process.env.SHOPIFY_DEALER_STORE
+    : process.env.SHOPIFY_STORE || 'howl-campfires.myshopify.com';
+  const token = isDealer ? process.env.SHOPIFY_DEALER_ACCESS_TOKEN : process.env.SHOPIFY_ACCESS_TOKEN;
+  const clientId = isDealer
+    ? process.env.SHOPIFY_DEALER_CLIENT_ID || process.env.SHOPIFY_CLIENT_ID
+    : process.env.SHOPIFY_CLIENT_ID;
+  const clientSecret = isDealer
+    ? process.env.SHOPIFY_DEALER_CLIENT_SECRET || process.env.SHOPIFY_CLIENT_SECRET
+    : process.env.SHOPIFY_CLIENT_SECRET;
   return {
+    role,
     store,
     token,
     clientId,
@@ -26,16 +34,17 @@ export function shopifyContentConfig() {
   };
 }
 
-export async function getShopifyAccessToken() {
-  const { store, token, clientId, clientSecret } = shopifyContentConfig();
+export async function getShopifyAccessToken(role = 'primary') {
+  const { store, token, clientId, clientSecret } = shopifyContentConfig(role);
   if (clientId && clientSecret) {
     const now = Date.now();
+    const cacheKey = `${role}:${store}:${clientId}`;
+    const cached = generatedTokenCache.get(cacheKey);
     if (
-      generatedTokenCache?.token
-      && generatedTokenCache.store === store
-      && generatedTokenCache.expiresAt > now + SHOPIFY_TOKEN_TTL_SKEW_MS
+      cached?.token
+      && cached.expiresAt > now + SHOPIFY_TOKEN_TTL_SKEW_MS
     ) {
-      return generatedTokenCache.token;
+      return cached.token;
     }
     const response = await fetch(`https://${store}/admin/oauth/access_token`, {
       method: 'POST',
@@ -46,20 +55,24 @@ export async function getShopifyAccessToken() {
         client_secret: clientSecret,
       }),
     });
-    const data = await response.json().catch(() => ({}));
+    const text = await response.text();
+    let data = {};
+    try { data = JSON.parse(text); } catch {}
     if (!response.ok || !data.access_token) {
-      throw new Error(`Shopify token exchange failed (${response.status}): ${data.error || data.error_description || JSON.stringify(data).slice(0, 300)}`);
+      const detail = data.error || data.error_description || text.slice(0, 300) || 'empty response';
+      throw new Error(`Shopify token exchange failed (${response.status}): ${detail}`);
     }
-    generatedTokenCache = {
+    generatedTokenCache.set(cacheKey, {
       store,
       token: data.access_token,
       expiresAt: now + Math.max(Number(data.expires_in || 86400) * 1000, 60 * 1000),
       scope: data.scope || '',
-    };
+    });
     return data.access_token;
   }
   if (token) return token;
-  throw new Error('SHOPIFY_CLIENT_ID/SHOPIFY_CLIENT_SECRET or SHOPIFY_ACCESS_TOKEN required');
+  const prefix = role === 'dealer' ? 'SHOPIFY_DEALER' : 'SHOPIFY';
+  throw new Error(`${prefix}_CLIENT_ID/${prefix}_CLIENT_SECRET or ${prefix}_ACCESS_TOKEN required`);
 }
 
 export async function shopifyGql(query, variables = {}) {

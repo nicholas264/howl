@@ -554,10 +554,11 @@ export default async function handler(req, res) {
   const stores = [];
   const primaryConfig = shopifyContentConfig();
   if (primaryConfig.configured) {
-    stores.push({ role: 'primary', store: primaryConfig.store, token: await getShopifyAccessToken() });
+    stores.push({ role: 'primary', store: primaryConfig.store, getToken: () => getShopifyAccessToken() });
   }
-  if (process.env.SHOPIFY_DEALER_ACCESS_TOKEN && process.env.SHOPIFY_DEALER_STORE) {
-    stores.push({ role: 'dealer', store: process.env.SHOPIFY_DEALER_STORE, token: process.env.SHOPIFY_DEALER_ACCESS_TOKEN });
+  const dealerConfig = shopifyContentConfig('dealer');
+  if (dealerConfig.store && dealerConfig.configured) {
+    stores.push({ role: 'dealer', store: dealerConfig.store, getToken: () => getShopifyAccessToken('dealer') });
   }
   if (stores.length === 0) return res.status(500).json({ error: 'No Shopify store credentials configured' });
 
@@ -567,8 +568,11 @@ export default async function handler(req, res) {
     // Run each store's fetch in isolation. If one store fails (expired token,
     // missing scope, GraphQL error) the others still return — previously a
     // dealer-store failure 500'd the whole call and emptied the dashboard.
-    const settle = async (fn, role, store) => {
-      try { return { role, store, result: await fn(store) }; }
+    const settle = async (fn, role, store, getToken) => {
+      try {
+        const token = await getToken();
+        return { role, store, result: await fn(store, token) };
+      }
       catch (err) {
         console.error(`Shopify ${role} (${store}) failed:`, err.message);
         return { role, store, error: err.message };
@@ -577,7 +581,7 @@ export default async function handler(req, res) {
 
     if (action === 'get_inventory') {
       const results = await Promise.all(stores.map(s =>
-        settle(store => fetchStoreInventory(store, s.token), s.role, s.store)
+        settle(fetchStoreInventory, s.role, s.store, s.getToken)
       ));
       const ok = results.filter(r => r.result);
       if (!ok.length) return res.status(500).json({ error: results.map(r => `${r.role}: ${r.error}`).join(' | ') });
@@ -588,15 +592,15 @@ export default async function handler(req, res) {
 
     if (action === 'get_analytics') {
       const results = await Promise.all(stores.map(s =>
-        settle(store => fetchStoreAnalytics(store, s.token), s.role, s.store)
+        settle(fetchStoreAnalytics, s.role, s.store, s.getToken)
       ));
       const ok = results.filter(r => r.result);
       if (!ok.length) return res.status(500).json({ error: results.map(r => `${r.role}: ${r.error}`).join(' | ') });
       const merged = mergeStoreResults(ok);
       merged._meta.errors = results.filter(r => r.error).map(r => ({ role: r.role, store: r.store, error: r.error }));
-      merged._meta.dealerConfigured = !!(process.env.SHOPIFY_DEALER_STORE && process.env.SHOPIFY_DEALER_ACCESS_TOKEN);
-      merged._meta.dealerStorePresent = !!process.env.SHOPIFY_DEALER_STORE;
-      merged._meta.dealerStore = process.env.SHOPIFY_DEALER_STORE || null;
+      merged._meta.dealerConfigured = ok.some(r => r.role === 'dealer');
+      merged._meta.dealerStorePresent = !!dealerConfig.store;
+      merged._meta.dealerStore = dealerConfig.store || null;
       return res.json(merged);
     }
 

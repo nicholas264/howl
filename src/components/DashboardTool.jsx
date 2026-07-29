@@ -1987,7 +1987,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
       )}
       {shopifyData && shopifyData?._meta?.dealerStorePresent && !shopifyData?._meta?.dealerConfigured && (
         <div style={{ ...S.err, marginBottom: 20, color: '#b42318', borderColor: 'rgba(248,81,73,0.5)', background: 'rgba(248,81,73,0.1)' }}>
-          Dealer Shopify is disconnected: <code>SHOPIFY_DEALER_ACCESS_TOKEN</code> is empty in Vercel. Dealer revenue will only include previously imported CSV snapshots.{' '}
+          Dealer Shopify is disconnected or the app is not installed on the dealer store. Dealer revenue will only include previously imported CSV snapshots until it is reconnected.{' '}
           <a
             href={`/api/shopify-install?shop=${encodeURIComponent(shopifyData._meta.dealerStore)}&role=dealer`}
             style={{ color: '#b42318', fontWeight: 700, textDecoration: 'underline' }}
