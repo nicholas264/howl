@@ -319,6 +319,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [dashboardSyncing, setDashboardSyncing] = useState(false);
 
   // Launch history (DB-backed — more reliable than Meta's filtered list)
   const [launches, setLaunches] = useState(null);
@@ -948,13 +949,20 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
     }
   }, []);
 
-  const syncCoreData = useCallback(async () => {
-    await Promise.allSettled([
-      loadDashboard(),
-      loadShopify(),
-      loadGoogle(),
-    ]);
-  }, [loadDashboard, loadShopify, loadGoogle]);
+  const syncDashboard = useCallback(async () => {
+    setDashboardSyncing(true);
+    try {
+      await Promise.allSettled([
+        loadDashboard(),
+        loadShopify(),
+        loadGoogle(),
+        loadKlaviyo(),
+        view === 'forecast' ? refreshForecast() : Promise.resolve(),
+      ]);
+    } finally {
+      setDashboardSyncing(false);
+    }
+  }, [loadDashboard, loadGoogle, loadKlaviyo, loadShopify, refreshForecast, view]);
 
   // Auto-refresh when snapshots are missing or >24h stale. Runs once after
   // the snapshot fetch resolves so we know whether to auto-pull.
@@ -1087,6 +1095,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
     forecast: { title: 'Forecast',  subtitle: 'Pacing actuals against the HOWL \'26 projections.' },
   };
   const v = VIEW_TITLES[view] || VIEW_TITLES.cfo;
+  const sourceLoading = loading || shopifyLoading || googleLoading || klaviyoLoading || forecastLoading || dashboardSyncing;
 
   return (
     <div className="dashboard-workspace dashboard-motion-workspace" style={{ ...S.wrap, maxWidth: view === 'creative' ? 1600 : S.wrap.maxWidth }}>
@@ -1118,23 +1127,46 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
               {' · '}Klaviyo {sourceAgeLabel(newestKlaviyoSnapshotAt)}
             </span>
           )}
-          <button
-            onClick={syncCoreData}
-            disabled={loading || shopifyLoading || googleLoading}
-            style={(loading || shopifyLoading || googleLoading) ? { ...S.ghostBtn, cursor: 'not-allowed' } : ((data || shopifyData || googleData) ? S.ghostBtn : S.btn)}
-          >
-            {(loading || shopifyLoading || googleLoading) ? 'Syncing…' : (data || shopifyData || googleData) ? 'Refresh Data' : 'Sync Data'}
+          <button onClick={syncDashboard} disabled={sourceLoading} style={sourceLoading ? { ...S.btn, cursor: 'not-allowed', opacity: 0.65 } : S.btn}>
+            {sourceLoading ? 'Syncing…' : 'Sync Dashboard'}
           </button>
-          {view === 'growth' && (
-            <button onClick={loadKlaviyo} disabled={klaviyoLoading} style={klaviyoLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : (klaviyoData ? S.ghostBtn : S.btn)}>
-              {klaviyoLoading ? 'Loading…' : klaviyoData ? 'Refresh Klaviyo' : 'Load Klaviyo'}
-            </button>
-          )}
-          {view === 'forecast' && (
-            <button onClick={refreshForecast} disabled={forecastLoading} style={forecastLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : (forecast ? S.ghostBtn : S.btn)}>
-              {forecastLoading ? 'Pulling…' : forecast ? 'Refresh Forecast' : 'Pull Forecast'}
-            </button>
-          )}
+          <details style={{ position: 'relative' }}>
+            <summary style={{ ...S.ghostBtn, listStyle: 'none', userSelect: 'none' }}>
+              Sources
+            </summary>
+            <div style={{
+              position: 'absolute',
+              right: 0,
+              top: 'calc(100% + 6px)',
+              zIndex: 10,
+              display: 'grid',
+              gap: 6,
+              minWidth: 170,
+              padding: 8,
+              background: DASH.surface,
+              border: `1px solid ${DASH.border}`,
+              borderRadius: 9,
+              boxShadow: '0 16px 36px rgba(45,40,30,.12)',
+            }}>
+              <button onClick={loadDashboard} disabled={loading} style={loading ? { ...S.ghostBtn, cursor: 'not-allowed' } : S.ghostBtn}>
+                {loading ? 'Loading…' : 'Meta'}
+              </button>
+              <button onClick={loadShopify} disabled={shopifyLoading} style={shopifyLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : S.ghostBtn}>
+                {shopifyLoading ? 'Loading…' : 'Shopify'}
+              </button>
+              <button onClick={loadGoogle} disabled={googleLoading} style={googleLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : S.ghostBtn}>
+                {googleLoading ? 'Loading…' : 'Google'}
+              </button>
+              <button onClick={loadKlaviyo} disabled={klaviyoLoading} style={klaviyoLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : S.ghostBtn}>
+                {klaviyoLoading ? 'Loading…' : 'Klaviyo'}
+              </button>
+              {view === 'forecast' && (
+                <button onClick={refreshForecast} disabled={forecastLoading} style={forecastLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : S.ghostBtn}>
+                  {forecastLoading ? 'Pulling…' : 'Forecast'}
+                </button>
+              )}
+            </div>
+          </details>
         </div>
       </div>
 
@@ -2996,6 +3028,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                         { label: 'Projected New', value: pace.newCustomers.toLocaleString(), sub: currentRow.newCustomers + ' MTD' },
                         { label: 'NCAC (run rate)', value: pace.ncac == null ? '—' : '$' + pace.ncac.toFixed(0), sub: currentRow.newCustomers ? '' : 'no new yet' },
                         { label: 'MER (MTD)', value: currentRow.blendedRoas == null ? '—' : currentRow.blendedRoas.toFixed(2) + 'x', color: (currentRow.blendedRoas || 0) >= 2 ? '#256b35' : (currentRow.blendedRoas || 0) >= 1 ? '#9a6a0a' : '#b42318' },
+                        { label: 'aMER (MTD)', value: currentRow.newRoas == null ? '—' : currentRow.newRoas.toFixed(2) + 'x', color: (currentRow.newRoas || 0) >= 1 ? '#256b35' : (currentRow.newRoas || 0) >= 0.5 ? '#9a6a0a' : '#b42318', sub: 'known new rev ÷ ad spend' },
                         { label: 'Google ROAS (MTD)', value: currentRow.googleRoasReported == null ? '—' : currentRow.googleRoasReported.toFixed(2) + 'x', color: (currentRow.googleRoasReported || 0) >= 2 ? '#256b35' : (currentRow.googleRoasReported || 0) >= 1 ? '#9a6a0a' : '#b42318', sub: 'reported (pixel)' },
                         { label: 'Blended CPA (MTD)', value: currentRow.orders > 0 ? '$' + (currentRow.adSpend / currentRow.orders).toFixed(0) : '—', sub: currentRow.orders + ' orders' },
                         { label: 'Mktg % Rev (MTD)', value: currentRow.revenue > 0 ? fmtPct(currentRow.adSpend / currentRow.revenue) : '—', color: currentRow.revenue > 0 && (currentRow.adSpend / currentRow.revenue) <= 0.30 ? '#256b35' : currentRow.revenue > 0 && (currentRow.adSpend / currentRow.revenue) <= 0.50 ? '#9a6a0a' : '#b42318' },
