@@ -85,7 +85,7 @@ export default async function handler(req, res) {
       `;
     }
 
-    const [deliverables, engagements, historicalAssets] = await Promise.all([
+    const [deliverables, engagements, historicalAssets, seededRows] = await Promise.all([
       sql`
         SELECT
           d.id, d.title, d.status, d.due_at, d.expected_asset_count,
@@ -158,6 +158,22 @@ export default async function handler(req, res) {
         GROUP BY asset_key
         ORDER BY spend DESC
       `,
+      sql`
+        SELECT
+          l.id, l.creator_id, c.name AS creator_name, l.seeded_on,
+          l.product_label, l.unit_type, l.quantity,
+          l.unit_cogs::float AS unit_cogs,
+          (COALESCE(l.unit_cogs, 0) * COALESCE(l.quantity, 1))::float AS cogs_total,
+          COALESCE(l.shipping_cost, 0)::float AS shipping_cost,
+          COALESCE(l.creator_fee, 0)::float AS creator_fee,
+          COALESCE(l.agreed_deliverables, 0)::int AS agreed_deliverables,
+          l.deliverable_due, l.seeding_status, l.notes
+        FROM creator_seeding_log l
+        JOIN creators c ON c.id = l.creator_id
+        WHERE l.seeded_on >= ${range.start}::date
+          AND l.seeded_on < ${range.end}::date
+        ORDER BY l.seeded_on DESC NULLS LAST, c.name ASC
+      `,
     ]);
 
     let forecastMonth = null;
@@ -207,6 +223,79 @@ export default async function handler(req, res) {
       ), 0),
     };
     summary.forecast = summary.scheduled + summary.unscheduled;
+
+    const seedingByCreator = new Map();
+    const productRollup = new Map();
+    for (const row of seededRows) {
+      const productLabel = row.product_label || row.unit_type || 'Unlabeled product';
+      const unitType = row.unit_type || 'unit';
+      const productKey = `${productLabel}::${unitType}`;
+      const cogsTotal = number(row.cogs_total);
+      const totalInvestment = cogsTotal + number(row.shipping_cost) + number(row.creator_fee);
+      const creatorKey = String(row.creator_id);
+      const creatorProducts = seedingByCreator.get(creatorKey) || [];
+      creatorProducts.push({
+        id: row.id,
+        product_label: productLabel,
+        unit_type: unitType,
+        quantity: number(row.quantity),
+        cogs_total: cogsTotal,
+        total_investment: totalInvestment,
+        seeded_on: row.seeded_on,
+        seeding_status: row.seeding_status,
+      });
+      seedingByCreator.set(creatorKey, creatorProducts);
+
+      const current = productRollup.get(productKey) || {
+        product_label: productLabel,
+        unit_type: unitType,
+        quantity: 0,
+        creators: new Set(),
+        seeded_rows: 0,
+        cogs_total: 0,
+        shipping_cost: 0,
+        creator_fee: 0,
+        total_investment: 0,
+        expected_assets: 0,
+      };
+      current.quantity += number(row.quantity);
+      current.creators.add(String(row.creator_id));
+      current.seeded_rows += 1;
+      current.cogs_total += cogsTotal;
+      current.shipping_cost += number(row.shipping_cost);
+      current.creator_fee += number(row.creator_fee);
+      current.total_investment += totalInvestment;
+      current.expected_assets += number(row.agreed_deliverables);
+      productRollup.set(productKey, current);
+    }
+
+    const seededProducts = Array.from(productRollup.values())
+      .map(item => ({
+        ...item,
+        creators: item.creators.size,
+      }))
+      .sort((a, b) => b.total_investment - a.total_investment);
+    const seededCreatorIds = new Set(seededRows.map(row => String(row.creator_id)));
+    const seeding = {
+      summary: {
+        seeded_creators: seededCreatorIds.size,
+        seeded_units: seededRows.reduce((sum, row) => sum + number(row.quantity), 0),
+        seeded_products: seededProducts.length,
+        seeded_cogs: seededRows.reduce((sum, row) => sum + number(row.cogs_total), 0),
+        seeded_shipping: seededRows.reduce((sum, row) => sum + number(row.shipping_cost), 0),
+        seeded_creator_fees: seededRows.reduce((sum, row) => sum + number(row.creator_fee), 0),
+        seeded_assets_expected: seededRows.reduce((sum, row) => sum + number(row.agreed_deliverables), 0),
+        seeded_total_investment: seededRows.reduce((sum, row) => (
+          sum + number(row.cogs_total) + number(row.shipping_cost) + number(row.creator_fee)
+        ), 0),
+      },
+      products: seededProducts,
+      rows: seededRows.map(row => ({
+        ...row,
+        product_label: row.product_label || row.unit_type || 'Unlabeled product',
+        total_investment: number(row.cogs_total) + number(row.shipping_cost) + number(row.creator_fee),
+      })),
+    };
 
     const spendingAssets = historicalAssets.filter(item => number(item.spend) > 0);
     const assetMetrics = spendingAssets.map(item => {
@@ -311,6 +400,16 @@ export default async function handler(req, res) {
         action: 'Schedule commitments',
       });
     }
+    if (seeding.summary.seeded_assets_expected > summary.scheduled && seeding.summary.seeded_creators > 0) {
+      recommendations.push({
+        key: 'seeded_unscheduled',
+        severity: 'warning',
+        title: 'Turn seeded product commitments into deadlines',
+        detail: `${seeding.summary.seeded_assets_expected} asset${seeding.summary.seeded_assets_expected === 1 ? '' : 's'} are promised from seeded product rows this month. Make sure each one has a deliverable due date before forecasting launch supply.`,
+        count: seeding.summary.seeded_assets_expected,
+        action: 'Schedule seeded assets',
+      });
+    }
     if (demand.surplus_shortfall != null && demand.surplus_shortfall < 0) {
       const shortage = Math.abs(demand.surplus_shortfall);
       recommendations.push({
@@ -380,7 +479,12 @@ export default async function handler(req, res) {
       });
     }
 
-    const risks = deliverables
+    const deliverablesWithSeeding = deliverables.map(item => ({
+      ...item,
+      seeded_products: seedingByCreator.get(String(item.creator_id)) || [],
+    }));
+
+    const risks = deliverablesWithSeeding
       .filter(item => number(item.completed_asset_count) < number(item.expected_asset_count))
       .map(item => ({
         ...item,
@@ -396,10 +500,11 @@ export default async function handler(req, res) {
     return res.json({
       month: range.month,
       summary,
+      seeding,
       by_type: byType,
       weeks,
       commitments,
-      deliverables,
+      deliverables: deliverablesWithSeeding,
       risks,
       recommendations,
       benchmarks: {

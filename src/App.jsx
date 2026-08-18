@@ -184,8 +184,6 @@ export default function HowlAdEngine({ appAccess }) {
     {
       label: 'Creative',
       items: [
-        { key: 'creative-flow', label: 'Flow', permission: 'creators.read' },
-        { key: 'creative-pipeline', label: 'Pipeline', permission: 'creators.read' },
         { key: 'seeding-ledger', label: 'Seeding', permission: 'creators.read' },
         { key: 'creative-analytics', label: 'Creative Analytics', permission: 'analytics.read' },
         { key: 'from-winners', label: 'Concept Studio', permission: 'briefs.write' },
@@ -357,7 +355,7 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "creative-flow" && <CreativeFlowBoard setActiveTab={navigate} onOpenCreator={openPlannedCreator} canManage={can('creators.write')} />}
         {activeTab === "creative-pipeline" && <CreatorPipelineFunnel />}
         {activeTab === "seeding-ledger" && <SeedingLedger canManage={can('creators.write')} />}
-        {activeTab === "creative-plan" && <CreativePlanningWorkspace onOpenCreator={openPlannedCreator} />}
+        {activeTab === "creative-plan" && <CreativePlanningWorkspace onOpenCreator={openPlannedCreator} setActiveTab={navigate} />}
         {activeTab === "campaign-planner" && <CreatorCampaignPlanner onOpenCreator={openPlannedCreator} />}
         {activeTab === "creative" && <WorkspaceHub type="creative" setActiveTab={navigate} can={can} />}
         {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={navigate} can={can} />}

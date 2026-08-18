@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 const currentMonth = () => new Date().toISOString().slice(0, 7);
 const labelType = value => value === 'one_off' ? 'One-off' : value === 'retainer' ? 'Retainer' : 'Unassigned';
@@ -8,11 +8,12 @@ function monthLabel(value) {
 }
 
 function dateLabel(value) {
+  if (!value) return 'No date';
   return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function money(value, digits = 0) {
-  if (value == null || !Number.isFinite(Number(value))) return '—';
+  if (value == null || !Number.isFinite(Number(value))) return '$0';
   return Number(value).toLocaleString(undefined, {
     style: 'currency',
     currency: 'USD',
@@ -24,7 +25,12 @@ function numberInput(value) {
   return value == null ? '' : String(Math.round(Number(value) * 100) / 100);
 }
 
-export default function CreativePlanningWorkspace({ onOpenCreator }) {
+function pct(value) {
+  if (value == null || !Number.isFinite(Number(value))) return '0%';
+  return `${Math.round(Number(value))}%`;
+}
+
+export default function CreativePlanningWorkspace({ onOpenCreator, setActiveTab }) {
   const [month, setMonth] = useState(currentMonth);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -38,10 +44,6 @@ export default function CreativePlanningWorkspace({ onOpenCreator }) {
     win_rate_pct: '',
     useful_lifespan_days: '',
   });
-  const demandRef = useRef(null);
-  const assumptionsRef = useRef(null);
-  const riskRef = useRef(null);
-  const commitmentsRef = useRef(null);
 
   useEffect(() => {
     let active = true;
@@ -50,18 +52,17 @@ export default function CreativePlanningWorkspace({ onOpenCreator }) {
     fetch(`/api/creative-planning?month=${encodeURIComponent(month)}`)
       .then(async response => {
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Could not load creative plan');
-        if (active) {
-          setData(result);
-          setScenario({
-            spend_target: numberInput(result.scenario?.spend_target),
-            cpa_target: numberInput(result.scenario?.cpa_target),
-            revenue_target: numberInput(result.scenario?.revenue_target),
-            spend_capacity_per_asset: numberInput(result.scenario?.spend_capacity_per_asset),
-            win_rate_pct: numberInput(result.scenario?.win_rate_pct),
-            useful_lifespan_days: numberInput(result.scenario?.useful_lifespan_days),
-          });
-        }
+        if (!response.ok) throw new Error(result.error || 'Could not load monthly output');
+        if (!active) return;
+        setData(result);
+        setScenario({
+          spend_target: numberInput(result.scenario?.spend_target),
+          cpa_target: numberInput(result.scenario?.cpa_target),
+          revenue_target: numberInput(result.scenario?.revenue_target),
+          spend_capacity_per_asset: numberInput(result.scenario?.spend_capacity_per_asset),
+          win_rate_pct: numberInput(result.scenario?.win_rate_pct),
+          useful_lifespan_days: numberInput(result.scenario?.useful_lifespan_days),
+        });
       })
       .catch(err => {
         if (active && !(import.meta.env.DEV && import.meta.env.VITE_AUTH_DISABLED === 'true')) setError(err.message);
@@ -70,10 +71,51 @@ export default function CreativePlanningWorkspace({ onOpenCreator }) {
     return () => { active = false; };
   }, [month]);
 
-  const maxWeekly = useMemo(() => Math.max(1, ...(data?.weeks || []).map(item => item.expected)), [data]);
   const summary = data?.summary || {};
+  const seeding = data?.seeding || { summary: {}, products: [], rows: [] };
+  const seedSummary = seeding.summary || {};
   const demand = data?.demand || {};
   const benchmarks = data?.benchmarks || {};
+  const completedPct = summary.forecast ? (Number(summary.completed || 0) / Number(summary.forecast || 1)) * 100 : 0;
+  const scheduledPct = summary.forecast ? (Number(summary.scheduled || 0) / Number(summary.forecast || 1)) * 100 : 0;
+  const seededInvestment = Number(seedSummary.seeded_total_investment || 0);
+  const costPerExpectedAsset = Number(seedSummary.seeded_assets_expected || 0)
+    ? seededInvestment / Number(seedSummary.seeded_assets_expected)
+    : null;
+  const outputHealth = summary.overdue
+    ? 'At risk'
+    : summary.unscheduled
+      ? 'Needs scheduling'
+      : demand.surplus_shortfall != null && demand.surplus_shortfall < 0
+        ? 'Under target'
+        : 'On track';
+
+  const rowsNeedingAction = useMemo(() => {
+    const risks = (data?.risks || []).slice(0, 6).map(item => ({
+      key: `risk-${item.id}`,
+      creator_id: item.creator_id,
+      creator_name: item.creator_name,
+      title: item.title,
+      meta: `${dateLabel(item.due_at)} due`,
+      metric: `${item.remaining} left`,
+      tone: item.risk === 'overdue' ? 'risk' : 'warning',
+      target: 'deliverables',
+    }));
+    const unscheduled = (data?.commitments || [])
+      .filter(item => Number(item.unscheduled_assets || 0) > 0)
+      .slice(0, Math.max(0, 6 - risks.length))
+      .map(item => ({
+        key: `commitment-${item.id}`,
+        creator_id: item.creator_id,
+        creator_name: item.creator_name,
+        title: `${labelType(item.engagement_type)} commitment`,
+        meta: item.commitment_period === 'monthly' ? 'monthly agreement' : 'engagement agreement',
+        metric: `${item.unscheduled_assets} unscheduled`,
+        tone: 'warning',
+        target: 'deliverables',
+      }));
+    return [...risks, ...unscheduled];
+  }, [data]);
 
   const saveScenario = async event => {
     event.preventDefault();
@@ -86,7 +128,7 @@ export default function CreativePlanningWorkspace({ onOpenCreator }) {
         body: JSON.stringify({ month, scenario }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Could not save planning assumptions');
+      if (!response.ok) throw new Error(result.error || 'Could not save model assumptions');
       setData(result);
       setScenario({
         spend_target: numberInput(result.scenario?.spend_target),
@@ -108,178 +150,154 @@ export default function CreativePlanningWorkspace({ onOpenCreator }) {
     setError('Creator navigation is not available from this view.');
   };
 
-  const jumpToPlanningAction = key => {
-    const target = {
-      overdue: riskRef,
-      unscheduled: commitmentsRef,
-      demand_shortfall: demandRef,
-      healthy: demandRef,
-      missing_assumptions: assumptionsRef,
-    }[key];
-    target?.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
   return (
-    <div className="creator-workspace planning-workspace">
-      <header className="creator-head">
+    <div className="creator-workspace output-workspace">
+      <header className="output-head">
         <div>
           <span className="workspace-kicker">Creator operations</span>
-          <h1>Creative Plan</h1>
-          <p>See contracted creator supply, scheduled deadlines, completed output, and the work putting the month at risk.</p>
+          <h1>Monthly Output</h1>
+          <p>{monthLabel(month)} creator production, seeded investment, and the work most likely to block launchable assets.</p>
         </div>
-        <label className="planning-month">Planning month<input type="month" value={month} onChange={event => setMonth(event.target.value)} /></label>
+        <div className="output-head-controls">
+          <label>Month<input type="month" value={month} onChange={event => setMonth(event.target.value)} /></label>
+          <button type="button" onClick={() => setActiveTab?.('seeding-ledger')}>Seeding ledger</button>
+        </div>
       </header>
 
       {error && <div className="app-error">{error}</div>}
 
-      <section className="planning-scorecard">
-        <div><span>Forecast supply</span><strong>{summary.forecast || 0}</strong><small>scheduled + unallocated commitments</small></div>
-        <div><span>Scheduled</span><strong>{summary.scheduled || 0}</strong><small>assets with deadlines</small></div>
-        <div><span>Completed</span><strong>{summary.completed || 0}</strong><small>{summary.shipped || 0} shipped</small></div>
-        <div className={summary.unscheduled ? 'warning' : ''}><span>Unscheduled</span><strong>{summary.unscheduled || 0}</strong><small>contracted without deadlines</small></div>
-        <div className={summary.overdue ? 'risk' : ''}><span>Overdue</span><strong>{summary.overdue || 0}</strong><small>assets remaining past due</small></div>
+      <section className={`output-command ${outputHealth === 'At risk' ? 'risk' : outputHealth === 'On track' ? 'good' : 'warning'}`}>
+        <div className="output-command-main">
+          <span>{outputHealth}</span>
+          <strong>{summary.forecast || 0} forecast assets</strong>
+          <p>{summary.completed || 0} complete, {summary.shipped || 0} shipped, {summary.unscheduled || 0} still need deadlines.</p>
+        </div>
+        <div className="output-gauge" style={{ '--complete': `${Math.min(100, completedPct)}%`, '--scheduled': `${Math.min(100, scheduledPct)}%` }}>
+          <i />
+          <span>{pct(completedPct)} complete</span>
+        </div>
       </section>
 
-      {!!data?.recommendations?.length && (
-        <section className="planning-panel planning-actions">
-          <div className="planning-panel-head">
-            <span>Planning actions</span>
-            <small>What to do with this forecast</small>
+      <section className="output-metrics">
+        <article>
+          <span>Expected output</span>
+          <strong>{summary.forecast || 0}</strong>
+          <small>{summary.scheduled || 0} scheduled + {summary.unscheduled || 0} from agreements</small>
+        </article>
+        <article>
+          <span>Seeded investment</span>
+          <strong>{money(seededInvestment)}</strong>
+          <small>{money(seedSummary.seeded_cogs)} COGS + {money(seedSummary.seeded_creator_fees)} creator fees</small>
+        </article>
+        <article>
+          <span>Seeded products</span>
+          <strong>{seedSummary.seeded_units || 0}</strong>
+          <small>{seedSummary.seeded_creators || 0} creators, {seedSummary.seeded_products || 0} product groups</small>
+        </article>
+        <article className={summary.overdue ? 'risk' : ''}>
+          <span>Needs attention</span>
+          <strong>{Number(summary.overdue || 0) + Number(summary.unscheduled || 0)}</strong>
+          <small>{summary.overdue || 0} overdue, {summary.unscheduled || 0} unscheduled</small>
+        </article>
+      </section>
+
+      <div className="output-grid">
+        <section className="output-panel output-month">
+          <div className="output-panel-head">
+            <span>Output build</span>
+            <small>Retainers, one-offs, and unassigned work</small>
           </div>
-          <div>
-            {data.recommendations.map(item => (
-              <button key={item.key} type="button" className={item.severity} onClick={() => jumpToPlanningAction(item.key)}>
-                <i>{item.count ?? '!'}</i>
-                <span>
-                  <strong>{item.title}</strong>
-                  <small>{item.detail}</small>
-                </span>
-                <b>{item.action}</b>
-              </button>
+          <div className="output-type-list">
+            {(data?.by_type || []).map(item => (
+              <div key={item.type}>
+                <header>
+                  <strong>{labelType(item.type)}</strong>
+                  <span>{item.forecast} forecast</span>
+                </header>
+                <div className="output-bar">
+                  <i style={{ width: `${item.forecast ? (item.completed / item.forecast) * 100 : 0}%` }} />
+                  <b style={{ width: `${item.forecast ? (item.scheduled / item.forecast) * 100 : 0}%` }} />
+                </div>
+                <footer>
+                  <span>{item.completed} complete</span>
+                  <span>{item.scheduled} scheduled</span>
+                  <span>{item.unscheduled} unscheduled</span>
+                </footer>
+              </div>
             ))}
           </div>
         </section>
-      )}
 
-      <div className="planning-demand-grid">
-        <section className="planning-panel planning-demand-result" ref={demandRef}>
-          <div className="planning-panel-head">
-            <span>Monthly creative demand</span>
-            <small>{demand.ready ? 'Steady-state replacement model' : 'Add assumptions to calculate'}</small>
+        <section className="output-panel">
+          <div className="output-panel-head">
+            <span>Product seeding</span>
+            <small>{costPerExpectedAsset == null ? 'Waiting on promised asset counts' : `${money(costPerExpectedAsset)} per promised asset`}</small>
           </div>
-          <div className="planning-demand-cards">
-            <div><span>New assets required</span><strong>{demand.new_assets_required ?? '—'}</strong><small>{demand.active_assets_needed ?? '—'} active winners needed</small></div>
-            <div><span>Forecast supply</span><strong>{summary.forecast || 0}</strong><small>contracted + scheduled</small></div>
-            <div className={demand.surplus_shortfall == null ? '' : demand.surplus_shortfall < 0 ? 'shortfall' : 'surplus'}>
-              <span>{demand.surplus_shortfall != null && demand.surplus_shortfall < 0 ? 'Asset shortfall' : 'Asset surplus'}</span>
-              <strong>{demand.surplus_shortfall == null ? '—' : Math.abs(demand.surplus_shortfall)}</strong>
-              <small>{demand.purchases_required ?? '—'} purchases required</small>
-            </div>
+          <div className="output-product-list">
+            {(seeding.products || []).slice(0, 6).map(item => (
+              <div key={`${item.product_label}-${item.unit_type}`}>
+                <span>
+                  <strong>{item.product_label}</strong>
+                  <small>{item.quantity} {item.unit_type} across {item.creators} creator{item.creators === 1 ? '' : 's'}</small>
+                </span>
+                <b>{money(item.total_investment)}</b>
+              </div>
+            ))}
+            {!loading && !(seeding.products || []).length && (
+              <div className="output-empty">No seeded products are logged for this month.</div>
+            )}
           </div>
-          {!demand.ready && (
-            <p className="planning-demand-note">
-              Historical attribution is still too thin to set reliable defaults. Enter monthly spend capacity, win rate, and useful lifespan to run the scenario now.
-            </p>
-          )}
-          {demand.ready && (
-            <p className="planning-demand-note">
-              Required assets = active winners needed × monthly replacement rate ÷ expected win rate. Every assumption remains editable.
-            </p>
-          )}
         </section>
+      </div>
 
-        <form className="planning-panel planning-assumptions" onSubmit={saveScenario} ref={assumptionsRef}>
-          <div className="planning-panel-head"><span>Demand assumptions</span><small>{data?.scenario?.source === 'cfo_forecast' ? 'Started from CFO forecast' : 'Saved scenario'}</small></div>
-          <div className="planning-assumption-grid">
+      <section className="output-panel">
+        <div className="output-panel-head">
+          <span>Action queue</span>
+          <small>Only items that change this month&apos;s output</small>
+        </div>
+        <div className="output-action-table">
+          {rowsNeedingAction.map(item => (
+            <button key={item.key} type="button" onClick={() => openCreator(item.creator_id, item.target)}>
+              <span>
+                <strong>{item.creator_name}</strong>
+                <small>{item.title}</small>
+              </span>
+              <em>{item.meta}</em>
+              <b className={item.tone}>{item.metric}</b>
+            </button>
+          ))}
+          {!loading && !rowsNeedingAction.length && (
+            <div className="output-empty">No overdue assets or unscheduled commitments for this month.</div>
+          )}
+        </div>
+      </section>
+
+      <details className="output-panel output-model">
+        <summary>
+          <span>Demand model</span>
+          <small>{demand.ready ? `${demand.new_assets_required || 0} assets required at current assumptions` : 'Add assumptions only when you need capacity planning'}</small>
+        </summary>
+        <div className="output-model-body">
+          <div className="output-demand">
+            <div><span>Spend target</span><strong>{money(data?.scenario?.spend_target)}</strong></div>
+            <div><span>Assets required</span><strong>{demand.new_assets_required ?? '-'}</strong></div>
+            <div className={demand.surplus_shortfall != null && demand.surplus_shortfall < 0 ? 'risk' : 'good'}>
+              <span>{demand.surplus_shortfall != null && demand.surplus_shortfall < 0 ? 'Shortfall' : 'Surplus'}</span>
+              <strong>{demand.surplus_shortfall == null ? '-' : Math.abs(demand.surplus_shortfall)}</strong>
+            </div>
+            <div><span>Historical sample</span><strong>{benchmarks.spending_assets || 0}</strong></div>
+          </div>
+          <form className="output-assumptions" onSubmit={saveScenario}>
             <label>Monthly spend target<input type="number" min="0" step="100" value={scenario.spend_target} onChange={event => setScenario({ ...scenario, spend_target: event.target.value })} /></label>
             <label>CPA target<input type="number" min="0.01" step="1" value={scenario.cpa_target} onChange={event => setScenario({ ...scenario, cpa_target: event.target.value })} /></label>
             <label>Spend capacity / winner<input type="number" min="0.01" step="100" placeholder={numberInput(benchmarks.median_monthly_spend_capacity)} value={scenario.spend_capacity_per_asset} onChange={event => setScenario({ ...scenario, spend_capacity_per_asset: event.target.value })} /></label>
             <label>Expected win rate %<input type="number" min="0.1" max="100" step="1" placeholder={numberInput(benchmarks.win_rate_at_target)} value={scenario.win_rate_pct} onChange={event => setScenario({ ...scenario, win_rate_pct: event.target.value })} /></label>
             <label>Useful lifespan days<input type="number" min="1" step="1" placeholder={numberInput(benchmarks.median_useful_lifespan_days)} value={scenario.useful_lifespan_days} onChange={event => setScenario({ ...scenario, useful_lifespan_days: event.target.value })} /></label>
             <label>Revenue target<input type="number" min="0" step="1000" value={scenario.revenue_target} onChange={event => setScenario({ ...scenario, revenue_target: event.target.value })} /></label>
-          </div>
-          <button className="primary-action" disabled={saving}>{saving ? 'Saving…' : 'Save scenario'}</button>
-        </form>
-      </div>
-
-      <section className="planning-panel planning-benchmarks">
-        <div className="planning-panel-head">
-          <span>Historical asset productivity</span>
-          <small className={`planning-confidence ${benchmarks.confidence || 'low'}`}>{benchmarks.confidence || 'low'} confidence · {benchmarks.spending_assets || 0} spending assets</small>
+            <button className="primary-action" disabled={saving}>{saving ? 'Saving' : 'Save model'}</button>
+          </form>
         </div>
-        <div>
-          <dl><dt>Median revenue / asset</dt><dd>{money(benchmarks.median_revenue_per_asset)}</dd></dl>
-          <dl><dt>Average revenue / asset</dt><dd>{money(benchmarks.average_revenue_per_asset)}</dd></dl>
-          <dl><dt>Median monthly capacity</dt><dd>{money(benchmarks.median_monthly_spend_capacity)}</dd></dl>
-          <dl><dt>Win rate at target CPA</dt><dd>{benchmarks.win_rate_at_target == null ? '—' : `${Number(benchmarks.win_rate_at_target).toFixed(0)}%`}</dd></dl>
-          <dl><dt>Median useful lifespan</dt><dd>{benchmarks.median_useful_lifespan_days == null ? '—' : `${Math.round(benchmarks.median_useful_lifespan_days)} days`}</dd></dl>
-          <dl><dt>Active in last 14 days</dt><dd>{benchmarks.active_assets_14d || 0}</dd></dl>
-        </div>
-        {!benchmarks.auto_defaults_ready && <p>HOWL will begin using historical medians as defaults after 10 spending assets. Until then, saved manual assumptions stay in control.</p>}
-      </section>
-
-      <div className="planning-grid">
-        <section className="planning-panel">
-          <div className="planning-panel-head"><span>{monthLabel(month)} supply</span><small>Forecast by creator relationship</small></div>
-          <div className="planning-supply">
-            {(data?.by_type || []).map(item => (
-              <article key={item.type}>
-                <header><strong>{labelType(item.type)}</strong><span>{item.forecast} forecast</span></header>
-                <div className="planning-stack">
-                  <i className="complete" style={{ width: `${item.forecast ? (item.completed / item.forecast) * 100 : 0}%` }} />
-                  <i className="scheduled" style={{ width: `${item.forecast ? (Math.max(item.scheduled - item.completed, 0) / item.forecast) * 100 : 0}%` }} />
-                  <i className="unscheduled" style={{ width: `${item.forecast ? (item.unscheduled / item.forecast) * 100 : 0}%` }} />
-                </div>
-                <footer><span>{item.completed} complete</span><span>{item.scheduled} scheduled</span><span>{item.unscheduled} unscheduled</span></footer>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="planning-panel">
-          <div className="planning-panel-head"><span>Weekly delivery</span><small>Deadlines, not upload dates</small></div>
-          <div className="planning-weeks">
-            {(data?.weeks || []).map((week, index) => (
-              <div key={week.start}>
-                <span>Week {index + 1}<small>{dateLabel(week.start)} - {dateLabel(new Date(new Date(week.end).getTime() - 1))}</small></span>
-                <div><i style={{ width: `${(week.expected / maxWeekly) * 100}%` }} /><b style={{ width: `${(week.completed / maxWeekly) * 100}%` }} /></div>
-                <strong>{week.completed}/{week.expected}</strong>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-
-      <section className="planning-panel planning-risk-panel" ref={riskRef}>
-        <div className="planning-panel-head"><span>Deadline risk</span><small>{data?.risks?.length || 0} incomplete deliverables</small></div>
-        <div className="planning-table">
-          <div className="planning-table-head"><span>Creator / deliverable</span><span>Type</span><span>Due</span><span>Remaining</span><span>State</span></div>
-          {(data?.risks || []).map(item => (
-            <button key={item.id} type="button" onClick={() => openCreator(item.creator_id, 'deliverables')}>
-              <span><strong>{item.creator_name}</strong><small>{item.title}</small></span>
-              <span>{labelType(item.engagement_type)}</span>
-              <time>{dateLabel(item.due_at)}</time>
-              <b>{item.remaining}</b>
-              <i className={item.risk}>{item.risk.replace('_', ' ')}</i>
-            </button>
-          ))}
-          {!loading && !data?.risks?.length && <div className="workflow-empty">No incomplete deliverables are scheduled for this month.</div>}
-        </div>
-      </section>
-
-      {!!data?.commitments?.filter(item => item.unscheduled_assets > 0).length && (
-        <section className="planning-panel" ref={commitmentsRef}>
-          <div className="planning-panel-head"><span>Commitments needing deadlines</span><small>Contracted supply not yet placed on the calendar</small></div>
-          <div className="planning-commitments">
-            {data.commitments.filter(item => item.unscheduled_assets > 0).map(item => (
-              <button key={item.id} type="button" onClick={() => openCreator(item.creator_id, 'deliverables')}>
-                <span><strong>{item.creator_name}</strong><small>{labelType(item.engagement_type)} · {item.commitment_period === 'monthly' ? 'monthly commitment' : 'engagement commitment'}{item.cadence ? ` · ${item.cadence}` : ''}</small></span>
-                <b>{item.unscheduled_assets} unscheduled</b>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
+      </details>
     </div>
   );
 }
