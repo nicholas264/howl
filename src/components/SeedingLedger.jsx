@@ -327,6 +327,14 @@ export default function SeedingLedger({ canManage = false }) {
     });
   }
 
+  function addNicheTag(tag) {
+    if (!tag) return;
+    setForm(current => {
+      const next = [...new Set([...(current.niche_tags || []), tag])];
+      return { ...current, niche_tags: next, niche: next.join(', ') };
+    });
+  }
+
   async function addRow(e) {
     e.preventDefault();
     if (!form.creator_id && !form.creator_name.trim()) {
@@ -468,19 +476,17 @@ export default function SeedingLedger({ canManage = false }) {
             <input placeholder="IG handle or profile URL" value={form.instagram_handle} onChange={e => setForm({ ...form, instagram_handle: e.target.value })} />
             <input placeholder="Email or DM contact" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
             <input placeholder="Location" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} />
-            <div className="niche-tag-picker span-2">
-              <span>Creator tags</span>
-              <div>
-                {NICHE_OPTIONS.map(tag => (
-                  <button
-                    key={tag}
-                    type="button"
-                    className={(form.niche_tags || []).includes(tag) ? 'active' : ''}
-                    onClick={() => toggleNicheTag(tag)}
-                  >
-                    {tag}
-                  </button>
+            <div className="niche-tag-select span-2">
+              <IntakeSelect label="Creator tags" value="" onChange={e => addNicheTag(e.target.value)}>
+                <option value="">Add category</option>
+                {NICHE_OPTIONS.filter(tag => !(form.niche_tags || []).includes(tag)).map(tag => (
+                  <option key={tag} value={tag}>{tag}</option>
                 ))}
+              </IntakeSelect>
+              <div className="niche-selected-tags">
+                {(form.niche_tags || []).length ? (form.niche_tags || []).map(tag => (
+                  <button key={tag} type="button" onClick={() => toggleNicheTag(tag)}>{tag}</button>
+                )) : <span>No tags selected</span>}
               </div>
             </div>
           </section>

@@ -540,11 +540,12 @@ input, textarea, select, button { font-family: inherit; }
 .intake-select select:focus{outline:0;border-color:var(--flame);box-shadow:0 0 0 2px rgba(216,74,23,.08),inset 0 -1px 0 rgba(23,23,23,.03)}
 .intake-select select:hover{border-color:#cfc9bd;background:#fff}
 .seed-intake .span-2{grid-column:span 2}
-.niche-tag-picker{min-width:0;display:grid;gap:7px;padding:9px 10px;background:#fbfaf7;border:1px solid var(--border);border-radius:7px}
-.niche-tag-picker>span,.seed-item-list-head span{color:#8b8881;font-family:'JetBrains Mono',monospace;font-size:6px;font-weight:800;letter-spacing:.9px;text-transform:uppercase}
-.niche-tag-picker>div{display:flex;flex-wrap:wrap;gap:5px}
-.niche-tag-picker button{height:24px;padding:0 8px;background:#fff;border:1px solid #dedbd3;border-radius:999px;color:#5f5b54;font-size:9px;font-weight:700;cursor:pointer}
-.niche-tag-picker button.active{background:#171717;border-color:#171717;color:#fff}
+.niche-tag-select{min-width:0;display:grid;gap:6px}
+.niche-tag-select .intake-field{height:42px}
+.niche-selected-tags{min-height:31px;display:flex;align-items:center;flex-wrap:wrap;gap:5px;padding:5px 6px;background:#fbfaf7;border:1px solid var(--border);border-radius:7px}
+.niche-selected-tags button{height:20px;padding:0 8px;background:#171717;border:1px solid #171717;border-radius:999px;color:#fff;font-size:8px;font-weight:800;cursor:pointer}
+.niche-selected-tags button:after{content:" ×";color:#d7cabe}
+.niche-selected-tags span,.seed-item-list-head span{color:#8b8881;font-family:'JetBrains Mono',monospace;font-size:6px;font-weight:800;letter-spacing:.9px;text-transform:uppercase}
 .seed-item-list{grid-column:1/-1;display:grid;gap:7px;padding:10px;background:#fbfaf7;border:1px solid var(--border);border-radius:8px}
 .seed-item-list-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .seed-item-list-head button{height:28px;padding:0 10px;background:#fff;border:1px solid var(--border);border-radius:6px;color:var(--flame);font-size:8px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;cursor:pointer}
