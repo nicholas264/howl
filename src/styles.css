@@ -530,8 +530,15 @@ input, textarea, select, button { font-family: inherit; }
 .seed-intake-head small{color:#c6beb3;font-size:9px}
 .seed-intake section{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding:13px;background:#fff;border:1px solid var(--border);border-radius:9px}
 .seed-intake h3{grid-column:1/-1;margin:0 0 3px;color:var(--flame);font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase}
-.seed-intake input,.seed-intake select{min-width:0;width:100%;padding:9px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:10px}
-.seed-intake input:focus,.seed-intake select:focus{outline:0;border-color:var(--flame)}
+.seed-intake input{min-width:0;width:100%;height:42px;padding:0 11px;background:#fbfaf7;border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:11px}
+.seed-intake input:focus{outline:0;border-color:var(--flame);box-shadow:0 0 0 2px rgba(216,74,23,.08)}
+.intake-field{position:relative;display:block;min-width:0;height:42px}
+.intake-field>span:first-child{position:absolute;z-index:2;top:6px;left:11px;color:#8b8881;font-family:'JetBrains Mono',monospace;font-size:6px;font-weight:800;letter-spacing:.9px;line-height:1;text-transform:uppercase;pointer-events:none}
+.intake-select{position:relative;display:block;height:42px}
+.intake-select:after{content:"";position:absolute;right:12px;top:16px;width:7px;height:7px;border-right:1.5px solid #5d5a54;border-bottom:1.5px solid #5d5a54;transform:rotate(45deg);pointer-events:none}
+.intake-select select{appearance:none;-webkit-appearance:none;min-width:0;width:100%;height:42px;padding:17px 32px 6px 11px;background:#fbfaf7;border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:11px;line-height:1.2;box-shadow:inset 0 -1px 0 rgba(23,23,23,.03)}
+.intake-select select:focus{outline:0;border-color:var(--flame);box-shadow:0 0 0 2px rgba(216,74,23,.08),inset 0 -1px 0 rgba(23,23,23,.03)}
+.intake-select select:hover{border-color:#cfc9bd;background:#fff}
 .seed-intake .span-2{grid-column:span 2}
 .seed-intake-path{display:flex;flex-wrap:wrap;gap:6px}
 .seed-intake-path span{padding:6px 8px;background:#fff;border:1px solid var(--border);border-radius:999px;color:var(--muted);font-size:8px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}

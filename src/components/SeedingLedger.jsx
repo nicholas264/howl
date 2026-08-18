@@ -83,6 +83,25 @@ function Score({ label, value, detail, tone = '' }) {
   );
 }
 
+function IntakeField({ label, className = '', children }) {
+  return (
+    <label className={`intake-field ${className}`}>
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function IntakeSelect({ label, className = '', children, ...props }) {
+  return (
+    <IntakeField label={label} className={`intake-select-field ${className}`}>
+      <span className="intake-select">
+        <select {...props}>{children}</select>
+      </span>
+    </IntakeField>
+  );
+}
+
 export default function SeedingLedger({ canManage = false }) {
   const [data, setData] = useState(null);
   const [creators, setCreators] = useState([]);
@@ -324,13 +343,17 @@ export default function SeedingLedger({ canManage = false }) {
 
           <section>
             <h3>Creator</h3>
-            <select value={form.creator_id} onChange={e => {
-              const selected = creators.find(c => String(c.id) === e.target.value);
-              setForm({ ...form, creator_id: e.target.value, creator_name: selected?.name || form.creator_name });
-            }}>
-              <option value="">New creator...</option>
+            <IntakeSelect
+              label="Creator record"
+              value={form.creator_id}
+              onChange={e => {
+                const selected = creators.find(c => String(c.id) === e.target.value);
+                setForm({ ...form, creator_id: e.target.value, creator_name: selected?.name || form.creator_name });
+              }}
+            >
+              <option value="">Create new creator</option>
               {creators.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            </IntakeSelect>
             <input placeholder="Creator name" value={form.creator_name} onChange={e => setForm({ ...form, creator_name: e.target.value })} />
             <input placeholder="IG handle or profile URL" value={form.instagram_handle} onChange={e => setForm({ ...form, instagram_handle: e.target.value })} />
             <input placeholder="Email or DM contact" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
@@ -342,24 +365,24 @@ export default function SeedingLedger({ canManage = false }) {
             <h3>Product seeded</h3>
             <input type="date" value={form.seeded_on} onChange={e => setForm({ ...form, seeded_on: e.target.value })} />
             <input className="span-2" placeholder="Product seeded" value={form.product_label} onChange={e => setForm({ ...form, product_label: e.target.value })} />
-            <select value={form.unit_type} onChange={e => setForm({ ...form, unit_type: e.target.value, unit_cogs: String(catalogCost(e.target.value) || '') })}>
-              <option value="">Unit...</option>
+            <IntakeSelect label="Unit type" value={form.unit_type} onChange={e => setForm({ ...form, unit_type: e.target.value, unit_cogs: String(catalogCost(e.target.value) || '') })}>
+              <option value="">Select unit</option>
               {units.map(u => <option key={u.unit_type} value={u.unit_type}>{u.unit_type} ({fmt$(u.cogs)})</option>)}
-            </select>
+            </IntakeSelect>
             <input type="number" min="1" placeholder="Qty" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} />
             <input type="number" step="0.01" placeholder="Unit COGS" value={form.unit_cogs} onChange={e => setForm({ ...form, unit_cogs: e.target.value })} />
             <input type="number" step="0.01" placeholder="Shipping" value={form.shipping_cost} onChange={e => setForm({ ...form, shipping_cost: e.target.value })} />
-            <select value={form.seeding_status} onChange={e => setForm({ ...form, seeding_status: e.target.value })}>
+            <IntakeSelect label="Seed status" value={form.seeding_status} onChange={e => setForm({ ...form, seeding_status: e.target.value })}>
               {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
+            </IntakeSelect>
           </section>
 
           <section>
             <h3>Terms and assets</h3>
-            <select value={form.engagement_type} onChange={e => setForm({ ...form, engagement_type: e.target.value })}>
+            <IntakeSelect label="Engagement" value={form.engagement_type} onChange={e => setForm({ ...form, engagement_type: e.target.value })}>
               <option value="one_off">One-off paid</option>
               <option value="retainer">Retainer</option>
-            </select>
+            </IntakeSelect>
             <input type="number" step="0.01" placeholder="Creator fee" value={form.creator_fee} onChange={e => setForm({ ...form, creator_fee: e.target.value })} />
             <input type="number" min="1" placeholder="Number of ads/assets" value={form.asset_commitment} onChange={e => setForm({ ...form, asset_commitment: e.target.value })} />
             <input type="date" value={form.deliverable_due} onChange={e => setForm({ ...form, deliverable_due: e.target.value })} />
