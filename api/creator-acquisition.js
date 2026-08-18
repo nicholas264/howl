@@ -1,8 +1,10 @@
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import { discoverInstagramProfile, normalizeInstagramHandle } from './_lib/instagram-discovery.js';
+import { getUserGoogleAccessToken } from './_lib/google-user-oauth.js';
+import { resendConfigured, sendResendEmail, validEmail } from './_lib/resend-email.js';
 
-const REVIEW_STATUSES = new Set(['new', 'reviewing', 'approved', 'declined', 'archived']);
+const REVIEW_STATUSES = new Set(['new', 'reviewing', 'approved', 'declined', 'denied', 'archived']);
 const RECOMMENDATIONS = new Set(['strong_fit', 'potential', 'pass']);
 const SCORE_FIELDS = ['brand_fit', 'creative_quality', 'audience_fit', 'reliability', 'economics'];
 
@@ -14,6 +16,18 @@ function text(value, max = 5000) {
 function list(value, max = 20) {
   const values = Array.isArray(value) ? value : String(value || '').split(',');
   return values.map(item => text(item, 200)).filter(Boolean).slice(0, max);
+}
+
+function encodeHeader(value) {
+  return `=?UTF-8?B?${Buffer.from(value || '', 'utf8').toString('base64')}?=`;
+}
+
+function base64Url(value) {
+  return Buffer.from(value, 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
 }
 
 function reviewScorecard(value, previous = {}) {
@@ -38,6 +52,57 @@ function reviewScorecard(value, previous = {}) {
 function promotableScorecard(scorecard = {}) {
   return SCORE_FIELDS.every(field => Number(scorecard[field]) >= 1 && Number(scorecard[field]) <= 5)
     && ['strong_fit', 'potential'].includes(scorecard.recommendation);
+}
+
+async function sendApplicationDenialEmail({ sql, access, application, subject, body }) {
+  const to = validEmail(application.email);
+  if (!to) throw new Error('Application needs a valid email before sending a denial.');
+  if (!subject || !body) throw new Error('Denial email subject and body are required.');
+
+  let provider = 'gmail';
+  let providerMessageId = null;
+  if (resendConfigured()) {
+    provider = 'resend';
+    const sent = await sendResendEmail({
+      from: process.env.CREATOR_EMAIL_FROM || process.env.EMAIL_FROM || 'HOWL Campfires <creators@howlcampfires.com>',
+      to,
+      subject,
+      text: body,
+      replyTo: validEmail(access.email),
+    });
+    if (sent.skipped) throw new Error(sent.reason || 'Resend send failed');
+    providerMessageId = sent.id || null;
+  } else {
+    const accessToken = await getUserGoogleAccessToken(sql, access.userId);
+    const raw = [
+      `To: ${to}`,
+      `Subject: ${encodeHeader(subject)}`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/plain; charset="UTF-8"',
+      'Content-Transfer-Encoding: 8bit',
+      '',
+      body,
+    ].join('\r\n');
+    const gmailResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ raw: base64Url(raw) }),
+    });
+    const gmailData = await gmailResponse.json();
+    if (!gmailResponse.ok) {
+      const message = gmailData.error?.message || 'Gmail send failed';
+      const reconnect = /scope|permission|credential|auth/i.test(message);
+      const error = new Error(message);
+      error.reconnectRequired = reconnect;
+      throw error;
+    }
+    providerMessageId = gmailData.id || null;
+  }
+
+  return { provider, providerMessageId, to };
 }
 
 function mergeInstagramSocial(socials, profile) {
@@ -189,10 +254,10 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const [applications, candidates, counts] = await Promise.all([
         sql`SELECT * FROM creator_applications ORDER BY
-          CASE status WHEN 'new' THEN 0 WHEN 'reviewing' THEN 1 WHEN 'approved' THEN 2 ELSE 3 END,
+          CASE status WHEN 'new' THEN 0 WHEN 'reviewing' THEN 1 WHEN 'approved' THEN 2 WHEN 'denied' THEN 3 ELSE 4 END,
           created_at DESC LIMIT 500`,
         sql`SELECT * FROM creator_candidates ORDER BY
-          CASE status WHEN 'new' THEN 0 WHEN 'reviewing' THEN 1 WHEN 'approved' THEN 2 ELSE 3 END,
+          CASE status WHEN 'new' THEN 0 WHEN 'reviewing' THEN 1 WHEN 'approved' THEN 2 WHEN 'denied' THEN 3 ELSE 4 END,
           created_at DESC LIMIT 500`,
         sql`SELECT
           (SELECT count(*) FROM creator_applications WHERE status = 'new')::int AS new_applications,
@@ -327,6 +392,49 @@ export default async function handler(req, res) {
       return res.json({ creator });
     }
 
+    if (req.body?.action === 'deny_application') {
+      if (type !== 'application') return res.status(400).json({ error: 'Denial email is only available for applications.' });
+      const reviewedRecord = withQualification(record, req.body);
+      const subject = text(req.body?.denial_subject, 500);
+      const body = text(req.body?.denial_body, 50000);
+      const shouldSend = req.body?.send_email !== false;
+      let email = null;
+      if (shouldSend) {
+        email = await sendApplicationDenialEmail({ sql, access, application: reviewedRecord, subject, body });
+      }
+      const denialMetadata = {
+        ...(record.enrichment || {}),
+        denial: {
+          status: shouldSend ? 'sent' : 'not_sent',
+          subject: subject || null,
+          body: body || null,
+          to: email?.to || reviewedRecord.email || null,
+          provider: email?.provider || null,
+          external_id: email?.providerMessageId || null,
+          denied_at: new Date().toISOString(),
+          denied_by: access.userId,
+        },
+      };
+      const [updated] = await sql`
+        UPDATE creator_applications SET
+          status = 'denied',
+          name = ${reviewedRecord.name}, email = ${reviewedRecord.email},
+          location = ${reviewedRecord.location}, niche = ${reviewedRecord.niche},
+          strengths = ${reviewedRecord.strengths},
+          audience_description = ${reviewedRecord.audience_description},
+          audience_psychographics = ${reviewedRecord.audience_psychographics},
+          rate_expectations = ${reviewedRecord.rate_expectations},
+          activities = ${reviewedRecord.activities || []},
+          review_scorecard = ${JSON.stringify(reviewedRecord.review_scorecard || {})}::jsonb,
+          review_notes = ${reviewedRecord.review_notes},
+          enrichment = ${JSON.stringify(denialMetadata)}::jsonb,
+          reviewed_by = ${access.userId}, reviewed_at = now(), updated_at = now()
+        WHERE id = ${id}
+        RETURNING *
+      `;
+      return res.json({ record: updated, email });
+    }
+
     const status = REVIEW_STATUSES.has(req.body?.status) ? req.body.status : record.status;
     const reviewNotes = req.body?.review_notes === undefined ? record.review_notes : text(req.body.review_notes, 5000);
     const [updated] = type === 'application'
@@ -364,6 +472,9 @@ export default async function handler(req, res) {
         `;
     return res.json({ record: updated });
   } catch (err) {
+    if (err.reconnectRequired) {
+      return res.status(401).json({ error: err.message, reconnect_required: true });
+    }
     return res.status(500).json({ error: err.message });
   }
 }

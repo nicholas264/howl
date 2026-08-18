@@ -72,7 +72,7 @@ export default async function handler(req, res) {
       FROM creator_applications
       WHERE lower(email) = ${email}
         AND created_at >= now() - interval '90 days'
-        AND status NOT IN ('declined', 'withdrawn')
+        AND status NOT IN ('declined', 'denied', 'withdrawn')
       ORDER BY created_at DESC
       LIMIT 1
     `;

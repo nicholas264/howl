@@ -17,6 +17,20 @@ const SCORE_SIGNALS = [
   ['economics', 'Economics'],
 ];
 
+function denialTemplate(record = {}) {
+  const firstName = (record.name || '').trim().split(/\s+/)[0] || 'there';
+  return {
+    subject: 'Thank you for applying to HOWL',
+    body: `Hi ${firstName},
+
+Thank you for taking the time to apply to the HOWL creator program. We reviewed your application, and we are not going to move forward with a creator partnership at this time.
+
+We appreciate you reaching out and wish you the best with your future projects.
+
+HOWL Campfires`,
+  };
+}
+
 function socialLine(record) {
   const accounts = Array.isArray(record.socials) ? record.socials : [];
   return accounts.find(item => item.platform === 'instagram') || accounts[0] || null;
@@ -104,6 +118,7 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
   const [notes, setNotes] = useState('');
   const [qualification, setQualification] = useState(EMPTY_QUALIFICATION);
   const [scorecard, setScorecard] = useState(EMPTY_SCORECARD);
+  const [denialEmail, setDenialEmail] = useState(() => denialTemplate());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [batchEnriching, setBatchEnriching] = useState(false);
@@ -134,6 +149,7 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
     setNotes('');
     setQualification(EMPTY_QUALIFICATION);
     setScorecard(EMPTY_SCORECARD);
+    setDenialEmail(denialTemplate());
     setSearch('');
     setQueueFilter('active');
   }, [mode]);
@@ -152,6 +168,7 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
       fit_notes: selected.fit_notes || '',
     });
     setScorecard({ ...EMPTY_SCORECARD, ...(selected.review_scorecard || {}) });
+    setDenialEmail(denialTemplate(selected));
   }, [selected?.id]);
 
   const records = mode === 'applications' ? data.applications : data.candidates;
@@ -162,7 +179,7 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
     return records.filter(item => {
       const quality = readiness(item);
       const fit = fitAssessment(item);
-      const active = !['approved', 'declined', 'archived'].includes(item.status);
+      const active = !['approved', 'declined', 'denied', 'archived'].includes(item.status);
       const filterMatch = queueFilter === 'all'
         || (queueFilter === 'active' && active)
         || item.status === queueFilter
@@ -183,7 +200,7 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
   }, [records, queueFilter, search]);
 
   const queueSummary = useMemo(() => {
-    const active = records.filter(item => !['declined', 'archived', 'approved'].includes(item.status));
+    const active = records.filter(item => !['declined', 'denied', 'archived', 'approved'].includes(item.status));
     return {
       active: active.length,
       new: active.filter(item => item.status === 'new').length,
@@ -262,6 +279,39 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Could not update review');
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const denyApplication = async (sendEmail = true) => {
+    if (!selected) return;
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch('/api/creator-acquisition', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'deny_application',
+          type: 'application',
+          id: selected.id,
+          status: 'denied',
+          send_email: sendEmail,
+          denial_subject: denialEmail.subject,
+          denial_body: denialEmail.body,
+          review_notes: notes || selected.review_notes,
+          review_scorecard: scorecard,
+          ...qualification,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not deny application');
+      setNotice(sendEmail ? `Denied and emailed ${result.email?.to || qualification.email}.` : 'Application marked denied.');
       await load();
     } catch (err) {
       setError(err.message);
@@ -351,6 +401,7 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
             ['active', 'Active'],
             ['new', 'New'],
             ['reviewing', 'Reviewing'],
+            ['denied', 'Denied'],
             ['ready', 'Ready'],
             ['high_fit', 'High fit'],
             ['all', 'All'],
@@ -525,8 +576,38 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
                   </label>
                 </section>
                 <label className="talent-notes">Internal review note<textarea rows="4" value={notes} onChange={event => setNotes(event.target.value)} /></label>
+                {mode === 'applications' && (
+                  <section className="talent-denial">
+                    <header>
+                      <span>Denial email</span>
+                      <small>{qualification.email || selected.email || 'Email required'}</small>
+                    </header>
+                    <label>
+                      Subject
+                      <input value={denialEmail.subject} onChange={event => setDenialEmail(current => ({ ...current, subject: event.target.value }))} />
+                    </label>
+                    <label>
+                      Message
+                      <textarea rows="7" value={denialEmail.body} onChange={event => setDenialEmail(current => ({ ...current, body: event.target.value }))} />
+                    </label>
+                    {selected.enrichment?.denial?.status === 'sent' && (
+                      <small className="denial-sent-note">Denial sent to {selected.enrichment.denial.to || selected.email}.</small>
+                    )}
+                    <div>
+                      <button type="button" onClick={() => denyApplication(false)} disabled={saving}>Mark denied only</button>
+                      <button
+                        type="button"
+                        className="primary-action"
+                        onClick={() => denyApplication(true)}
+                        disabled={saving || !(qualification.email || selected.email) || !denialEmail.subject.trim() || !denialEmail.body.trim()}
+                      >
+                        Deny + send email
+                      </button>
+                    </div>
+                  </section>
+                )}
                 <div className="talent-actions">
-                  <button onClick={() => update('declined')} disabled={saving}>Decline</button>
+                  {mode !== 'applications' && <button onClick={() => update('denied')} disabled={saving}>Deny</button>}
                   <button onClick={() => update('reviewing')} disabled={saving}>Keep reviewing</button>
                   <button
                     className="primary-action"
