@@ -40,6 +40,7 @@ export default async function handler(req, res) {
                   title
                   sku
                   price
+                  inventoryItem { unitCost { amount currencyCode } }
                   availableForSale
                   inventoryQuantity
                 }
@@ -60,6 +61,8 @@ export default async function handler(req, res) {
         title: variant.title,
         sku: variant.sku,
         price: Number(variant.price || 0),
+        unit_cost: variant.inventoryItem?.unitCost ? Number(variant.inventoryItem.unitCost.amount || 0) : null,
+        unit_cost_currency: variant.inventoryItem?.unitCost?.currencyCode || null,
         available_for_sale: Boolean(variant.availableForSale),
         inventory_quantity: variant.inventoryQuantity,
       })),

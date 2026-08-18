@@ -8,6 +8,18 @@ const STATUS_OPTIONS = [
   ['blocked', 'Blocked'],
 ];
 
+const NICHE_OPTIONS = ['Overland', 'Offroad', 'Ski', 'MTB', 'Hunt', 'Fish', 'Van life', 'Jeep', 'Surf', 'Backyard'];
+
+const EMPTY_SEED_ITEM = {
+  product_key: '',
+  product_label: '',
+  unit_type: '',
+  quantity: '1',
+  unit_cogs: '',
+  shopify_product_id: '',
+  shopify_variant_id: '',
+};
+
 const EMPTY_ADD = {
   creator_id: '',
   creator_name: '',
@@ -16,11 +28,9 @@ const EMPTY_ADD = {
   instagram_handle: '',
   location: '',
   niche: '',
+  niche_tags: [],
   seeded_on: '',
-  product_label: '',
-  unit_type: '',
-  quantity: '1',
-  unit_cogs: '',
+  seed_items: [{ ...EMPTY_SEED_ITEM }],
   shipping_cost: '',
   creator_fee: '',
   seeding_status: 'planned',
@@ -36,6 +46,8 @@ const EMPTY_ADD = {
   notes: '',
 };
 
+const emptyAdd = () => ({ ...EMPTY_ADD, niche_tags: [], seed_items: [{ ...EMPTY_SEED_ITEM }] });
+
 const fmt$ = n => (n || n === 0) ? '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '-';
 const fmtMo = m => {
   if (!m) return 'Undated';
@@ -44,6 +56,7 @@ const fmtMo = m => {
 };
 const monthKey = date => date ? String(date).slice(0, 7) : 'undated';
 const labelForStatus = value => STATUS_OPTIONS.find(([key]) => key === value)?.[1] || 'Planned';
+const optionKey = (productId, variantId) => `${productId}::${variantId}`;
 
 function inferStatus(row) {
   if (row.seeding_status) return row.seeding_status;
@@ -108,7 +121,9 @@ export default function SeedingLedger({ canManage = false }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState(EMPTY_ADD);
+  const [form, setForm] = useState(() => emptyAdd());
+  const [shopifyProducts, setShopifyProducts] = useState([]);
+  const [shopifyConnected, setShopifyConnected] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -127,12 +142,15 @@ export default function SeedingLedger({ canManage = false }) {
     setLoading(true);
     setError('');
     try {
-      const [ledger, cre] = await Promise.all([
+      const [ledger, cre, shopify] = await Promise.all([
         fetch('/api/creator-seeding-log').then(r => r.ok ? r.json() : Promise.reject(new Error('Failed to load ledger'))),
         fetch('/api/creators').then(r => r.ok ? r.json() : { creators: [] }),
+        fetch('/api/shopify-products').then(r => r.ok ? r.json() : { connected: false, products: [] }).catch(() => ({ connected: false, products: [] })),
       ]);
       setData(ledger);
       setCreators((cre.creators || []).map(c => ({ id: c.id, name: c.name })));
+      setShopifyProducts(shopify.products || []);
+      setShopifyConnected(Boolean(shopify.connected));
     } catch (err) {
       setError(err.message || 'Failed to load');
     } finally {
@@ -209,10 +227,51 @@ export default function SeedingLedger({ canManage = false }) {
   }, [rows]);
 
   const catalogCost = ut => units.find(u => u.unit_type === ut)?.cogs || 0;
-  const draftUnitCogs = Number(form.unit_cogs || catalogCost(form.unit_type) || 0);
-  const draftQuantity = Number(form.quantity) || 1;
+  const catalogCostForLabel = label => {
+    const normalized = String(label || '').toLowerCase();
+    const candidates = [...units].sort((a, b) => String(b.unit_type).length - String(a.unit_type).length);
+    return candidates.find(u => normalized.includes(String(u.unit_type).toLowerCase()))?.cogs || 0;
+  };
+  const productOptions = useMemo(() => {
+    const shopifyOptions = shopifyProducts.flatMap(product => {
+      const variants = product.variants?.length ? product.variants : [{ id: product.id, title: 'Default', sku: '', unit_cost: null }];
+      return variants.map(variant => {
+        const variantTitle = variant.title && variant.title !== 'Default Title' ? variant.title : '';
+        const label = variantTitle ? `${product.title} - ${variantTitle}` : product.title;
+        const fallbackCogs = catalogCostForLabel(`${product.title} ${variantTitle} ${variant.sku || ''}`);
+        return {
+          key: optionKey(product.id, variant.id),
+          label,
+          detail: variant.sku || (shopifyConnected ? 'Shopify' : 'Catalog'),
+          product_id: product.id,
+          variant_id: variant.id,
+          unit_type: variant.sku || variantTitle || product.title,
+          unit_cogs: variant.unit_cost ?? fallbackCogs,
+          has_shopify_cogs: variant.unit_cost !== null && variant.unit_cost !== undefined,
+        };
+      });
+    });
+    const unitOptions = units.map(unit => ({
+      key: `unit:${unit.unit_type}`,
+      label: unit.unit_type,
+      detail: 'Manual COGS catalog',
+      product_id: '',
+      variant_id: '',
+      unit_type: unit.unit_type,
+      unit_cogs: unit.cogs,
+      has_shopify_cogs: false,
+    }));
+    return [...shopifyOptions, ...unitOptions];
+  }, [shopifyProducts, shopifyConnected, units]);
+  const productOptionByKey = useMemo(() => Object.fromEntries(productOptions.map(option => [option.key, option])), [productOptions]);
+  const draftProductCogs = (form.seed_items || []).reduce((sum, item) => {
+    const option = productOptionByKey[item.product_key];
+    const cogs = Number(item.unit_cogs || option?.unit_cogs || catalogCost(item.unit_type) || 0);
+    const quantity = Number(item.quantity) || 1;
+    return sum + cogs * quantity;
+  }, 0);
   const draftInvestment = {
-    product: draftUnitCogs * draftQuantity,
+    product: draftProductCogs,
     shipping: Number(form.shipping_cost) || 0,
     fees: Number(form.creator_fee) || 0,
   };
@@ -227,6 +286,47 @@ export default function SeedingLedger({ canManage = false }) {
     load();
   }
 
+  function updateSeedItem(index, patch) {
+    setForm(current => ({
+      ...current,
+      seed_items: current.seed_items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item),
+    }));
+  }
+
+  function chooseSeedProduct(index, key) {
+    const option = productOptionByKey[key];
+    updateSeedItem(index, option ? {
+      product_key: key,
+      product_label: option.label,
+      unit_type: option.unit_type,
+      unit_cogs: option.unit_cogs ? String(option.unit_cogs) : '',
+      shopify_product_id: option.product_id,
+      shopify_variant_id: option.variant_id,
+    } : { ...EMPTY_SEED_ITEM });
+  }
+
+  function addSeedItem() {
+    setForm(current => ({ ...current, seed_items: [...current.seed_items, { ...EMPTY_SEED_ITEM }] }));
+  }
+
+  function removeSeedItem(index) {
+    setForm(current => ({
+      ...current,
+      seed_items: current.seed_items.length > 1
+        ? current.seed_items.filter((_, itemIndex) => itemIndex !== index)
+        : [{ ...EMPTY_SEED_ITEM }],
+    }));
+  }
+
+  function toggleNicheTag(tag) {
+    setForm(current => {
+      const active = new Set(current.niche_tags || []);
+      if (active.has(tag)) active.delete(tag);
+      else active.add(tag);
+      return { ...current, niche_tags: [...active], niche: [...active].join(', ') };
+    });
+  }
+
   async function addRow(e) {
     e.preventDefault();
     if (!form.creator_id && !form.creator_name.trim()) {
@@ -237,7 +337,17 @@ export default function SeedingLedger({ canManage = false }) {
     try {
       const payload = {
         ...form,
-        unit_cogs: form.unit_cogs || catalogCost(form.unit_type),
+        seed_items: form.seed_items
+          .map(item => {
+            const option = productOptionByKey[item.product_key];
+            return {
+              ...item,
+              product_label: item.product_label || option?.label || '',
+              unit_type: item.unit_type || option?.unit_type || '',
+              unit_cogs: item.unit_cogs || option?.unit_cogs || catalogCost(item.unit_type),
+            };
+          })
+          .filter(item => item.product_label || item.unit_type || Number(item.unit_cogs || 0) > 0),
         agreed_deliverables: form.asset_commitment,
       };
       const res = await fetch('/api/creator-investment-intake', {
@@ -246,7 +356,7 @@ export default function SeedingLedger({ canManage = false }) {
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Could not save intake');
-      setForm(EMPTY_ADD);
+      setForm(emptyAdd());
       setAdding(false);
       await Promise.all([load(), loadFees()]);
     } catch (err) {
@@ -358,23 +468,51 @@ export default function SeedingLedger({ canManage = false }) {
             <input placeholder="IG handle or profile URL" value={form.instagram_handle} onChange={e => setForm({ ...form, instagram_handle: e.target.value })} />
             <input placeholder="Email or DM contact" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
             <input placeholder="Location" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} />
-            <input placeholder="Niche / creator fit" value={form.niche} onChange={e => setForm({ ...form, niche: e.target.value })} />
+            <div className="niche-tag-picker span-2">
+              <span>Creator tags</span>
+              <div>
+                {NICHE_OPTIONS.map(tag => (
+                  <button
+                    key={tag}
+                    type="button"
+                    className={(form.niche_tags || []).includes(tag) ? 'active' : ''}
+                    onClick={() => toggleNicheTag(tag)}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            </div>
           </section>
 
-          <section>
+          <section className="seed-products-section">
             <h3>Product seeded</h3>
             <input type="date" value={form.seeded_on} onChange={e => setForm({ ...form, seeded_on: e.target.value })} />
-            <input className="span-2" placeholder="Product seeded" value={form.product_label} onChange={e => setForm({ ...form, product_label: e.target.value })} />
-            <IntakeSelect label="Unit type" value={form.unit_type} onChange={e => setForm({ ...form, unit_type: e.target.value, unit_cogs: String(catalogCost(e.target.value) || '') })}>
-              <option value="">Select unit</option>
-              {units.map(u => <option key={u.unit_type} value={u.unit_type}>{u.unit_type} ({fmt$(u.cogs)})</option>)}
-            </IntakeSelect>
-            <input type="number" min="1" placeholder="Qty" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} />
-            <input type="number" step="0.01" placeholder="Unit COGS" value={form.unit_cogs} onChange={e => setForm({ ...form, unit_cogs: e.target.value })} />
             <input type="number" step="0.01" placeholder="Shipping" value={form.shipping_cost} onChange={e => setForm({ ...form, shipping_cost: e.target.value })} />
             <IntakeSelect label="Seed status" value={form.seeding_status} onChange={e => setForm({ ...form, seeding_status: e.target.value })}>
               {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </IntakeSelect>
+            <div className="seed-item-list">
+              <div className="seed-item-list-head">
+                <span>{shopifyConnected ? 'Shopify product catalog' : 'Manual product catalog'}</span>
+                <button type="button" onClick={addSeedItem}>Add product</button>
+              </div>
+              {(form.seed_items || []).map((item, index) => (
+                <div className="seed-item-row" key={index}>
+                  <IntakeSelect label="Seed item" className="span-2" value={item.product_key} onChange={e => chooseSeedProduct(index, e.target.value)}>
+                    <option value="">{productOptions.length ? 'Choose product' : 'No products loaded'}</option>
+                    {productOptions.map(option => (
+                      <option key={option.key} value={option.key}>
+                        {option.label}{option.unit_cogs ? ` (${fmt$(option.unit_cogs)} COGS)` : ''}
+                      </option>
+                    ))}
+                  </IntakeSelect>
+                  <input type="number" min="1" placeholder="Qty" value={item.quantity} onChange={e => updateSeedItem(index, { quantity: e.target.value })} />
+                  <input type="number" step="0.01" placeholder="Unit COGS" value={item.unit_cogs} onChange={e => updateSeedItem(index, { unit_cogs: e.target.value })} />
+                  <button type="button" className="seed-item-remove" onClick={() => removeSeedItem(index)}>{form.seed_items.length > 1 ? 'Remove' : 'Clear'}</button>
+                </div>
+              ))}
+            </div>
           </section>
 
           <section>

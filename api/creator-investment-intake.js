@@ -12,6 +12,11 @@ function num(value, fallback = null) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function list(value) {
+  if (Array.isArray(value)) return value.map(v => text(v, 100)).filter(Boolean).slice(0, 30);
+  return text(value, 2000)?.split(',').map(v => v.trim()).filter(Boolean).slice(0, 30) || [];
+}
+
 function dateOrNull(value) {
   const t = text(value, 40);
   return t && /^\d{4}-\d{2}-\d{2}/.test(t) ? t.slice(0, 10) : null;
@@ -62,6 +67,36 @@ function deliverableStatus(value) {
   return allowed.has(status) ? status : 'requested';
 }
 
+function creatorNiche(body) {
+  const tags = list(body.niche_tags || body.tags);
+  return tags.length ? tags.join(', ') : text(body.niche, 500);
+}
+
+function seedItems(body) {
+  const raw = Array.isArray(body.seed_items) ? body.seed_items : [];
+  const items = raw.map(item => ({
+    product_label: text(item.product_label || item.label, 300),
+    unit_type: text(item.unit_type || item.sku || item.variant_title, 120),
+    quantity: Math.max(1, Math.round(num(item.quantity, 1) || 1)),
+    unit_cogs: num(item.unit_cogs, null),
+    shopify_product_id: text(item.shopify_product_id, 200),
+    shopify_variant_id: text(item.shopify_variant_id, 200),
+  })).filter(item => item.product_label || item.unit_type || item.unit_cogs !== null).slice(0, 12);
+
+  if (items.length) return items;
+  const legacyUnit = text(body.unit_type, 120);
+  const legacyLabel = text(body.product_label, 300);
+  if (!legacyUnit && !legacyLabel && num(body.unit_cogs, null) === null) return [];
+  return [{
+    product_label: legacyLabel,
+    unit_type: legacyUnit,
+    quantity: Math.max(1, Math.round(num(body.quantity, 1) || 1)),
+    unit_cogs: num(body.unit_cogs, null),
+    shopify_product_id: text(body.shopify_product_id, 200),
+    shopify_variant_id: text(body.shopify_variant_id, 200),
+  }];
+}
+
 async function resolveCreator(sql, body, userId) {
   const explicitId = Number(body.creator_id) || null;
   if (explicitId) {
@@ -88,16 +123,18 @@ async function resolveCreator(sql, body, userId) {
   `;
   if (matches[0]) return matches[0];
 
+  const niche = creatorNiche(body);
+  const tags = list(body.niche_tags || body.tags);
   const [created] = await sql`
     INSERT INTO creators (
       name, email, phone, status, stage, source, location, niche, notes,
-      product_seeding_required, created_by
+      tags, product_seeding_required, created_by
     ) VALUES (
       ${name || handle || email}, ${email}, ${text(body.phone, 100)},
       'contracted', 'producing', 'investment_intake',
-      ${text(body.location, 200)}, ${text(body.niche, 500)},
+      ${text(body.location, 200)}, ${niche},
       ${text(body.creator_notes || body.notes, 2000)},
-      ${body.product_seeding_required !== false}, ${userId}
+      ${tags}, ${body.product_seeding_required !== false}, ${userId}
     )
     RETURNING *
   `;
@@ -114,6 +151,7 @@ async function resolveCreator(sql, body, userId) {
 }
 
 async function updateCreator(sql, creator, body, userId) {
+  const tags = list(body.niche_tags || body.tags);
   const [updated] = await sql`
     UPDATE creators
     SET
@@ -121,7 +159,12 @@ async function updateCreator(sql, creator, body, userId) {
       email = COALESCE(${text(body.email, 320)}, email),
       phone = COALESCE(${text(body.phone, 100)}, phone),
       location = COALESCE(${text(body.location, 200)}, location),
-      niche = COALESCE(${text(body.niche, 500)}, niche),
+      niche = COALESCE(${creatorNiche(body)}, niche),
+      tags = CASE
+        WHEN cardinality(${tags}::text[]) > 0
+        THEN ARRAY(SELECT DISTINCT item FROM unnest(tags || ${tags}::text[]) item)
+        ELSE tags
+      END,
       notes = COALESCE(${text(body.creator_notes || body.notes, 2000)}, notes),
       status = 'contracted',
       stage = CASE WHEN stage IN ('active', 'producing') THEN stage ELSE 'producing' END,
@@ -211,30 +254,40 @@ export default async function handler(req, res) {
       `;
     }
 
-    let seeding = null;
-    const unitType = text(body.unit_type, 60);
-    if (unitType || text(body.product_label) || feeAmount !== null || num(body.shipping_cost, 0) > 0) {
-      const [unit] = unitType
-        ? await sql`SELECT cogs::float AS cogs FROM seeding_units WHERE unit_type = ${unitType}`
-        : [];
-      const quantity = Math.max(1, Math.round(num(body.quantity, 1) || 1));
-      const unitCogs = num(body.unit_cogs, unit ? unit.cogs : 0) || 0;
-      [seeding] = await sql`
-        INSERT INTO creator_seeding_log (
-          creator_id, seeded_on, product_label, unit_type, quantity, unit_cogs,
-          shipping_cost, creator_fee, seeding_status, agreed_deliverables,
-          deliverable_due, usage_rights, notes, source, created_by
-        ) VALUES (
-          ${updatedCreator.id}, ${dateOrNull(body.seeded_on)}, ${text(body.product_label, 300)},
-          ${unitType}, ${quantity}, ${unitCogs},
-          ${num(body.shipping_cost, 0)}, ${feeAmount || 0}, ${seedingStatus(body.seeding_status)},
-          ${assetCommitment || null}, ${dateOrNull(body.deliverable_due)},
-          ${text(body.usage_rights, 500)}, ${text(body.notes, 2000)},
-          'investment_intake', ${userId}
-        )
-        RETURNING *
-      `;
+    const items = seedItems(body);
+    const seedingRows = [];
+    const shippingCost = num(body.shipping_cost, 0) || 0;
+    const hasLedgerCost = items.length || feeAmount !== null || shippingCost > 0;
+    if (hasLedgerCost) {
+      const rowsToCreate = items.length ? items : [{ product_label: null, unit_type: null, quantity: 1, unit_cogs: 0 }];
+      for (let index = 0; index < rowsToCreate.length; index += 1) {
+        const item = rowsToCreate[index];
+        const [unit] = item.unit_type
+          ? await sql`SELECT cogs::float AS cogs FROM seeding_units WHERE unit_type = ${item.unit_type}`
+          : [];
+        const unitCogs = num(item.unit_cogs, unit ? unit.cogs : 0) || 0;
+        const rowShipping = index === 0 ? shippingCost : 0;
+        const rowFee = index === 0 ? (feeAmount || 0) : 0;
+        const [row] = await sql`
+          INSERT INTO creator_seeding_log (
+            creator_id, seeded_on, product_label, unit_type, quantity, unit_cogs,
+            shipping_cost, creator_fee, seeding_status, agreed_deliverables,
+            deliverable_due, usage_rights, notes, source, created_by
+          ) VALUES (
+            ${updatedCreator.id}, ${dateOrNull(body.seeded_on)}, ${item.product_label},
+            ${item.unit_type}, ${item.quantity}, ${unitCogs},
+            ${rowShipping}, ${rowFee}, ${seedingStatus(body.seeding_status)},
+            ${index === 0 ? (assetCommitment || null) : null}, ${index === 0 ? dateOrNull(body.deliverable_due) : null},
+            ${index === 0 ? text(body.usage_rights, 500) : null}, ${index === 0 ? text(body.notes, 2000) : null},
+            'investment_intake', ${userId}
+          )
+          RETURNING *
+        `;
+        seedingRows.push(row);
+      }
     }
+    const seeding = seedingRows[0] || null;
+    const productSummary = items.map(item => item.product_label || item.unit_type).filter(Boolean).join(' + ');
 
     let deliverable = null;
     if (assetCommitment || text(body.deliverable_title) || dateOrNull(body.deliverable_due)) {
@@ -244,7 +297,7 @@ export default async function handler(req, res) {
           due_at, source_url, created_by
         ) VALUES (
           ${updatedCreator.id}, ${engagement?.id || null},
-          ${text(body.deliverable_title, 300) || `${text(body.product_label, 120) || 'Creator'} assets`},
+          ${text(body.deliverable_title, 300) || `${productSummary || 'Creator'} assets`},
           ${deliverableStatus(body.deliverable_status)},
           ${Math.max(1, assetCommitment || 1)},
           ${timestampOrNull(body.deliverable_due)},
@@ -258,12 +311,13 @@ export default async function handler(req, res) {
           stage, title, product_label, objective, concept_json,
           creator_id, deliverable_id, source_winner_group_key, created_by
         ) VALUES (
-          'produce', ${deliverable.title}, ${text(body.product_label, 300)},
+          'produce', ${deliverable.title}, ${text(productSummary, 300)},
           ${text(body.objective, 500) || 'Creator investment intake'},
           ${JSON.stringify({
             source: 'creator_investment_intake',
             engagement_id: engagement?.id || null,
             seeding_id: seeding?.id || null,
+            seeding_ids: seedingRows.map(row => row.id),
             asset_commitment: assetCommitment || null,
           })}::jsonb,
           ${updatedCreator.id}, ${deliverable.id}, ${`creator_investment:${deliverable.id}`}, ${userId}
@@ -272,8 +326,8 @@ export default async function handler(req, res) {
     }
 
     const investment = {
-      product_cogs: seeding ? Number(seeding.unit_cogs || 0) * Number(seeding.quantity || 1) : 0,
-      shipping: num(body.shipping_cost, 0) || 0,
+      product_cogs: seedingRows.reduce((sum, row) => sum + Number(row.unit_cogs || 0) * Number(row.quantity || 1), 0),
+      shipping: shippingCost,
       creator_fee: feeAmount || 0,
     };
     investment.total = investment.product_cogs + investment.shipping + investment.creator_fee;
@@ -282,6 +336,7 @@ export default async function handler(req, res) {
       creator: updatedCreator,
       engagement,
       seeding,
+      seedings: seedingRows,
       deliverable,
       investment,
     });
