@@ -397,7 +397,7 @@ async function createCreatorOpsTables(sql) {
   // Seed the known HOWL unit costs without overwriting any edits.
   await sql`
     INSERT INTO seeding_units (unit_type, cogs) VALUES
-      ('R1', 169.25), ('R4', 750.00), ('R1 + Bag', 244.25), ('R4 + Bag', 840.00)
+      ('R1', 169.25), ('R3', 329.00), ('R4', 750.00), ('R1 + Bag', 244.25), ('R4 + Bag', 840.00)
     ON CONFLICT (unit_type) DO NOTHING
   `;
 
@@ -414,6 +414,7 @@ async function createCreatorOpsTables(sql) {
       unit_cogs           NUMERIC(12,2) NOT NULL DEFAULT 0,
       shipping_cost       NUMERIC(12,2) NOT NULL DEFAULT 0,
       creator_fee         NUMERIC(12,2) NOT NULL DEFAULT 0,
+      seeding_status      TEXT NOT NULL DEFAULT 'planned',
       agreed_deliverables INTEGER,
       deliverable_due     DATE,
       usage_rights        TEXT,
@@ -425,8 +426,21 @@ async function createCreatorOpsTables(sql) {
       updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+  await sql`ALTER TABLE creator_seeding_log ADD COLUMN IF NOT EXISTS seeding_status TEXT NOT NULL DEFAULT 'planned'`;
+  await sql`
+    UPDATE creator_seeding_log
+    SET seeding_status = CASE
+      WHEN notes ILIKE '%delivered%' THEN 'delivered'
+      WHEN notes ILIKE '%transit%' THEN 'in_transit'
+      WHEN notes ILIKE '%blocked%' OR notes ILIKE '%waiting%' THEN 'blocked'
+      WHEN notes ILIKE '%progress%' THEN 'ordered'
+      ELSE seeding_status
+    END
+    WHERE seeding_status = 'planned'
+  `;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_seeding_log_creator ON creator_seeding_log(creator_id, seeded_on DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_seeding_log_seeded ON creator_seeding_log(seeded_on DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_creator_seeding_log_status ON creator_seeding_log(seeding_status, seeded_on DESC)`;
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_creator_seeding_log_import_key ON creator_seeding_log(import_key) WHERE import_key IS NOT NULL`;
 
   // Creative Flow board spine. One row per creative cycle moving through the

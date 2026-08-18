@@ -14,6 +14,11 @@ function dateOrNull(value) {
   const t = text(value, 40);
   return t && /^\d{4}-\d{2}-\d{2}/.test(t) ? t.slice(0, 10) : null;
 }
+function status(value) {
+  const allowed = new Set(['planned', 'ordered', 'in_transit', 'delivered', 'blocked']);
+  const result = text(value, 40);
+  return allowed.has(result) ? result : 'planned';
+}
 
 // Cost of a ledger row = unit COGS × qty + shipping + fee, computed on read.
 function fetchRow(sql, id) {
@@ -77,12 +82,12 @@ export default async function handler(req, res) {
       const [row] = await sql`
         INSERT INTO creator_seeding_log (
           creator_id, seeded_on, product_label, unit_type, quantity, unit_cogs,
-          shipping_cost, creator_fee, agreed_deliverables, deliverable_due,
+          shipping_cost, creator_fee, seeding_status, agreed_deliverables, deliverable_due,
           usage_rights, notes, source, created_by
         ) VALUES (
           ${creatorId}, ${dateOrNull(body.seeded_on)}, ${text(body.product_label, 300)},
           ${unitType}, ${quantity}, ${unitCogs || 0},
-          ${num(body.shipping_cost, 0)}, ${num(body.creator_fee, 0)},
+          ${num(body.shipping_cost, 0)}, ${num(body.creator_fee, 0)}, ${status(body.seeding_status)},
           ${num(body.agreed_deliverables)}, ${dateOrNull(body.deliverable_due)},
           ${text(body.usage_rights, 500)}, ${text(body.notes, 2000)}, 'manual', ${userId}
         )
@@ -120,6 +125,7 @@ export default async function handler(req, res) {
           unit_cogs = ${u('unit_cogs', v => num(v, 0))},
           shipping_cost = ${u('shipping_cost', v => num(v, 0))},
           creator_fee = ${u('creator_fee', v => num(v, 0))},
+          seeding_status = ${u('seeding_status', status)},
           agreed_deliverables = ${u('agreed_deliverables', v => num(v))},
           deliverable_due = ${u('deliverable_due', dateOrNull)},
           usage_rights = ${u('usage_rights', v => text(v, 500))},
