@@ -10,16 +10,29 @@ const STATUS_OPTIONS = [
 
 const EMPTY_ADD = {
   creator_id: '',
+  creator_name: '',
+  email: '',
+  phone: '',
+  instagram_handle: '',
+  location: '',
+  niche: '',
   seeded_on: '',
   product_label: '',
   unit_type: '',
   quantity: '1',
+  unit_cogs: '',
   shipping_cost: '',
   creator_fee: '',
   seeding_status: 'planned',
-  agreed_deliverables: '',
+  engagement_type: 'one_off',
+  asset_commitment: '1',
+  deliverable_title: '',
   deliverable_due: '',
   usage_rights: '',
+  usage_term_months: '',
+  whitelisting_monthly_rate: '',
+  payment_terms: '',
+  engagement_notes: '',
   notes: '',
 };
 
@@ -177,6 +190,14 @@ export default function SeedingLedger({ canManage = false }) {
   }, [rows]);
 
   const catalogCost = ut => units.find(u => u.unit_type === ut)?.cogs || 0;
+  const draftUnitCogs = Number(form.unit_cogs || catalogCost(form.unit_type) || 0);
+  const draftQuantity = Number(form.quantity) || 1;
+  const draftInvestment = {
+    product: draftUnitCogs * draftQuantity,
+    shipping: Number(form.shipping_cost) || 0,
+    fees: Number(form.creator_fee) || 0,
+  };
+  draftInvestment.total = draftInvestment.product + draftInvestment.shipping + draftInvestment.fees;
 
   async function saveUnit(unit_type, cogs) {
     await fetch('/api/creator-seeding-log', {
@@ -189,18 +210,26 @@ export default function SeedingLedger({ canManage = false }) {
 
   async function addRow(e) {
     e.preventDefault();
-    if (!form.creator_id || !form.unit_type) return;
+    if (!form.creator_id && !form.creator_name.trim()) {
+      setError('Choose an existing creator or enter a new creator name.');
+      return;
+    }
     setBusy(true);
     try {
-      const res = await fetch('/api/creator-seeding-log', {
+      const payload = {
+        ...form,
+        unit_cogs: form.unit_cogs || catalogCost(form.unit_type),
+        agreed_deliverables: form.asset_commitment,
+      };
+      const res = await fetch('/api/creator-investment-intake', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error((await res.json()).error || 'Could not save');
+      if (!res.ok) throw new Error((await res.json()).error || 'Could not save intake');
       setForm(EMPTY_ADD);
       setAdding(false);
-      await load();
+      await Promise.all([load(), loadFees()]);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -250,7 +279,7 @@ export default function SeedingLedger({ canManage = false }) {
         </div>
         {canManage && (
           <button type="button" className="primary-action" onClick={() => setAdding(v => !v)}>
-            {adding ? 'Close' : 'Add seeding'}
+            {adding ? 'Close' : 'Add creator investment'}
           </button>
         )}
       </div>
@@ -283,30 +312,71 @@ export default function SeedingLedger({ canManage = false }) {
       </div>
 
       {adding && canManage && (
-        <form className="seed-add seed-card-panel" onSubmit={addRow}>
-          <select value={form.creator_id} onChange={e => setForm({ ...form, creator_id: e.target.value })} required>
-            <option value="">Creator...</option>
-            {creators.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <input type="date" value={form.seeded_on} onChange={e => setForm({ ...form, seeded_on: e.target.value })} />
-          <input className="wide" placeholder="Product seeded" value={form.product_label} onChange={e => setForm({ ...form, product_label: e.target.value })} />
-          <select value={form.unit_type} onChange={e => setForm({ ...form, unit_type: e.target.value })} required>
-            <option value="">Unit...</option>
-            {units.map(u => <option key={u.unit_type} value={u.unit_type}>{u.unit_type} ({fmt$(u.cogs)})</option>)}
-          </select>
-          <input type="number" min="1" placeholder="Qty" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} />
-          <select value={form.seeding_status} onChange={e => setForm({ ...form, seeding_status: e.target.value })}>
-            {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-          <input type="number" step="0.01" placeholder="Shipping" value={form.shipping_cost} onChange={e => setForm({ ...form, shipping_cost: e.target.value })} />
-          <input type="number" step="0.01" placeholder="Creator fee" value={form.creator_fee} onChange={e => setForm({ ...form, creator_fee: e.target.value })} />
-          <input type="number" min="0" placeholder="Deliverables" value={form.agreed_deliverables} onChange={e => setForm({ ...form, agreed_deliverables: e.target.value })} />
-          <input type="date" value={form.deliverable_due} onChange={e => setForm({ ...form, deliverable_due: e.target.value })} />
-          <input placeholder="Usage rights" value={form.usage_rights} onChange={e => setForm({ ...form, usage_rights: e.target.value })} />
-          <input className="wide" placeholder="Notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
-          <div className="seed-add-actions">
-            {form.unit_type && <span>Row COGS: {fmt$(catalogCost(form.unit_type) * (Number(form.quantity) || 1))}</span>}
-            <button className="primary-action" disabled={busy}>{busy ? 'Saving...' : 'Save row'}</button>
+        <form className="seed-intake seed-card-panel" onSubmit={addRow}>
+          <div className="seed-intake-head">
+            <div>
+              <span>Creator Investment Intake</span>
+              <strong>{fmt$(draftInvestment.total)}</strong>
+              <small>{fmt$(draftInvestment.product)} product + {fmt$(draftInvestment.shipping)} shipping + {fmt$(draftInvestment.fees)} fee</small>
+            </div>
+            <button className="primary-action" disabled={busy}>{busy ? 'Saving...' : 'Save investment'}</button>
+          </div>
+
+          <section>
+            <h3>Creator</h3>
+            <select value={form.creator_id} onChange={e => {
+              const selected = creators.find(c => String(c.id) === e.target.value);
+              setForm({ ...form, creator_id: e.target.value, creator_name: selected?.name || form.creator_name });
+            }}>
+              <option value="">New creator...</option>
+              {creators.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <input placeholder="Creator name" value={form.creator_name} onChange={e => setForm({ ...form, creator_name: e.target.value })} />
+            <input placeholder="IG handle or profile URL" value={form.instagram_handle} onChange={e => setForm({ ...form, instagram_handle: e.target.value })} />
+            <input placeholder="Email or DM contact" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+            <input placeholder="Location" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} />
+            <input placeholder="Niche / creator fit" value={form.niche} onChange={e => setForm({ ...form, niche: e.target.value })} />
+          </section>
+
+          <section>
+            <h3>Product seeded</h3>
+            <input type="date" value={form.seeded_on} onChange={e => setForm({ ...form, seeded_on: e.target.value })} />
+            <input className="span-2" placeholder="Product seeded" value={form.product_label} onChange={e => setForm({ ...form, product_label: e.target.value })} />
+            <select value={form.unit_type} onChange={e => setForm({ ...form, unit_type: e.target.value, unit_cogs: String(catalogCost(e.target.value) || '') })}>
+              <option value="">Unit...</option>
+              {units.map(u => <option key={u.unit_type} value={u.unit_type}>{u.unit_type} ({fmt$(u.cogs)})</option>)}
+            </select>
+            <input type="number" min="1" placeholder="Qty" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} />
+            <input type="number" step="0.01" placeholder="Unit COGS" value={form.unit_cogs} onChange={e => setForm({ ...form, unit_cogs: e.target.value })} />
+            <input type="number" step="0.01" placeholder="Shipping" value={form.shipping_cost} onChange={e => setForm({ ...form, shipping_cost: e.target.value })} />
+            <select value={form.seeding_status} onChange={e => setForm({ ...form, seeding_status: e.target.value })}>
+              {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </section>
+
+          <section>
+            <h3>Terms and assets</h3>
+            <select value={form.engagement_type} onChange={e => setForm({ ...form, engagement_type: e.target.value })}>
+              <option value="one_off">One-off paid</option>
+              <option value="retainer">Retainer</option>
+            </select>
+            <input type="number" step="0.01" placeholder="Creator fee" value={form.creator_fee} onChange={e => setForm({ ...form, creator_fee: e.target.value })} />
+            <input type="number" min="1" placeholder="Number of ads/assets" value={form.asset_commitment} onChange={e => setForm({ ...form, asset_commitment: e.target.value })} />
+            <input type="date" value={form.deliverable_due} onChange={e => setForm({ ...form, deliverable_due: e.target.value })} />
+            <input className="span-2" placeholder="Deliverable title" value={form.deliverable_title} onChange={e => setForm({ ...form, deliverable_title: e.target.value })} />
+            <input placeholder="Usage term months" value={form.usage_term_months} onChange={e => setForm({ ...form, usage_term_months: e.target.value })} />
+            <input type="number" step="0.01" placeholder="Whitelisting /mo" value={form.whitelisting_monthly_rate} onChange={e => setForm({ ...form, whitelisting_monthly_rate: e.target.value })} />
+            <input className="span-2" placeholder="Usage rights" value={form.usage_rights} onChange={e => setForm({ ...form, usage_rights: e.target.value })} />
+            <input className="span-2" placeholder="Payment terms" value={form.payment_terms} onChange={e => setForm({ ...form, payment_terms: e.target.value })} />
+            <input className="span-2" placeholder="Internal notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+          </section>
+
+          <div className="seed-intake-path">
+            <span>Creates/updates creator</span>
+            <span>adds IG profile</span>
+            <span>logs seeding cost</span>
+            <span>creates engagement</span>
+            <span>schedules deliverable</span>
           </div>
         </form>
       )}

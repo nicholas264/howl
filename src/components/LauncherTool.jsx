@@ -234,12 +234,25 @@ function driveItemIncludesAnyId(item, ids) {
 
 export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem, onRemoveCartItem }) {
   const [creators, setCreators] = useState([]);
+  const [deliverablesByCreator, setDeliverablesByCreator] = useState({});
   useEffect(() => {
     fetch('/api/creators')
       .then(response => response.ok ? response.json() : Promise.reject())
       .then(data => setCreators(data.creators || []))
       .catch(() => {});
   }, []);
+  const loadCreatorDeliverables = useCallback(async (creatorId) => {
+    if (!creatorId || deliverablesByCreator[creatorId]) return;
+    try {
+      const response = await fetch(`/api/creator-workflow?creator_id=${creatorId}`);
+      if (!response.ok) return;
+      const data = await response.json();
+      setDeliverablesByCreator(prev => ({
+        ...prev,
+        [creatorId]: (data.deliverables || []).filter(item => !['launched', 'cancelled'].includes(item.status)),
+      }));
+    } catch { /* optional helper only */ }
+  }, [deliverablesByCreator]);
   // ── shared settings ────────────────────────────────────────────────────
   const [config, setConfig] = useState(() => ({ ...DEFAULT_LAUNCHER_CONFIG, ...ls(LS_CONFIG, {}) }));
   // Backfill defaults for users whose localStorage config predates these fields.
@@ -411,9 +424,11 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   const autoMatchCreator = useCallback((assetName) => suggestedCreatorFromAsset(assetName, matchIndex), [matchIndex]);
   const updateCreator = (id, name) => {
     const creator = findCreatorByName(name);
+    if (creator?.id) loadCreatorDeliverables(creator.id);
     updateMeta(id, {
       creator: name,
       creatorId: creator?.id || null,
+      deliverableId: creator?.id ? null : undefined,
       sourceType: 'external_creator',
       sourceLabel: creator?.name || name,
       creatorMatch: creator ? {
@@ -1246,6 +1261,27 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                     {item.source !== 'drive' && isCreatorLinked && creatorMatch?.reason && (
                       <div style={S.linkedHint(true)}>
                         {creatorMatch.confidence === 'review' ? 'Review match' : 'Linked'}: {creatorMatch.reason}.
+                      </div>
+                    )}
+                    {isCreatorLinked && (
+                      <div style={{ marginTop: 8 }}>
+                        <label style={S.label}>Deliverable</label>
+                        <select
+                          style={S.select}
+                          value={m.deliverableId || ''}
+                          onFocus={() => loadCreatorDeliverables(m.creatorId)}
+                          onChange={e => updateMeta(id, { deliverableId: e.target.value ? Number(e.target.value) : null })}
+                        >
+                          <option value="">No deliverable selected</option>
+                          {(deliverablesByCreator[m.creatorId] || []).map(deliverable => (
+                            <option key={deliverable.id} value={deliverable.id}>
+                              {deliverable.title} · {deliverable.expected_asset_count || 1} asset{Number(deliverable.expected_asset_count || 1) === 1 ? '' : 's'}{deliverable.due_at ? ` · due ${String(deliverable.due_at).slice(0, 10)}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, lineHeight: 1.35 }}>
+                          Links this launch back to the creator investment and expected asset.
+                        </div>
                       </div>
                     )}
                   </div>
