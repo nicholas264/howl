@@ -10,6 +10,7 @@ const STAGES = [
   ['all', 'All creators'],
   ['active', 'Active creators'],
   ['past', 'Past creators'],
+  ['legacy_clickup', 'Legacy ClickUp creators'],
   ['rejected_applicants', 'Rejected applicants'],
 ];
 
@@ -43,6 +44,12 @@ function compactText(value, fallback = '—') {
 
 function rosterStageLabel(creator) {
   if (creator?.record_type === 'application') return 'rejected';
+  if (
+    creator?.source === 'clickup'
+    || creator?.source === 'clickup_import'
+    || creator?.source_metadata?.clickup_status
+    || creator?.source_metadata?.clickup_url
+  ) return 'legacy clickup';
   return creator?.stage === 'alumni' || creator?.status === 'inactive' || creator?.archived_at ? 'past' : 'active';
 }
 
@@ -1172,7 +1179,7 @@ export default function CreatorWorkspace({
                   </span>
                 </span>
                 <span className="creator-pipeline">
-                  <span className={`creator-stage stage-${rosterStageLabel(creator)}`}>
+                  <span className={`creator-stage stage-${rosterStageLabel(creator).replace(/\s+/g, '-')}`}>
                     {rosterStageLabel(creator)}
                   </span>
                   <small className={creator.next_follow_up_at && new Date(creator.next_follow_up_at) <= new Date() ? 'follow-up-due' : ''}>

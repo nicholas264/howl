@@ -2,7 +2,7 @@ import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 
 const STAGES = new Set(['sourced', 'contacted', 'interested', 'briefing', 'producing', 'active', 'alumni']);
-const ROSTER_FILTERS = new Set(['active', 'past', 'rejected_applicants']);
+const ROSTER_FILTERS = new Set(['active', 'past', 'legacy_clickup', 'rejected_applicants']);
 const STATUSES = new Set(['prospect', 'qualified', 'contracted', 'inactive']);
 const PLATFORMS = new Set(['instagram', 'tiktok', 'youtube', 'facebook', 'other']);
 
@@ -335,12 +335,41 @@ export default async function handler(req, res) {
         LEFT JOIN creator_rollups rollup ON rollup.creator_id = c.id
         WHERE (${search}::text IS NULL OR c.name ILIKE ${search ? `%${search}%` : null} OR c.email ILIKE ${search ? `%${search}%` : null})
           AND (
-            ${stage}::text IS NULL
+            (
+              ${stage}::text IS NULL
+              AND c.archived_at IS NULL
+              AND NOT (
+                c.source IN ('clickup', 'clickup_import')
+                OR c.source_metadata->>'clickup_status' IS NOT NULL
+                OR c.source_metadata->>'clickup_url' IS NOT NULL
+              )
+            )
             OR (${stage}::text = 'active' AND c.archived_at IS NULL AND c.status <> 'inactive' AND c.stage <> 'alumni')
-            OR (${stage}::text = 'past' AND (c.stage = 'alumni' OR c.status = 'inactive' OR c.archived_at IS NOT NULL))
+            OR (
+              ${stage}::text = 'past'
+              AND c.archived_at IS NULL
+              AND (c.stage = 'alumni' OR c.status = 'inactive')
+              AND NOT (
+                c.source IN ('clickup', 'clickup_import')
+                OR c.source_metadata->>'clickup_status' IS NOT NULL
+                OR c.source_metadata->>'clickup_url' IS NOT NULL
+              )
+            )
+            OR (
+              ${stage}::text = 'legacy_clickup'
+              AND (
+                c.source IN ('clickup', 'clickup_import')
+                OR c.source_metadata->>'clickup_status' IS NOT NULL
+                OR c.source_metadata->>'clickup_url' IS NOT NULL
+              )
+            )
             OR (${stage}::text NOT IN ('active', 'past') AND c.stage = ${stage})
           )
-          AND (${stage}::text IS NULL OR ${stage}::text = 'past' OR c.archived_at IS NULL)
+          AND (
+            ${stage}::text IS NULL
+            OR ${stage}::text IN ('past', 'legacy_clickup')
+            OR c.archived_at IS NULL
+          )
           AND (${archived}::boolean = false OR c.archived_at IS NOT NULL)
         ORDER BY
           c.archived_at DESC NULLS LAST,
