@@ -83,11 +83,22 @@ export default async function handler(req, res) {
       if (!creatorId && body.creator_name) {
         const [created] = await sql`
           INSERT INTO creators (name, stage, status, source, created_by)
-          VALUES (${body.creator_name.toString().slice(0, 200)}, 'producing', 'contracted', 'fee_intent', ${userId})
+          VALUES (${body.creator_name.toString().slice(0, 200)}, 'active', 'contracted', 'fee_intent', ${userId})
           RETURNING id`;
         creatorId = created.id;
       }
       if (!creatorId) return res.status(400).json({ error: 'creator required' });
+
+      await sql`
+        UPDATE creators
+        SET stage = 'active',
+            status = 'contracted',
+            archived_at = NULL,
+            archived_by = NULL,
+            archive_reason = NULL,
+            updated_at = now()
+        WHERE id = ${creatorId}
+      `;
 
       const [engagement] = await sql`
         INSERT INTO creator_engagements (
@@ -98,6 +109,15 @@ export default async function handler(req, res) {
           ${assetCommitment}, ${amount || null}, 'USD', ${note}, ${userId}
         )
         RETURNING id
+      `;
+      await sql`
+        INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+        VALUES (
+          ${creatorId}, 'fee_engagement_linked',
+          ${`${type === 'retainer' ? 'Retainer' : 'One-off'} creator payment linked`},
+          ${JSON.stringify({ fee_amount: amount || null, engagement_id: engagement.id, source: 'creator_fee_intent' })}::jsonb,
+          ${userId}
+        )
       `;
       return res.status(201).json({ creator_id: creatorId, engagement_id: engagement.id });
     }

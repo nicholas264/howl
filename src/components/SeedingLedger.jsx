@@ -162,8 +162,9 @@ export default function SeedingLedger({ canManage = false }) {
 
   async function convertFee(intent) {
     setFeeBusy(intent.creator_name);
+    setError('');
     try {
-      await fetch('/api/creator-fees', {
+      const response = await fetch('/api/creator-fees', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -174,7 +175,12 @@ export default function SeedingLedger({ canManage = false }) {
           note: intent.note,
         }),
       });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not link creator payment');
       await loadFees();
+      await load();
+    } catch (err) {
+      setError(err.message || 'Could not link creator payment');
     } finally {
       setFeeBusy(null);
     }
