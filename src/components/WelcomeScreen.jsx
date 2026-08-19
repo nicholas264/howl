@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
 const QUICK_ACTIONS = [
-  { tab: 'campaign-planner', permission: 'briefs.write', eyebrow: 'Plan', title: 'Campaign Planner', sub: 'Pick product, allocate creators, and draft performance-led scripts.' },
   { tab: 'from-winners', permission: 'briefs.write', eyebrow: 'Create', title: 'Concept Studio', sub: 'Build creator-grounded concepts or iterate proven winners.' },
   { tab: 'launcher', permission: 'launch.write', eyebrow: 'Launch', title: 'UGC Inbox', sub: 'Whatever the team dropped in Drive, ready to ship.' },
   { tab: 'dashboard-cfo', permission: 'analytics.read', eyebrow: 'Insights', title: 'CFO View', sub: 'NCAC, CM3, OpEx coverage — real numbers.' },
@@ -26,7 +25,6 @@ function setupTarget(step) {
 export default function WelcomeScreen({ setActiveTab, can = () => true, openCreatorWorkspace = () => setActiveTab('creators'), currentUser = null }) {
   const [operations, setOperations] = useState(null);
   const [health, setHealth] = useState(null);
-  const [planner, setPlanner] = useState(null);
   const [loadingActions, setLoadingActions] = useState(true);
   const [actionError, setActionError] = useState('');
   const firstName = currentUser?.display_name?.split(' ')?.[0] || currentUser?.email?.split('@')?.[0] || null;
@@ -39,7 +37,6 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
   const hour = new Date().getHours();
   const greeting = hour < 5 ? 'Late night' : hour < 12 ? 'Morning' : hour < 17 ? 'Afternoon' : hour < 21 ? 'Evening' : 'Late night';
   const canSeeCreatorOps = can('creators.read');
-  const canSeePlanner = can('briefs.read') || can('briefs.write');
 
   useEffect(() => {
     let cancelled = false;
@@ -48,7 +45,6 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
       requests.push(['operations', loadJson('/api/creator-operations')]);
       requests.push(['health', loadJson('/api/creator-data-health')]);
     }
-    if (canSeePlanner) requests.push(['planner', loadJson('/api/creator-campaign-planner')]);
     if (!requests.length) {
       setLoadingActions(false);
       return () => { cancelled = true; };
@@ -62,7 +58,6 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
         if (result.status === 'fulfilled') {
           if (key === 'operations') setOperations(result.value);
           if (key === 'health') setHealth(result.value);
-          if (key === 'planner') setPlanner(result.value);
         } else {
           failed.push(key);
         }
@@ -71,7 +66,7 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
       setLoadingActions(false);
     });
     return () => { cancelled = true; };
-  }, [canSeeCreatorOps, canSeePlanner]);
+  }, [canSeeCreatorOps]);
 
   const actionCards = useMemo(() => {
     const cards = [];
@@ -192,25 +187,10 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
         priority: 'medium',
       });
     }
-    const attribution = planner?.attribution;
-    const totalLaunches = Number(attribution?.total_launches || 0);
-    const attributedLaunches = Number(attribution?.attributed_launches || 0);
-    if (totalLaunches > attributedLaunches) {
-      cards.push({
-        key: 'planner-attribution',
-        eyebrow: 'Performance loop',
-        title: `${totalLaunches - attributedLaunches} launch${totalLaunches - attributedLaunches === 1 ? '' : 'es'} need source attribution`,
-        detail: 'Match external UGC to creators, or tag founder/internal/tool-generated ads so the planner learns from clean source data.',
-        count: totalLaunches - attributedLaunches,
-        action: 'Open planner mapping',
-        target: { type: 'tab', value: 'campaign-planner' },
-        priority: 'medium',
-      });
-    }
     return cards
       .sort((a, b) => (a.priority === 'high' ? -1 : 1) - (b.priority === 'high' ? -1 : 1))
       .slice(0, 5);
-  }, [operations, health, planner]);
+  }, [operations, health]);
 
   const openAction = card => {
     if (card.target.type === 'creator-view') openCreatorWorkspace(card.target.value);

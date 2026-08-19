@@ -24,7 +24,6 @@ const CreatorPipelineFunnel = lazy(() => import("./components/CreatorPipelineFun
 const SeedingLedger = lazy(() => import("./components/SeedingLedger"));
 const CreativeFlowBoard = lazy(() => import("./components/CreativeFlowBoard"));
 const CreativePlanningWorkspace = lazy(() => import("./components/CreativePlanningWorkspace"));
-const CreatorCampaignPlanner = lazy(() => import("./components/CreatorCampaignPlanner"));
 const AdminWorkspace = lazy(() => import("./components/AdminWorkspace"));
 const WorkspaceHub = lazy(() => import("./components/WorkspaceHub"));
 const MapMonitorWorkspace = lazy(() => import("./components/MapMonitorWorkspace"));
@@ -177,7 +176,6 @@ export default function HowlAdEngine({ appAccess }) {
       items: [
         { key: 'welcome', label: 'Home' },
         { key: 'creators', label: 'Creators', permission: 'creators.read' },
-        { key: 'campaign-planner', label: 'Campaign Planner', permission: 'briefs.write' },
         { key: 'creative-plan', label: 'Creative Forecast', permission: 'creators.read' },
       ],
     },
@@ -356,7 +354,6 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "creative-pipeline" && <CreatorPipelineFunnel />}
         {activeTab === "seeding-ledger" && <SeedingLedger canManage={can('creators.write')} />}
         {activeTab === "creative-plan" && <CreativePlanningWorkspace onOpenCreator={openPlannedCreator} setActiveTab={navigate} />}
-        {activeTab === "campaign-planner" && <CreatorCampaignPlanner onOpenCreator={openPlannedCreator} />}
         {activeTab === "creative" && <WorkspaceHub type="creative" setActiveTab={navigate} can={can} />}
         {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={navigate} can={can} />}
         {activeTab === "admin" && can('admin.users') && <AdminWorkspace onOpenEditor={openEditorSession} />}
