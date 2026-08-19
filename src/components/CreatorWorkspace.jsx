@@ -176,6 +176,7 @@ export default function CreatorWorkspace({
   const [shopifyConnected, setShopifyConnected] = useState(false);
   const [seeds, setSeeds] = useState([]);
   const [seedForm, setSeedForm] = useState({ product_variant: '', quantity: '1', notes: '' });
+  const [creatorIdentity, setCreatorIdentity] = useState({ name: '', email: '', phone: '', location: '' });
   const [creatorIntel, setCreatorIntel] = useState({
     niche: '', strengths: '', audience_demographics: '', audience_psychographics: '',
     shipping_address1: '', shipping_address2: '', shipping_city: '', shipping_region: '',
@@ -281,6 +282,12 @@ export default function CreatorWorkspace({
 
   useEffect(() => {
     if (!selected) return;
+    setCreatorIdentity({
+      name: selected.name || '',
+      email: selected.email || '',
+      phone: selected.phone || '',
+      location: selected.location || '',
+    });
     setCreatorIntel({
       niche: selected.niche || '',
       strengths: selected.strengths || '',
@@ -915,6 +922,18 @@ export default function CreatorWorkspace({
     }
   };
 
+  const saveCreatorIdentity = async event => {
+    event.preventDefault();
+    if (!creatorIdentity.name.trim()) return setError('Creator name is required.');
+    setSaving(true);
+    setError('');
+    try {
+      await updateCreator(creatorIdentity);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const seedProduct = async event => {
     event.preventDefault();
     const [productId, variantId] = seedForm.product_variant.split('::');
@@ -1313,6 +1332,46 @@ export default function CreatorWorkspace({
             </div>
 
             {detailTab === 'profile' && <>
+            <section className="creator-detail-section">
+              <div className="detail-section-head"><span>Identity</span></div>
+              <dl className="creator-facts">
+                <div><dt>Name</dt><dd>{selected.name || 'Not set'}</dd></div>
+                <div><dt>Email</dt><dd>{selected.email || 'Not set'}</dd></div>
+                <div><dt>Phone</dt><dd>{selected.phone || 'Not set'}</dd></div>
+                <div><dt>Location</dt><dd>{selected.location || 'Not set'}</dd></div>
+              </dl>
+              {canManageCreators && (
+                <details className="inline-editor creator-identity-editor">
+                  <summary>Edit identity</summary>
+                  <form onSubmit={saveCreatorIdentity}>
+                    <input
+                      required
+                      placeholder="Creator name"
+                      value={creatorIdentity.name}
+                      onChange={event => setCreatorIdentity({ ...creatorIdentity, name: event.target.value })}
+                    />
+                    <input
+                      type="email"
+                      placeholder="Email"
+                      value={creatorIdentity.email}
+                      onChange={event => setCreatorIdentity({ ...creatorIdentity, email: event.target.value })}
+                    />
+                    <input
+                      placeholder="Phone"
+                      value={creatorIdentity.phone}
+                      onChange={event => setCreatorIdentity({ ...creatorIdentity, phone: event.target.value })}
+                    />
+                    <input
+                      placeholder="Location"
+                      value={creatorIdentity.location}
+                      onChange={event => setCreatorIdentity({ ...creatorIdentity, location: event.target.value })}
+                    />
+                    <button disabled={saving}>{saving ? 'Saving...' : 'Save identity'}</button>
+                  </form>
+                </details>
+              )}
+            </section>
+
             <section className="creator-detail-section">
               <div className="detail-section-head">
                 <span>Social intelligence</span>
