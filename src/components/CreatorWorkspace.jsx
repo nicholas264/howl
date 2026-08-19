@@ -7,19 +7,20 @@ import CreatorOperationsWorkspace from './CreatorOperationsWorkspace';
 import { uploadPublicBlob } from '../utils/blobUpload';
 
 const STAGES = [
-  ['all', 'All'],
-  ['sourced', 'Sourced'],
-  ['contacted', 'Contacted'],
-  ['interested', 'Interested'],
-  ['briefing', 'Briefing'],
-  ['producing', 'Producing'],
-  ['active', 'Active'],
-  ['alumni', 'Alumni'],
+  ['all', 'All creators'],
+  ['active', 'Active creators'],
+  ['past', 'Past creators'],
+  ['rejected_applicants', 'Rejected applicants'],
+];
+
+const CREATOR_STAGE_OPTIONS = [
+  ['active', 'Active creator'],
+  ['alumni', 'Past creator'],
 ];
 
 const EMPTY_CREATOR = {
-  name: '', email: '', phone: '', location: '', stage: 'sourced',
-  status: 'prospect', activities: '', tags: '', bio: '', rate_notes: '', notes: '',
+  name: '', email: '', phone: '', location: '', stage: 'active',
+  status: 'contracted', activities: '', tags: '', bio: '', rate_notes: '', notes: '',
 };
 
 const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
@@ -38,6 +39,11 @@ function strongestSocial(accounts = []) {
 function compactText(value, fallback = '—') {
   const text = Array.isArray(value) ? value.filter(Boolean).join(', ') : String(value || '').trim();
   return text || fallback;
+}
+
+function rosterStageLabel(creator) {
+  if (creator?.record_type === 'application') return 'rejected';
+  return creator?.stage === 'alumni' || creator?.status === 'inactive' || creator?.archived_at ? 'past' : 'active';
 }
 
 function initials(name = '') {
@@ -273,11 +279,6 @@ export default function CreatorWorkspace({
       shipping_country_code: selected.shipping_country_code || 'US',
     });
   }, [selected?.id]);
-
-  const counts = useMemo(() => creators.reduce((result, creator) => {
-    result[creator.stage] = (result[creator.stage] || 0) + 1;
-    return result;
-  }, {}), [creators]);
 
   // The board needs every creator regardless of the active stage filter.
   useEffect(() => {
@@ -1125,7 +1126,7 @@ export default function CreatorWorkspace({
         <div className="creator-stage-tabs">
           {STAGES.map(([key, label]) => (
             <button key={key} className={stage === key ? 'active' : ''} onClick={() => setStage(key)}>
-              {label}{key !== 'all' && counts[key] ? ` ${counts[key]}` : ''}
+              {label}
             </button>
           ))}
         </div>
@@ -1155,7 +1156,14 @@ export default function CreatorWorkspace({
             const primarySocial = strongestSocial(creator.social_accounts);
             const focus = creator.activities?.length ? creator.activities : creator.tags;
             return (
-              <button key={creator.id} className={`creator-row ${selected?.id === creator.id ? 'active' : ''}`} onClick={() => openCreator(creator)}>
+              <button key={creator.id} className={`creator-row ${selected?.id === creator.id ? 'active' : ''}`} onClick={() => {
+                if (creator.record_type === 'application') {
+                  setWorkspaceView('talent');
+                  setError('Rejected applicants are managed in the Talent inbox.');
+                  return;
+                }
+                openCreator(creator);
+              }}>
                 <span className="creator-row-identity">
                   <CreatorAvatar creator={creator} />
                   <span className="creator-row-name">
@@ -1164,7 +1172,9 @@ export default function CreatorWorkspace({
                   </span>
                 </span>
                 <span className="creator-pipeline">
-                  <span className={`creator-stage stage-${creator.stage}`}>{creator.stage}</span>
+                  <span className={`creator-stage stage-${rosterStageLabel(creator)}`}>
+                    {rosterStageLabel(creator)}
+                  </span>
                   <small className={creator.next_follow_up_at && new Date(creator.next_follow_up_at) <= new Date() ? 'follow-up-due' : ''}>
                     {creator.next_follow_up_at
                       ? `${new Date(creator.next_follow_up_at) <= new Date() ? 'Follow up due' : 'Follow up'} ${new Date(creator.next_follow_up_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
@@ -1210,8 +1220,8 @@ export default function CreatorWorkspace({
             <div className="creator-status-row">
               <label>
                 Stage
-                <select value={selected.stage} disabled={!canManageCreators} onChange={event => updateCreator({ stage: event.target.value })}>
-                  {STAGES.slice(1).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                <select value={selected.stage === 'alumni' || selected.status === 'inactive' ? 'alumni' : 'active'} disabled={!canManageCreators} onChange={event => updateCreator({ stage: event.target.value, status: event.target.value === 'alumni' ? 'inactive' : 'contracted' })}>
+                  {CREATOR_STAGE_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                 </select>
               </label>
               <label>
@@ -1911,8 +1921,8 @@ export default function CreatorWorkspace({
             <div className="creator-empty"><strong>Loading board…</strong></div>
           ) : (
             <div className="cboard">
-              {STAGES.slice(1).map(([key, label]) => {
-                const inStage = creators.filter(c => c.stage === key);
+              {CREATOR_STAGE_OPTIONS.map(([key, label]) => {
+                const inStage = creators.filter(c => key === 'alumni' ? rosterStageLabel(c) === 'past' : rosterStageLabel(c) === 'active');
                 return (
                   <div
                     key={key}
@@ -2017,7 +2027,7 @@ export default function CreatorWorkspace({
               <label>Email<input type="email" value={form.email} onChange={event => setForm({ ...form, email: event.target.value })} /></label>
               <label>Phone<input value={form.phone} onChange={event => setForm({ ...form, phone: event.target.value })} /></label>
               <label>Location<input value={form.location} onChange={event => setForm({ ...form, location: event.target.value })} /></label>
-              <label>Stage<select value={form.stage} onChange={event => setForm({ ...form, stage: event.target.value })}>{STAGES.slice(1).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+              <label>Stage<select value={form.stage} onChange={event => setForm({ ...form, stage: event.target.value })}>{CREATOR_STAGE_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
               <label className="wide">Activities<input placeholder="running, hunting, overlanding" value={form.activities} onChange={event => setForm({ ...form, activities: event.target.value })} /></label>
               <label className="wide">Tags<input placeholder="Colorado, truck, technical" value={form.tags} onChange={event => setForm({ ...form, tags: event.target.value })} /></label>
               <label className="wide">Bio<textarea rows="3" value={form.bio} onChange={event => setForm({ ...form, bio: event.target.value })} /></label>

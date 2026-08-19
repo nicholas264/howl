@@ -2,6 +2,7 @@ import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 
 const STAGES = new Set(['sourced', 'contacted', 'interested', 'briefing', 'producing', 'active', 'alumni']);
+const ROSTER_FILTERS = new Set(['active', 'past', 'rejected_applicants']);
 const STATUSES = new Set(['prospect', 'qualified', 'contracted', 'inactive']);
 const PLATFORMS = new Set(['instagram', 'tiktok', 'youtube', 'facebook', 'other']);
 
@@ -256,8 +257,39 @@ export default async function handler(req, res) {
         return res.json({ funnel, totals });
       }
       const search = text(req.query.search, 200);
-      const stage = STAGES.has(req.query.stage) ? req.query.stage : null;
+      const requestedStage = text(req.query.stage, 80);
+      const stage = ROSTER_FILTERS.has(requestedStage) || STAGES.has(requestedStage) ? requestedStage : null;
       const archived = req.query.archived === 'true';
+      if (stage === 'rejected_applicants') {
+        const rows = await sql`
+          SELECT
+            ('application:' || id)::text AS id,
+            id AS application_id,
+            'application' AS record_type,
+            COALESCE(name, email, application_code, 'Rejected applicant') AS name,
+            email,
+            phone,
+            location,
+            'rejected_applicant' AS stage,
+            status,
+            niche,
+            activities,
+            ARRAY[]::text[] AS tags,
+            rate_expectations AS rate_notes,
+            NULL::text AS avatar_url,
+            created_at,
+            updated_at,
+            0::int AS launch_count,
+            NULL::timestamptz AS last_launch_at,
+            '[]'::json AS social_accounts
+          FROM creator_applications
+          WHERE status IN ('denied', 'declined')
+            AND (${search}::text IS NULL OR name ILIKE ${search ? `%${search}%` : null} OR email ILIKE ${search ? `%${search}%` : null})
+          ORDER BY updated_at DESC, created_at DESC
+          LIMIT 500
+        `;
+        return res.json({ creators: rows });
+      }
       const rows = await sql`
         WITH attributed_groups AS (
           SELECT a.creator_id, cp.group_key, max(cp.created_time) AS last_launch_at
@@ -302,8 +334,14 @@ export default async function handler(req, res) {
         FROM creators c
         LEFT JOIN creator_rollups rollup ON rollup.creator_id = c.id
         WHERE (${search}::text IS NULL OR c.name ILIKE ${search ? `%${search}%` : null} OR c.email ILIKE ${search ? `%${search}%` : null})
-          AND (${stage}::text IS NULL OR c.stage = ${stage})
-          AND (${archived}::boolean = (c.archived_at IS NOT NULL))
+          AND (
+            ${stage}::text IS NULL
+            OR (${stage}::text = 'active' AND c.archived_at IS NULL AND c.status <> 'inactive' AND c.stage <> 'alumni')
+            OR (${stage}::text = 'past' AND (c.stage = 'alumni' OR c.status = 'inactive' OR c.archived_at IS NOT NULL))
+            OR (${stage}::text NOT IN ('active', 'past') AND c.stage = ${stage})
+          )
+          AND (${stage}::text IS NULL OR ${stage}::text = 'past' OR c.archived_at IS NULL)
+          AND (${archived}::boolean = false OR c.archived_at IS NOT NULL)
         ORDER BY
           c.archived_at DESC NULLS LAST,
           next_follow_up_at ASC NULLS LAST,
