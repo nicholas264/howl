@@ -42,13 +42,21 @@ function compactText(value, fallback = '—') {
   return text || fallback;
 }
 
+function isLegacyClickUpException(creator) {
+  const name = String(creator?.name || '').trim().toLowerCase();
+  return name.startsWith('dominique rit') || name === 'talon' || name.startsWith('talon ');
+}
+
 function rosterStageLabel(creator) {
   if (creator?.record_type === 'application') return 'rejected';
   if (
-    creator?.source === 'clickup'
-    || creator?.source === 'clickup_import'
-    || creator?.source_metadata?.clickup_status
-    || creator?.source_metadata?.clickup_url
+    !isLegacyClickUpException(creator)
+    && (
+      creator?.source === 'clickup'
+      || creator?.source === 'clickup_import'
+      || creator?.source_metadata?.clickup_status
+      || creator?.source_metadata?.clickup_url
+    )
   ) return 'legacy clickup';
   return creator?.stage === 'alumni' || creator?.status === 'inactive' || creator?.archived_at ? 'past' : 'active';
 }

@@ -339,9 +339,16 @@ export default async function handler(req, res) {
               ${stage}::text IS NULL
               AND c.archived_at IS NULL
               AND NOT (
-                c.source IN ('clickup', 'clickup_import')
-                OR c.source_metadata->>'clickup_status' IS NOT NULL
-                OR c.source_metadata->>'clickup_url' IS NOT NULL
+                (
+                  c.source IN ('clickup', 'clickup_import')
+                  OR c.source_metadata->>'clickup_status' IS NOT NULL
+                  OR c.source_metadata->>'clickup_url' IS NOT NULL
+                )
+                AND NOT (
+                  lower(c.name) LIKE 'dominique rit%'
+                  OR lower(c.name) = 'talon'
+                  OR lower(c.name) LIKE 'talon %'
+                )
               )
             )
             OR (${stage}::text = 'active' AND c.archived_at IS NULL AND c.status <> 'inactive' AND c.stage <> 'alumni')
@@ -350,9 +357,16 @@ export default async function handler(req, res) {
               AND c.archived_at IS NULL
               AND (c.stage = 'alumni' OR c.status = 'inactive')
               AND NOT (
-                c.source IN ('clickup', 'clickup_import')
-                OR c.source_metadata->>'clickup_status' IS NOT NULL
-                OR c.source_metadata->>'clickup_url' IS NOT NULL
+                (
+                  c.source IN ('clickup', 'clickup_import')
+                  OR c.source_metadata->>'clickup_status' IS NOT NULL
+                  OR c.source_metadata->>'clickup_url' IS NOT NULL
+                )
+                AND NOT (
+                  lower(c.name) LIKE 'dominique rit%'
+                  OR lower(c.name) = 'talon'
+                  OR lower(c.name) LIKE 'talon %'
+                )
               )
             )
             OR (
@@ -361,6 +375,11 @@ export default async function handler(req, res) {
                 c.source IN ('clickup', 'clickup_import')
                 OR c.source_metadata->>'clickup_status' IS NOT NULL
                 OR c.source_metadata->>'clickup_url' IS NOT NULL
+              )
+              AND NOT (
+                lower(c.name) LIKE 'dominique rit%'
+                OR lower(c.name) = 'talon'
+                OR lower(c.name) LIKE 'talon %'
               )
             )
             OR (${stage}::text NOT IN ('active', 'past') AND c.stage = ${stage})
