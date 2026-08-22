@@ -41,30 +41,50 @@ async function creatorDetail(sql, id) {
         ) a
       ), '[]'::json) AS activity,
       (
-        SELECT count(DISTINCT cp.group_key)::int
-        FROM creative_performance cp
-        WHERE EXISTS (
-          SELECT 1 FROM creative_creator_assignments a
-          WHERE a.group_key = cp.group_key AND a.creator_id = c.id
-        ) OR EXISTS (
-          SELECT 1 FROM creative_assets ca
-          WHERE ca.group_key = cp.group_key AND ca.creator_id = c.id
-        ) OR EXISTS (
-          SELECT 1 FROM launch_history l
-          WHERE l.ad_id = cp.ad_id AND (l.creator_id = c.id OR lower(l.creator) = lower(c.name))
-        )
+        SELECT count(DISTINCT launch_key)::int
+        FROM (
+          SELECT cp.group_key::text AS launch_key
+          FROM creative_performance cp
+          WHERE EXISTS (
+            SELECT 1 FROM creative_creator_assignments a
+            WHERE a.group_key = cp.group_key AND a.creator_id = c.id
+          ) OR EXISTS (
+            SELECT 1 FROM creative_assets ca
+            WHERE ca.group_key = cp.group_key AND ca.creator_id = c.id
+          ) OR EXISTS (
+            SELECT 1 FROM launch_history l
+            WHERE l.ad_id = cp.ad_id AND (l.creator_id = c.id OR lower(l.creator) = lower(c.name))
+          )
+          UNION ALL
+          SELECT COALESCE(cp.group_key::text, 'launch:' || l.ad_id::text) AS launch_key
+          FROM launch_history l
+          LEFT JOIN creative_performance cp ON cp.ad_id = l.ad_id
+          WHERE l.ad_id IS NOT NULL
+            AND (l.creator_id = c.id OR lower(l.creator) = lower(c.name))
+        ) launches
       ) AS launch_count,
       (
-        SELECT max(COALESCE(cp.created_time, l.launched_at))
-        FROM creative_performance cp
-        LEFT JOIN launch_history l ON l.ad_id = cp.ad_id
-        WHERE EXISTS (
-          SELECT 1 FROM creative_creator_assignments a
-          WHERE a.group_key = cp.group_key AND a.creator_id = c.id
-        ) OR EXISTS (
-          SELECT 1 FROM creative_assets ca
-          WHERE ca.group_key = cp.group_key AND ca.creator_id = c.id
-        ) OR (l.creator_id = c.id OR lower(l.creator) = lower(c.name))
+        SELECT max(last_launch_at)
+        FROM (
+          SELECT cp.created_time AS last_launch_at
+          FROM creative_performance cp
+          WHERE EXISTS (
+            SELECT 1 FROM creative_creator_assignments a
+            WHERE a.group_key = cp.group_key AND a.creator_id = c.id
+          ) OR EXISTS (
+            SELECT 1 FROM creative_assets ca
+            WHERE ca.group_key = cp.group_key AND ca.creator_id = c.id
+          ) OR EXISTS (
+            SELECT 1 FROM launch_history l
+            WHERE l.ad_id = cp.ad_id AND (l.creator_id = c.id OR lower(l.creator) = lower(c.name))
+          )
+          UNION ALL
+          SELECT COALESCE(cp.created_time, l.launched_at) AS last_launch_at
+          FROM launch_history l
+          LEFT JOIN creative_performance cp ON cp.ad_id = l.ad_id
+          WHERE l.ad_id IS NOT NULL
+            AND (l.creator_id = c.id OR lower(l.creator) = lower(c.name))
+        ) launches
       ) AS last_launch_at,
       COALESCE((
         SELECT json_build_object(
@@ -292,22 +312,26 @@ export default async function handler(req, res) {
       }
       const rows = await sql`
         WITH attributed_groups AS (
-          SELECT a.creator_id, cp.group_key, max(cp.created_time) AS last_launch_at
+          SELECT a.creator_id, cp.group_key::text AS group_key, max(cp.created_time) AS last_launch_at
           FROM creative_creator_assignments a
           JOIN creative_performance cp ON cp.group_key = a.group_key
           GROUP BY a.creator_id, cp.group_key
           UNION ALL
-          SELECT ca.creator_id, cp.group_key, max(cp.created_time) AS last_launch_at
+          SELECT ca.creator_id, cp.group_key::text AS group_key, max(cp.created_time) AS last_launch_at
           FROM creative_assets ca
           JOIN creative_performance cp ON cp.group_key = ca.group_key
           WHERE ca.creator_id IS NOT NULL
           GROUP BY ca.creator_id, cp.group_key
           UNION ALL
-          SELECT c.id AS creator_id, cp.group_key, max(COALESCE(cp.created_time, l.launched_at)) AS last_launch_at
+          SELECT
+            c.id AS creator_id,
+            COALESCE(cp.group_key::text, 'launch:' || l.ad_id::text) AS group_key,
+            max(COALESCE(cp.created_time, l.launched_at)) AS last_launch_at
           FROM creators c
           JOIN launch_history l ON l.creator_id = c.id OR lower(l.creator) = lower(c.name)
-          JOIN creative_performance cp ON cp.ad_id = l.ad_id
-          GROUP BY c.id, cp.group_key
+          LEFT JOIN creative_performance cp ON cp.ad_id = l.ad_id
+          WHERE l.ad_id IS NOT NULL
+          GROUP BY c.id, COALESCE(cp.group_key::text, 'launch:' || l.ad_id::text)
         ),
         creator_rollups AS (
           SELECT creator_id, count(DISTINCT group_key)::int AS launch_count, max(last_launch_at) AS last_launch_at
