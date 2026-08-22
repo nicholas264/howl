@@ -11,6 +11,16 @@ import { ensureCreativeAssetTables, markCreativeAssetLaunched, upsertDriveAsset 
 import { ensureCreatorOpsTables } from '../_lib/creator-ops.js';
 
 const DRIVE = 'https://www.googleapis.com/drive/v3';
+const DEFAULT_META_URL_TAGS = 'tw_source={{site_source_name}}&tw_adid={{ad.id}}';
+
+function cleanMetaUrlTags(value) {
+  return String(value || DEFAULT_META_URL_TAGS).trim().replace(/^[?&]+/, '');
+}
+
+function appendUrlTags(params, urlParams) {
+  const tags = cleanMetaUrlTags(urlParams);
+  if (tags) params.set('url_tags', tags);
+}
 
 async function getAccessToken() {
   return getGoogleAccessToken(['https://www.googleapis.com/auth/drive']);
@@ -390,6 +400,7 @@ export default async function handler(req, res) {
       // Accepts EITHER a single fileId OR a pair { feedFileId, storyFileId } for placement-asset customization.
       const {
         fileId, pair, adsetId, pageId, destUrl, adName, headline, primaryText,
+        urlParams,
         creator, creatorId, sourceType, sourceLabel, briefId, deliverableId, productId, angleId, campaignId,
       } = req.body;
       const attributionSourceType = sourceType || (creatorId ? 'external_creator' : null);
@@ -622,6 +633,7 @@ export default async function handler(req, res) {
             asset_feed_spec: JSON.stringify(assetFeedSpec),
             access_token: metaToken,
           });
+          appendUrlTags(creativeParams, urlParams);
           const creativeRes = await fetch(`${GRAPH}/${metaAdAccount}/adcreatives`, {
             method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: creativeParams,
           });
@@ -636,6 +648,7 @@ export default async function handler(req, res) {
             creative: JSON.stringify({ creative_id: creativeData.id }),
             status: 'PAUSED', access_token: metaToken,
           });
+          appendUrlTags(adParams, urlParams);
           const adRes = await fetch(`${GRAPH}/${metaAdAccount}/ads`, {
             method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: adParams,
           });
@@ -853,6 +866,7 @@ export default async function handler(req, res) {
         object_story_spec: JSON.stringify(objectStorySpec),
         access_token: metaToken,
       });
+      appendUrlTags(creativeParams, urlParams);
       const creativeRes = await fetch(`${GRAPH}/${metaAdAccount}/adcreatives`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -873,6 +887,7 @@ export default async function handler(req, res) {
         status: 'PAUSED',
         access_token: metaToken,
       });
+      appendUrlTags(adParams, urlParams);
       const adRes = await fetch(`${GRAPH}/${metaAdAccount}/ads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

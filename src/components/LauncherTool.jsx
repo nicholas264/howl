@@ -29,6 +29,7 @@ import {
 
 const LS_CONFIG = 'howl_launcher_config';
 const LS_SELECTED = 'howl_launcher_selected_items';
+const DEFAULT_URL_PARAMS = 'tw_source={{site_source_name}}&tw_adid={{ad.id}}';
 
 const DEFAULT_LAUNCHER_CONFIG = {
   pageId: import.meta.env.VITE_META_PAGE_ID || '',
@@ -37,6 +38,7 @@ const DEFAULT_LAUNCHER_CONFIG = {
   defaultProduct: PRODUCTS[0]?.id || '',
   defaultPixelId: import.meta.env.VITE_META_PIXEL_ID || '3577794072540304',
   defaultObjective: 'OUTCOME_SALES',
+  defaultUrlParams: DEFAULT_URL_PARAMS,
   namingMode: 'batch_adsets',
   adsetNameTemplate: 'HOWL | CT | {creator} | {asset} | {product} | {date}',
   adNameTemplate: 'HOWL | AD | {creator} | {asset} | {product} | {date}',
@@ -120,6 +122,10 @@ function applyNameTemplate(template, { creator, product, asset, date, source, in
 
 function destUrlFor(productId) {
   return PRODUCTS.find(p => p.id === productId)?.url || '';
+}
+
+function cleanUrlParams(value) {
+  return String(value || '').trim().replace(/^[?&]+/, '');
 }
 
 function normalizeCreatorName(name = '') {
@@ -517,6 +523,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
             sourceLabel: creator?.name || creatorName,
             creatorMatch: suggestion,
             productId: config.defaultProduct,
+            destUrl: destUrlFor(config.defaultProduct),
+            urlParams: config.defaultUrlParams || DEFAULT_URL_PARAMS,
             headline: '',
             primaryText: '',
           };
@@ -550,6 +558,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
             briefId: c.briefId || null,
             deliverableId: c.deliverableId || null,
             productId: config.defaultProduct,
+            destUrl: c.destUrl || destUrlFor(config.defaultProduct),
+            urlParams: c.urlParams || config.defaultUrlParams || DEFAULT_URL_PARAMS,
             headline: c.hook || '',
             primaryText: c.body || '',
           };
@@ -626,6 +636,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   };
   const focusedItem = useMemo(() => queue.find(item => item.unifiedId === focusedItemId) || selectedQueue[0] || null, [queue, focusedItemId, selectedQueue]);
   const focusedAdsetName = focusedItem ? buildNamesForItem(focusedItem).adsetName : '';
+  const destUrlForMeta = (m = {}) => (m.destUrl || destUrlFor(m.productId)).trim();
+  const urlParamsForMeta = (m = {}) => cleanUrlParams(m.urlParams ?? config.defaultUrlParams ?? DEFAULT_URL_PARAMS);
 
   useEffect(() => {
     if (selectedAdsetId !== '__new__' || newAdsetNameEdited || !focusedAdsetName) return;
@@ -638,8 +650,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     const attribution = sourceConfig(m.sourceType || 'external_creator');
     const adsetId = options.adsetId || selectedAdsetId;
     if (!adsetId || adsetId === '__new__') return setGlobalError('Pick an ad set first.');
-    const productUrl = destUrlFor(m.productId);
-    if (!productUrl) return setItemStatus(id, 'error', 'Selected product has no URL set in data/products.js');
+    const productUrl = destUrlForMeta(m);
+    if (!productUrl) return setItemStatus(id, 'error', 'Add an ad URL before launching');
     if (attribution.requiresCreator && !m.creatorId) return setItemStatus(id, 'error', 'Choose an exact creator record before launching creator UGC');
     if (attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim()) return setItemStatus(id, 'error', 'Add the internal/founder name before launching');
     if (!m.headline?.trim() && !m.primaryText?.trim()) return setItemStatus(id, 'error', 'Headline or primary text required');
@@ -654,6 +666,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       pageId: config.pageId.trim(),
       instagramUserId: (config.instagramUserId || '').trim(),
       destUrl: productUrl,
+      urlParams: urlParamsForMeta(m),
       adName,
       headline: m.headline?.trim() || '',
       primaryText: m.primaryText?.trim() || '',
@@ -714,8 +727,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     const adsetId = options.adsetId || selectedAdsetId;
     if (!adsetId || adsetId === '__new__') return setGlobalError('Pick an ad set first.');
     if (!config.pageId.trim()) return setGlobalError('Pick a Facebook Page.');
-    const productUrl = destUrlFor(m.productId);
-    if (!productUrl) return setItemStatus(id, 'error', 'Selected product has no URL set in data/products.js');
+    const productUrl = destUrlForMeta(m);
+    if (!productUrl) return setItemStatus(id, 'error', 'Add an ad URL before launching');
     if (!m.headline?.trim()) return setItemStatus(id, 'error', 'Headline required');
     if (attribution.requiresCreator && !m.creatorId) return setItemStatus(id, 'error', 'Choose an exact creator record before launching creator UGC');
     if (attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim()) return setItemStatus(id, 'error', 'Add the internal/founder name before launching');
@@ -747,6 +760,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           headline: m.headline,
           primaryText: m.primaryText || m.headline,
           destUrl: productUrl,
+          urlParams: urlParamsForMeta(m),
           adsetId,
           pageId: config.pageId,
           instagramUserId: (config.instagramUserId || '').trim() || undefined,
@@ -775,6 +789,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         headline: m.headline,
         primaryText: m.primaryText || m.headline,
         destUrl: productUrl,
+        urlParams: urlParamsForMeta(m),
         pageId: config.pageId,
         instagramUserId: (config.instagramUserId || '').trim() || undefined,
       };
@@ -819,6 +834,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           headline: m.headline,
           primaryText: m.primaryText || m.headline,
           destUrl: productUrl,
+          urlParams: urlParamsForMeta(m),
           mimeType,
           creator: m.creator || 'Static Builder',
           creatorId: attribution.requiresCreator ? (m.creatorId || null) : null,
@@ -897,7 +913,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     const id = item.unifiedId;
     const m = meta[id] || {};
     const names = buildNamesForItem(item);
-    const productUrl = destUrlFor(m.productId);
+    const productUrl = destUrlForMeta(m);
     const attribution = sourceConfig(m.sourceType || 'external_creator');
     try {
       for (let i = 0; i < ids.length; i++) {
@@ -926,6 +942,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
             headline: m.headline || '',
             primaryText: m.primaryText || '',
             destUrl: productUrl || '',
+            urlParams: urlParamsForMeta(m),
           }),
         });
         if (!r.ok) {
@@ -980,6 +997,15 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
             <select style={S.select} value={config.defaultObjective} onChange={e => updateConfig({ defaultObjective: e.target.value })}>
               {OBJECTIVES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
+          </div>
+          <div>
+            <label style={S.label}>Default URL parameters</label>
+            <input
+              style={S.input}
+              value={config.defaultUrlParams || ''}
+              onChange={e => updateConfig({ defaultUrlParams: cleanUrlParams(e.target.value) })}
+              placeholder={DEFAULT_URL_PARAMS}
+            />
           </div>
         </div>
 
@@ -1403,14 +1429,33 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                 ) : null}
                 <div>
                   <label style={S.label}>Product</label>
-                  <select style={S.select} value={m.productId || ''} onChange={e => updateMeta(id, { productId: e.target.value })}>
+                  <select
+                    style={S.select}
+                    value={m.productId || ''}
+                    onChange={e => updateMeta(id, { productId: e.target.value, destUrl: destUrlFor(e.target.value) })}
+                  >
                     {PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
-                  {m.productId && (
-                    <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, wordBreak: 'break-all' }}>
-                      → {destUrlFor(m.productId) || '(no URL set)'}
-                    </div>
-                  )}
+                </div>
+              </div>
+              <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'minmax(220px, 1.3fr) minmax(220px, 1fr)', gap: 8 }}>
+                <div>
+                  <label style={S.label}>Ad URL</label>
+                  <input
+                    style={S.input}
+                    value={m.destUrl ?? destUrlFor(m.productId)}
+                    onChange={e => updateMeta(id, { destUrl: e.target.value })}
+                    placeholder="https://www.howlcampfires.com/products/..."
+                  />
+                </div>
+                <div>
+                  <label style={S.label}>URL parameters</label>
+                  <input
+                    style={S.input}
+                    value={m.urlParams ?? config.defaultUrlParams ?? DEFAULT_URL_PARAMS}
+                    onChange={e => updateMeta(id, { urlParams: cleanUrlParams(e.target.value) })}
+                    placeholder={DEFAULT_URL_PARAMS}
+                  />
                 </div>
               </div>
               <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8 }}>

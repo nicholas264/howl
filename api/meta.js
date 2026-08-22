@@ -3,6 +3,17 @@ import { backfillCreativeAssetsFromLaunchHistory, ensureCreativeAssetTables } fr
 import { enqueueCreativeAnalyses, enqueueCreativeAssetAnalysis, ensureCreativeAnalysisQueue } from './_lib/creative-analysis-queue.js';
 import { normalizeCreativeAsset, normalizeCreativeAssetBatch } from './_lib/creative-asset-normalizer.js';
 
+const DEFAULT_META_URL_TAGS = 'tw_source={{site_source_name}}&tw_adid={{ad.id}}';
+
+function cleanMetaUrlTags(value) {
+  return String(value || DEFAULT_META_URL_TAGS).trim().replace(/^[?&]+/, '');
+}
+
+function appendUrlTags(params, urlParams) {
+  const tags = cleanMetaUrlTags(urlParams);
+  if (tags) params.set('url_tags', tags);
+}
+
 async function stampFlowLaunched(sql, { adId, groupKey, briefId, deliverableId }) {
   if (!briefId && !deliverableId) return;
   try {
@@ -714,6 +725,7 @@ export default async function handler(req, res) {
         } else {
           return res.status(400).json({ error: 'No imageHash, videoId, or cards provided', step: 'create_creative' });
         }
+        appendUrlTags(creativeParams, req.body.urlParams);
 
         const r = await fetch(`${BASE}/${adAccountId}/adcreatives`, {
           method: 'POST',
@@ -739,6 +751,7 @@ export default async function handler(req, res) {
           status: 'PAUSED',
           access_token: accessToken,
         });
+        appendUrlTags(adParams, req.body.urlParams);
         const r = await fetch(`${BASE}/${adAccountId}/ads`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -814,6 +827,7 @@ export default async function handler(req, res) {
           asset_feed_spec: JSON.stringify(assetFeedSpec),
           access_token: accessToken,
         });
+        appendUrlTags(creativeParams, req.body.urlParams);
         const creativeRes = await fetch(`${BASE}/${adAccountId}/adcreatives`, {
           method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: creativeParams,
         });
@@ -829,6 +843,7 @@ export default async function handler(req, res) {
           status: 'PAUSED',
           access_token: accessToken,
         });
+        appendUrlTags(adParams, req.body.urlParams);
         const adRes = await fetch(`${BASE}/${adAccountId}/ads`, {
           method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: adParams,
         });
