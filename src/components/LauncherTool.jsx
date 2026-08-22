@@ -638,6 +638,20 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   const focusedAdsetName = focusedItem ? buildNamesForItem(focusedItem).adsetName : '';
   const destUrlForMeta = (m = {}) => (m.destUrl || destUrlFor(m.productId)).trim();
   const urlParamsForMeta = (m = {}) => cleanUrlParams(m.urlParams ?? config.defaultUrlParams ?? DEFAULT_URL_PARAMS);
+  const clearLaunchedItem = (item) => {
+    const id = item.unifiedId;
+    if (item.source === 'drive') {
+      const ids = item.kind === 'pair' ? [item.feed?.id, item.story?.id].filter(Boolean) : [item.id];
+      setDriveItems(prev => prev.filter(d => !driveItemIncludesAnyId(d, ids)));
+    }
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      lsSet(LS_SELECTED, [...next]);
+      return next;
+    });
+    setFocusedItemId(current => current === id ? null : current);
+  };
 
   useEffect(() => {
     if (selectedAdsetId !== '__new__' || newAdsetNameEdited || !focusedAdsetName) return;
@@ -711,11 +725,15 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       }
       if (final?.error) {
         setItemStatus(id, 'error', final.error);
+        return null;
       } else if (final?.adId) {
         setItemStatus(id, 'success', `Ad ${final.adId}`);
+        clearLaunchedItem(item);
+        return final.adId;
       }
     } catch (err) {
       setItemStatus(id, 'error', err.message);
+      return null;
     }
   };
 
@@ -778,7 +796,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         setStep(id, 'meta_ad', 'done', pd.adId);
         setItemStatus(id, 'success', `Ad ${pd.adId}`);
         onUpdateCartItem?.(item.id, { metaStatus: 'pushed', metaPushedAt: Date.now() });
-        return;
+        clearLaunchedItem(item);
+        return pd.adId;
       }
 
       // 1. Upload asset
@@ -850,22 +869,58 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       setStep(id, 'meta_ad', 'done', ad.adId);
       setItemStatus(id, 'success', `Ad ${ad.adId}`);
       onUpdateCartItem?.(item.id, { metaStatus: 'pushed', metaPushedAt: Date.now() });
+      clearLaunchedItem(item);
+      return ad.adId;
     } catch (err) {
       setItemStatus(id, 'error', err.message);
+      return null;
     }
   };
 
   const launch = (item, options = {}) => item.source === 'drive' ? launchDriveItem(item, options) : launchCartItem(item, options);
+
+  const launchWithAdsetForItem = async (item, index = 1) => {
+    if (!selectedCampaignId || selectedCampaignId === '__new__') throw new Error('Pick a campaign first.');
+    if (!config.pageId.trim()) throw new Error('Pick a Facebook Page.');
+    const names = buildNamesForItem(item, index);
+    const oneAdsetPerItem = config.namingMode !== 'existing_adset';
+    let adsetId = selectedAdsetId;
+    if (oneAdsetPerItem) {
+      setItemStatus(item.unifiedId, 'pushing', `Creating ad set: ${names.adsetName}`);
+      adsetId = await createAdsetRequest({ name: names.adsetName, budget: batchAdsetBudget, select: false });
+    } else if (!adsetId || adsetId === '__new__') {
+      throw new Error('Pick an ad set or switch launch structure to one ad set per creative.');
+    }
+    return launch(item, { adsetId, adName: names.adName, index });
+  };
+
+  const launchOne = async (item) => {
+    setGlobalError('');
+    if (!canLaunchItem(item)) return setGlobalError('This creative is missing required launch fields.');
+    setBatchLaunching(true);
+    try {
+      await launchWithAdsetForItem(item, 1);
+      if (config.namingMode !== 'existing_adset') await loadAdsets(selectedCampaignId);
+    } catch (err) {
+      setGlobalError(err.message);
+    } finally {
+      setBatchLaunching(false);
+    }
+  };
 
   const canLaunchItem = (item) => {
     const id = item.unifiedId;
     const m = meta[id] || {};
     const attribution = sourceConfig(m.sourceType || (item.source === 'drive' ? 'external_creator' : (m.creatorId ? 'external_creator' : 'tool_generated')));
     if ((statuses[id] || {}).status === 'pushing') return false;
+    if (!destUrlForMeta(m)) return false;
+    if (item.source === 'drive' && !m.headline?.trim() && !m.primaryText?.trim()) return false;
+    if (item.source !== 'drive' && !m.headline?.trim()) return false;
     if (attribution.requiresCreator && !m.creatorId) return false;
     if (attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim()) return false;
     return true;
   };
+  const selectedLaunchReadyCount = selectedQueue.filter(canLaunchItem).length;
 
   const launchSelected = async () => {
     setGlobalError('');
@@ -878,14 +933,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     setBatchLaunching(true);
     try {
       for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        const names = buildNamesForItem(item, i + 1);
-        let adsetId = selectedAdsetId;
-        if (oneAdsetPerItem) {
-          setItemStatus(item.unifiedId, 'pushing', `Creating ad set: ${names.adsetName}`);
-          adsetId = await createAdsetRequest({ name: names.adsetName, budget: batchAdsetBudget, select: false });
-        }
-        await launch(item, { adsetId, adName: names.adName, index: i + 1 });
+        await launchWithAdsetForItem(items[i], i + 1);
       }
       if (oneAdsetPerItem) await loadAdsets(selectedCampaignId);
     } catch (err) {
@@ -1153,8 +1201,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         }} style={S.ghost}>
           Clear
         </button>
-        <button onClick={launchSelected} disabled={batchLaunching || selectedQueue.length === 0} style={S.btn(batchLaunching || selectedQueue.length === 0)}>
-          {batchLaunching ? 'Launching…' : `Launch selected (${selectedQueue.length})`}
+        <button onClick={launchSelected} disabled={batchLaunching || selectedLaunchReadyCount === 0} style={S.btn(batchLaunching || selectedLaunchReadyCount === 0)}>
+          {batchLaunching ? 'Launching…' : `Launch ready (${selectedLaunchReadyCount})`}
         </button>
         <div style={{ fontSize: 11, color: '#77746f' }}>
           {queue.length} item{queue.length === 1 ? '' : 's'} ·
@@ -1183,9 +1231,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         const missingExternalCreator = attribution.requiresCreator && !isCreatorLinked;
         const missingSourceLabel = attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim();
         const creatorMatch = m.creatorMatch;
-        const launchDisabled = status.status === 'pushing'
-          || missingExternalCreator
-          || missingSourceLabel;
+        const launchDisabled = batchLaunching || !canLaunchItem(item);
 
         return (
           <div key={id} style={{ ...S.card, borderColor: selectedItems.has(id) ? '#d84a17' : '#dedbd3', boxShadow: selectedItems.has(id) ? 'inset 3px 0 #d84a17' : 'none' }}>
@@ -1484,7 +1530,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
             {/* ACTION COL */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
               <button
-                onClick={() => launch(item)}
+                onClick={() => launchOne(item)}
                 disabled={launchDisabled}
                 title={missingExternalCreator ? 'Pick an exact creator record before launching creator UGC.' : missingSourceLabel ? 'Add the internal/founder name before launching.' : ''}
                 style={S.btn(launchDisabled)}
