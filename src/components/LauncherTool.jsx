@@ -234,12 +234,16 @@ function driveItemIncludesAnyId(item, ids) {
 
 export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem, onRemoveCartItem }) {
   const [creators, setCreators] = useState([]);
+  const [creatorsError, setCreatorsError] = useState('');
   const [deliverablesByCreator, setDeliverablesByCreator] = useState({});
   useEffect(() => {
     fetch('/api/creators')
-      .then(response => response.ok ? response.json() : Promise.reject())
-      .then(data => setCreators(data.creators || []))
-      .catch(() => {});
+      .then(response => response.ok ? response.json() : Promise.reject(new Error(`Creators failed (${response.status})`)))
+      .then(data => {
+        setCreators(data.creators || []);
+        setCreatorsError('');
+      })
+      .catch(err => setCreatorsError(err.message || 'Creators could not load'));
   }, []);
   const loadCreatorDeliverables = useCallback(async (creatorId) => {
     if (!creatorId || deliverablesByCreator[creatorId]) return;
@@ -436,6 +440,45 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         reason: 'Selected from creator database',
       } : null,
     });
+  };
+  const createCreatorFromLauncher = async (id) => {
+    const name = (meta[id]?.creator || '').trim();
+    if (!name) return;
+    setCreatingCreatorFor(id);
+    try {
+      const response = await fetch('/api/creators', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          source: 'launcher',
+          stage: 'sourced',
+          status: 'prospect',
+          notes: 'Created from the ad launcher to preserve launch attribution.',
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `Creator create failed (${response.status})`);
+      const creator = data.creator;
+      setCreators(prev => [creator, ...prev.filter(item => Number(item.id) !== Number(creator.id))]);
+      updateMeta(id, {
+        creator: creator.name,
+        creatorId: creator.id,
+        deliverableId: null,
+        sourceType: 'external_creator',
+        sourceLabel: creator.name,
+        creatorMatch: {
+          confidence: 'manual',
+          reason: 'Created from launcher',
+        },
+      });
+      loadCreatorDeliverables(creator.id);
+      setOpenCreatorPickerId(null);
+    } catch (err) {
+      setItemStatus(id, 'error', err.message || 'Could not create creator');
+    } finally {
+      setCreatingCreatorFor('');
+    }
   };
   const creatorOptionsFor = useCallback((value) => {
     const needle = normalizedWords(value);
@@ -895,6 +938,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   const library = useCopyLibrary();
   const [focusedItemId, setFocusedItemId] = useState(null);
   const [openCreatorPickerId, setOpenCreatorPickerId] = useState(null);
+  const [creatingCreatorFor, setCreatingCreatorFor] = useState('');
 
   // ── render ────────────────────────────────────────────────────────────
   return (
@@ -1200,57 +1244,95 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                       autoComplete="off"
                     />
                     <span style={{ position: 'absolute', top: 29, right: 10, color: '#77746f', fontSize: 12, pointerEvents: 'none' }}>v</span>
-                    {openCreatorPickerId === id && creatorOptionsFor(m.creator || '').length > 0 && (
-                      <div style={{
-                        position: 'absolute',
-                        zIndex: 30,
-                        top: 58,
-                        left: 0,
-                        right: 0,
-                        maxHeight: 238,
-                        overflowY: 'auto',
-                        background: '#fff',
-                        border: '1px solid #d8d4ca',
-                        borderRadius: 6,
-                        boxShadow: '0 14px 35px rgba(45, 40, 30, .16)',
-                        padding: 4,
-                      }}>
-                        {creatorOptionsFor(m.creator || '').map(creator => {
-                          const social = Array.isArray(creator.social_accounts)
-                            ? creator.social_accounts.find(account => account?.handle)?.handle
-                            : null;
-                          return (
+                    {openCreatorPickerId === id && (() => {
+                      const options = creatorOptionsFor(m.creator || '');
+                      const typedName = (m.creator || '').trim();
+                      const exactCreator = findCreatorByName(typedName);
+                      const canCreate = typedName && !exactCreator;
+                      return (
+                        <div style={{
+                          position: 'absolute',
+                          zIndex: 30,
+                          top: 58,
+                          left: 0,
+                          right: 0,
+                          maxHeight: 286,
+                          overflowY: 'auto',
+                          background: '#fff',
+                          border: '1px solid #d8d4ca',
+                          borderRadius: 6,
+                          boxShadow: '0 14px 35px rgba(45, 40, 30, .16)',
+                          padding: 4,
+                        }}>
+                          {options.map(creator => {
+                            const social = Array.isArray(creator.social_accounts)
+                              ? creator.social_accounts.find(account => account?.handle)?.handle
+                              : null;
+                            return (
+                              <button
+                                type="button"
+                                key={creator.id}
+                                onMouseDown={e => {
+                                  e.preventDefault();
+                                  updateCreator(id, creator.name);
+                                  setOpenCreatorPickerId(null);
+                                }}
+                                style={{
+                                  width: '100%',
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  gap: 10,
+                                  padding: '8px 9px',
+                                  background: 'transparent',
+                                  border: 0,
+                                  borderRadius: 4,
+                                  color: '#171717',
+                                  fontFamily: 'inherit',
+                                  fontSize: 11,
+                                  textAlign: 'left',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{creator.name}</span>
+                                {social && <span style={{ flex: 'none', color: '#88857f', fontSize: 9 }}>{social}</span>}
+                              </button>
+                            );
+                          })}
+                          {!options.length && (
+                            <div style={{ padding: '8px 9px', color: '#88857f', fontSize: 10 }}>
+                              {creatorsError || 'No matching creator.'}
+                            </div>
+                          )}
+                          {canCreate && (
                             <button
                               type="button"
-                              key={creator.id}
+                              disabled={creatingCreatorFor === id}
                               onMouseDown={e => {
                                 e.preventDefault();
-                                updateCreator(id, creator.name);
-                                setOpenCreatorPickerId(null);
+                                createCreatorFromLauncher(id);
                               }}
                               style={{
                                 width: '100%',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                gap: 10,
-                                padding: '8px 9px',
-                                background: 'transparent',
-                                border: 0,
+                                marginTop: 4,
+                                padding: '9px',
+                                background: '#f4f1ea',
+                                border: '1px solid #dedbd3',
                                 borderRadius: 4,
-                                color: '#171717',
+                                color: '#d84a17',
                                 fontFamily: 'inherit',
-                                fontSize: 11,
-                                textAlign: 'left',
-                                cursor: 'pointer',
+                                fontSize: 10,
+                                fontWeight: 700,
+                                letterSpacing: 1.5,
+                                textTransform: 'uppercase',
+                                cursor: creatingCreatorFor === id ? 'wait' : 'pointer',
                               }}
                             >
-                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{creator.name}</span>
-                              {social && <span style={{ flex: 'none', color: '#88857f', fontSize: 9 }}>{social}</span>}
+                              {creatingCreatorFor === id ? 'Adding...' : `Add creator "${typedName}"`}
                             </button>
-                          );
-                        })}
-                      </div>
-                    )}
+                          )}
+                        </div>
+                      );
+                    })()}
                     {item.source === 'drive' && (
                       <div style={S.linkedHint(isCreatorLinked)}>
                         {isCreatorLinked

@@ -111,11 +111,12 @@ async function collectInboxFiles(token, inboxId, hiddenIds = new Set()) {
 
   return {
     folderNames,
+    folderParents,
     files: files.map(f => ({ ...f, folderPath: pathFor(f.parents?.[0]) })),
   };
 }
 
-function buildLauncherItems(enriched, folderNames, inboxId) {
+function buildLauncherItems(enriched, folderNames, folderParents, inboxId) {
   // Group same-creative aspect variants under a shared parent. Feed assets
   // include 1:1, 4:5, and landscape; story assets are the taller 9:16 family.
   const dimsFor = (f) => {
@@ -146,9 +147,23 @@ function buildLauncherItems(enriched, folderNames, inboxId) {
     if (!label) return null;
     return label === '9:16' ? 'story' : 'feed';
   };
+  const aspectFolderFor = (folderName = '') => {
+    const n = String(folderName || '').toLowerCase();
+    if (/(^|[^a-z0-9])(9\s*[x:]\s*16|916|story|stories|reels?|vertical)([^a-z0-9]|$)/.test(n)) return 'story';
+    if (/(^|[^a-z0-9])(4\s*[x:]\s*5|1\s*[x:]\s*1|16\s*[x:]\s*9|45|11|169|feed|square|portrait|landscape)([^a-z0-9]|$)/.test(n)) return 'feed';
+    return null;
+  };
+  const groupingParentFor = (f) => {
+    const parent = f.parents?.[0] || inboxId;
+    const parentName = folderNames[parent] || '';
+    if (parent !== inboxId && aspectFolderFor(parentName)) {
+      return folderParents[parent] || parent;
+    }
+    return parent;
+  };
 
   const variantKeyFor = (f) => {
-    const parent = f.parents?.[0] || inboxId;
+    const parent = groupingParentFor(f);
     const type = f.mimeType?.startsWith('video/') ? 'video' : f.mimeType?.startsWith('image/') ? 'image' : 'file';
     const stem = (f.name || '')
       .toLowerCase()
@@ -164,7 +179,7 @@ function buildLauncherItems(enriched, folderNames, inboxId) {
 
   const byParent = {};
   for (const f of enriched) {
-    const p = f.parents?.[0] || inboxId;
+    const p = groupingParentFor(f);
     if (!byParent[p]) byParent[p] = [];
     byParent[p].push(f);
   }
@@ -190,7 +205,7 @@ function buildLauncherItems(enriched, folderNames, inboxId) {
       id: `pair:${parentId}:${feed.id}:${story.id}`,
       folderId: parentId,
       folderName: folderNames[parentId] || '',
-      folderPath: feed.folderPath,
+      folderPath: feed.folderPath === story.folderPath ? feed.folderPath : (folderNames[parentId] || feed.folderPath),
       feed,
       story,
       feedAspect,
@@ -317,8 +332,8 @@ export default async function handler(req, res) {
       // sidebar badge aligned with hidden filtering and feed/story grouping.
       const inboxId = await ensureFolder(token, rootId, 'Inbox');
       const hiddenIds = await loadHiddenUgcIds();
-      const { files, folderNames } = await collectInboxFiles(token, inboxId, hiddenIds);
-      const items = buildLauncherItems(files, folderNames, inboxId);
+      const { files, folderNames, folderParents } = await collectInboxFiles(token, inboxId, hiddenIds);
+      const items = buildLauncherItems(files, folderNames, folderParents, inboxId);
       return res.json({ count: items.length });
     }
 
@@ -331,7 +346,7 @@ export default async function handler(req, res) {
     if (action === 'list') {
       const inboxId = await ensureFolder(token, rootId, 'Inbox');
       const hiddenIds = await loadHiddenUgcIds();
-      const { files: enriched, folderNames } = await collectInboxFiles(token, inboxId, hiddenIds);
+      const { files: enriched, folderNames, folderParents } = await collectInboxFiles(token, inboxId, hiddenIds);
       if (process.env.DATABASE_URL) {
         try {
           const sql = neon(process.env.DATABASE_URL);
@@ -347,7 +362,7 @@ export default async function handler(req, res) {
         }
       }
 
-      const items = buildLauncherItems(enriched, folderNames, inboxId);
+      const items = buildLauncherItems(enriched, folderNames, folderParents, inboxId);
 
       // Backwards-compat: also return `files` for older clients (just the singles).
       return res.json({ items, files: items.filter(i => i.kind === 'single'), inboxId });
