@@ -288,6 +288,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   const [selectedAdsetId, setSelectedAdsetId] = useState(() => ls('howl_launcher_adset', ''));
   const [newCampaign, setNewCampaign] = useState({ name: '', objective: 'OUTCOME_SALES', pixelId: '' });
   const [newAdset, setNewAdset] = useState({ name: '', budget: '50' });
+  const [newAdsetNameEdited, setNewAdsetNameEdited] = useState(false);
   const [batchAdsetBudget, setBatchAdsetBudget] = useState(() => ls('howl_launcher_batch_budget', '50'));
   const [creatingCampaign, setCreatingCampaign] = useState(false);
   const [creatingAdset, setCreatingAdset] = useState(false);
@@ -566,6 +567,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   }, [driveItems, cart]);
 
   const [selectedItems, setSelectedItems] = useState(() => new Set(ls(LS_SELECTED, [])));
+  const [focusedItemId, setFocusedItemId] = useState(null);
   useEffect(() => {
     const available = new Set(queue.map(item => item.unifiedId));
     setSelectedItems(prev => {
@@ -575,6 +577,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     });
   }, [queue]);
   const toggleSelected = (id) => {
+    setFocusedItemId(id);
+    if (selectedAdsetId === '__new__') setNewAdsetNameEdited(false);
     setSelectedItems(prev => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
@@ -620,6 +624,13 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       adName: applyNameTemplate(config.adNameTemplate || DEFAULT_LAUNCHER_CONFIG.adNameTemplate, ctx) || buildAdName({ creator: ctx.creator, productId: meta[item.unifiedId]?.productId }),
     };
   };
+  const focusedItem = useMemo(() => queue.find(item => item.unifiedId === focusedItemId) || selectedQueue[0] || null, [queue, focusedItemId, selectedQueue]);
+  const focusedAdsetName = focusedItem ? buildNamesForItem(focusedItem).adsetName : '';
+
+  useEffect(() => {
+    if (selectedAdsetId !== '__new__' || newAdsetNameEdited || !focusedAdsetName) return;
+    setNewAdset(prev => prev.name === focusedAdsetName ? prev : { ...prev, name: focusedAdsetName });
+  }, [selectedAdsetId, newAdsetNameEdited, focusedAdsetName]);
 
   const launchDriveItem = async (item, options = {}) => {
     const id = item.unifiedId;
@@ -936,7 +947,6 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
 
   // ── library (saved variants) ──────────────────────────────────────────
   const library = useCopyLibrary();
-  const [focusedItemId, setFocusedItemId] = useState(null);
   const [openCreatorPickerId, setOpenCreatorPickerId] = useState(null);
   const [creatingCreatorFor, setCreatingCreatorFor] = useState('');
 
@@ -1062,10 +1072,25 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                 <> · pixel <strong style={{ color: '#171717' }}>{config.defaultPixelId}</strong> · optimizing for <strong style={{ color: '#171717' }}>PURCHASE</strong></>
               )}
             </div>
+            <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 10, color: focusedItem ? '#171717' : '#88857f' }}>
+              {focusedItem ? `Naming from selected creative: ${focusedAdsetName}` : 'Select a creative below to prefill the ad set name.'}
+              <button
+                type="button"
+                disabled={!focusedAdsetName}
+                onClick={() => {
+                  if (!focusedAdsetName) return;
+                  setNewAdset(prev => ({ ...prev, name: focusedAdsetName }));
+                  setNewAdsetNameEdited(false);
+                }}
+                style={{ ...S.ghost, padding: '5px 9px', fontSize: 9 }}
+              >
+                Use selected
+              </button>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr auto', gap: 8, alignItems: 'flex-end' }}>
               <div>
                 <label style={S.label}>Ad set name</label>
-                <input style={S.input} placeholder="e.g. US | 18-65 | Broad" value={newAdset.name} onChange={e => setNewAdset({ ...newAdset, name: e.target.value })} />
+                <input style={S.input} placeholder={focusedAdsetName || 'Select a creative below'} value={newAdset.name} onChange={e => { setNewAdsetNameEdited(true); setNewAdset({ ...newAdset, name: e.target.value }); }} />
               </div>
               <div>
                 <label style={S.label}>Daily budget ($)</label>
@@ -1170,7 +1195,10 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
             </div>
 
             {/* META COL */}
-            <div onClick={() => setFocusedItemId(id)}>
+            <div onClick={() => {
+              setFocusedItemId(id);
+              if (selectedAdsetId === '__new__') setNewAdsetNameEdited(false);
+            }}>
               <div style={S.fileName}>
                 {item.source === 'drive'
                   ? (item.kind === 'pair' ? (item.folderName || item.name) : item.name)
