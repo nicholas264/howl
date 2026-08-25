@@ -1309,42 +1309,40 @@ export default function CreatorWorkspace({
         </section>
 
         {selected && (
-          <aside className="creator-detail">
+          <aside className="creator-detail creator-profile-drawer">
             <button className="detail-close" onClick={() => setSelected(null)} aria-label="Close creator detail">Close</button>
-            <div className="creator-identity">
+            <div className="creator-profile-hero">
               <CreatorAvatar creator={selected} large />
-              <div>
+              <div className="creator-profile-title">
+                <span>Creator profile</span>
                 <h2>{selected.name}</h2>
-                <p>
-                  <span>{selected.email || 'No email'}{selected.location ? ` · ${selected.location}` : ''}</span>
+                <div className="creator-profile-meta">
+                  <span>{selected.email || 'No email'}</span>
+                  <span>{selected.location || 'No location'}</span>
                   {socialProfileUrl(selectedInstagram) && (
-                    <>
-                      <span> · </span>
-                      <a className="creator-profile-link" href={socialProfileUrl(selectedInstagram)} target="_blank" rel="noreferrer">
-                        @{String(selectedInstagram.handle || 'Instagram').replace(/^@/, '')}
-                      </a>
-                    </>
+                    <a className="creator-profile-link" href={socialProfileUrl(selectedInstagram)} target="_blank" rel="noreferrer">
+                      @{String(selectedInstagram.handle || 'Instagram').replace(/^@/, '')}
+                    </a>
                   )}
-                </p>
+                </div>
               </div>
-            </div>
-
-            <div className="creator-status-row">
-              <label>
-                Stage
-                <select value={selected.stage === 'alumni' || selected.status === 'inactive' ? 'alumni' : 'active'} disabled={!canManageCreators} onChange={event => updateCreator({ stage: event.target.value, status: event.target.value === 'alumni' ? 'inactive' : 'contracted' })}>
-                  {CREATOR_STAGE_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-                </select>
-              </label>
-              <label>
-                Status
-                <select value={selected.status} disabled={!canManageCreators} onChange={event => updateCreator({ status: event.target.value })}>
-                  <option value="prospect">Prospect</option>
-                  <option value="qualified">Qualified</option>
-                  <option value="contracted">Contracted</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </label>
+              <div className="creator-status-row">
+                <label>
+                  Stage
+                  <select value={selected.stage === 'alumni' || selected.status === 'inactive' ? 'alumni' : 'active'} disabled={!canManageCreators} onChange={event => updateCreator({ stage: event.target.value, status: event.target.value === 'alumni' ? 'inactive' : 'contracted' })}>
+                    {CREATOR_STAGE_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Status
+                  <select value={selected.status} disabled={!canManageCreators} onChange={event => updateCreator({ status: event.target.value })}>
+                    <option value="prospect">Prospect</option>
+                    <option value="qualified">Qualified</option>
+                    <option value="contracted">Contracted</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </label>
+              </div>
             </div>
             <div className="creator-signal-strip">
               {creatorSignalCards.map(card => (
@@ -1378,9 +1376,9 @@ export default function CreatorWorkspace({
             </div>
 
             {detailTab === 'profile' && <>
-            <section className="creator-detail-section">
-              <div className="detail-section-head"><span>Identity</span></div>
-              <form className="profile-edit-form" onSubmit={saveCreatorIdentity}>
+            <section className="creator-detail-section profile-editor-panel">
+              <div className="detail-section-head"><span>Contact</span><small>Editable profile fields</small></div>
+              <form className="profile-edit-form profile-identity-form" onSubmit={saveCreatorIdentity}>
                 <label>Name<input required disabled={!canManageCreators} value={creatorIdentity.name} onChange={event => setCreatorIdentity({ ...creatorIdentity, name: event.target.value })} /></label>
                 <label>Email<input type="email" disabled={!canManageCreators} value={creatorIdentity.email} onChange={event => setCreatorIdentity({ ...creatorIdentity, email: event.target.value })} /></label>
                 <label>Phone<input disabled={!canManageCreators} value={creatorIdentity.phone} onChange={event => setCreatorIdentity({ ...creatorIdentity, phone: event.target.value })} /></label>
@@ -1389,9 +1387,9 @@ export default function CreatorWorkspace({
               </form>
             </section>
 
-            <section className="creator-detail-section">
+            <section className="creator-detail-section profile-editor-panel">
               <div className="detail-section-head">
-                <span>Social intelligence</span>
+                <span>Social profiles</span>
                 <small>{selected.social_accounts?.length || 0} accounts</small>
               </div>
               <div className="social-account-grid">
@@ -1412,6 +1410,7 @@ export default function CreatorWorkspace({
                   {account.last_synced_at && <small className="social-synced">Synced {new Date(account.last_synced_at).toLocaleDateString()}</small>}
                   </div>
                 ))}
+                {!selected.social_accounts?.length && <div className="workflow-empty compact">No social profiles recorded yet.</div>}
               </div>
               {canManageCreators && (
                 <details className="inline-editor">
@@ -1435,8 +1434,8 @@ export default function CreatorWorkspace({
               )}
             </section>
 
-            <section className="creator-detail-section">
-              <div className="detail-section-head"><span>Creator context</span></div>
+            <section className="creator-detail-section profile-editor-panel">
+              <div className="detail-section-head"><span>Creator context</span><small>Fit, audience, shipping</small></div>
               <form className="profile-edit-form profile-edit-form-wide" onSubmit={saveCreatorIntel}>
                 <label>Niche<input disabled={!canManageCreators} value={creatorIntel.niche} onChange={event => setCreatorIntel({ ...creatorIntel, niche: event.target.value })} /></label>
                 <label>Strengths<input disabled={!canManageCreators} value={creatorIntel.strengths} onChange={event => setCreatorIntel({ ...creatorIntel, strengths: event.target.value })} /></label>
