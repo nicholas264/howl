@@ -148,16 +148,8 @@ export default function CreatorApplicationPage() {
       <aside className="apply-story">
         <img src="/logos/howl-horizontal-wht.png" alt="HOWL Campfires" />
         <div>
-          <span>HOWL creator program</span>
-          <h1>Show us how you carry the fire.</h1>
-          <p>We partner with creators who can make outdoor cooking, campfire hosting, and real product use feel immediate.</p>
-          <p>Share your channels, your point of view, and the kind of work you want to make with HOWL.</p>
+          <h1>Howl Creator Program Application</h1>
         </div>
-        <dl>
-          <div><dt>01</dt><dd>Social proof</dd></div>
-          <div><dt>02</dt><dd>Creative fit</dd></div>
-          <div><dt>03</dt><dd>Clear terms</dd></div>
-        </dl>
       </aside>
 
       <section className="apply-form-shell">

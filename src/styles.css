@@ -809,9 +809,10 @@ input, textarea, select, button { font-family: inherit; }
 /* Creator recruitment form rebuild */
 .creator-apply-redesign{grid-template-columns:minmax(360px,.58fr) minmax(620px,1fr);background:#f8f8f4}
 .creator-apply-redesign .apply-story{background:linear-gradient(145deg,#20251f,#10130f 72%);border-right:1px solid #c9d1bf}
+.creator-apply-redesign .apply-story{justify-content:flex-start;gap:clamp(76px,18vh,170px)}
 .creator-apply-redesign .apply-story:after{right:-150px;bottom:-130px;border-color:rgba(178,205,120,.34);box-shadow:0 0 0 38px rgba(178,205,120,.05),0 0 0 78px rgba(178,205,120,.025)}
 .creator-apply-redesign .apply-story>div>span,.creator-apply-redesign .apply-story dt{color:#b8d36b}
-.creator-apply-redesign .apply-story h1{letter-spacing:0}
+.creator-apply-redesign .apply-story h1{color:#b8d36b;letter-spacing:0}
 .creator-apply-redesign .apply-story p{color:#d2d8c9}
 .creator-apply-redesign .apply-story dl div{border-top-color:rgba(210,216,201,.22)}
 .creator-apply-redesign .apply-form-shell{display:grid;align-content:start;min-height:100vh;padding:56px clamp(26px,5vw,76px) 80px}
