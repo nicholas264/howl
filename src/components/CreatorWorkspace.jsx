@@ -112,10 +112,11 @@ function socialProfileUrl(account) {
   const raw = String(account?.profile_url || '').trim();
   if (/^https?:\/\//i.test(raw)) return raw;
   const handle = String(account?.handle || '').trim().replace(/^@/, '');
+  const platform = String(account?.platform || '').toLowerCase();
   if (!handle) return null;
-  if (account.platform === 'instagram') return `https://www.instagram.com/${handle}/`;
-  if (account.platform === 'tiktok') return `https://www.tiktok.com/@${handle}`;
-  if (account.platform === 'youtube') return `https://www.youtube.com/@${handle}`;
+  if (platform === 'instagram') return `https://www.instagram.com/${handle}/`;
+  if (platform === 'tiktok') return `https://www.tiktok.com/@${handle}`;
+  if (platform === 'youtube') return `https://www.youtube.com/@${handle}`;
   return null;
 }
 
@@ -1136,6 +1137,17 @@ export default function CreatorWorkspace({
     }
   };
 
+  const editSocialAccount = account => {
+    setSocial({
+      platform: account.platform || 'instagram',
+      handle: account.handle || '',
+      profile_url: socialProfileUrl(account) || account.profile_url || '',
+      followers: account.followers ?? '',
+      avg_views: account.avg_views ?? '',
+      engagement_rate: account.engagement_rate ?? '',
+    });
+  };
+
   const syncSocial = async (account) => {
     setSyncingSocial(account.id);
     setError('');
@@ -1378,13 +1390,15 @@ export default function CreatorWorkspace({
 
             {detailTab === 'profile' && <>
             <section className="creator-detail-section profile-editor-panel">
-              <div className="detail-section-head"><span>Contact</span><small>Editable profile fields</small></div>
-              <form className="profile-edit-form profile-identity-form" onSubmit={saveCreatorIdentity}>
+              <div className="detail-section-head">
+                <span>Contact</span>
+                {canManageCreators && <button type="submit" form="creator-contact-form" disabled={saving}>{saving ? 'Saving...' : 'Save contact'}</button>}
+              </div>
+              <form id="creator-contact-form" className="profile-edit-form profile-identity-form" onSubmit={saveCreatorIdentity}>
                 <label>Name<input required disabled={!canManageCreators} value={creatorIdentity.name} onChange={event => setCreatorIdentity({ ...creatorIdentity, name: event.target.value })} /></label>
                 <label>Email<input type="email" disabled={!canManageCreators} value={creatorIdentity.email} onChange={event => setCreatorIdentity({ ...creatorIdentity, email: event.target.value })} /></label>
                 <label>Phone<input disabled={!canManageCreators} value={creatorIdentity.phone} onChange={event => setCreatorIdentity({ ...creatorIdentity, phone: event.target.value })} /></label>
                 <label>Location<input disabled={!canManageCreators} value={creatorIdentity.location} onChange={event => setCreatorIdentity({ ...creatorIdentity, location: event.target.value })} /></label>
-                {canManageCreators && <button disabled={saving}>{saving ? 'Saving...' : 'Save identity'}</button>}
               </form>
             </section>
 
@@ -1394,28 +1408,36 @@ export default function CreatorWorkspace({
                 <small>{selected.social_accounts?.length || 0} accounts</small>
               </div>
               <div className="social-account-grid">
-                {selected.social_accounts?.map(account => (
+                {selected.social_accounts?.map(account => {
+                  const accountUrl = socialProfileUrl(account);
+                  return (
                   <div key={account.id} className="social-account-wrap">
-                  <a href={account.profile_url || undefined} target="_blank" rel="noreferrer" className="social-account">
+                  <a href={accountUrl || undefined} target="_blank" rel="noreferrer" className={`social-account ${accountUrl ? '' : 'disabled'}`} aria-disabled={!accountUrl}>
                     <span>{account.platform}</span>
                     <strong>{account.handle || 'Profile'}</strong>
                     <div><b>{displayMetric(account.followers)}</b><small>followers</small></div>
                     <div><b>{displayMetric(account.avg_views)}</b><small>avg views</small></div>
                     <div><b>{account.engagement_rate == null ? '—' : `${account.engagement_rate}%`}</b><small>engagement</small></div>
                   </a>
-                  {canManageCreators && account.platform === 'instagram' && (
-                    <button className="social-sync" disabled={syncingSocial === account.id} onClick={() => syncSocial(account)}>
-                      {syncingSocial === account.id ? 'Syncing' : 'Refresh'}
-                    </button>
+                  {canManageCreators && (
+                    <div className="social-row-actions">
+                      <button type="button" onClick={() => editSocialAccount(account)}>Edit</button>
+                      {account.platform === 'instagram' && (
+                        <button type="button" disabled={syncingSocial === account.id} onClick={() => syncSocial(account)}>
+                          {syncingSocial === account.id ? 'Syncing' : 'Refresh'}
+                        </button>
+                      )}
+                    </div>
                   )}
                   {account.last_synced_at && <small className="social-synced">Synced {new Date(account.last_synced_at).toLocaleDateString()}</small>}
                   </div>
-                ))}
+                  );
+                })}
                 {!selected.social_accounts?.length && <div className="workflow-empty compact">No social profiles recorded yet.</div>}
               </div>
               {canManageCreators && (
-                <details className="inline-editor">
-                  <summary>Add or update account</summary>
+                <div className="inline-editor social-inline-editor">
+                  <div className="detail-section-head"><span>Add or edit social</span><small>{social.handle ? social.handle : 'Select Edit or enter a handle'}</small></div>
                   <form onSubmit={saveSocial}>
                     <select value={social.platform} onChange={event => setSocial({ ...social, platform: event.target.value })}>
                       <option value="instagram">Instagram</option>
@@ -1431,13 +1453,16 @@ export default function CreatorWorkspace({
                     <input type="number" step="0.01" placeholder="Engagement %" value={social.engagement_rate} onChange={event => setSocial({ ...social, engagement_rate: event.target.value })} />
                     <button disabled={saving}>Save account</button>
                   </form>
-                </details>
+                </div>
               )}
             </section>
 
             <section className="creator-detail-section profile-editor-panel">
-              <div className="detail-section-head"><span>Creator context</span><small>Fit, audience, shipping</small></div>
-              <form className="profile-edit-form profile-edit-form-wide" onSubmit={saveCreatorIntel}>
+              <div className="detail-section-head">
+                <span>Creator context</span>
+                {canManageCreators && <button type="submit" form="creator-context-form" disabled={saving}>{saving ? 'Saving...' : 'Save profile'}</button>}
+              </div>
+              <form id="creator-context-form" className="profile-edit-form profile-edit-form-wide" onSubmit={saveCreatorIntel}>
                 <label>Niche<input disabled={!canManageCreators} value={creatorIntel.niche} onChange={event => setCreatorIntel({ ...creatorIntel, niche: event.target.value })} /></label>
                 <label>Strengths<input disabled={!canManageCreators} value={creatorIntel.strengths} onChange={event => setCreatorIntel({ ...creatorIntel, strengths: event.target.value })} /></label>
                 <label className="wide">Audience<textarea disabled={!canManageCreators} rows="3" value={creatorIntel.audience_demographics} onChange={event => setCreatorIntel({ ...creatorIntel, audience_demographics: event.target.value })} /></label>
@@ -1452,7 +1477,6 @@ export default function CreatorWorkspace({
                 <label>State / region<input disabled={!canManageCreators} value={creatorIntel.shipping_region} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_region: event.target.value })} /></label>
                 <label>Postal code<input disabled={!canManageCreators} value={creatorIntel.shipping_postal_code} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_postal_code: event.target.value })} /></label>
                 <label>Country<input disabled={!canManageCreators} maxLength="2" value={creatorIntel.shipping_country_code} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_country_code: event.target.value.toUpperCase() })} /></label>
-                {canManageCreators && <button disabled={saving}>{saving ? 'Saving...' : 'Save creator profile'}</button>}
               </form>
               {selected.source_metadata?.clickup_status && <dl className="creator-facts source-facts"><div><dt>ClickUp status</dt><dd>{selected.source_metadata.clickup_status}</dd></div></dl>}
               {Object.keys(selected.source_metadata?.custom_fields || {}).length > 0 && (
