@@ -94,9 +94,10 @@ export default async function handler(req, res) {
 
     const socials = [
       social('instagram', req.body?.instagram || req.body?.ig_handle),
+      social('tiktok', req.body?.tiktok || req.body?.tiktok_handle),
       social('youtube', req.body?.youtube || req.body?.youtube_handle),
     ].filter(Boolean);
-    if (!socials.length) return res.status(400).json({ error: 'Add an Instagram or YouTube handle.' });
+    if (!socials.length) return res.status(400).json({ error: 'Add an Instagram, TikTok, or YouTube handle.' });
     const sampleUrls = urls(req.body?.sample_urls);
     if (!sampleUrls.length) {
       return res.status(400).json({ error: 'Add a valid HTTPS link to past creative work or UGC content.' });
