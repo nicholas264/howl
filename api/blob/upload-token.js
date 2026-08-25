@@ -8,7 +8,9 @@
 // `clientPayload`, and we verify it inside onBeforeGenerateToken.
 import { handleUpload } from '@vercel/blob/client';
 import { verifyToken } from '@clerk/backend';
+import { neon } from '@neondatabase/serverless';
 import { getAppAccess, hasPermission } from '../_lib/app-access.js';
+import { checkRateLimit, rateLimitKey, sendRateLimited } from '../_lib/rate-limit.js';
 
 export const config = {
   api: { bodyParser: true },
@@ -24,6 +26,15 @@ export default async function handler(req, res) {
   }
 
   try {
+    const sql = neon(process.env.DATABASE_URL);
+    const rate = await checkRateLimit(sql, {
+      route: 'blob-upload-token:post',
+      key: rateLimitKey(req),
+      limit: 60,
+      windowSeconds: 10 * 60,
+    });
+    if (!rate.allowed) return sendRateLimited(res, rate);
+
     const jsonResponse = await handleUpload({
       body: req.body,
       request: req,
@@ -39,7 +50,9 @@ export default async function handler(req, res) {
               userId: payload.sub,
               email: payload.email || null,
             });
-            if (!hasPermission(access, 'assets.write')) throw new Error('assets.write required');
+            if (!hasPermission(access, 'assets.write') && !hasPermission(access, 'creators.write')) {
+              throw new Error('assets.write or creators.write required');
+            }
           } catch (err) {
             throw new Error(`Unauthorized — ${err.message}`);
           }
@@ -55,6 +68,7 @@ export default async function handler(req, res) {
             'image/png',
             'image/webp',
             'audio/mpeg',
+            'application/pdf',
           ],
           maximumSizeInBytes: 10 * 1024 * 1024 * 1024, // 10 GB
           addRandomSuffix: true,

@@ -2,6 +2,7 @@ import { handleUpload } from '@vercel/blob/client';
 import { neon } from '@neondatabase/serverless';
 import { ensureCreatorOpsTables } from '../_lib/creator-ops.js';
 import { getActiveSubmission } from '../_lib/creator-submissions.js';
+import { checkRateLimit, rateLimitKey, sendRateLimited } from '../_lib/rate-limit.js';
 
 export const config = {
   api: { bodyParser: true },
@@ -15,6 +16,14 @@ export default async function handler(req, res) {
 
   try {
     const sql = neon(process.env.DATABASE_URL);
+    const rate = await checkRateLimit(sql, {
+      route: 'blob-creator-upload-token:post',
+      key: rateLimitKey(req),
+      limit: 30,
+      windowSeconds: 10 * 60,
+    });
+    if (!rate.allowed) return sendRateLimited(res, rate);
+
     await ensureCreatorOpsTables(sql);
     const jsonResponse = await handleUpload({
       body: req.body,

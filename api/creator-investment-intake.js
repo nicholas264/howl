@@ -1,5 +1,6 @@
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+import { discoverInstagramProfile } from './_lib/instagram-discovery.js';
 
 function text(value, max = 2000) {
   const result = (value ?? '').toString().trim();
@@ -45,6 +46,17 @@ function instagramUrl(value) {
   if (raw.startsWith('http')) return raw;
   const handle = normalizeHandle(raw);
   return handle ? `https://www.instagram.com/${handle}/` : null;
+}
+
+function safeUrl(value, max = 2000) {
+  const raw = text(value, max);
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    return ['http:', 'https:'].includes(url.protocol) ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function engagementType(value) {
@@ -215,18 +227,41 @@ export default async function handler(req, res) {
 
     const handle = normalizeHandle(body.instagram_handle || body.instagram_url);
     if (handle || body.instagram_url) {
+      let discovered = null;
+      try {
+        discovered = await discoverInstagramProfile(body.instagram_url || handle);
+      } catch (err) {
+        console.warn('creator investment instagram discovery skipped', err.message);
+      }
       await sql`
-        INSERT INTO creator_social_accounts (creator_id, platform, handle, profile_url, metrics, updated_at)
+        INSERT INTO creator_social_accounts (
+          creator_id, platform, handle, profile_url, followers, following,
+          engagement_rate, metrics, last_synced_at, updated_at
+        )
         VALUES (
-          ${updatedCreator.id}, 'instagram', ${handle}, ${instagramUrl(body.instagram_url || handle)},
-          ${JSON.stringify({ source: 'creator_investment_intake' })}::jsonb, now()
+          ${updatedCreator.id}, 'instagram', ${discovered?.handle || handle}, ${discovered?.profile_url || instagramUrl(body.instagram_url || handle)},
+          ${discovered?.followers ?? null}, ${discovered?.following ?? null}, ${discovered?.engagement_rate ?? null},
+          ${JSON.stringify({ source: 'creator_investment_intake', ...(discovered?.metrics || {}) })}::jsonb,
+          ${discovered ? new Date().toISOString() : null}, now()
         )
         ON CONFLICT (creator_id, platform) DO UPDATE SET
           handle = COALESCE(EXCLUDED.handle, creator_social_accounts.handle),
           profile_url = COALESCE(EXCLUDED.profile_url, creator_social_accounts.profile_url),
+          followers = COALESCE(EXCLUDED.followers, creator_social_accounts.followers),
+          following = COALESCE(EXCLUDED.following, creator_social_accounts.following),
+          engagement_rate = COALESCE(EXCLUDED.engagement_rate, creator_social_accounts.engagement_rate),
           metrics = creator_social_accounts.metrics || EXCLUDED.metrics,
+          last_synced_at = COALESCE(EXCLUDED.last_synced_at, creator_social_accounts.last_synced_at),
           updated_at = now()
       `;
+      if (discovered?.avatar_url) {
+        await sql`
+          UPDATE creators
+          SET avatar_url = COALESCE(avatar_url, ${discovered.avatar_url}), updated_at = now()
+          WHERE id = ${updatedCreator.id}
+        `;
+        updatedCreator.avatar_url = updatedCreator.avatar_url || discovered.avatar_url;
+      }
     }
 
     const type = engagementType(body.engagement_type);
@@ -325,6 +360,49 @@ export default async function handler(req, res) {
       `;
     }
 
+    const contractPdfUrl = safeUrl(body.contract_pdf_url);
+    let contractAgreement = null;
+    if (contractPdfUrl) {
+      const [versionRow] = await sql`
+        SELECT COALESCE(max(version), 0)::int + 1 AS version
+        FROM creator_agreements
+        WHERE creator_id = ${updatedCreator.id}
+      `;
+      const contractFileName = text(body.contract_file_name, 300) || 'Uploaded contract PDF';
+      const title = text(body.contract_title, 300) || `Uploaded contract - ${updatedCreator.name}`;
+      const contractBody = [
+        'Uploaded contract PDF recorded from creator investment intake.',
+        `File: ${contractFileName}`,
+        `URL: ${contractPdfUrl}`,
+      ].join('\n');
+      [contractAgreement] = await sql`
+        INSERT INTO creator_agreements (
+          creator_id, engagement_id, title, agreement_body, version, status,
+          source_type, source_pdf_url, source_file_name, source_metadata, sent_to, created_by
+        ) VALUES (
+          ${updatedCreator.id}, ${engagement?.id || null}, ${title}, ${contractBody},
+          ${versionRow.version}, 'uploaded', 'uploaded_pdf', ${contractPdfUrl}, ${contractFileName},
+          ${JSON.stringify({
+            source: 'creator_investment_intake',
+            content_type: text(body.contract_content_type, 120),
+            size: num(body.contract_size, null),
+            seeding_ids: seedingRows.map(row => row.id),
+            deliverable_id: deliverable?.id || null,
+          })}::jsonb,
+          ${updatedCreator.email || text(body.email, 320)}, ${userId}
+        )
+        RETURNING *
+      `;
+      await sql`
+        INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+        VALUES (
+          ${updatedCreator.id}, 'agreement_uploaded', ${`Contract PDF uploaded: ${contractFileName}`},
+          ${JSON.stringify({ agreement_id: Number(contractAgreement.id), source_pdf_url: contractPdfUrl })}::jsonb,
+          ${userId}
+        )
+      `;
+    }
+
     const investment = {
       product_cogs: seedingRows.reduce((sum, row) => sum + Number(row.unit_cogs || 0) * Number(row.quantity || 1), 0),
       shipping: shippingCost,
@@ -338,6 +416,7 @@ export default async function handler(req, res) {
       seeding,
       seedings: seedingRows,
       deliverable,
+      agreement: contractAgreement,
       investment,
     });
   } catch (err) {

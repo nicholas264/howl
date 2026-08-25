@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useAuth } from '@clerk/clerk-react';
+import { uploadPublicBlob } from '../utils/blobUpload';
 
 const STATUS_OPTIONS = [
   ['planned', 'Planned'],
@@ -43,6 +45,10 @@ const EMPTY_ADD = {
   whitelisting_monthly_rate: '',
   payment_terms: '',
   engagement_notes: '',
+  contract_pdf_url: '',
+  contract_file_name: '',
+  contract_content_type: '',
+  contract_size: '',
   notes: '',
 };
 
@@ -105,6 +111,22 @@ function IntakeField({ label, className = '', children }) {
   );
 }
 
+function IntakeInput({ label, className = '', ...props }) {
+  return (
+    <IntakeField label={label} className={className}>
+      <input {...props} />
+    </IntakeField>
+  );
+}
+
+function IntakeTextarea({ label, className = '', ...props }) {
+  return (
+    <IntakeField label={label} className={`intake-textarea-field ${className}`}>
+      <textarea {...props} />
+    </IntakeField>
+  );
+}
+
 function IntakeSelect({ label, className = '', children, ...props }) {
   return (
     <IntakeField label={label} className={`intake-select-field ${className}`}>
@@ -116,6 +138,7 @@ function IntakeSelect({ label, className = '', children, ...props }) {
 }
 
 export default function SeedingLedger({ canManage = false }) {
+  const { getToken } = useAuth();
   const [data, setData] = useState(null);
   const [creators, setCreators] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -127,6 +150,8 @@ export default function SeedingLedger({ canManage = false }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [contractFile, setContractFile] = useState(null);
+  const [contractUploadProgress, setContractUploadProgress] = useState(0);
   const [fees, setFees] = useState(null);
   const [feeBusy, setFeeBusy] = useState(null);
   const [filters, setFilters] = useState({ month: 'all', status: 'all', search: '' });
@@ -341,6 +366,36 @@ export default function SeedingLedger({ canManage = false }) {
     });
   }
 
+  function safeFileName(name) {
+    return String(name || 'contract.pdf')
+      .trim()
+      .replace(/[^a-z0-9._-]+/gi, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 140) || 'contract.pdf';
+  }
+
+  async function uploadContractPdf() {
+    if (!contractFile) return {};
+    if (contractFile.type && contractFile.type !== 'application/pdf') {
+      throw new Error('Contract upload must be a PDF.');
+    }
+    const token = await getToken?.();
+    const pathname = `creator-contracts/${Date.now()}-${safeFileName(contractFile.name)}`;
+    setContractUploadProgress(0.01);
+    const blob = await uploadPublicBlob(pathname, contractFile, {
+      contentType: contractFile.type || 'application/pdf',
+      clientPayload: token,
+      onUploadProgress: progress => setContractUploadProgress(progress.percentage || 0),
+    });
+    setContractUploadProgress(1);
+    return {
+      contract_pdf_url: blob.url,
+      contract_file_name: contractFile.name,
+      contract_content_type: contractFile.type || 'application/pdf',
+      contract_size: contractFile.size,
+    };
+  }
+
   async function addRow(e) {
     e.preventDefault();
     if (!form.creator_id && !form.creator_name.trim()) {
@@ -349,8 +404,10 @@ export default function SeedingLedger({ canManage = false }) {
     }
     setBusy(true);
     try {
+      const contractPayload = await uploadContractPdf();
       const payload = {
         ...form,
+        ...contractPayload,
         seed_items: form.seed_items
           .map(item => {
             const option = productOptionByKey[item.product_key];
@@ -371,6 +428,8 @@ export default function SeedingLedger({ canManage = false }) {
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Could not save intake');
       setForm(emptyAdd());
+      setContractFile(null);
+      setContractUploadProgress(0);
       setAdding(false);
       await Promise.all([load(), loadFees()]);
     } catch (err) {
@@ -478,10 +537,10 @@ export default function SeedingLedger({ canManage = false }) {
               <option value="">Create new creator</option>
               {creators.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </IntakeSelect>
-            <input placeholder="Creator name" value={form.creator_name} onChange={e => setForm({ ...form, creator_name: e.target.value })} />
-            <input placeholder="IG handle or profile URL" value={form.instagram_handle} onChange={e => setForm({ ...form, instagram_handle: e.target.value })} />
-            <input placeholder="Email or DM contact" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
-            <input placeholder="Location" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} />
+            <IntakeInput label="Creator name" placeholder="Taylor James" value={form.creator_name} onChange={e => setForm({ ...form, creator_name: e.target.value })} />
+            <IntakeInput label="Instagram" placeholder="@handle or profile URL" value={form.instagram_handle} onChange={e => setForm({ ...form, instagram_handle: e.target.value })} />
+            <IntakeInput label="Contact" placeholder="Email or DM contact" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+            <IntakeInput label="Location" placeholder="City, state" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} />
             <div className="niche-tag-select span-2">
               <IntakeSelect label="Creator tags" value="" onChange={e => addNicheTag(e.target.value)}>
                 <option value="">Add category</option>
@@ -499,8 +558,8 @@ export default function SeedingLedger({ canManage = false }) {
 
           <section className="seed-products-section">
             <h3>Product seeded</h3>
-            <input type="date" value={form.seeded_on} onChange={e => setForm({ ...form, seeded_on: e.target.value })} />
-            <input type="number" step="0.01" placeholder="Shipping" value={form.shipping_cost} onChange={e => setForm({ ...form, shipping_cost: e.target.value })} />
+            <IntakeInput label="Seeded on" type="date" value={form.seeded_on} onChange={e => setForm({ ...form, seeded_on: e.target.value })} />
+            <IntakeInput label="Shipping" type="number" step="0.01" placeholder="0.00" value={form.shipping_cost} onChange={e => setForm({ ...form, shipping_cost: e.target.value })} />
             <IntakeSelect label="Seed status" value={form.seeding_status} onChange={e => setForm({ ...form, seeding_status: e.target.value })}>
               {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </IntakeSelect>
@@ -519,8 +578,8 @@ export default function SeedingLedger({ canManage = false }) {
                       </option>
                     ))}
                   </IntakeSelect>
-                  <input type="number" min="1" placeholder="Qty" value={item.quantity} onChange={e => updateSeedItem(index, { quantity: e.target.value })} />
-                  <input type="number" step="0.01" placeholder="Unit COGS" value={item.unit_cogs} onChange={e => updateSeedItem(index, { unit_cogs: e.target.value })} />
+                  <IntakeInput label="Qty" type="number" min="1" placeholder="1" value={item.quantity} onChange={e => updateSeedItem(index, { quantity: e.target.value })} />
+                  <IntakeInput label="Unit COGS" type="number" step="0.01" placeholder="0.00" value={item.unit_cogs} onChange={e => updateSeedItem(index, { unit_cogs: e.target.value })} />
                   <button type="button" className="seed-item-remove" onClick={() => removeSeedItem(index)}>{form.seed_items.length > 1 ? 'Remove' : 'Clear'}</button>
                 </div>
               ))}
@@ -533,15 +592,37 @@ export default function SeedingLedger({ canManage = false }) {
               <option value="one_off">One-off paid</option>
               <option value="retainer">Retainer</option>
             </IntakeSelect>
-            <input type="number" step="0.01" placeholder="Creator fee" value={form.creator_fee} onChange={e => setForm({ ...form, creator_fee: e.target.value })} />
-            <input type="number" min="1" placeholder="Number of ads/assets" value={form.asset_commitment} onChange={e => setForm({ ...form, asset_commitment: e.target.value })} />
-            <input type="date" value={form.deliverable_due} onChange={e => setForm({ ...form, deliverable_due: e.target.value })} />
-            <input className="span-2" placeholder="Deliverable title" value={form.deliverable_title} onChange={e => setForm({ ...form, deliverable_title: e.target.value })} />
-            <input placeholder="Usage term months" value={form.usage_term_months} onChange={e => setForm({ ...form, usage_term_months: e.target.value })} />
-            <input type="number" step="0.01" placeholder="Whitelisting /mo" value={form.whitelisting_monthly_rate} onChange={e => setForm({ ...form, whitelisting_monthly_rate: e.target.value })} />
-            <input className="span-2" placeholder="Usage rights" value={form.usage_rights} onChange={e => setForm({ ...form, usage_rights: e.target.value })} />
-            <input className="span-2" placeholder="Payment terms" value={form.payment_terms} onChange={e => setForm({ ...form, payment_terms: e.target.value })} />
-            <input className="span-2" placeholder="Internal notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+            <IntakeInput label="Creator fee" type="number" step="0.01" placeholder="0.00" value={form.creator_fee} onChange={e => setForm({ ...form, creator_fee: e.target.value })} />
+            <IntakeInput label="Assets owed" type="number" min="1" placeholder="1" value={form.asset_commitment} onChange={e => setForm({ ...form, asset_commitment: e.target.value })} />
+            <IntakeInput label="Due date" type="date" value={form.deliverable_due} onChange={e => setForm({ ...form, deliverable_due: e.target.value })} />
+            <IntakeInput label="Deliverable title" className="span-2" placeholder="R4 portable fire pit UGC batch" value={form.deliverable_title} onChange={e => setForm({ ...form, deliverable_title: e.target.value })} />
+            <IntakeInput label="Usage months" placeholder="12" value={form.usage_term_months} onChange={e => setForm({ ...form, usage_term_months: e.target.value })} />
+            <IntakeInput label="Whitelisting / mo" type="number" step="0.01" placeholder="0.00" value={form.whitelisting_monthly_rate} onChange={e => setForm({ ...form, whitelisting_monthly_rate: e.target.value })} />
+            <IntakeTextarea label="Usage rights" className="span-2" rows="3" placeholder="Paid social, organic, editing rights, term, territory..." value={form.usage_rights} onChange={e => setForm({ ...form, usage_rights: e.target.value })} />
+            <IntakeInput label="Payment terms" className="span-2" placeholder="Net 30 after usable assets received" value={form.payment_terms} onChange={e => setForm({ ...form, payment_terms: e.target.value })} />
+            <IntakeTextarea label="Internal notes" className="span-2" rows="3" placeholder="Negotiation notes, source context, reminders..." value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+          </section>
+
+          <section className="seed-contract-section">
+            <h3>Contract proof</h3>
+            <label className={`contract-drop ${contractFile ? 'has-file' : ''}`}>
+              <input
+                type="file"
+                accept="application/pdf,.pdf"
+                onChange={event => {
+                  const file = event.target.files?.[0] || null;
+                  setContractFile(file);
+                  setContractUploadProgress(0);
+                }}
+              />
+              <strong>{contractFile ? contractFile.name : 'Add signed contract PDF'}</strong>
+              <span>
+                {contractFile
+                  ? `${(contractFile.size / 1024 / 1024).toFixed(2)} MB${contractUploadProgress ? ` · ${Math.round(contractUploadProgress * 100)}% uploaded` : ''}`
+                  : 'PDF is stored as an uploaded agreement and linked to this creator engagement.'}
+              </span>
+            </label>
+            {contractFile && <button type="button" className="contract-clear" onClick={() => { setContractFile(null); setContractUploadProgress(0); }}>Remove PDF</button>}
           </section>
 
           <div className="seed-intake-path">
@@ -549,6 +630,7 @@ export default function SeedingLedger({ canManage = false }) {
             <span>adds IG profile</span>
             <span>logs seeding cost</span>
             <span>creates engagement</span>
+            <span>stores contract PDF</span>
             <span>schedules deliverable</span>
           </div>
         </form>

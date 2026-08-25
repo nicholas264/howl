@@ -1,6 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import { agreementTokenHash, getAgreementByToken } from './_lib/creator-agreements.js';
+import { checkRateLimit, rateLimitKey, sendRateLimited } from './_lib/rate-limit.js';
 
 function publicAgreement(agreement) {
   const expired = agreement.expires_at && new Date(agreement.expires_at).getTime() <= Date.now();
@@ -40,6 +41,14 @@ export default async function handler(req, res) {
   const sql = neon(process.env.DATABASE_URL);
 
   try {
+    const rate = await checkRateLimit(sql, {
+      route: `creator-agreement:${req.method.toLowerCase()}`,
+      key: rateLimitKey(req),
+      limit: req.method === 'GET' ? 80 : 12,
+      windowSeconds: 10 * 60,
+    });
+    if (!rate.allowed) return sendRateLimited(res, rate);
+
     await ensureCreatorOpsTables(sql);
     const agreement = await getAgreementByToken(sql, token);
     if (!agreement) return res.status(404).json({ error: 'Agreement link not found' });

@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { neon } from '@neondatabase/serverless';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+import { checkRateLimit, rateLimitKey, sendRateLimited } from './_lib/rate-limit.js';
 
 function text(value, max = 5000) {
   const result = (value ?? '').toString().trim();
@@ -58,6 +59,14 @@ export default async function handler(req, res) {
   const sql = neon(process.env.DATABASE_URL);
 
   try {
+    const rate = await checkRateLimit(sql, {
+      route: 'creator-application:post',
+      key: rateLimitKey(req),
+      limit: 30,
+      windowSeconds: 10 * 60,
+    });
+    if (!rate.allowed) return sendRateLimited(res, rate);
+
     await ensureCreatorOpsTables(sql);
     const [usage] = await sql`
       SELECT count(*)::int AS submissions

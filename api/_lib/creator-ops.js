@@ -275,6 +275,10 @@ async function createCreatorOpsTables(sql) {
       template_version      INTEGER,
       title                 TEXT NOT NULL,
       agreement_body        TEXT NOT NULL,
+      source_type           TEXT NOT NULL DEFAULT 'generated',
+      source_pdf_url        TEXT,
+      source_file_name      TEXT,
+      source_metadata       JSONB NOT NULL DEFAULT '{}'::jsonb,
       version               INTEGER NOT NULL DEFAULT 1,
       status                TEXT NOT NULL DEFAULT 'draft',
       token_hash            TEXT UNIQUE,
@@ -297,6 +301,10 @@ async function createCreatorOpsTables(sql) {
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_agreements_status ON creator_agreements(status, expires_at)`;
   await sql`ALTER TABLE creator_agreements ADD COLUMN IF NOT EXISTS template_id BIGINT REFERENCES creator_agreement_templates(id) ON DELETE SET NULL`;
   await sql`ALTER TABLE creator_agreements ADD COLUMN IF NOT EXISTS template_version INTEGER`;
+  await sql`ALTER TABLE creator_agreements ADD COLUMN IF NOT EXISTS source_type TEXT NOT NULL DEFAULT 'generated'`;
+  await sql`ALTER TABLE creator_agreements ADD COLUMN IF NOT EXISTS source_pdf_url TEXT`;
+  await sql`ALTER TABLE creator_agreements ADD COLUMN IF NOT EXISTS source_file_name TEXT`;
+  await sql`ALTER TABLE creator_agreements ADD COLUMN IF NOT EXISTS source_metadata JSONB NOT NULL DEFAULT '{}'::jsonb`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS creator_briefs (

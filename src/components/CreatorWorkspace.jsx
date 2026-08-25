@@ -171,6 +171,7 @@ export default function CreatorWorkspace({
   const [submissionLink, setSubmissionLink] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [syncingSocial, setSyncingSocial] = useState(null);
+  const [batchSyncingSocial, setBatchSyncingSocial] = useState(false);
   const [agreementTemplates, setAgreementTemplates] = useState([]);
   const [shopifyProducts, setShopifyProducts] = useState([]);
   const [shopifyConnected, setShopifyConnected] = useState(false);
@@ -1134,6 +1135,45 @@ export default function CreatorWorkspace({
     }
   };
 
+  const syncMissingInstagramAvatars = async () => {
+    setBatchSyncingSocial(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch('/api/creator-social-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'batch_missing_avatars', limit: 25 }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not refresh Instagram photos');
+      setNotice(`Instagram photos refreshed for ${data.synced || 0} creator${Number(data.synced || 0) === 1 ? '' : 's'}. ${data.skipped || 0} skipped.`);
+      await loadCreators();
+      if (selected?.id) await openCreator(selected);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBatchSyncingSocial(false);
+    }
+  };
+
+  const openContractPdf = async agreementItem => {
+    setError('');
+    try {
+      const response = await fetch(`/api/creator-contract?id=${agreementItem.id}`);
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Could not open contract PDF');
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   return (
     <div className="creator-workspace creator-motion-workspace">
       <header className="creator-head">
@@ -1142,7 +1182,15 @@ export default function CreatorWorkspace({
           <h1>Creators</h1>
           <p>Source, qualify, brief, produce, and measure creator relationships in one record.</p>
         </div>
-        {workspaceView === 'database' && canManageCreators && <div className="creator-head-actions"><button type="button" onClick={() => setShowImport(true)}>Import</button><button type="button" className="primary-action" onClick={() => setShowCreate(true)}>Add creator</button></div>}
+        {workspaceView === 'database' && canManageCreators && (
+          <div className="creator-head-actions">
+            <button type="button" disabled={batchSyncingSocial} onClick={syncMissingInstagramAvatars}>
+              {batchSyncingSocial ? 'Refreshing photos...' : 'Refresh IG photos'}
+            </button>
+            <button type="button" onClick={() => setShowImport(true)}>Import</button>
+            <button type="button" className="primary-action" onClick={() => setShowCreate(true)}>Add creator</button>
+          </div>
+        )}
       </header>
 
       <div className="creator-view-tabs">
@@ -1657,11 +1705,16 @@ export default function CreatorWorkspace({
                       <header>
                         <span>
                           <strong>{item.title}</strong>
-                          <small>Version {item.version}{item.sent_at ? ` · Sent ${new Date(item.sent_at).toLocaleDateString()}` : ''}</small>
+                          <small>
+                            {item.source_type === 'uploaded_pdf' ? 'Uploaded PDF' : `Version ${item.version}`}
+                            {item.sent_at ? ` · Sent ${new Date(item.sent_at).toLocaleDateString()}` : ''}
+                            {item.source_file_name ? ` · ${item.source_file_name}` : ''}
+                          </small>
                         </span>
                         <i>{item.status}</i>
                       </header>
                       <div className="agreement-card-meta">
+                        {item.source_pdf_url && <button type="button" onClick={() => openContractPdf(item)}>Open contract PDF</button>}
                         {item.viewed_at && <span>Viewed {new Date(item.viewed_at).toLocaleString()}</span>}
                         {item.accepted_at && <span>Accepted by {item.accepted_name} on {new Date(item.accepted_at).toLocaleString()}</span>}
                         {canManageCreators && ['draft', 'sent'].includes(item.status) && <button onClick={() => revokeAgreement(item.id)}>Revoke</button>}

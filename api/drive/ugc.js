@@ -126,7 +126,7 @@ async function collectInboxFiles(token, inboxId, hiddenIds = new Set()) {
   };
 }
 
-function buildLauncherItems(enriched, folderNames, folderParents, inboxId) {
+export function buildLauncherItems(enriched, folderNames, folderParents, inboxId) {
   // Group same-creative aspect variants under a shared parent. Feed assets
   // include 1:1, 4:5, and landscape; story assets are the taller 9:16 family.
   const dimsFor = (f) => {
@@ -138,10 +138,10 @@ function buildLauncherItems(enriched, folderNames, folderParents, inboxId) {
 
   const aspectLabelFor = (f) => {
     const n = (f.name || '').toLowerCase();
-    if (/(9\s*[x:]\s*16|916|story|stories|reel|vertical)/.test(n)) return '9:16';
-    if (/(4\s*[x:]\s*5|45|portrait|feed)/.test(n)) return '4:5';
-    if (/(1\s*[x:]\s*1|11|square)/.test(n)) return '1:1';
-    if (/(16\s*[x:]\s*9|169|landscape)/.test(n)) return '16:9';
+    if (/(9\s*[-_:x]\s*16|916|story|stories|reel|vertical)/.test(n)) return '9:16';
+    if (/(4\s*[-_:x]\s*5|45|portrait|feed)/.test(n)) return '4:5';
+    if (/(1\s*[-_:x]\s*1|11|square)/.test(n)) return '1:1';
+    if (/(16\s*[-_:x]\s*9|169|landscape)/.test(n)) return '16:9';
 
     const { width, height } = dimsFor(f);
     if (!(width > 0 && height > 0)) return null;
@@ -159,9 +159,14 @@ function buildLauncherItems(enriched, folderNames, folderParents, inboxId) {
   };
   const aspectFolderFor = (folderName = '') => {
     const n = String(folderName || '').toLowerCase();
-    if (/(^|[^a-z0-9])(9\s*[x:]\s*16|916|story|stories|reels?|vertical)([^a-z0-9]|$)/.test(n)) return 'story';
-    if (/(^|[^a-z0-9])(4\s*[x:]\s*5|1\s*[x:]\s*1|16\s*[x:]\s*9|45|11|169|feed|square|portrait|landscape)([^a-z0-9]|$)/.test(n)) return 'feed';
+    if (/(^|[^a-z0-9])(9\s*[-_:x]\s*16|916|story|stories|reels?|vertical)([^a-z0-9]|$)/.test(n)) return 'story';
+    if (/(^|[^a-z0-9])(4\s*[-_:x]\s*5|1\s*[-_:x]\s*1|16\s*[-_:x]\s*9|45|11|169|feed|square|portrait|landscape)([^a-z0-9]|$)/.test(n)) return 'feed';
     return null;
+  };
+  const aspectParentFolderFor = (f) => {
+    const parent = f.parents?.[0] || inboxId;
+    if (parent === inboxId) return null;
+    return aspectFolderFor(folderNames[parent] || '') ? parent : null;
   };
   const groupingParentFor = (f) => {
     const parent = f.parents?.[0] || inboxId;
@@ -178,7 +183,7 @@ function buildLauncherItems(enriched, folderNames, folderParents, inboxId) {
     const stem = (f.name || '')
       .toLowerCase()
       .replace(/\.[^.]+$/, '')
-      .replace(/\b(9\s*[x:]\s*16|4\s*[x:]\s*5|1\s*[x:]\s*1|16\s*[x:]\s*9|916|45|11|169)\b/g, ' ')
+      .replace(/\b(9\s*[-_:x]\s*16|4\s*[-_:x]\s*5|1\s*[-_:x]\s*1|16\s*[-_:x]\s*9|916|45|11|169)\b/g, ' ')
       .replace(/\b(story|stories|reels?|vertical|portrait|feed|square|landscape)\b/g, ' ')
       .replace(/\b(copy|final|export|asset|creative|video|image)\b/g, ' ')
       .replace(/[_\-.()[\]]+/g, ' ')
@@ -197,6 +202,13 @@ function buildLauncherItems(enriched, folderNames, folderParents, inboxId) {
   const pairedFileIds = new Set();
   const pairItems = [];
   const byCreated = (a, b) => (a.createdTime || '').localeCompare(b.createdTime || '');
+  const byFolderThenName = (a, b) => {
+    const fa = folderNames[aspectParentFolderFor(a)] || a.folderPath || '';
+    const fb = folderNames[aspectParentFolderFor(b)] || b.folderPath || '';
+    return fa.localeCompare(fb)
+      || (a.name || '').localeCompare(b.name || '')
+      || byCreated(a, b);
+  };
   const feedScore = (f) => {
     const label = aspectLabelFor(f);
     if (label === '4:5') return 0;
@@ -276,6 +288,19 @@ function buildLauncherItems(enriched, folderNames, folderParents, inboxId) {
             feeds.splice(feeds.findIndex(f => f.id === groupFeeds[i].id), 1);
             stories.splice(stories.findIndex(f => f.id === groupStories[i].id), 1);
           }
+        }
+        const aspectFolderOrganized = [...feeds, ...stories].every(f => aspectParentFolderFor(f));
+        if (aspectFolderOrganized && feeds.length && stories.length) {
+          feeds.sort((a, b) => feedScore(a) - feedScore(b) || byFolderThenName(a, b));
+          stories.sort((a, b) => storyScore(a) - storyScore(b) || byFolderThenName(a, b));
+          const pairCount = Math.min(feeds.length, stories.length);
+          for (let i = 0; i < pairCount; i++) {
+            if (pairedFileIds.has(feeds[i].id) || pairedFileIds.has(stories[i].id)) continue;
+            makePair(parentId, feeds[i], stories[i]);
+            groupedPairCount += 1;
+          }
+          feeds.splice(0, pairCount);
+          stories.splice(0, pairCount);
         }
       }
       if (sameTypeList.length > 2 && unknown.length) {

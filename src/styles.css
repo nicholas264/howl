@@ -535,9 +535,11 @@ input, textarea, select, button { font-family: inherit; }
 .seed-intake-head small{color:#c6beb3;font-size:9px}
 .seed-intake section{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding:13px;background:#fff;border:1px solid var(--border);border-radius:9px}
 .seed-intake h3{grid-column:1/-1;margin:0 0 3px;color:var(--flame);font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase}
-.seed-intake input{min-width:0;width:100%;height:42px;padding:0 11px;background:#fbfaf7;border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:11px}
-.seed-intake input:focus{outline:0;border-color:var(--flame);box-shadow:0 0 0 2px rgba(216,74,23,.08)}
+.seed-intake input,.seed-intake textarea{min-width:0;width:100%;height:42px;padding:16px 11px 5px;background:#fbfaf7;border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:11px;box-sizing:border-box}
+.seed-intake textarea{height:auto;min-height:74px;line-height:1.45;resize:vertical}
+.seed-intake input:focus,.seed-intake textarea:focus{outline:0;border-color:var(--flame);box-shadow:0 0 0 2px rgba(216,74,23,.08)}
 .intake-field{position:relative;display:block;min-width:0;height:42px}
+.intake-textarea-field{height:auto;min-height:74px}
 .intake-field>span:first-child{position:absolute;z-index:2;top:6px;left:11px;color:#8b8881;font-family:'JetBrains Mono',monospace;font-size:6px;font-weight:800;letter-spacing:.9px;line-height:1;text-transform:uppercase;pointer-events:none}
 .intake-select{position:relative;display:block;height:42px}
 .intake-select:after{content:"";position:absolute;right:12px;top:16px;width:7px;height:7px;border-right:1.5px solid #5d5a54;border-bottom:1.5px solid #5d5a54;transform:rotate(45deg);pointer-events:none}
@@ -545,6 +547,14 @@ input, textarea, select, button { font-family: inherit; }
 .intake-select select:focus{outline:0;border-color:var(--flame);box-shadow:0 0 0 2px rgba(216,74,23,.08),inset 0 -1px 0 rgba(23,23,23,.03)}
 .intake-select select:hover{border-color:#cfc9bd;background:#fff}
 .seed-intake .span-2{grid-column:span 2}
+.seed-contract-section{align-items:start}
+.contract-drop{grid-column:span 4;display:grid;gap:6px;min-height:78px;padding:14px 16px;background:#fbfaf7;border:1px dashed #cfc8bb;border-radius:10px;cursor:pointer;transition:border-color .15s,background .15s}
+.contract-drop:hover,.contract-drop.has-file{background:#fff7f2;border-color:var(--flame)}
+.contract-drop input{display:none}
+.contract-drop strong{color:#171717;font-size:13px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.contract-drop span{color:var(--muted);font-size:10px;line-height:1.45}
+.contract-clear{align-self:stretch;min-height:78px;padding:0 12px;background:#fff;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+.contract-clear:hover{border-color:var(--flame);color:var(--flame)}
 .niche-tag-select{min-width:0;display:grid;gap:6px}
 .niche-tag-select .intake-field{height:42px}
 .niche-selected-tags{min-height:31px;display:flex;align-items:center;flex-wrap:wrap;gap:5px;padding:5px 6px;background:#fbfaf7;border:1px solid var(--border);border-radius:7px}
@@ -569,7 +579,7 @@ input, textarea, select, button { font-family: inherit; }
 .seed-flag b{font-family:'Instrument Serif',Georgia,serif;font-size:17px;font-weight:400}
 .seed-flag ul{margin:8px 0 0;padding-left:18px;columns:2;font-size:11px;color:var(--muted);line-height:1.7}
 @media(max-width:1100px){.seed-scoreboard{grid-template-columns:repeat(2,minmax(0,1fr))}.seed-grid{grid-template-columns:1fr}.seed-toolbar{grid-template-columns:1fr 1fr}.seed-toolbar input{grid-column:1/-1}}
-@media(max-width:760px){.seed-page{padding:28px 16px 56px}.seed-scoreboard{grid-template-columns:1fr}.seed-toolbar{grid-template-columns:1fr}.seed-add,.seed-intake section{grid-template-columns:1fr}.seed-add .wide,.seed-intake .span-2{grid-column:auto}.seed-intake-head{align-items:flex-start;flex-direction:column}.seed-item-row{grid-template-columns:1fr}.seed-fee{align-items:flex-start;flex-direction:column}.seed-fee-actions{width:100%;justify-content:space-between;flex-wrap:wrap}}
+@media(max-width:760px){.seed-page{padding:28px 16px 56px}.seed-scoreboard{grid-template-columns:1fr}.seed-toolbar{grid-template-columns:1fr}.seed-add,.seed-intake section{grid-template-columns:1fr}.seed-add .wide,.seed-intake .span-2,.contract-drop{grid-column:auto}.seed-intake-head{align-items:flex-start;flex-direction:column}.seed-item-row{grid-template-columns:1fr}.seed-fee{align-items:flex-start;flex-direction:column}.seed-fee-actions{width:100%;justify-content:space-between;flex-wrap:wrap}}
 
 /* ── Creative Flow Board ─────────────────────────────────────────────────── */
 .flow-page{width:100%;max-width:none;margin:0 auto;padding:40px 42px 72px}

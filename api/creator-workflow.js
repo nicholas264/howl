@@ -172,7 +172,7 @@ function buildWorkflowGuidance({
   const followUpDue = openFollowUp && new Date(openFollowUp.next_follow_up_at).getTime() <= Date.now();
   const liveEngagement = engagements.find(item => ['approved', 'active'].includes(item.status));
   const anyEngagement = liveEngagement || engagements.find(item => item.status === 'draft');
-  const acceptedAgreement = agreements.find(item => item.status === 'accepted');
+  const acceptedAgreement = agreements.find(item => item.status === 'accepted' || item.source_type === 'uploaded_pdf');
   const openAgreement = agreements.find(item => ['draft', 'sent'].includes(item.status));
   const activeSubmission = submissionLinks.find(item => item.status === 'active');
   const productSeeded = creator.product_seeding_required === false
@@ -359,7 +359,7 @@ async function getWorkflow(sql, creatorId) {
     sql`
       SELECT id, creator_id, engagement_id, template_id, template_version, title, version, status, expires_at,
         sent_to, sent_at, viewed_at, accepted_name, accepted_email, accepted_at,
-        revoked_at, created_at, updated_at
+        revoked_at, source_type, source_pdf_url, source_file_name, source_metadata, created_at, updated_at
       FROM creator_agreements
       WHERE creator_id = ${creatorId}
       ORDER BY created_at DESC

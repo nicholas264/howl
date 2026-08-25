@@ -1,8 +1,41 @@
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+import { discoverInstagramProfile } from './_lib/instagram-discovery.js';
 
 function normalizeHandle(value) {
   return (value || '').toString().trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').split(/[/?#]/)[0];
+}
+
+async function syncInstagramAccount({ sql, creatorId, account, userId }) {
+  const handle = normalizeHandle(account.handle || account.profile_url);
+  if (!handle) throw new Error('Add an Instagram handle first');
+  const profile = await discoverInstagramProfile(handle);
+  await sql`
+    UPDATE creator_social_accounts SET
+      handle = ${profile.handle || handle},
+      profile_url = ${profile.profile_url},
+      followers = ${profile.followers ?? null},
+      following = ${profile.following ?? null},
+      engagement_rate = ${profile.engagement_rate},
+      metrics = ${JSON.stringify(profile.metrics || {})}::jsonb,
+      last_synced_at = now(),
+      updated_at = now()
+    WHERE id = ${account.id}
+  `;
+  await sql`
+    UPDATE creators
+    SET avatar_url = COALESCE(${profile.avatar_url || null}, avatar_url), updated_at = now()
+    WHERE id = ${creatorId}
+  `;
+  await sql`
+    INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+    VALUES (
+      ${creatorId}, 'social_sync', 'Instagram metrics refreshed',
+      ${JSON.stringify({ platform: 'instagram', followers: profile.followers, engagement_rate: profile.engagement_rate })}::jsonb,
+      ${userId}
+    )
+  `;
+  return profile;
 }
 
 export default async function handler(req, res) {
@@ -13,6 +46,36 @@ export default async function handler(req, res) {
 
   try {
     await ensureCreatorOpsTables(sql);
+    if (req.body?.action === 'batch_missing_avatars') {
+      const limit = Math.min(Math.max(Number(req.body.limit) || 25, 1), 50);
+      const rows = await sql`
+        SELECT c.id AS creator_id, c.name, s.*
+        FROM creators c
+        JOIN creator_social_accounts s ON s.creator_id = c.id AND s.platform = 'instagram'
+        WHERE c.archived_at IS NULL
+          AND (c.avatar_url IS NULL OR c.avatar_url = '')
+          AND (s.handle IS NOT NULL OR s.profile_url IS NOT NULL)
+        ORDER BY s.last_synced_at ASC NULLS FIRST, c.updated_at DESC
+        LIMIT ${limit}
+      `;
+      const results = [];
+      for (const row of rows) {
+        try {
+          const profile = await syncInstagramAccount({
+            sql,
+            creatorId: row.creator_id,
+            account: row,
+            userId: access.userId,
+          });
+          results.push({ creator_id: row.creator_id, name: row.name, status: 'synced', avatar_url: profile.avatar_url || null });
+        } catch (err) {
+          results.push({ creator_id: row.creator_id, name: row.name, status: 'skipped', error: err.message });
+        }
+      }
+      const synced = results.filter(item => item.status === 'synced').length;
+      return res.json({ ok: true, attempted: rows.length, synced, skipped: results.length - synced, results });
+    }
+
     const creatorId = Number(req.body?.creator_id);
     const platform = (req.body?.platform || '').toString().toLowerCase();
     if (!creatorId || platform !== 'instagram') {
@@ -26,88 +89,12 @@ export default async function handler(req, res) {
     const handle = normalizeHandle(account.handle || account.profile_url);
     if (!handle) return res.status(400).json({ error: 'Add an Instagram handle first' });
 
-    const token = process.env.META_ACCESS_TOKEN;
-    let instagramUserId = process.env.META_INSTAGRAM_USER_ID;
-    if (!token) {
-      return res.status(409).json({ error: 'Meta connection is not configured' });
-    }
-    const version = process.env.META_GRAPH_VERSION || 'v21.0';
-    if (!instagramUserId && process.env.META_PAGE_ID) {
-      const pageUrl = new URL(`https://graph.facebook.com/${version}/${process.env.META_PAGE_ID}`);
-      pageUrl.searchParams.set('fields', 'instagram_business_account');
-      pageUrl.searchParams.set('access_token', token);
-      const pageResponse = await fetch(pageUrl);
-      const pageData = await pageResponse.json();
-      instagramUserId = pageData.instagram_business_account?.id || null;
-    }
-    if (!instagramUserId) {
-      return res.status(409).json({ error: 'The configured Facebook Page does not expose a connected Instagram professional account' });
-    }
-    const discoveryFields = [
-      'username', 'name', 'biography', 'website', 'followers_count',
-      'follows_count', 'media_count', 'profile_picture_url',
-      'media.limit(25){id,like_count,comments_count,timestamp,media_type,permalink}',
-    ].join(',');
-    const fields = `business_discovery.username(${handle}){${discoveryFields}}`;
-    const url = new URL(`https://graph.facebook.com/${version}/${instagramUserId}`);
-    url.searchParams.set('fields', fields);
-    url.searchParams.set('access_token', token);
-    const response = await fetch(url);
-    const data = await response.json();
-    if (!response.ok || data.error) {
-      const message = data.error?.message || `Meta request failed (${response.status})`;
-      return res.status(422).json({
-        error: `${message}. Instagram Business Discovery only supports eligible professional accounts.`,
-      });
-    }
-    const profile = data.business_discovery;
-    if (!profile) return res.status(404).json({ error: 'Instagram profile was not discoverable' });
-    const media = profile.media?.data || [];
-    const interactions = media.reduce((sum, item) => sum + Number(item.like_count || 0) + Number(item.comments_count || 0), 0);
-    const avgInteractions = media.length ? interactions / media.length : 0;
-    const engagementRate = profile.followers_count
-      ? Number(((avgInteractions / profile.followers_count) * 100).toFixed(4))
-      : null;
-    const metrics = {
-      name: profile.name || null,
-      biography: profile.biography || null,
-      website: profile.website || null,
-      media_count: profile.media_count || 0,
-      recent_media_count: media.length,
-      avg_interactions: Number(avgInteractions.toFixed(2)),
-      recent_media: media,
-      provider: 'instagram_business_discovery',
-    };
-
-    await sql`
-      UPDATE creator_social_accounts SET
-        handle = ${profile.username || handle},
-        profile_url = ${`https://www.instagram.com/${profile.username || handle}/`},
-        followers = ${profile.followers_count ?? null},
-        following = ${profile.follows_count ?? null},
-        engagement_rate = ${engagementRate},
-        metrics = ${JSON.stringify(metrics)}::jsonb,
-        last_synced_at = now(),
-        updated_at = now()
-      WHERE id = ${account.id}
-    `;
-    await sql`
-      UPDATE creators
-      SET avatar_url = COALESCE(${profile.profile_picture_url || null}, avatar_url), updated_at = now()
-      WHERE id = ${creatorId}
-    `;
-    await sql`
-      INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
-      VALUES (
-        ${creatorId}, 'social_sync', 'Instagram metrics refreshed',
-        ${JSON.stringify({ platform: 'instagram', followers: profile.followers_count, engagement_rate: engagementRate })}::jsonb,
-        ${access.userId}
-      )
-    `;
+    const profile = await syncInstagramAccount({ sql, creatorId, account, userId: access.userId });
     return res.json({
       ok: true,
-      followers: profile.followers_count,
-      engagement_rate: engagementRate,
+      followers: profile.followers,
+      engagement_rate: profile.engagement_rate,
+      avatar_url: profile.avatar_url,
       last_synced_at: new Date().toISOString(),
     });
   } catch (err) {

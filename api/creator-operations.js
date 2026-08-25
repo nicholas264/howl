@@ -358,7 +358,7 @@ export default async function handler(req, res) {
           ) AS has_live_engagement,
           EXISTS (
             SELECT 1 FROM creator_agreements a
-            WHERE a.creator_id = c.id AND a.status = 'accepted'
+            WHERE a.creator_id = c.id AND (a.status = 'accepted' OR a.source_type = 'uploaded_pdf')
           ) AS has_accepted_agreement,
           EXISTS (
             SELECT 1 FROM creator_agreements a
