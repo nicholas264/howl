@@ -191,6 +191,7 @@ export default function CreatorWorkspace({
   const [creatorIdentity, setCreatorIdentity] = useState({ name: '', email: '', phone: '', location: '' });
   const [creatorIntel, setCreatorIntel] = useState({
     niche: '', strengths: '', audience_demographics: '', audience_psychographics: '',
+    activities: '', tags: '', rate_notes: '', bio: '',
     shipping_address1: '', shipping_address2: '', shipping_city: '', shipping_region: '',
     shipping_postal_code: '', shipping_country_code: 'US',
   });
@@ -305,6 +306,10 @@ export default function CreatorWorkspace({
       strengths: selected.strengths || '',
       audience_demographics: selected.audience_demographics || '',
       audience_psychographics: selected.audience_psychographics || '',
+      activities: Array.isArray(selected.activities) ? selected.activities.join(', ') : '',
+      tags: Array.isArray(selected.tags) ? selected.tags.join(', ') : '',
+      rate_notes: selected.rate_notes || '',
+      bio: selected.bio || '',
       shipping_address1: selected.shipping_address1 || '',
       shipping_address2: selected.shipping_address2 || '',
       shipping_city: selected.shipping_city || '',
@@ -1375,42 +1380,13 @@ export default function CreatorWorkspace({
             {detailTab === 'profile' && <>
             <section className="creator-detail-section">
               <div className="detail-section-head"><span>Identity</span></div>
-              <dl className="creator-facts">
-                <div><dt>Name</dt><dd>{selected.name || 'Not set'}</dd></div>
-                <div><dt>Email</dt><dd>{selected.email || 'Not set'}</dd></div>
-                <div><dt>Phone</dt><dd>{selected.phone || 'Not set'}</dd></div>
-                <div><dt>Location</dt><dd>{selected.location || 'Not set'}</dd></div>
-              </dl>
-              {canManageCreators && (
-                <details className="inline-editor creator-identity-editor">
-                  <summary>Edit identity</summary>
-                  <form onSubmit={saveCreatorIdentity}>
-                    <input
-                      required
-                      placeholder="Creator name"
-                      value={creatorIdentity.name}
-                      onChange={event => setCreatorIdentity({ ...creatorIdentity, name: event.target.value })}
-                    />
-                    <input
-                      type="email"
-                      placeholder="Email"
-                      value={creatorIdentity.email}
-                      onChange={event => setCreatorIdentity({ ...creatorIdentity, email: event.target.value })}
-                    />
-                    <input
-                      placeholder="Phone"
-                      value={creatorIdentity.phone}
-                      onChange={event => setCreatorIdentity({ ...creatorIdentity, phone: event.target.value })}
-                    />
-                    <input
-                      placeholder="Location"
-                      value={creatorIdentity.location}
-                      onChange={event => setCreatorIdentity({ ...creatorIdentity, location: event.target.value })}
-                    />
-                    <button disabled={saving}>{saving ? 'Saving...' : 'Save identity'}</button>
-                  </form>
-                </details>
-              )}
+              <form className="profile-edit-form" onSubmit={saveCreatorIdentity}>
+                <label>Name<input required disabled={!canManageCreators} value={creatorIdentity.name} onChange={event => setCreatorIdentity({ ...creatorIdentity, name: event.target.value })} /></label>
+                <label>Email<input type="email" disabled={!canManageCreators} value={creatorIdentity.email} onChange={event => setCreatorIdentity({ ...creatorIdentity, email: event.target.value })} /></label>
+                <label>Phone<input disabled={!canManageCreators} value={creatorIdentity.phone} onChange={event => setCreatorIdentity({ ...creatorIdentity, phone: event.target.value })} /></label>
+                <label>Location<input disabled={!canManageCreators} value={creatorIdentity.location} onChange={event => setCreatorIdentity({ ...creatorIdentity, location: event.target.value })} /></label>
+                {canManageCreators && <button disabled={saving}>{saving ? 'Saving...' : 'Save identity'}</button>}
+              </form>
             </section>
 
             <section className="creator-detail-section">
@@ -1461,35 +1437,24 @@ export default function CreatorWorkspace({
 
             <section className="creator-detail-section">
               <div className="detail-section-head"><span>Creator context</span></div>
-              <dl className="creator-facts">
-                <div><dt>Niche</dt><dd>{selected.niche || 'Not set'}</dd></div>
-                <div><dt>Strengths</dt><dd>{selected.strengths || 'Not set'}</dd></div>
-                <div><dt>Audience</dt><dd>{selected.audience_demographics || 'Not set'}</dd></div>
-                <div><dt>Psychographics</dt><dd>{selected.audience_psychographics || 'Not set'}</dd></div>
-                <div><dt>Activities</dt><dd>{selected.activities?.join(', ') || 'Not set'}</dd></div>
-                <div><dt>Tags</dt><dd>{selected.tags?.join(', ') || 'Not set'}</dd></div>
-                <div><dt>Rates</dt><dd>{selected.rate_notes || 'Not set'}</dd></div>
-                <div><dt>Bio</dt><dd>{selected.bio || 'Not set'}</dd></div>
-                {selected.source_metadata?.clickup_status && <div><dt>ClickUp status</dt><dd>{selected.source_metadata.clickup_status}</dd></div>}
-              </dl>
-              {canManageCreators && (
-                <details className="inline-editor creator-intel-editor">
-                  <summary>Edit creator intelligence and shipping</summary>
-                  <form onSubmit={saveCreatorIntel}>
-                    <input placeholder="Niche" value={creatorIntel.niche} onChange={event => setCreatorIntel({ ...creatorIntel, niche: event.target.value })} />
-                    <input placeholder="On-camera and production strengths" value={creatorIntel.strengths} onChange={event => setCreatorIntel({ ...creatorIntel, strengths: event.target.value })} />
-                    <textarea placeholder="Audience demographics" value={creatorIntel.audience_demographics} onChange={event => setCreatorIntel({ ...creatorIntel, audience_demographics: event.target.value })} />
-                    <textarea placeholder="Audience psychographics, motivations, objections" value={creatorIntel.audience_psychographics} onChange={event => setCreatorIntel({ ...creatorIntel, audience_psychographics: event.target.value })} />
-                    <input placeholder="Shipping address" value={creatorIntel.shipping_address1} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_address1: event.target.value })} />
-                    <input placeholder="Address line 2" value={creatorIntel.shipping_address2} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_address2: event.target.value })} />
-                    <input placeholder="City" value={creatorIntel.shipping_city} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_city: event.target.value })} />
-                    <input placeholder="State / region" value={creatorIntel.shipping_region} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_region: event.target.value })} />
-                    <input placeholder="Postal code" value={creatorIntel.shipping_postal_code} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_postal_code: event.target.value })} />
-                    <input maxLength="2" placeholder="Country code" value={creatorIntel.shipping_country_code} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_country_code: event.target.value.toUpperCase() })} />
-                    <button disabled={saving}>Save creator profile</button>
-                  </form>
-                </details>
-              )}
+              <form className="profile-edit-form profile-edit-form-wide" onSubmit={saveCreatorIntel}>
+                <label>Niche<input disabled={!canManageCreators} value={creatorIntel.niche} onChange={event => setCreatorIntel({ ...creatorIntel, niche: event.target.value })} /></label>
+                <label>Strengths<input disabled={!canManageCreators} value={creatorIntel.strengths} onChange={event => setCreatorIntel({ ...creatorIntel, strengths: event.target.value })} /></label>
+                <label className="wide">Audience<textarea disabled={!canManageCreators} rows="3" value={creatorIntel.audience_demographics} onChange={event => setCreatorIntel({ ...creatorIntel, audience_demographics: event.target.value })} /></label>
+                <label className="wide">Psychographics<textarea disabled={!canManageCreators} rows="3" value={creatorIntel.audience_psychographics} onChange={event => setCreatorIntel({ ...creatorIntel, audience_psychographics: event.target.value })} /></label>
+                <label>Activities<input disabled={!canManageCreators} placeholder="Overland, MTB, Ski" value={creatorIntel.activities} onChange={event => setCreatorIntel({ ...creatorIntel, activities: event.target.value })} /></label>
+                <label>Tags<input disabled={!canManageCreators} placeholder="Creator tags" value={creatorIntel.tags} onChange={event => setCreatorIntel({ ...creatorIntel, tags: event.target.value })} /></label>
+                <label>Rates<input disabled={!canManageCreators} value={creatorIntel.rate_notes} onChange={event => setCreatorIntel({ ...creatorIntel, rate_notes: event.target.value })} /></label>
+                <label className="wide">Bio<textarea disabled={!canManageCreators} rows="3" value={creatorIntel.bio} onChange={event => setCreatorIntel({ ...creatorIntel, bio: event.target.value })} /></label>
+                <label className="wide">Shipping address<input disabled={!canManageCreators} value={creatorIntel.shipping_address1} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_address1: event.target.value })} /></label>
+                <label>Address line 2<input disabled={!canManageCreators} value={creatorIntel.shipping_address2} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_address2: event.target.value })} /></label>
+                <label>City<input disabled={!canManageCreators} value={creatorIntel.shipping_city} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_city: event.target.value })} /></label>
+                <label>State / region<input disabled={!canManageCreators} value={creatorIntel.shipping_region} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_region: event.target.value })} /></label>
+                <label>Postal code<input disabled={!canManageCreators} value={creatorIntel.shipping_postal_code} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_postal_code: event.target.value })} /></label>
+                <label>Country<input disabled={!canManageCreators} maxLength="2" value={creatorIntel.shipping_country_code} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_country_code: event.target.value.toUpperCase() })} /></label>
+                {canManageCreators && <button disabled={saving}>{saving ? 'Saving...' : 'Save creator profile'}</button>}
+              </form>
+              {selected.source_metadata?.clickup_status && <dl className="creator-facts source-facts"><div><dt>ClickUp status</dt><dd>{selected.source_metadata.clickup_status}</dd></div></dl>}
               {Object.keys(selected.source_metadata?.custom_fields || {}).length > 0 && (
                 <details className="inline-editor">
                   <summary>Application details</summary>
