@@ -1237,7 +1237,7 @@ export default function CreatorWorkspace({
       {error && <div className="app-error">{error}</div>}
       {notice && <div className="app-notice">{notice}</div>}
 
-      <div className={`creator-layout ${selected ? 'detail-open' : ''}`}>
+      <div className="creator-layout">
         <section className="creator-list-panel">
           <div className="creator-list-head">
             <span>Creator</span>
@@ -1309,7 +1309,8 @@ export default function CreatorWorkspace({
         </section>
 
         {selected && (
-          <aside className="creator-detail creator-profile-drawer">
+          <div className="creator-profile-modal" role="presentation">
+          <aside className="creator-detail creator-profile-drawer" role="dialog" aria-modal="true" aria-label={`${selected.name} creator profile`}>
             <button className="detail-close" onClick={() => setSelected(null)} aria-label="Close creator detail">Close</button>
             <div className="creator-profile-hero">
               <CreatorAvatar creator={selected} large />
@@ -1996,6 +1997,7 @@ export default function CreatorWorkspace({
               </section>
             )}
           </aside>
+          </div>
         )}
       </div>
       </>

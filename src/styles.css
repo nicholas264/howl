@@ -777,3 +777,22 @@ input, textarea, select, button { font-family: inherit; }
 .creator-profile-drawer .creator-note-form input{background:#fff;border-color:#dcd5ca;border-radius:6px;font-size:11px}
 .creator-profile-drawer .creator-note-form button,.creator-profile-drawer .inline-editor button{border-radius:6px;font-weight:800}
 @media(max-width:760px){.creator-profile-hero{grid-template-columns:58px minmax(0,1fr);padding:22px 18px 16px}.creator-profile-hero .creator-avatar.large{width:58px;height:58px}.creator-profile-title h2{font-size:26px}.creator-profile-hero .creator-status-row,.creator-profile-drawer .creator-signal-strip,.creator-profile-drawer .profile-edit-form{grid-template-columns:1fr}.creator-profile-drawer .creator-signal-strip{padding:12px 18px 0}.creator-profile-drawer .profile-editor-panel{margin:10px 18px}.creator-profile-drawer .social-account{grid-template-columns:minmax(70px,.55fr) minmax(0,1fr)}.creator-profile-drawer .social-account div{display:none}}
+
+/* Centered creator edit modal */
+.creator-profile-modal{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:32px;background:rgba(23,23,23,.46);backdrop-filter:blur(5px)}
+.creator-motion-workspace .creator-profile-modal .creator-profile-drawer{position:relative;width:min(1120px,calc(100vw - 64px));max-height:min(900px,calc(100vh - 64px));padding:0;overflow:auto;background:#f7f4ee;border:1px solid #d6cec1;border-radius:8px;box-shadow:0 24px 70px rgba(20,18,15,.34)}
+.creator-profile-modal .detail-close{position:sticky;float:right;top:14px;right:14px;margin:14px 14px -44px auto}
+.creator-profile-modal .creator-profile-hero{grid-template-columns:82px minmax(0,1fr) 270px;padding:26px 72px 22px 26px}
+.creator-profile-modal .creator-profile-hero .creator-avatar.large{width:82px;height:82px}
+.creator-profile-modal .creator-profile-hero .creator-status-row{grid-column:auto;grid-template-columns:1fr;align-self:stretch;margin:0}
+.creator-profile-modal .creator-signal-strip{grid-template-columns:repeat(4,minmax(0,1fr));padding:16px 26px 0}
+.creator-motion-workspace .creator-profile-modal .creator-detail-tabs{top:0;margin:16px 0 0;padding:10px 26px}
+.creator-profile-modal .profile-editor-panel{margin:14px 26px;padding:18px}
+.creator-profile-modal .profile-edit-form{grid-template-columns:repeat(4,minmax(0,1fr))}
+.creator-profile-modal .profile-identity-form{grid-template-columns:repeat(4,minmax(0,1fr))}
+.creator-profile-modal .profile-edit-form .wide{grid-column:span 2}
+.creator-profile-modal .profile-edit-form button{grid-column:1/-1}
+.creator-profile-modal .social-account{grid-template-columns:110px minmax(160px,1fr) repeat(3,90px)}
+.creator-profile-modal .creator-detail-section:not(.profile-editor-panel){margin:14px 26px;padding:18px;background:#fffdf8;border:1px solid #e4ddd1;border-radius:8px}
+@media(max-width:980px){.creator-profile-modal{padding:18px}.creator-motion-workspace .creator-profile-modal .creator-profile-drawer{width:calc(100vw - 36px);max-height:calc(100vh - 36px)}.creator-profile-modal .creator-profile-hero{grid-template-columns:64px minmax(0,1fr);padding:22px 60px 18px 20px}.creator-profile-modal .creator-profile-hero .creator-avatar.large{width:64px;height:64px}.creator-profile-modal .creator-profile-hero .creator-status-row,.creator-profile-modal .creator-signal-strip,.creator-profile-modal .profile-edit-form,.creator-profile-modal .profile-identity-form{grid-template-columns:1fr 1fr}.creator-profile-modal .profile-edit-form .wide{grid-column:1/-1}.creator-profile-modal .social-account{grid-template-columns:minmax(80px,.6fr) minmax(0,1fr)}.creator-profile-modal .social-account div{display:none}}
+@media(max-width:640px){.creator-profile-modal{align-items:stretch;padding:0}.creator-motion-workspace .creator-profile-modal .creator-profile-drawer{width:100vw;max-height:100vh;border:0;border-radius:0}.creator-profile-modal .creator-profile-hero,.creator-profile-modal .creator-signal-strip,.creator-profile-modal .profile-edit-form,.creator-profile-modal .profile-identity-form{grid-template-columns:1fr}.creator-profile-modal .creator-profile-hero{padding:54px 18px 16px}.creator-profile-modal .creator-profile-hero .creator-avatar.large{width:58px;height:58px}.creator-profile-modal .profile-editor-panel,.creator-profile-modal .creator-detail-section:not(.profile-editor-panel){margin:10px 18px}.creator-motion-workspace .creator-profile-modal .creator-detail-tabs{padding:9px 18px;overflow-x:auto}.creator-motion-workspace .creator-profile-modal .creator-detail-tabs button{flex:0 0 auto;min-width:82px}}
