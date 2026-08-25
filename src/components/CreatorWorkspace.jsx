@@ -108,6 +108,17 @@ function CreatorAvatar({ creator, large = false }) {
     : <div className={`creator-avatar fallback ${large ? 'large' : ''}`}>{initials(creator.name)}</div>;
 }
 
+function socialProfileUrl(account) {
+  const raw = String(account?.profile_url || '').trim();
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const handle = String(account?.handle || '').trim().replace(/^@/, '');
+  if (!handle) return null;
+  if (account.platform === 'instagram') return `https://www.instagram.com/${handle}/`;
+  if (account.platform === 'tiktok') return `https://www.tiktok.com/@${handle}`;
+  if (account.platform === 'youtube') return `https://www.youtube.com/@${handle}`;
+  return null;
+}
+
 export default function CreatorWorkspace({
   canManageCreators = false,
   canMergeCreators = false,
@@ -321,6 +332,10 @@ export default function CreatorWorkspace({
   }), [agreement.title, agreement.agreement_body, selected, selectedEngagement]);
   const selectedPrimarySocial = useMemo(
     () => strongestSocial(selected?.social_accounts || []),
+    [selected?.social_accounts],
+  );
+  const selectedInstagram = useMemo(
+    () => selected?.social_accounts?.find(account => account.platform === 'instagram') || null,
     [selected?.social_accounts],
   );
   const creatorSignalCards = useMemo(() => {
@@ -1295,7 +1310,17 @@ export default function CreatorWorkspace({
               <CreatorAvatar creator={selected} large />
               <div>
                 <h2>{selected.name}</h2>
-                <p>{selected.email || 'No email'}{selected.location ? ` · ${selected.location}` : ''}</p>
+                <p>
+                  <span>{selected.email || 'No email'}{selected.location ? ` · ${selected.location}` : ''}</span>
+                  {socialProfileUrl(selectedInstagram) && (
+                    <>
+                      <span> · </span>
+                      <a className="creator-profile-link" href={socialProfileUrl(selectedInstagram)} target="_blank" rel="noreferrer">
+                        @{String(selectedInstagram.handle || 'Instagram').replace(/^@/, '')}
+                      </a>
+                    </>
+                  )}
+                </p>
               </div>
             </div>
 
@@ -1325,38 +1350,6 @@ export default function CreatorWorkspace({
                 </div>
               ))}
             </div>
-            {workflow.guidance?.next_action && (
-              <section className={`creator-next-action ${workflow.guidance.next_action.urgent ? 'urgent' : ''} ${workflow.guidance.next_action.waiting ? 'waiting' : ''}`}>
-                <div className="creator-lifecycle">
-                  {workflow.guidance.milestones.map(item => (
-                    <div key={item.key} className={item.status}>
-                      <i>{item.status === 'complete' ? '✓' : ''}</i>
-                      <span>{item.label}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="next-action-copy">
-                  <span>{workflow.guidance.next_action.waiting ? 'Waiting state' : workflow.guidance.next_action.blocker ? 'Needs attention' : 'Next best action'}</span>
-                  <strong>{workflow.guidance.next_action.label}</strong>
-                  <p>{workflow.guidance.next_action.description}</p>
-                </div>
-                <div className="next-action-buttons">
-                  <button className="primary-action" onClick={() => setDetailTab(workflow.guidance.next_action.tab)}>
-                    Open {workflow.guidance.next_action.tab}
-                  </button>
-                  {canManageCreators
-                    && workflow.guidance.next_action.recommended_stage
-                    && selected.stage !== workflow.guidance.next_action.recommended_stage && (
-                      <button
-                        disabled={saving}
-                        onClick={() => updateCreator({ stage: workflow.guidance.next_action.recommended_stage })}
-                      >
-                        Align stage to {workflow.guidance.next_action.recommended_stage}
-                      </button>
-                    )}
-                </div>
-              </section>
-            )}
             <div className="creator-performance">
               <div><span>Spend · 90d</span><strong>${Number(selected.performance?.spend || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong></div>
               <div><span>Revenue · 90d</span><strong>${Number(selected.performance?.revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong></div>
