@@ -87,6 +87,35 @@ async function loadHiddenUgcIds() {
   }
 }
 
+async function ensureUgcAssetPairTable(sql) {
+  await sql`
+    CREATE TABLE IF NOT EXISTS ugc_asset_pairs (
+      id BIGSERIAL PRIMARY KEY,
+      feed_file_id TEXT NOT NULL,
+      story_file_id TEXT NOT NULL,
+      created_by_user_id TEXT,
+      created_by_email TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT ugc_asset_pairs_distinct_files CHECK (feed_file_id <> story_file_id)
+    )
+  `;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS ugc_asset_pairs_feed_idx ON ugc_asset_pairs(feed_file_id)`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS ugc_asset_pairs_story_idx ON ugc_asset_pairs(story_file_id)`;
+}
+
+async function loadManualUgcPairs() {
+  if (!process.env.DATABASE_URL) return [];
+  try {
+    const sql = neon(process.env.DATABASE_URL);
+    await ensureUgcAssetPairTable(sql);
+    return await sql`SELECT feed_file_id, story_file_id FROM ugc_asset_pairs ORDER BY updated_at DESC`;
+  } catch (err) {
+    console.error('ugc pair load failed:', err.message);
+    return [];
+  }
+}
+
 async function collectInboxFiles(token, inboxId, hiddenIds = new Set()) {
   const fields = encodeURIComponent('files(id,name,mimeType,size,createdTime,modifiedTime,thumbnailLink,webViewLink,parents,videoMediaMetadata(width,height),imageMediaMetadata(width,height))');
   const folderNames = { [inboxId]: 'Inbox' };
@@ -126,9 +155,32 @@ async function collectInboxFiles(token, inboxId, hiddenIds = new Set()) {
   };
 }
 
-export function buildLauncherItems(enriched, folderNames, folderParents, inboxId) {
+export function buildLauncherItems(enriched, folderNames, folderParents, inboxId, manualPairs = []) {
   // Group same-creative aspect variants under a shared parent. Feed assets
   // include 1:1, 4:5, and landscape; story assets are the taller 9:16 family.
+  const aspectFolderFor = (folderName = '') => {
+    const n = String(folderName || '').toLowerCase();
+    if (/(^|[^a-z0-9])(9\s*[-_:x]\s*16|916|story|stories|reels?|vertical)([^a-z0-9]|$)/.test(n)) return 'story';
+    if (/(^|[^a-z0-9])(4\s*[-_:x]\s*5|1\s*[-_:x]\s*1|16\s*[-_:x]\s*9|45|11|169|feed|square|portrait|landscape)([^a-z0-9]|$)/.test(n)) return 'feed';
+    return null;
+  };
+  const nearestAspectFolderFor = (f) => {
+    let cur = f.parents?.[0] || inboxId;
+    while (cur && cur !== inboxId) {
+      if (aspectFolderFor(folderNames[cur] || '')) return cur;
+      cur = folderParents[cur];
+    }
+    return null;
+  };
+  const aspectLabelFromFolder = (folderId) => {
+    const folderAspect = aspectFolderFor(folderNames[folderId] || '');
+    if (folderAspect === 'story') return '9:16';
+    if (!folderAspect) return null;
+    const n = String(folderNames[folderId] || '').toLowerCase();
+    if (/(1\s*[-_:x]\s*1|11|square)/.test(n)) return '1:1';
+    if (/(16\s*[-_:x]\s*9|169|landscape)/.test(n)) return '16:9';
+    return '4:5';
+  };
   const dimsFor = (f) => {
     const v = f.videoMediaMetadata, i = f.imageMediaMetadata;
     const width = parseInt(v?.width || i?.width || 0);
@@ -137,6 +189,9 @@ export function buildLauncherItems(enriched, folderNames, folderParents, inboxId
   };
 
   const aspectLabelFor = (f) => {
+    const folderLabel = aspectLabelFromFolder(nearestAspectFolderFor(f));
+    if (folderLabel) return folderLabel;
+
     const n = (f.name || '').toLowerCase();
     if (/(9\s*[-_:x]\s*16|916|story|stories|reel|vertical)/.test(n)) return '9:16';
     if (/(4\s*[-_:x]\s*5|45|portrait|feed)/.test(n)) return '4:5';
@@ -157,24 +212,15 @@ export function buildLauncherItems(enriched, folderNames, folderParents, inboxId
     if (!label) return null;
     return label === '9:16' ? 'story' : 'feed';
   };
-  const aspectFolderFor = (folderName = '') => {
-    const n = String(folderName || '').toLowerCase();
-    if (/(^|[^a-z0-9])(9\s*[-_:x]\s*16|916|story|stories|reels?|vertical)([^a-z0-9]|$)/.test(n)) return 'story';
-    if (/(^|[^a-z0-9])(4\s*[-_:x]\s*5|1\s*[-_:x]\s*1|16\s*[-_:x]\s*9|45|11|169|feed|square|portrait|landscape)([^a-z0-9]|$)/.test(n)) return 'feed';
-    return null;
-  };
   const aspectParentFolderFor = (f) => {
-    const parent = f.parents?.[0] || inboxId;
-    if (parent === inboxId) return null;
-    return aspectFolderFor(folderNames[parent] || '') ? parent : null;
+    return nearestAspectFolderFor(f);
   };
   const groupingParentFor = (f) => {
-    const parent = f.parents?.[0] || inboxId;
-    const parentName = folderNames[parent] || '';
-    if (parent !== inboxId && aspectFolderFor(parentName)) {
-      return folderParents[parent] || parent;
+    const aspectParent = aspectParentFolderFor(f);
+    if (aspectParent) {
+      return folderParents[aspectParent] || aspectParent;
     }
-    return parent;
+    return f.parents?.[0] || inboxId;
   };
 
   const variantKeyFor = (f) => {
@@ -239,6 +285,21 @@ export function buildLauncherItems(enriched, folderNames, folderParents, inboxId
     });
   };
 
+  const byId = new Map(enriched.map(file => [file.id, file]));
+  for (const pair of manualPairs || []) {
+    const feed = byId.get(pair.feed_file_id || pair.feedFileId);
+    const story = byId.get(pair.story_file_id || pair.storyFileId);
+    if (!feed || !story) continue;
+    if (pairedFileIds.has(feed.id) || pairedFileIds.has(story.id)) continue;
+    const parentId = groupingParentFor(feed) || groupingParentFor(story) || inboxId;
+    makePair(parentId, feed, story);
+    const item = pairItems[pairItems.length - 1];
+    item.id = `manual-pair:${feed.id}:${story.id}`;
+    item.pairSource = 'manual';
+    item.folderName = item.folderName || feed.folderPath || story.folderPath || 'Manual pair';
+    item.name = item.folderName || 'Manual pair';
+  }
+
   for (const [parentId, list] of Object.entries(byParent)) {
     if (list.length < 2) continue;
     const buckets = { video: [], image: [] };
@@ -253,13 +314,16 @@ export function buildLauncherItems(enriched, folderNames, folderParents, inboxId
       const unknown = [];
       let groupedPairCount = 0;
       for (const f of sameTypeList) {
+        if (pairedFileIds.has(f.id)) continue;
         const a = aspectFor(f);
         if (a === 'feed') feeds.push(f);
         else if (a === 'story') stories.push(f);
         else unknown.push(f);
       }
       if (sameTypeList.length === 2) {
-        const [a, b] = sameTypeList;
+        const candidates = sameTypeList.filter(f => !pairedFileIds.has(f.id));
+        if (candidates.length < 2) continue;
+        const [a, b] = candidates;
         let feed, story;
         const aa = aspectFor(a), ab = aspectFor(b);
         if (aa === 'feed' || ab === 'story') { feed = a; story = b; }
@@ -273,6 +337,7 @@ export function buildLauncherItems(enriched, folderNames, folderParents, inboxId
       } else {
         const grouped = {};
         for (const f of sameTypeList) {
+          if (pairedFileIds.has(f.id)) continue;
           const k = variantKeyFor(f);
           if (!grouped[k]) grouped[k] = [];
           grouped[k].push(f);
@@ -323,7 +388,7 @@ export function buildLauncherItems(enriched, folderNames, folderParents, inboxId
 
   const items = [
     ...pairItems,
-    ...enriched.filter(f => !pairedFileIds.has(f.id)).map(f => ({ kind: 'single', ...f })),
+    ...enriched.filter(f => !pairedFileIds.has(f.id)).map(f => ({ kind: 'single', aspectLabel: aspectLabelFor(f), ...f })),
   ];
   items.sort((a, b) => (b.createdTime || '').localeCompare(a.createdTime || ''));
   return items;
@@ -343,7 +408,7 @@ export default async function handler(req, res) {
     if (action === 'launch_meta_ad' && !hasPermission(appAccess, 'launch.write')) {
       return res.status(403).json({ error: 'Forbidden - launch.write required' });
     }
-    if (['delete', 'mark_launched', 'ensure_subfolders'].includes(action) && !hasPermission(appAccess, 'assets.write')) {
+    if (['delete', 'mark_launched', 'ensure_subfolders', 'associate_pair', 'unpair'].includes(action) && !hasPermission(appAccess, 'assets.write')) {
       return res.status(403).json({ error: 'Forbidden - assets.write required' });
     }
     if (['list', 'count', 'download'].includes(action) && !hasPermission(appAccess, 'assets.read')) {
@@ -368,7 +433,8 @@ export default async function handler(req, res) {
       const inboxId = await ensureFolder(token, rootId, 'Inbox');
       const hiddenIds = await loadHiddenUgcIds();
       const { files, folderNames, folderParents } = await collectInboxFiles(token, inboxId, hiddenIds);
-      const items = buildLauncherItems(files, folderNames, folderParents, inboxId);
+      const manualPairs = await loadManualUgcPairs();
+      const items = buildLauncherItems(files, folderNames, folderParents, inboxId, manualPairs);
       return res.json({ count: items.length });
     }
 
@@ -382,6 +448,7 @@ export default async function handler(req, res) {
       const inboxId = await ensureFolder(token, rootId, 'Inbox');
       const hiddenIds = await loadHiddenUgcIds();
       const { files: enriched, folderNames, folderParents } = await collectInboxFiles(token, inboxId, hiddenIds);
+      const manualPairs = await loadManualUgcPairs();
       if (process.env.DATABASE_URL) {
         try {
           const sql = neon(process.env.DATABASE_URL);
@@ -397,10 +464,46 @@ export default async function handler(req, res) {
         }
       }
 
-      const items = buildLauncherItems(enriched, folderNames, folderParents, inboxId);
+      const items = buildLauncherItems(enriched, folderNames, folderParents, inboxId, manualPairs);
 
       // Backwards-compat: also return `files` for older clients (just the singles).
       return res.json({ items, files: items.filter(i => i.kind === 'single'), inboxId });
+    }
+
+    if (action === 'associate_pair') {
+      const { feedFileId, storyFileId } = req.body;
+      if (!feedFileId || !storyFileId) return res.status(400).json({ error: 'feedFileId and storyFileId required' });
+      if (feedFileId === storyFileId) return res.status(400).json({ error: 'Pick two different files' });
+      if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'DATABASE_URL not configured' });
+      const sql = neon(process.env.DATABASE_URL);
+      await ensureUgcAssetPairTable(sql);
+      await sql`
+        DELETE FROM ugc_asset_pairs
+        WHERE feed_file_id IN (${feedFileId}, ${storyFileId})
+           OR story_file_id IN (${feedFileId}, ${storyFileId})
+      `;
+      const [row] = await sql`
+        INSERT INTO ugc_asset_pairs
+          (feed_file_id, story_file_id, created_by_user_id, created_by_email, updated_at)
+        VALUES
+          (${feedFileId}, ${storyFileId}, ${appAccess.userId}, ${appAccess.email || null}, NOW())
+        RETURNING *
+      `;
+      return res.json({ ok: true, pair: row });
+    }
+
+    if (action === 'unpair') {
+      const { feedFileId, storyFileId, fileId } = req.body;
+      if (!feedFileId && !storyFileId && !fileId) return res.status(400).json({ error: 'fileId or pair file ids required' });
+      if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'DATABASE_URL not configured' });
+      const sql = neon(process.env.DATABASE_URL);
+      await ensureUgcAssetPairTable(sql);
+      await sql`
+        DELETE FROM ugc_asset_pairs
+        WHERE (${feedFileId || fileId || null}::text IS NOT NULL AND (feed_file_id = ${feedFileId || fileId || null} OR story_file_id = ${feedFileId || fileId || null}))
+           OR (${storyFileId || null}::text IS NOT NULL AND (feed_file_id = ${storyFileId || null} OR story_file_id = ${storyFileId || null}))
+      `;
+      return res.json({ ok: true });
     }
 
     if (action === 'download') {

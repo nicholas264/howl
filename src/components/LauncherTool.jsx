@@ -238,6 +238,33 @@ function driveItemIncludesAnyId(item, ids) {
   return ids.includes(item.id);
 }
 
+function driveSingleAspect(item = {}) {
+  if (item.aspectLabel) return item.aspectLabel;
+  const n = `${item.folderPath || ''} ${item.name || ''}`.toLowerCase();
+  if (/(9\s*[-_:x]\s*16|916|story|stories|reel|vertical)/.test(n)) return '9:16';
+  if (/(4\s*[-_:x]\s*5|45|portrait|feed)/.test(n)) return '4:5';
+  if (/(1\s*[-_:x]\s*1|11|square)/.test(n)) return '1:1';
+  if (/(16\s*[-_:x]\s*9|169|landscape)/.test(n)) return '16:9';
+  const video = item.videoMediaMetadata || {};
+  const image = item.imageMediaMetadata || {};
+  const width = parseInt(video.width || image.width || 0, 10);
+  const height = parseInt(video.height || image.height || 0, 10);
+  if (!(width > 0 && height > 0)) return '';
+  const ratio = width / height;
+  if (ratio < 0.68) return '9:16';
+  if (ratio < 0.92) return '4:5';
+  if (ratio < 1.12) return '1:1';
+  return '16:9';
+}
+
+function orderDrivePair(first, second) {
+  const firstAspect = driveSingleAspect(first);
+  const secondAspect = driveSingleAspect(second);
+  if (firstAspect === '9:16' && secondAspect !== '9:16') return { feed: second, story: first };
+  if (secondAspect === '9:16' && firstAspect !== '9:16') return { feed: first, story: second };
+  return { feed: first, story: second };
+}
+
 export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem, onRemoveCartItem }) {
   const [creators, setCreators] = useState([]);
   const [creatorsError, setCreatorsError] = useState('');
@@ -944,6 +971,54 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   };
 
   // ── drive-only actions: hide from inbox, open in Drive ────────────────
+  const [pairingSourceId, setPairingSourceId] = useState(null);
+  const pairingSource = useMemo(() => driveItems.find(item => item.kind === 'single' && item.id === pairingSourceId) || null, [driveItems, pairingSourceId]);
+
+  const associateDrivePair = async (source, target) => {
+    if (!source || !target || source.id === target.id) {
+      setPairingSourceId(null);
+      return;
+    }
+    const { feed, story } = orderDrivePair(source, target);
+    try {
+      const response = await fetch('/api/drive/ugc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'associate_pair',
+          feedFileId: feed.id,
+          storyFileId: story.id,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `Pair failed (${response.status})`);
+      setPairingSourceId(null);
+      await refreshDrive();
+    } catch (err) {
+      setGlobalError(err.message || 'Could not pair assets');
+    }
+  };
+
+  const unpairDriveItem = async (item) => {
+    if (item.source !== 'drive' || item.kind !== 'pair') return;
+    try {
+      const response = await fetch('/api/drive/ugc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'unpair',
+          feedFileId: item.feed?.id,
+          storyFileId: item.story?.id,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `Unpair failed (${response.status})`);
+      await refreshDrive();
+    } catch (err) {
+      setGlobalError(err.message || 'Could not unpair assets');
+    }
+  };
+
   const hideDriveFile = async (fileId) => {
     if (!confirm('Hide this file from the inbox? (file stays in Drive)')) return;
     try {
@@ -1210,6 +1285,12 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           <span style={{ color: '#256b35', marginLeft: 4 }}>{cart.filter(c => c.metaStatus !== 'pushed').length} Cart</span> ·
           <span style={{ color: '#171717', marginLeft: 4 }}>{selectedQueue.length} selected</span>
         </div>
+        {pairingSource && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#171717' }}>
+            Pairing <strong>{assetLabel(pairingSource)}</strong>
+            <button type="button" onClick={() => setPairingSourceId(null)} style={{ ...S.ghost, padding: '5px 9px', fontSize: 9 }}>Cancel</button>
+          </div>
+        )}
       </div>
 
       {globalError && <div style={S.err}>{globalError}</div>}
@@ -1281,6 +1362,12 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                     : <span style={S.badge('#256b35')}>Cart</span>}
                   {item.source === 'drive' && item.kind === 'pair' && (
                     <span style={{ marginLeft: 6, ...S.badge('#256b35') }}>{item.aspectLabel || 'Feed + Story'}</span>
+                  )}
+                  {item.source === 'drive' && item.kind === 'pair' && item.pairSource === 'manual' && (
+                    <span style={{ marginLeft: 6, ...S.badge('#7357c7') }}>Manual</span>
+                  )}
+                  {item.source === 'drive' && item.kind === 'single' && driveSingleAspect(item) && (
+                    <span style={{ marginLeft: 6, ...S.badge('#77746f') }}>{driveSingleAspect(item)}</span>
                   )}
                   {(item.squareUrl || item.url) && item.storyUrl && item.type !== 'video' && (
                     <span style={{ marginLeft: 6, ...S.badge('#256b35') }}>4:5 + 9:16</span>
@@ -1541,6 +1628,21 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                 <>
                   {item.webViewLink && (
                     <a href={item.webViewLink} target="_blank" rel="noreferrer" style={{ ...S.ghost, textDecoration: 'none' }}>Open in Drive</a>
+                  )}
+                  {item.kind === 'single' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (pairingSourceId && pairingSourceId !== item.id) associateDrivePair(pairingSource, item);
+                        else setPairingSourceId(current => current === item.id ? null : item.id);
+                      }}
+                      style={{ ...S.ghost, color: pairingSourceId && pairingSourceId !== item.id ? '#256b35' : '#7357c7' }}
+                    >
+                      {pairingSourceId && pairingSourceId !== item.id ? 'Pair here' : pairingSourceId === item.id ? 'Cancel pair' : 'Pair'}
+                    </button>
+                  )}
+                  {item.kind === 'pair' && (
+                    <button type="button" onClick={() => unpairDriveItem(item)} style={{ ...S.ghost, color: '#7357c7' }}>Unpair</button>
                   )}
                   <button onClick={() => markDriveLaunched(item)} style={{ ...S.ghost, color: '#256b35' }}>Mark launched</button>
                   <button onClick={() => hideDriveFile(item.kind === 'pair' ? item.feed.id : item.id)} style={{ ...S.ghost, color: '#b42318' }}>Hide</button>
