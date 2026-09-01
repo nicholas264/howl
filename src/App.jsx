@@ -27,6 +27,7 @@ const CreativePlanningWorkspace = lazy(() => import("./components/CreativePlanni
 const AdminWorkspace = lazy(() => import("./components/AdminWorkspace"));
 const WorkspaceHub = lazy(() => import("./components/WorkspaceHub"));
 const MapMonitorWorkspace = lazy(() => import("./components/MapMonitorWorkspace"));
+const SkuMediaPacingTool = lazy(() => import("./components/SkuMediaPacingTool"));
 import { useDriveAuth } from "./hooks/useDriveAuth";
 import { cartGetAll, cartPut, cartDelete } from "./utils/cartDb";
 import "./styles.css";
@@ -211,6 +212,7 @@ export default function HowlAdEngine({ appAccess }) {
       items: [
         { key: 'dashboard-cfo', label: 'Dashboard', permission: 'analytics.read' },
         { key: 'dashboard-forecast', label: 'Forecast', permission: 'analytics.read' },
+        { key: 'sku-media-pacing', label: 'SKU Pacing', permission: 'analytics.read' },
         { key: 'log', label: 'Launch Log', permission: 'launch.read' },
       ],
     },
@@ -367,6 +369,7 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "dashboard-creative" && <DashboardTool setActiveTab={navigate} view="creative" canManageCreators={can('creators.write')} />}
         {activeTab === "creative-analytics" && <DashboardTool setActiveTab={navigate} view="creative" canManageCreators={can('creators.write')} />}
         {activeTab === "dashboard-forecast" && <DashboardTool setActiveTab={navigate} view="forecast" />}
+        {activeTab === "sku-media-pacing" && <SkuMediaPacingTool />}
         {activeTab === "log" && <LaunchLogTool />}
         {activeTab === "ugc-editor" && (
           <UgcEditorTool
