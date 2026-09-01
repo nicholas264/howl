@@ -293,6 +293,7 @@ export default async function handler(req, res) {
             'rejected_applicant' AS stage,
             status,
             niche,
+            product_type,
             activities,
             ARRAY[]::text[] AS tags,
             rate_expectations AS rate_notes,
@@ -450,7 +451,7 @@ export default async function handler(req, res) {
           audience_psychographics, activities, tags, rate_notes, notes,
           avatar_url, owner_user_id, shipping_address1, shipping_address2,
           shipping_city, shipping_region, shipping_postal_code, shipping_country_code,
-          product_seeding_required, created_by
+          product_seeding_required, product_type, created_by
         ) VALUES (
           ${name}, ${text(body.email, 320)}, ${text(body.phone, 100)}, ${status}, ${stage},
           ${text(body.source, 50) || 'manual'}, ${text(body.source_external_id, 200)},
@@ -462,7 +463,7 @@ export default async function handler(req, res) {
           ${text(body.shipping_address1, 300)}, ${text(body.shipping_address2, 300)},
           ${text(body.shipping_city, 200)}, ${text(body.shipping_region, 100)},
           ${text(body.shipping_postal_code, 40)}, ${text(body.shipping_country_code, 2)?.toUpperCase() || 'US'},
-          ${body.product_seeding_required !== false}, ${access.userId}
+          ${body.product_seeding_required !== false}, ${text(body.product_type, 200)}, ${access.userId}
         )
         RETURNING *
       `;
@@ -553,6 +554,7 @@ export default async function handler(req, res) {
           timezone = ${body.timezone === undefined ? current.timezone : text(body.timezone, 100)},
           bio = ${body.bio === undefined ? current.bio : text(body.bio)},
           niche = ${body.niche === undefined ? current.niche : text(body.niche)},
+          product_type = ${body.product_type === undefined ? current.product_type : text(body.product_type, 200)},
           strengths = ${body.strengths === undefined ? current.strengths : text(body.strengths)},
           audience_demographics = ${body.audience_demographics === undefined ? current.audience_demographics : text(body.audience_demographics)},
           audience_psychographics = ${body.audience_psychographics === undefined ? current.audience_psychographics : text(body.audience_psychographics)},

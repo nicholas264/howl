@@ -174,6 +174,10 @@ export function mapClickupCreator(task) {
       'bio', 'about', 'about you', 'creator bio', 'creator information', 'tell us about yourself',
       'why do you want to work with us', 'content style', 'content niche',
     ]),
+    product_type: fieldValue(fields, [
+      'product type', 'product', 'product owned', 'product they have', 'seeded product',
+      'free unit', 'unit sent',
+    ]),
     activities: fieldValue(fields, [
       'activities', 'activity', 'interests', 'hobbies', 'outdoor activities', 'sports',
     ]),

@@ -106,7 +106,7 @@ export default async function handler(req, res) {
     await sql`
       INSERT INTO creator_applications (
         application_code, name, email, phone, location, timezone, niche, strengths,
-        activities, audience_description, audience_psychographics, creator_experience, why_howl,
+        product_type, activities, audience_description, audience_psychographics, creator_experience, why_howl,
         rate_expectations, availability, open_to_product_for_content, open_to_whitelisting,
         referral_source, socials, sample_urls,
         age_confirmed, consent_confirmed, ip_hash
@@ -114,6 +114,7 @@ export default async function handler(req, res) {
         ${applicationCode}, ${name}, ${email}, ${text(req.body?.phone, 100)},
         ${text(req.body?.location, 300)}, ${text(req.body?.timezone, 100)},
         ${text(req.body?.niche, 1000)}, ${text(req.body?.strengths, 2000)},
+        ${text(req.body?.product_type, 200)},
         ${list(req.body?.activities)}, ${text(req.body?.audience_description, 2000)},
         ${text(req.body?.audience_psychographics, 2000)},
         ${text(req.body?.creator_experience, 3000)}, ${text(req.body?.why_howl, 3000)},

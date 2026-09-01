@@ -126,6 +126,7 @@ export default async function handler(req, res) {
         location: value(row, ['location', 'city', 'state']),
         timezone: value(row, ['timezone']),
         bio: value(row, ['bio', 'about', 'creatorinfo']),
+        product_type: value(row, ['producttype', 'product', 'productowned', 'producthave', 'seededproduct']),
         activities: value(row, ['activities', 'activity', 'interests']),
         tags: value(row, ['tags', 'labels', 'creatorcategory']),
         rate_notes: value(row, ['rates', 'rate', 'ratenotes', 'pricing']),
@@ -179,6 +180,7 @@ export default async function handler(req, res) {
             location = COALESCE(${mapped.location || null}, location),
             timezone = COALESCE(${mapped.timezone || null}, timezone),
             bio = COALESCE(${mapped.bio || null}, bio),
+            product_type = COALESCE(${mapped.product_type || null}, product_type),
             activities = CASE WHEN cardinality(${activities}::text[]) > 0 THEN ${activities}::text[] ELSE activities END,
             tags = CASE WHEN cardinality(${tags}::text[]) > 0 THEN ${tags}::text[] ELSE tags END,
             rate_notes = COALESCE(${mapped.rate_notes || null}, rate_notes),
@@ -214,12 +216,12 @@ export default async function handler(req, res) {
       } else {
         const [creator] = await sql`
           INSERT INTO creators (
-            name, email, phone, location, timezone, bio, activities, tags, rate_notes, notes, avatar_url,
+            name, email, phone, location, timezone, bio, product_type, activities, tags, rate_notes, notes, avatar_url,
             source_metadata,
             source, source_external_id, stage, status, created_by
           ) VALUES (
             ${name}, ${email || null}, ${mapped.phone || null}, ${mapped.location || null},
-            ${mapped.timezone || null}, ${mapped.bio || null}, ${activities}, ${tags},
+            ${mapped.timezone || null}, ${mapped.bio || null}, ${mapped.product_type || null}, ${activities}, ${tags},
             ${mapped.rate_notes || null}, ${mapped.notes || null}, ${mapped.avatar_url || null},
             ${JSON.stringify(sourceMetadata)}::jsonb,
             ${source}, ${externalId}, ${mapped.stage || 'sourced'}, ${mapped.status || 'prospect'}, ${access.userId}

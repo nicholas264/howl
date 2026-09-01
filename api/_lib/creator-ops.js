@@ -15,6 +15,7 @@ async function createCreatorOpsTables(sql) {
       timezone            TEXT,
       bio                 TEXT,
       niche               TEXT,
+      product_type        TEXT,
       strengths           TEXT,
       audience_demographics TEXT,
       audience_psychographics TEXT,
@@ -45,6 +46,7 @@ async function createCreatorOpsTables(sql) {
   await sql`CREATE INDEX IF NOT EXISTS idx_creators_name ON creators(lower(name))`;
   await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS source_metadata JSONB NOT NULL DEFAULT '{}'::jsonb`;
   await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS niche TEXT`;
+  await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS product_type TEXT`;
   await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS strengths TEXT`;
   await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS audience_demographics TEXT`;
   await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS audience_psychographics TEXT`;
@@ -97,6 +99,7 @@ async function createCreatorOpsTables(sql) {
       location            TEXT,
       timezone            TEXT,
       niche               TEXT,
+      product_type        TEXT,
       strengths           TEXT,
       activities          TEXT[] NOT NULL DEFAULT '{}',
       audience_description TEXT,
@@ -128,6 +131,7 @@ async function createCreatorOpsTables(sql) {
   await sql`ALTER TABLE creator_applications ADD COLUMN IF NOT EXISTS enrichment JSONB NOT NULL DEFAULT '{}'::jsonb`;
   await sql`ALTER TABLE creator_applications ADD COLUMN IF NOT EXISTS review_scorecard JSONB NOT NULL DEFAULT '{}'::jsonb`;
   await sql`ALTER TABLE creator_applications ADD COLUMN IF NOT EXISTS audience_psychographics TEXT`;
+  await sql`ALTER TABLE creator_applications ADD COLUMN IF NOT EXISTS product_type TEXT`;
   await sql`ALTER TABLE creator_applications ADD COLUMN IF NOT EXISTS open_to_product_for_content BOOLEAN`;
   await sql`ALTER TABLE creator_applications ADD COLUMN IF NOT EXISTS open_to_whitelisting BOOLEAN`;
 
@@ -140,6 +144,7 @@ async function createCreatorOpsTables(sql) {
       email               TEXT,
       location            TEXT,
       niche               TEXT,
+      product_type        TEXT,
       strengths           TEXT,
       audience_description TEXT,
       audience_psychographics TEXT,
@@ -163,6 +168,7 @@ async function createCreatorOpsTables(sql) {
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_candidates_source ON creator_candidates(source, created_at DESC)`;
   await sql`ALTER TABLE creator_candidates ADD COLUMN IF NOT EXISTS audience_description TEXT`;
   await sql`ALTER TABLE creator_candidates ADD COLUMN IF NOT EXISTS audience_psychographics TEXT`;
+  await sql`ALTER TABLE creator_candidates ADD COLUMN IF NOT EXISTS product_type TEXT`;
   await sql`ALTER TABLE creator_candidates ADD COLUMN IF NOT EXISTS rate_expectations TEXT`;
   await sql`ALTER TABLE creator_candidates ADD COLUMN IF NOT EXISTS activities TEXT[] NOT NULL DEFAULT '{}'`;
   await sql`ALTER TABLE creator_candidates ADD COLUMN IF NOT EXISTS review_scorecard JSONB NOT NULL DEFAULT '{}'::jsonb`;

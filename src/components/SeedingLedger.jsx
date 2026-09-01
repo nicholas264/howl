@@ -11,6 +11,7 @@ const STATUS_OPTIONS = [
 ];
 
 const NICHE_OPTIONS = ['Overland', 'Offroad', 'Ski', 'MTB', 'Hunt', 'Fish', 'Van life', 'Jeep', 'Surf', 'Backyard'];
+const PRODUCT_TYPE_OPTIONS = ['R1', 'R3', 'R4 MKii', 'R1 HaulBag', 'R3 HaulBag', 'Accessory', 'No product needed'];
 
 const EMPTY_SEED_ITEM = {
   product_key: '',
@@ -31,6 +32,7 @@ const EMPTY_ADD = {
   location: '',
   niche: '',
   niche_tags: [],
+  product_type: '',
   seeded_on: '',
   seed_items: [{ ...EMPTY_SEED_ITEM }],
   shipping_cost: '',
@@ -326,14 +328,18 @@ export default function SeedingLedger({ canManage = false }) {
 
   function chooseSeedProduct(index, key) {
     const option = productOptionByKey[key];
-    updateSeedItem(index, option ? {
-      product_key: key,
-      product_label: option.label,
-      unit_type: option.unit_type,
-      unit_cogs: option.unit_cogs ? String(option.unit_cogs) : '',
-      shopify_product_id: option.product_id,
-      shopify_variant_id: option.variant_id,
-    } : { ...EMPTY_SEED_ITEM });
+    setForm(current => ({
+      ...current,
+      product_type: current.product_type || option?.label || '',
+      seed_items: current.seed_items.map((item, itemIndex) => itemIndex === index ? (option ? {
+        product_key: key,
+        product_label: option.label,
+        unit_type: option.unit_type,
+        unit_cogs: option.unit_cogs ? String(option.unit_cogs) : '',
+        shopify_product_id: option.product_id,
+        shopify_variant_id: option.variant_id,
+      } : { ...EMPTY_SEED_ITEM }) : item),
+    }));
   }
 
   function addSeedItem() {
@@ -471,6 +477,9 @@ export default function SeedingLedger({ canManage = false }) {
 
   return (
     <div className="forge seed-page">
+      <datalist id="seed-product-types">
+        {PRODUCT_TYPE_OPTIONS.map(option => <option key={option} value={option} />)}
+      </datalist>
       <div className="forge-head">
         <div>
           <div className="forge-eyebrow">Product Seeding</div>
@@ -541,6 +550,7 @@ export default function SeedingLedger({ canManage = false }) {
             <IntakeInput label="Instagram" placeholder="@handle or profile URL" value={form.instagram_handle} onChange={e => setForm({ ...form, instagram_handle: e.target.value })} />
             <IntakeInput label="Contact" placeholder="Email or DM contact" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
             <IntakeInput label="Location" placeholder="City, state" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} />
+            <IntakeInput label="Product owned" list="seed-product-types" placeholder="R1, R3, R4 MKii..." value={form.product_type} onChange={e => setForm({ ...form, product_type: e.target.value })} />
             <div className="niche-tag-select span-2">
               <IntakeSelect label="Creator tags" value="" onChange={e => addNicheTag(e.target.value)}>
                 <option value="">Add category</option>
@@ -587,15 +597,14 @@ export default function SeedingLedger({ canManage = false }) {
           </section>
 
           <section>
-            <h3>Terms and assets</h3>
-            <IntakeSelect label="Engagement" value={form.engagement_type} onChange={e => setForm({ ...form, engagement_type: e.target.value })}>
+            <h3>Commercial terms</h3>
+            <IntakeSelect label="Term type" value={form.engagement_type} onChange={e => setForm({ ...form, engagement_type: e.target.value })}>
               <option value="one_off">One-off paid</option>
               <option value="retainer">Retainer</option>
             </IntakeSelect>
-            <IntakeInput label="Creator fee" type="number" step="0.01" placeholder="0.00" value={form.creator_fee} onChange={e => setForm({ ...form, creator_fee: e.target.value })} />
+            <IntakeInput label="Compensation" type="number" step="0.01" placeholder="0.00" value={form.creator_fee} onChange={e => setForm({ ...form, creator_fee: e.target.value })} />
             <IntakeInput label="Assets owed" type="number" min="1" placeholder="1" value={form.asset_commitment} onChange={e => setForm({ ...form, asset_commitment: e.target.value })} />
             <IntakeInput label="Due date" type="date" value={form.deliverable_due} onChange={e => setForm({ ...form, deliverable_due: e.target.value })} />
-            <IntakeInput label="Deliverable title" className="span-2" placeholder="R4 portable fire pit UGC batch" value={form.deliverable_title} onChange={e => setForm({ ...form, deliverable_title: e.target.value })} />
             <IntakeInput label="Usage months" placeholder="12" value={form.usage_term_months} onChange={e => setForm({ ...form, usage_term_months: e.target.value })} />
             <IntakeInput label="Whitelisting / mo" type="number" step="0.01" placeholder="0.00" value={form.whitelisting_monthly_rate} onChange={e => setForm({ ...form, whitelisting_monthly_rate: e.target.value })} />
             <IntakeTextarea label="Usage rights" className="span-2" rows="3" placeholder="Paid social, organic, editing rights, term, territory..." value={form.usage_rights} onChange={e => setForm({ ...form, usage_rights: e.target.value })} />

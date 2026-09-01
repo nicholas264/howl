@@ -12,6 +12,7 @@ async function loadHealth(sql) {
         count(*)::int AS total,
         count(*) FILTER (WHERE email IS NULL)::int AS missing_email,
         count(*) FILTER (WHERE niche IS NULL)::int AS missing_niche,
+        count(*) FILTER (WHERE product_type IS NULL)::int AS missing_product_type,
         count(*) FILTER (WHERE strengths IS NULL)::int AS missing_strengths,
         count(*) FILTER (WHERE audience_demographics IS NULL)::int AS missing_audience,
         count(*) FILTER (WHERE rate_notes IS NULL)::int AS missing_rates,
@@ -22,13 +23,14 @@ async function loadHealth(sql) {
           (CASE WHEN email IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN location IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN niche IS NOT NULL THEN 1 ELSE 0 END) +
+          (CASE WHEN product_type IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN strengths IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN audience_demographics IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN rate_notes IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN EXISTS (
             SELECT 1 FROM creator_social_accounts s WHERE s.creator_id = creators.id
           ) THEN 1 ELSE 0 END)
-        )::numeric / 7 * 100))::int, 0) AS average_completeness
+        )::numeric / 8 * 100))::int, 0) AS average_completeness
       FROM creators
       WHERE status <> 'inactive'
         AND archived_at IS NULL
@@ -79,7 +81,7 @@ async function loadHealth(sql) {
     `,
     sql`
       SELECT c.id, c.name, c.email, c.stage, c.status, c.location, c.avatar_url,
-        c.niche, c.strengths, c.audience_demographics, c.rate_notes,
+        c.niche, c.product_type, c.strengths, c.audience_demographics, c.rate_notes,
         c.updated_at,
         COALESCE((
           SELECT json_build_object(
@@ -94,6 +96,7 @@ async function loadHealth(sql) {
           (CASE WHEN c.email IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN c.location IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN c.niche IS NOT NULL THEN 1 ELSE 0 END) +
+          (CASE WHEN c.product_type IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN c.strengths IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN c.audience_demographics IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN c.rate_notes IS NOT NULL THEN 1 ELSE 0 END) +
@@ -166,12 +169,13 @@ async function loadHealth(sql) {
     duplicate_groups: duplicateGroups,
     incomplete_profiles: gapRows.map(row => ({
       ...row,
-      completeness: Math.round((Number(row.complete_fields) / 7) * 100),
+      completeness: Math.round((Number(row.complete_fields) / 8) * 100),
       missing: [
         !row.email && 'Email',
         !row.location && 'Location',
         !row.primary_social?.handle && 'Social',
         !row.niche && 'Niche',
+        !row.product_type && 'Product',
         !row.strengths && 'Strengths',
         !row.audience_demographics && 'Audience',
         !row.rate_notes && 'Rates',
@@ -255,6 +259,7 @@ async function mergeCreators(sql, access, primaryId, duplicateId) {
         timezone = COALESCE(timezone, ${duplicate.timezone}),
         bio = COALESCE(bio, ${duplicate.bio}),
         niche = COALESCE(niche, ${duplicate.niche}),
+        product_type = COALESCE(product_type, ${duplicate.product_type}),
         strengths = COALESCE(strengths, ${duplicate.strengths}),
         audience_demographics = COALESCE(audience_demographics, ${duplicate.audience_demographics}),
         audience_psychographics = COALESCE(audience_psychographics, ${duplicate.audience_psychographics}),

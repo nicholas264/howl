@@ -140,13 +140,13 @@ async function resolveCreator(sql, body, userId) {
   const [created] = await sql`
     INSERT INTO creators (
       name, email, phone, status, stage, source, location, niche, notes,
-      tags, product_seeding_required, created_by
+      tags, product_seeding_required, product_type, created_by
     ) VALUES (
       ${name || handle || email}, ${email}, ${text(body.phone, 100)},
       'contracted', 'producing', 'investment_intake',
       ${text(body.location, 200)}, ${niche},
       ${text(body.creator_notes || body.notes, 2000)},
-      ${tags}, ${body.product_seeding_required !== false}, ${userId}
+      ${tags}, ${body.product_seeding_required !== false}, ${text(body.product_type, 200)}, ${userId}
     )
     RETURNING *
   `;
@@ -172,6 +172,7 @@ async function updateCreator(sql, creator, body, userId) {
       phone = COALESCE(${text(body.phone, 100)}, phone),
       location = COALESCE(${text(body.location, 200)}, location),
       niche = COALESCE(${creatorNiche(body)}, niche),
+      product_type = COALESCE(${text(body.product_type, 200)}, product_type),
       tags = CASE
         WHEN cardinality(${tags}::text[]) > 0
         THEN ARRAY(SELECT DISTINCT item FROM unnest(tags || ${tags}::text[]) item)
@@ -222,6 +223,9 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
     const body = req.body || {};
+    const items = seedItems(body);
+    const productSummary = items.map(item => item.product_label || item.unit_type).filter(Boolean).join(' + ');
+    if (!body.product_type && productSummary) body.product_type = productSummary;
     const creator = await resolveCreator(sql, body, userId);
     const updatedCreator = await updateCreator(sql, creator, body, userId);
 
@@ -289,7 +293,6 @@ export default async function handler(req, res) {
       `;
     }
 
-    const items = seedItems(body);
     const seedingRows = [];
     const shippingCost = num(body.shipping_cost, 0) || 0;
     const hasLedgerCost = items.length || feeAmount !== null || shippingCost > 0;
@@ -322,7 +325,6 @@ export default async function handler(req, res) {
       }
     }
     const seeding = seedingRows[0] || null;
-    const productSummary = items.map(item => item.product_label || item.unit_type).filter(Boolean).join(' + ');
 
     let deliverable = null;
     if (assetCommitment || text(body.deliverable_title) || dateOrNull(body.deliverable_due)) {

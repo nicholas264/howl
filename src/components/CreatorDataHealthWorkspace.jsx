@@ -5,12 +5,14 @@ const FILTERS = [
   ['email', 'Missing email'],
   ['social', 'Missing social'],
   ['intelligence', 'Missing intelligence'],
+  ['product', 'Missing product'],
   ['rates', 'Missing rates'],
 ];
 
 function profileMatches(record, filter) {
   if (filter === 'email') return record.missing.includes('Email');
   if (filter === 'social') return record.missing.includes('Social');
+  if (filter === 'product') return record.missing.includes('Product');
   if (filter === 'rates') return record.missing.includes('Rates');
   if (filter === 'intelligence') return ['Niche', 'Strengths', 'Audience'].some(item => record.missing.includes(item));
   return true;
@@ -136,7 +138,7 @@ export default function CreatorDataHealthWorkspace({ canMerge = false, onOpenCre
       <div className="health-scorecard">
         <div><span>Active records</span><strong>{summary.total || 0}</strong><small>non-inactive creators</small></div>
         <div className={summary.duplicate_groups ? 'risk' : ''}><span>Exact duplicate groups</span><strong>{summary.duplicate_groups || 0}</strong><small>same email or social handle</small></div>
-        <div><span>Average completeness</span><strong>{summary.average_completeness || 0}%</strong><small>contact, context, social, rates</small></div>
+        <div><span>Average completeness</span><strong>{summary.average_completeness || 0}%</strong><small>contact, context, product, social</small></div>
         <div className={summary.missing_email ? 'warning' : ''}><span>Missing email</span><strong>{summary.missing_email || 0}</strong><small>cannot receive outreach</small></div>
         <div><span>Archived records</span><strong>{summary.archived_total || 0}</strong><small>accessible outside active workflow</small></div>
       </div>

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
 const EMPTY_QUALIFICATION = {
   name: '', email: '', location: '', niche: '', strengths: '',
-  audience_description: '', audience_psychographics: '', rate_expectations: '', activities: '', fit_notes: '',
+  product_type: '', audience_description: '', audience_psychographics: '', rate_expectations: '', activities: '', fit_notes: '',
 };
 const EMPTY_SCORECARD = {
   brand_fit: '', creative_quality: '', audience_fit: '', reliability: '', economics: '',
@@ -16,6 +16,7 @@ const SCORE_SIGNALS = [
   ['reliability', 'Production'],
   ['economics', 'Economics'],
 ];
+const PRODUCT_TYPE_OPTIONS = ['R1', 'R3', 'R4 MKii', 'R1 HaulBag', 'R3 HaulBag', 'Accessory', 'No product needed'];
 
 function denialTemplate(record = {}) {
   const firstName = (record.name || '').trim().split(/\s+/)[0] || 'there';
@@ -54,6 +55,7 @@ function readiness(record) {
     ['Identity', record.name],
     ['Contact', record.email],
     ['Social profile', social?.handle],
+    ['Product', record.product_type],
     ['Rates', record.rate_expectations],
     ['Turnaround', record.availability],
     ['Product terms', record.open_to_product_for_content !== null && record.open_to_product_for_content !== undefined],
@@ -63,6 +65,7 @@ function readiness(record) {
     ['Contact', record.email],
     ['Social profile', social?.handle],
     ['Niche', record.niche],
+    ['Product', record.product_type],
     ['Strengths', record.strengths],
     ['Audience', record.audience_description],
     ['Audience mindset', record.audience_psychographics],
@@ -160,6 +163,7 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
       email: selected.email || '',
       location: selected.location || '',
       niche: selected.niche || '',
+      product_type: selected.product_type || '',
       strengths: selected.strengths || '',
       audience_description: selected.audience_description || '',
       audience_psychographics: selected.audience_psychographics || '',
@@ -188,7 +192,7 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
       if (!filterMatch) return false;
       if (!needle) return true;
       const social = socialLine(item);
-      return [item.name, item.email, item.location, item.niche, social?.handle]
+      return [item.name, item.email, item.location, item.niche, item.product_type, social?.handle]
         .some(value => value?.toLowerCase().includes(needle));
     }).sort((left, right) => {
       const leftFit = fitAssessment(left);
@@ -374,6 +378,9 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
 
   return (
     <section className="talent-workspace">
+      <datalist id="howl-product-types">
+        {PRODUCT_TYPE_OPTIONS.map(option => <option key={option} value={option} />)}
+      </datalist>
       <div className="talent-toolbar">
         <div className="talent-modes">
           <button className={mode === 'applications' ? 'active' : ''} onClick={() => setMode('applications')}>
@@ -494,6 +501,7 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
             })()}
             <dl className="talent-facts">
               <div><dt>Niche</dt><dd>{selected.niche || 'Not provided'}</dd></div>
+              <div><dt>Product</dt><dd>{selected.product_type || 'Not provided'}</dd></div>
               <div><dt>Strengths</dt><dd>{selected.strengths || 'Not provided'}</dd></div>
               {selected.audience_description && <div><dt>Audience</dt><dd>{selected.audience_description}</dd></div>}
               {selected.audience_psychographics && <div><dt>Audience mindset</dt><dd>{selected.audience_psychographics}</dd></div>}
@@ -530,6 +538,7 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
                     <label>Email<input type="email" value={qualification.email} onChange={event => setQualification({ ...qualification, email: event.target.value })} /></label>
                     <label>Location<input value={qualification.location} onChange={event => setQualification({ ...qualification, location: event.target.value })} /></label>
                     <label>Niche<input value={qualification.niche} onChange={event => setQualification({ ...qualification, niche: event.target.value })} /></label>
+                    <label>Product<input list="howl-product-types" placeholder="R1, R3, R4 MKii..." value={qualification.product_type} onChange={event => setQualification({ ...qualification, product_type: event.target.value })} /></label>
                     <label className="wide">Activities<input placeholder="Camping, cooking, overlanding" value={qualification.activities} onChange={event => setQualification({ ...qualification, activities: event.target.value })} /></label>
                     <label className="wide">Strengths<textarea rows="2" value={qualification.strengths} onChange={event => setQualification({ ...qualification, strengths: event.target.value })} /></label>
                     <label className="wide">Audience<textarea rows="2" value={qualification.audience_description} onChange={event => setQualification({ ...qualification, audience_description: event.target.value })} /></label>

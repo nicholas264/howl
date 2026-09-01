@@ -21,8 +21,9 @@ const CREATOR_STAGE_OPTIONS = [
 
 const EMPTY_CREATOR = {
   name: '', email: '', phone: '', location: '', stage: 'active',
-  status: 'contracted', activities: '', tags: '', bio: '', rate_notes: '', notes: '',
+  status: 'contracted', activities: '', tags: '', bio: '', product_type: '', rate_notes: '', notes: '',
 };
+const PRODUCT_TYPE_OPTIONS = ['R1', 'R3', 'R4 MKii', 'R1 HaulBag', 'R3 HaulBag', 'Accessory', 'No product needed'];
 
 const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
 
@@ -192,7 +193,7 @@ export default function CreatorWorkspace({
   const [creatorIdentity, setCreatorIdentity] = useState({ name: '', email: '', phone: '', location: '' });
   const [creatorIntel, setCreatorIntel] = useState({
     niche: '', strengths: '', audience_demographics: '', audience_psychographics: '',
-    activities: '', tags: '', rate_notes: '', bio: '',
+    activities: '', tags: '', product_type: '', rate_notes: '', bio: '',
     shipping_address1: '', shipping_address2: '', shipping_city: '', shipping_region: '',
     shipping_postal_code: '', shipping_country_code: 'US',
   });
@@ -309,6 +310,7 @@ export default function CreatorWorkspace({
       audience_psychographics: selected.audience_psychographics || '',
       activities: Array.isArray(selected.activities) ? selected.activities.join(', ') : '',
       tags: Array.isArray(selected.tags) ? selected.tags.join(', ') : '',
+      product_type: selected.product_type || '',
       rate_notes: selected.rate_notes || '',
       bio: selected.bio || '',
       shipping_address1: selected.shipping_address1 || '',
@@ -362,9 +364,9 @@ export default function CreatorWorkspace({
           : selectedPrimarySocial?.platform || 'No social profile',
       },
       {
-        label: 'Fit',
-        value: selected.niche || selected.tags?.[0] || 'Unscored',
-        detail: selected.strengths || selected.activities?.slice(0, 2).join(', ') || 'Add creator strengths',
+        label: 'Product',
+        value: selected.product_type || 'Not set',
+        detail: selected.niche || selected.tags?.[0] || 'Add creator fit',
       },
       {
         label: 'Performance',
@@ -1208,6 +1210,9 @@ export default function CreatorWorkspace({
 
   return (
     <div className="creator-workspace creator-motion-workspace">
+      <datalist id="creator-product-types">
+        {PRODUCT_TYPE_OPTIONS.map(option => <option key={option} value={option} />)}
+      </datalist>
       <header className="creator-head">
         <div>
           <span className="workspace-kicker">Creator operations</span>
@@ -1256,7 +1261,7 @@ export default function CreatorWorkspace({
             <span>Pipeline</span>
             <span>Audience</span>
             <span>Focus</span>
-            <span>Rates</span>
+            <span>Product</span>
             <span>Location</span>
             <span>Output</span>
           </div>
@@ -1303,9 +1308,9 @@ export default function CreatorWorkspace({
                   <strong>{compactText(focus, 'Not set')}</strong>
                   <small>{creator.tags?.length ? compactText(creator.tags) : 'No tags'}</small>
                 </span>
-                <span className="creator-rates" title={creator.rate_notes || 'No rates recorded'}>
-                  <strong>{creator.rate_notes || 'Not set'}</strong>
-                  <small>rate notes</small>
+                <span className="creator-rates" title={creator.product_type || 'No product recorded'}>
+                  <strong>{creator.product_type || 'Not set'}</strong>
+                  <small>product</small>
                 </span>
                 <span className="creator-location" title={creator.location || 'No location'}>
                   <strong>{creator.location || 'Not set'}</strong>
@@ -1465,11 +1470,12 @@ export default function CreatorWorkspace({
               <form id="creator-context-form" className="profile-edit-form profile-edit-form-wide" onSubmit={saveCreatorIntel}>
                 <label>Niche<input disabled={!canManageCreators} value={creatorIntel.niche} onChange={event => setCreatorIntel({ ...creatorIntel, niche: event.target.value })} /></label>
                 <label>Strengths<input disabled={!canManageCreators} value={creatorIntel.strengths} onChange={event => setCreatorIntel({ ...creatorIntel, strengths: event.target.value })} /></label>
+                <label>Product<input list="creator-product-types" disabled={!canManageCreators} placeholder="R1, R3, R4 MKii..." value={creatorIntel.product_type} onChange={event => setCreatorIntel({ ...creatorIntel, product_type: event.target.value })} /></label>
                 <label className="wide">Audience<textarea disabled={!canManageCreators} rows="3" value={creatorIntel.audience_demographics} onChange={event => setCreatorIntel({ ...creatorIntel, audience_demographics: event.target.value })} /></label>
                 <label className="wide">Psychographics<textarea disabled={!canManageCreators} rows="3" value={creatorIntel.audience_psychographics} onChange={event => setCreatorIntel({ ...creatorIntel, audience_psychographics: event.target.value })} /></label>
                 <label>Activities<input disabled={!canManageCreators} placeholder="Overland, MTB, Ski" value={creatorIntel.activities} onChange={event => setCreatorIntel({ ...creatorIntel, activities: event.target.value })} /></label>
                 <label>Tags<input disabled={!canManageCreators} placeholder="Creator tags" value={creatorIntel.tags} onChange={event => setCreatorIntel({ ...creatorIntel, tags: event.target.value })} /></label>
-                <label>Rates<input disabled={!canManageCreators} value={creatorIntel.rate_notes} onChange={event => setCreatorIntel({ ...creatorIntel, rate_notes: event.target.value })} /></label>
+                <label>Rate notes<input disabled={!canManageCreators} value={creatorIntel.rate_notes} onChange={event => setCreatorIntel({ ...creatorIntel, rate_notes: event.target.value })} /></label>
                 <label className="wide">Bio<textarea disabled={!canManageCreators} rows="3" value={creatorIntel.bio} onChange={event => setCreatorIntel({ ...creatorIntel, bio: event.target.value })} /></label>
                 <label className="wide">Shipping address<input disabled={!canManageCreators} value={creatorIntel.shipping_address1} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_address1: event.target.value })} /></label>
                 <label>Address line 2<input disabled={!canManageCreators} value={creatorIntel.shipping_address2} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_address2: event.target.value })} /></label>
@@ -1615,14 +1621,7 @@ export default function CreatorWorkspace({
                       <input type="number" min="0" placeholder="Usage term months" value={engagement.usage_term_months} onChange={event => setEngagement({ ...engagement, usage_term_months: event.target.value })} />
                       <input placeholder="Payment terms" value={engagement.payment_terms} onChange={event => setEngagement({ ...engagement, payment_terms: event.target.value })} />
                     </div>
-                    <div className="detail-section-head agreement-rate-head"><span>Rate card</span><small>Optional line-item pricing</small></div>
-                    <div className="workflow-rate-grid">
-                      <input type="number" min="0" step="0.01" placeholder="UGC video rate" value={engagement.ugc_video_rate} onChange={event => setEngagement({ ...engagement, ugc_video_rate: event.target.value })} />
-                      <input type="number" min="0" step="0.01" placeholder="Raw footage rate" value={engagement.raw_footage_rate} onChange={event => setEngagement({ ...engagement, raw_footage_rate: event.target.value })} />
-                      <input type="number" min="0" step="0.01" placeholder="Hook rate" value={engagement.hook_rate} onChange={event => setEngagement({ ...engagement, hook_rate: event.target.value })} />
-                      <input type="number" min="0" step="0.01" placeholder="Photo rate" value={engagement.photo_rate} onChange={event => setEngagement({ ...engagement, photo_rate: event.target.value })} />
-                      <input type="number" min="0" step="0.01" placeholder="Whitelisting / month" value={engagement.whitelisting_monthly_rate} onChange={event => setEngagement({ ...engagement, whitelisting_monthly_rate: event.target.value })} />
-                    </div>
+                    <input type="number" min="0" step="0.01" placeholder="Whitelisting monthly fee, if separate" value={engagement.whitelisting_monthly_rate} onChange={event => setEngagement({ ...engagement, whitelisting_monthly_rate: event.target.value })} />
                     <div className="agreement-options">
                       <label><input type="checkbox" checked={engagement.paid_media_included} onChange={event => setEngagement({ ...engagement, paid_media_included: event.target.checked })} /> Paid media usage</label>
                       <label><input type="checkbox" checked={engagement.raw_footage_included} onChange={event => setEngagement({ ...engagement, raw_footage_included: event.target.checked })} /> Raw footage included</label>
@@ -2138,6 +2137,7 @@ export default function CreatorWorkspace({
               <label>Phone<input value={form.phone} onChange={event => setForm({ ...form, phone: event.target.value })} /></label>
               <label>Location<input value={form.location} onChange={event => setForm({ ...form, location: event.target.value })} /></label>
               <label>Stage<select value={form.stage} onChange={event => setForm({ ...form, stage: event.target.value })}>{CREATOR_STAGE_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+              <label>Product<input list="creator-product-types" placeholder="R1, R3, R4 MKii..." value={form.product_type} onChange={event => setForm({ ...form, product_type: event.target.value })} /></label>
               <label className="wide">Activities<input placeholder="running, hunting, overlanding" value={form.activities} onChange={event => setForm({ ...form, activities: event.target.value })} /></label>
               <label className="wide">Tags<input placeholder="Colorado, truck, technical" value={form.tags} onChange={event => setForm({ ...form, tags: event.target.value })} /></label>
               <label className="wide">Bio<textarea rows="3" value={form.bio} onChange={event => setForm({ ...form, bio: event.target.value })} /></label>
