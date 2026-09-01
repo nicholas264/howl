@@ -40,6 +40,18 @@ function monthKeyForIndex(index, year = 2026) {
   return `${year}-${String(index + 1).padStart(2, '0')}`;
 }
 
+function getMonthPacing(index, asOf = new Date(), year = 2026) {
+  const daysInMonth = new Date(year, index + 1, 0).getDate();
+  const isPast = year < asOf.getFullYear() || (year === asOf.getFullYear() && index < asOf.getMonth());
+  const isFuture = year > asOf.getFullYear() || (year === asOf.getFullYear() && index > asOf.getMonth());
+  const elapsedDays = isPast ? daysInMonth : isFuture ? 0 : clamp(asOf.getDate(), 1, daysInMonth);
+  return {
+    daysInMonth,
+    elapsedDays,
+    remainingDays: Math.max(0, daysInMonth - elapsedDays),
+  };
+}
+
 function defaultSkuAssumption(item) {
   return {
     price: item.dtcPrice,
@@ -51,6 +63,7 @@ function defaultSkuAssumption(item) {
     targetCmPct: DEFAULT_GLOBALS.targetCmPct,
     unitMultiplier: DEFAULT_GLOBALS.unitMultiplier,
     unitOverride: '',
+    spendToDate: '',
     returningRevenuePct: '',
   };
 }
@@ -124,7 +137,7 @@ function historicalFromRows(rows = []) {
   };
 }
 
-function modelSku(item, assumption, monthIndex, monthReturningRevenue, monthRevenue) {
+function modelSku(item, assumption, monthIndex, monthReturningRevenue, monthRevenue, monthPacing) {
   const forecastUnits = Number(item.units[monthIndex]) || 0;
   const override = assumption.unitOverride === '' ? null : Number(assumption.unitOverride);
   const plannedUnits = Math.max(0, override ?? forecastUnits * ((Number(assumption.unitMultiplier) || 0) / 100));
@@ -145,6 +158,13 @@ function modelSku(item, assumption, monthIndex, monthReturningRevenue, monthReve
   const targetContribution = revenue * (clamp(assumption.targetCmPct, 35, 80) / 100);
   const mediaBudget = Math.max(0, contributionBeforeMedia - targetContribution);
   const costCap = acquiredUnits > 0 ? mediaBudget / acquiredUnits : 0;
+  const spendToDate = assumption.spendToDate === '' ? 0 : Math.max(0, Number(assumption.spendToDate) || 0);
+  const dailyTarget = monthPacing.daysInMonth > 0 ? mediaBudget / monthPacing.daysInMonth : 0;
+  const paceTargetToDate = dailyTarget * monthPacing.elapsedDays;
+  const remainingSpend = Math.max(0, mediaBudget - spendToDate);
+  const requiredDaily = monthPacing.remainingDays > 0 ? remainingSpend / monthPacing.remainingDays : 0;
+  const paceDelta = spendToDate - paceTargetToDate;
+  const paceRatio = paceTargetToDate > 0 ? spendToDate / paceTargetToDate : null;
   const postMediaContribution = revenue - cogs - variableCost - fulfillment - mediaBudget;
   const cmPct = revenue > 0 ? postMediaContribution / revenue : 0;
 
@@ -159,6 +179,13 @@ function modelSku(item, assumption, monthIndex, monthReturningRevenue, monthReve
     returningRevenue,
     mediaBudget,
     costCap,
+    spendToDate,
+    dailyTarget,
+    paceTargetToDate,
+    remainingSpend,
+    requiredDaily,
+    paceDelta,
+    paceRatio,
     postMediaContribution,
     cmPct,
   };
@@ -173,6 +200,9 @@ function sumRows(rows) {
     newRevenue: acc.newRevenue + row.newRevenue,
     returningRevenue: acc.returningRevenue + row.returningRevenue,
     mediaBudget: acc.mediaBudget + row.mediaBudget,
+    spendToDate: acc.spendToDate + row.spendToDate,
+    paceTargetToDate: acc.paceTargetToDate + row.paceTargetToDate,
+    remainingSpend: acc.remainingSpend + row.remainingSpend,
     postMediaContribution: acc.postMediaContribution + row.postMediaContribution,
   }), {
     plannedUnits: 0,
@@ -182,6 +212,9 @@ function sumRows(rows) {
     newRevenue: 0,
     returningRevenue: 0,
     mediaBudget: 0,
+    spendToDate: 0,
+    paceTargetToDate: 0,
+    remainingSpend: 0,
     postMediaContribution: 0,
   });
 }
@@ -236,6 +269,7 @@ export default function SkuMediaPacingTool() {
   };
 
   const rowsByMonth = useMemo(() => SKU_MEDIA_MONTHS.map((month, index) => {
+    const monthPacing = getMonthPacing(index);
     const preRows = SKU_MEDIA_FORECAST.map(item => {
       const assumption = state.skus[item.sku];
       const forecastUnits = Number(item.units[index]) || 0;
@@ -263,8 +297,9 @@ export default function SkuMediaPacingTool() {
       index,
       monthReturningRevenue,
       monthRevenue,
+      monthPacing,
     ));
-    return { month, key: monthKeyForIndex(index), returnPct, rows, totals: sumRows(rows) };
+    return { month, key: monthKeyForIndex(index), returnPct, pacing: monthPacing, rows, totals: sumRows(rows) };
   }), [history, state.globals.returningRevenueOverride, state.globals.returningRevenuePct, state.skus, useSeasonalReturnCurve]);
 
   const selected = rowsByMonth[monthIndex];
@@ -277,6 +312,13 @@ export default function SkuMediaPacingTool() {
   const blendedCostCap = selected.totals.acquiredUnits > 0
     ? selected.totals.mediaBudget / selected.totals.acquiredUnits
     : 0;
+  const monthlyDailyTarget = selected.pacing.daysInMonth > 0
+    ? selected.totals.mediaBudget / selected.pacing.daysInMonth
+    : 0;
+  const requiredDailyTotal = selected.pacing.remainingDays > 0
+    ? selected.totals.remainingSpend / selected.pacing.remainingDays
+    : 0;
+  const totalPaceDelta = selected.totals.spendToDate - selected.totals.paceTargetToDate;
   const returnSource = history.months.length
     ? `${history.months.length} Shopify snapshot months`
     : 'manual fallback';
@@ -285,7 +327,7 @@ export default function SkuMediaPacingTool() {
     : 'No snapshot';
 
   const exportCsv = () => {
-    const headings = ['Month', 'SKU', 'Planned units', 'New units', 'Returning units', 'Revenue', 'New revenue', 'Returning revenue', 'Cost cap', 'Paid media', 'Post-media CM %'];
+    const headings = ['Month', 'SKU', 'Planned units', 'New units', 'Returning units', 'Revenue', 'New revenue', 'Returning revenue', 'Cost cap', 'Monthly paid media', 'Daily target', 'Spend to date', 'Pace target to date', 'Required daily', 'Post-media CM %'];
     const lines = rowsByMonth.flatMap(month => month.rows.map(row => [
       month.month,
       row.sku,
@@ -297,6 +339,10 @@ export default function SkuMediaPacingTool() {
       row.returningRevenue.toFixed(2),
       row.costCap.toFixed(2),
       row.mediaBudget.toFixed(2),
+      row.dailyTarget.toFixed(2),
+      row.spendToDate.toFixed(2),
+      row.paceTargetToDate.toFixed(2),
+      row.requiredDaily.toFixed(2),
       (row.cmPct * 100).toFixed(2),
     ]));
     const csv = [headings, ...lines].map(line => line.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -348,6 +394,24 @@ export default function SkuMediaPacingTool() {
           <span>Post-media CM</span>
           <strong>{fmtPct(totalCmPct * 100)}</strong>
           <small>{fmtMoney(selected.totals.postMediaContribution)} contribution</small>
+        </div>
+      </section>
+
+      <section className="sku-pacing-daily">
+        <div>
+          <span>{selected.month} daily target</span>
+          <strong>{fmtMoney(monthlyDailyTarget)}</strong>
+          <small>{selected.pacing.elapsedDays} of {selected.pacing.daysInMonth} days elapsed</small>
+        </div>
+        <div className={totalPaceDelta < 0 ? 'behind' : 'ahead'}>
+          <span>Spend pace</span>
+          <strong>{totalPaceDelta < 0 ? '-' : '+'}{fmtMoney(Math.abs(totalPaceDelta))}</strong>
+          <small>{fmtMoney(selected.totals.spendToDate)} spent vs {fmtMoney(selected.totals.paceTargetToDate)} pace</small>
+        </div>
+        <div>
+          <span>Required daily</span>
+          <strong>{fmtMoney(requiredDailyTotal)}</strong>
+          <small>{fmtMoney(selected.totals.remainingSpend)} left across {selected.pacing.remainingDays} days</small>
         </div>
       </section>
 
@@ -434,6 +498,8 @@ export default function SkuMediaPacingTool() {
                 <select value={sortKey} onChange={event => setSortKey(event.target.value)}>
                   <option value="mediaBudget">Paid media</option>
                   <option value="costCap">Cost Cap</option>
+                  <option value="requiredDaily">Required daily</option>
+                  <option value="paceDelta">Pace delta</option>
                   <option value="acquiredUnits">New units</option>
                   <option value="returningRevenue">Returning revenue</option>
                   <option value="revenue">Revenue</option>
@@ -447,7 +513,9 @@ export default function SkuMediaPacingTool() {
                 <span>New units</span>
                 <span>Returning rev</span>
                 <span>Cost Cap</span>
-                <span>Paid media</span>
+                <span>Monthly target</span>
+                <span>Spend to date</span>
+                <span>Daily pace</span>
               </div>
               {selectedRows.map(row => {
                 const assumption = state.skus[row.sku];
@@ -471,6 +539,20 @@ export default function SkuMediaPacingTool() {
                     <b>{fmtMoney(row.returningRevenue)}</b>
                     <b>{fmtMoney(row.costCap)}</b>
                     <b>{fmtMoney(row.mediaBudget)}</b>
+                    <label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="$0"
+                        value={assumption.spendToDate}
+                        onChange={event => updateSku(row.sku, { spendToDate: event.target.value })}
+                      />
+                    </label>
+                    <span className={row.paceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
+                      <strong>{fmtMoney(row.requiredDaily)}</strong>
+                      <small>{row.paceDelta < 0 ? 'Behind' : 'Ahead'} {fmtMoney(Math.abs(row.paceDelta))}</small>
+                    </span>
                     <div className="sku-pacing-inline">
                       <label>
                         Price
