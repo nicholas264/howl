@@ -307,9 +307,6 @@ const S = {
 
 const DASH_TABS = [
   { key: 'dashboard-cfo',      view: 'cfo',      label: 'CFO' },
-  { key: 'dashboard-growth',   view: 'growth',   label: 'Growth' },
-  { key: 'dashboard-meta',     view: 'meta',     label: 'Meta' },
-  { key: 'dashboard-shopify',  view: 'shopify',  label: 'Shopify' },
   { key: 'dashboard-creative', view: 'creative', label: 'Creative' },
   { key: 'dashboard-forecast', view: 'forecast', label: 'Forecast' },
 ];
@@ -1088,9 +1085,6 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
 
   const VIEW_TITLES = {
     cfo:      { title: 'CFO View',  subtitle: 'Revenue, contribution margin, OpEx coverage, and estimated profitability.' },
-    growth:   { title: 'Growth Data', subtitle: 'Media mix, channel spend, and acquisition context.' },
-    meta:     { title: 'Meta Ads',  subtitle: 'Live budget, formats, monthly velocity, recent launches.' },
-    shopify:  { title: 'Shopify',   subtitle: 'Seasonality, monthly trend, CVR, product mix.' },
     creative: { title: 'Creative',  subtitle: 'Velocity, format mix, top creators — sourced from launch_history.' },
     forecast: { title: 'Forecast',  subtitle: 'Pacing actuals against the HOWL \'26 projections.' },
   };
@@ -1119,54 +1113,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {(newestShopifySnapshotAt > 0 || newestMetaSnapshotAt > 0 || newestGoogleSnapshotAt > 0 || newestKlaviyoSnapshotAt > 0) && (
-            <span style={{ fontSize: 9, color: (shopifyIsStale || metaIsStale || googleIsStale || klaviyoIsStale) ? '#9a6a0a' : '#88857f', letterSpacing: 1 }}>
-              Shopify {sourceAgeLabel(newestShopifySnapshotAt)}
-              {' · '}Meta {sourceAgeLabel(newestMetaSnapshotAt)}
-              {' · '}Google {sourceAgeLabel(newestGoogleSnapshotAt)}
-              {' · '}Klaviyo {sourceAgeLabel(newestKlaviyoSnapshotAt)}
-            </span>
-          )}
           <button onClick={syncDashboard} disabled={sourceLoading} style={sourceLoading ? { ...S.btn, cursor: 'not-allowed', opacity: 0.65 } : S.btn}>
             {sourceLoading ? 'Syncing…' : 'Sync Dashboard'}
           </button>
-          <details style={{ position: 'relative' }}>
-            <summary style={{ ...S.ghostBtn, listStyle: 'none', userSelect: 'none' }}>
-              Sources
-            </summary>
-            <div style={{
-              position: 'absolute',
-              right: 0,
-              top: 'calc(100% + 6px)',
-              zIndex: 10,
-              display: 'grid',
-              gap: 6,
-              minWidth: 170,
-              padding: 8,
-              background: DASH.surface,
-              border: `1px solid ${DASH.border}`,
-              borderRadius: 9,
-              boxShadow: '0 16px 36px rgba(45,40,30,.12)',
-            }}>
-              <button onClick={loadDashboard} disabled={loading} style={loading ? { ...S.ghostBtn, cursor: 'not-allowed' } : S.ghostBtn}>
-                {loading ? 'Loading…' : 'Meta'}
-              </button>
-              <button onClick={loadShopify} disabled={shopifyLoading} style={shopifyLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : S.ghostBtn}>
-                {shopifyLoading ? 'Loading…' : 'Shopify'}
-              </button>
-              <button onClick={loadGoogle} disabled={googleLoading} style={googleLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : S.ghostBtn}>
-                {googleLoading ? 'Loading…' : 'Google'}
-              </button>
-              <button onClick={loadKlaviyo} disabled={klaviyoLoading} style={klaviyoLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : S.ghostBtn}>
-                {klaviyoLoading ? 'Loading…' : 'Klaviyo'}
-              </button>
-              {view === 'forecast' && (
-                <button onClick={refreshForecast} disabled={forecastLoading} style={forecastLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : S.ghostBtn}>
-                  {forecastLoading ? 'Pulling…' : 'Forecast'}
-                </button>
-              )}
-            </div>
-          </details>
         </div>
       </div>
 
@@ -1178,12 +1127,6 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           Google Ads: pulled {googleData.months?.length || 0} months · ${(googleData.months || []).reduce((a, m) => a + (m.spend || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} total spend
         </div>
       )}
-      {view === 'growth' && klaviyoData && !klaviyoError && (
-        <div style={{ padding: '8px 12px', border: `1px solid ${klaviyoData.configured === false ? 'rgba(245,166,35,0.4)' : 'rgba(63,185,80,0.4)'}`, background: klaviyoData.configured === false ? 'rgba(245,166,35,0.1)' : 'rgba(63,185,80,0.08)', color: klaviyoData.configured === false ? '#9a6a0a' : '#256b35', fontSize: 10, borderRadius: 4, marginBottom: 20 }}>
-          Klaviyo: {klaviyoData.configured === false ? (klaviyoData.error || 'not configured') : `pulled ${klaviyoData.months?.length || 0} months · $${Math.round((klaviyoData.months || []).reduce((a, m) => a + (m.revenue || 0), 0)).toLocaleString()} attributed revenue`}
-        </div>
-      )}
-
       {view === 'creative' && creativeWorkspaceMode === 'motion' && (
         <CreativePerformanceWorkspace
           creativeTable={creativeTable}
@@ -2038,7 +1981,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
 	        if (!hasAnyData) {
 	          return (
 	            <div style={{ ...S.card, color: '#77746f', fontSize: 12 }}>
-	              {(loading || shopifyLoading || googleLoading) ? 'Loading…' : `No data yet. Click Sync Data above to populate the ${view === 'growth' ? 'Growth Data' : 'CFO'} view.`}
+	              {(loading || shopifyLoading || googleLoading) ? 'Loading…' : 'No data yet. Click Sync Data above to populate this view.'}
 	            </div>
 	          );
 	        }
@@ -2403,6 +2346,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         const ltmOpexCoverage = ltm.opex > 0 ? ltm.cm3 / ltm.opex : null;
         // For UI: show the average full-month OpEx budget, even while current-month actuals are MTD prorated.
         const opex = ltm.monthlyOpexBudget / Math.max(rollupRows.length, 1);
+        const ytdRevenueRows = rollupRows
+          .filter(r => r.month.startsWith(`${summaryYear}-`) && r.month <= currentMonthKey)
+          .sort((a, b) => a.month.localeCompare(b.month));
+        const maxYtdMonthlyRevenue = Math.max(...ytdRevenueRows.map(r => r.revenue), 1);
 
         const fmtPct = (n) => (n == null || isNaN(n)) ? '—' : (n * 100).toFixed(1) + '%';
         const fmt$ = (n) => (n == null || isNaN(n)) ? '—' : '$' + Math.round(n).toLocaleString();
@@ -2557,7 +2504,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
             <>
               <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 16, marginTop: 28 }}>
                 <div>
-                  <div className="eyebrow" style={{ marginBottom: 6 }}>Growth Data</div>
+                  <div className="eyebrow" style={{ marginBottom: 6 }}>Performance</div>
                   <div className="display-md" style={{ color: '#171717' }}>Performance Control Room</div>
                   <div className="display-italic" style={{ fontSize: 12, color: '#77746f', marginTop: 4 }}>
                     Ratio guardrails, source health, channel mix, and lifecycle revenue.
@@ -2705,7 +2652,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                   })}
                 </div>
                 <div style={{ display: 'flex', gap: 14, marginTop: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#1877f2' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Meta</span></div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#1877f2' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Paid Social</span></div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#fbbc05' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Google</span></div>
                 </div>
               </div>
@@ -2858,7 +2805,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
 
             {hasLegacyCustomerMonths && (
               <div style={{ ...S.err, marginBottom: 16, color: '#9a6a0a', borderColor: 'rgba(245,166,35,0.4)', background: 'rgba(245,166,35,0.1)' }}>
-                Some {summaryYear} customer snapshots predate unique-customer tracking. Click Load Shopify to refresh the year and replace legacy summed customer counts.
+                Some {summaryYear} customer snapshots predate unique-customer tracking. Sync Dashboard to refresh the year and replace legacy summed customer counts.
               </div>
             )}
 
@@ -2954,7 +2901,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
 
             {!dataReady && (
               <div style={{ ...S.card, marginBottom: 20, color: '#77746f', fontSize: 12 }}>
-                Load Meta + Shopify data above to populate this view.
+                Sync Dashboard above to populate this view.
               </div>
             )}
 
@@ -3008,6 +2955,52 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                       )}
                     </div>
                   ))}
+                </div>
+
+                {/* Monthly revenue by month YTD */}
+                <div style={{ ...S.card, marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 14, marginBottom: 14, flexWrap: 'wrap' }}>
+                    <span style={{ ...S.label, marginBottom: 0 }}>Monthly Revenue YTD — {summaryYear}</span>
+                    <span style={{ fontSize: 10, color: '#77746f', letterSpacing: 1 }}>
+                      {fmt$(ltm.revenue)} YTD gross sales · current month is MTD
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(ytdRevenueRows.length, 1)}, minmax(42px, 1fr))`, gap: 10, minHeight: 230, alignItems: 'end' }}>
+                    {ytdRevenueRows.map(r => {
+                      const barHeight = Math.max(8, (r.revenue / maxYtdMonthlyRevenue) * 168);
+                      const dtcPct = r.revenue > 0 ? (r.dtcGrossRevenue / r.revenue) * 100 : 0;
+                      const dealerPct = r.revenue > 0 ? (r.dealerRevenue / r.revenue) * 100 : 0;
+                      const otherPct = r.revenue > 0 ? Math.max(0, 100 - dtcPct - dealerPct) : 0;
+                      return (
+                        <div key={r.month} style={{ display: 'grid', gridTemplateRows: 'auto 1fr auto auto', gap: 6, minWidth: 0, alignItems: 'end' }}>
+                          <div style={{ fontSize: 10, color: r.isCurrent ? '#d84a17' : '#171717', textAlign: 'center', fontWeight: 800, lineHeight: 1 }}>
+                            {fmt$(r.revenue)}
+                          </div>
+                          <div style={{ height: 168, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+                            <div
+                              title={`${fmtMo(r.month)} revenue: ${fmt$(r.revenue)} | DTC ${fmt$(r.dtcGrossRevenue)} | Dealer ${fmt$(r.dealerRevenue)} | Other ${fmt$(r.offPlatformRevenue)}`}
+                              style={{ width: '100%', maxWidth: 54, height: barHeight, display: 'flex', flexDirection: 'column-reverse', background: '#f4f1ea', border: '1px solid #dedbd3', borderRadius: 5, overflow: 'hidden' }}
+                            >
+                              {r.dtcGrossRevenue > 0 && <div style={{ height: `${dtcPct}%`, background: '#d84a17' }} />}
+                              {r.dealerRevenue > 0 && <div style={{ height: `${dealerPct}%`, background: '#9a6a0a' }} />}
+                              {r.offPlatformRevenue > 0 && <div style={{ height: `${otherPct}%`, background: '#315f91' }} />}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: 9, color: r.isCurrent ? '#d84a17' : '#77746f', textAlign: 'center', fontWeight: r.isCurrent ? 800 : 700, letterSpacing: 1 }}>
+                            {fmtMo(r.month)}
+                          </div>
+                          <div style={{ fontSize: 8, color: '#88857f', textAlign: 'center', minHeight: 10, letterSpacing: 1 }}>
+                            {r.isCurrent ? 'MTD' : ''}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: 'flex', gap: 14, marginTop: 12, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#d84a17' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>DTC Gross</span></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#9a6a0a' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Dealer</span></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#315f91' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Other</span></div>
+                  </div>
                 </div>
 
                 {/* Current-month pace */}
@@ -3149,7 +3142,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                           })}
                         </div>
                         <div style={{ display: 'flex', gap: 14, marginTop: 10 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#1877f2' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Meta</span></div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#1877f2' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Paid Social</span></div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#fbbc05' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Google</span></div>
                         </div>
                       </>
@@ -3814,7 +3807,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
 
       {view === 'meta' && !data && !loading && (
         <div style={{ color: '#88857f', fontSize: 12, padding: '40px 0' }}>
-          Click "Load Meta" above to pull your ad shipping data from Meta.
+          Sync Dashboard above to pull ad delivery data.
         </div>
       )}
 
@@ -4088,7 +4081,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
 
       {view === 'shopify' && !shopifyData && !shopifyLoading && !(historySnapshots || []).some(r => r.shopify || r.shopify_dealer) && (
         <div style={{ color: '#88857f', fontSize: 12, padding: '40px 0' }}>
-          Click "Load Shopify" above to pull store analytics from Shopify.
+          Sync Dashboard above to pull store analytics.
         </div>
       )}
 
@@ -4165,7 +4158,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
             {/* Seasonality Insights */}
             {usingSnapshots && (
               <div style={{ ...S.err, marginBottom: 16, color: '#9a6a0a', borderColor: 'rgba(245,166,35,0.4)', background: 'rgba(245,166,35,0.1)' }}>
-                Showing snapshotted Shopify history. Click Load Shopify to refresh live data and product mix.
+                Showing snapshotted store history. Sync Dashboard to refresh live data and product mix.
               </div>
             )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 20 }}>

@@ -210,10 +210,7 @@ export default function HowlAdEngine({ appAccess }) {
       label: 'Performance',
       items: [
         { key: 'dashboard-cfo', label: 'Dashboard', permission: 'analytics.read' },
-        { key: 'dashboard-growth', label: 'Growth Data', permission: 'analytics.read' },
         { key: 'dashboard-forecast', label: 'Forecast', permission: 'analytics.read' },
-        { key: 'dashboard-meta', label: 'Meta', permission: 'analytics.read' },
-        { key: 'dashboard-shopify', label: 'Shopify', permission: 'analytics.read' },
         { key: 'log', label: 'Launch Log', permission: 'launch.read' },
       ],
     },
@@ -366,9 +363,6 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "founder" && <FounderAdTool />}
         {activeTab === "gallery" && <GalleryTab cart={cart} />}
         {activeTab === "dashboard-cfo" && <DashboardTool setActiveTab={navigate} view="cfo" />}
-        {activeTab === "dashboard-growth" && <DashboardTool setActiveTab={navigate} view="growth" />}
-        {activeTab === "dashboard-meta" && <DashboardTool setActiveTab={navigate} view="meta" />}
-        {activeTab === "dashboard-shopify" && <DashboardTool setActiveTab={navigate} view="shopify" />}
         {activeTab === "map-monitor" && <MapMonitorWorkspace canManage={can('admin.users')} />}
         {activeTab === "dashboard-creative" && <DashboardTool setActiveTab={navigate} view="creative" canManageCreators={can('creators.write')} />}
         {activeTab === "creative-analytics" && <DashboardTool setActiveTab={navigate} view="creative" canManageCreators={can('creators.write')} />}
