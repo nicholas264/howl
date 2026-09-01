@@ -104,8 +104,10 @@ function agreementPreview(value, creator, engagement) {
 }
 
 function CreatorAvatar({ creator, large = false }) {
-  return creator.avatar_url
-    ? <img className={`creator-avatar ${large ? 'large' : ''}`} src={creator.avatar_url} alt="" />
+  const [failedSrc, setFailedSrc] = useState('');
+  const src = creator.avatar_url && creator.avatar_url !== failedSrc ? creator.avatar_url : '';
+  return src
+    ? <img className={`creator-avatar ${large ? 'large' : ''}`} src={src} alt="" onError={() => setFailedSrc(src)} />
     : <div className={`creator-avatar fallback ${large ? 'large' : ''}`}>{initials(creator.name)}</div>;
 }
 

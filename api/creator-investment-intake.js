@@ -1,5 +1,6 @@
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+import { mirrorImageUrlToBlob } from './_lib/blob/mirror.js';
 import { discoverInstagramProfile } from './_lib/instagram-discovery.js';
 
 function text(value, max = 2000) {
@@ -259,6 +260,7 @@ export default async function handler(req, res) {
           updated_at = now()
       `;
       if (discovered?.avatar_url) {
+        discovered.avatar_url = await mirrorImageUrlToBlob(discovered.avatar_url, `creator-${updatedCreator.id}-${discovered.handle || handle}-avatar`);
         await sql`
           UPDATE creators
           SET avatar_url = COALESCE(avatar_url, ${discovered.avatar_url}), updated_at = now()

@@ -18,6 +18,12 @@ function profileMatches(record, filter) {
   return true;
 }
 
+function AvatarFallback({ src, name }) {
+  const [failedSrc, setFailedSrc] = useState('');
+  const imageSrc = src && src !== failedSrc ? src : '';
+  return imageSrc ? <img src={imageSrc} alt="" onError={() => setFailedSrc(imageSrc)} /> : (name || '?').slice(0, 1);
+}
+
 export default function CreatorDataHealthWorkspace({ canMerge = false, onOpenCreator }) {
   const [data, setData] = useState({ summary: {}, duplicate_groups: [], incomplete_profiles: [], archived_creators: [] });
   const [mode, setMode] = useState('duplicates');
@@ -190,7 +196,7 @@ export default function CreatorDataHealthWorkspace({ canMerge = false, onOpenCre
           <div className="profile-health-list">
             {profiles.map(record => (
               <button type="button" key={record.id} onClick={() => openCreator(record)}>
-                <span className="health-avatar">{record.avatar_url ? <img src={record.avatar_url} alt="" /> : record.name.slice(0, 1)}</span>
+                <span className="health-avatar"><AvatarFallback src={record.avatar_url} name={record.name} /></span>
                 <span><strong>{record.name}</strong><small>{record.primary_social?.handle || record.email || 'No contact identity'}</small></span>
                 <span className="health-progress"><i><b style={{ width: `${record.completeness}%` }} /></i><small>{record.completeness}% complete</small></span>
                 <span className="health-missing">{record.missing.slice(0, 4).map(item => <i key={item}>{item}</i>)}</span>
@@ -229,7 +235,7 @@ export default function CreatorDataHealthWorkspace({ canMerge = false, onOpenCre
             {data.archived_creators.map(record => (
               <div key={record.id} className="archive-record">
                 <button type="button" onClick={() => openCreator(record)}>
-                  <span className="health-avatar">{record.avatar_url ? <img src={record.avatar_url} alt="" /> : record.name.slice(0, 1)}</span>
+                  <span className="health-avatar"><AvatarFallback src={record.avatar_url} name={record.name} /></span>
                   <span><strong>{record.name}</strong><small>{record.primary_social?.handle || record.email || record.clickup_status || 'Archived creator'}</small></span>
                   <span className="health-missing">
                     <i>{record.source || 'source'}</i>

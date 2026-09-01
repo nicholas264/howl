@@ -1,5 +1,6 @@
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+import { mirrorImageUrlToBlob } from './_lib/blob/mirror.js';
 import { discoverInstagramProfile } from './_lib/instagram-discovery.js';
 
 function normalizeHandle(value) {
@@ -10,6 +11,8 @@ async function syncInstagramAccount({ sql, creatorId, account, userId }) {
   const handle = normalizeHandle(account.handle || account.profile_url);
   if (!handle) throw new Error('Add an Instagram handle first');
   const profile = await discoverInstagramProfile(handle);
+  const avatarUrl = await mirrorImageUrlToBlob(profile.avatar_url, `creator-${creatorId}-${profile.handle || handle}-avatar`);
+  profile.avatar_url = avatarUrl;
   await sql`
     UPDATE creator_social_accounts SET
       handle = ${profile.handle || handle},
@@ -24,7 +27,7 @@ async function syncInstagramAccount({ sql, creatorId, account, userId }) {
   `;
   await sql`
     UPDATE creators
-    SET avatar_url = COALESCE(${profile.avatar_url || null}, avatar_url), updated_at = now()
+    SET avatar_url = COALESCE(${avatarUrl || null}, avatar_url), updated_at = now()
     WHERE id = ${creatorId}
   `;
   await sql`
@@ -53,7 +56,12 @@ export default async function handler(req, res) {
         FROM creators c
         JOIN creator_social_accounts s ON s.creator_id = c.id AND s.platform = 'instagram'
         WHERE c.archived_at IS NULL
-          AND (c.avatar_url IS NULL OR c.avatar_url = '')
+          AND (
+            c.avatar_url IS NULL
+            OR c.avatar_url = ''
+            OR c.avatar_url ILIKE '%fbcdn.net%'
+            OR c.avatar_url ILIKE '%cdninstagram.com%'
+          )
           AND (s.handle IS NOT NULL OR s.profile_url IS NOT NULL)
         ORDER BY s.last_synced_at ASC NULLS FIRST, c.updated_at DESC
         LIMIT ${limit}

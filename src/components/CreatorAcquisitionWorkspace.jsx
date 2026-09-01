@@ -92,6 +92,12 @@ function fitAssessment(record) {
   };
 }
 
+function AvatarFallback({ src, name }) {
+  const [failedSrc, setFailedSrc] = useState('');
+  const imageSrc = src && src !== failedSrc ? src : '';
+  return imageSrc ? <img src={imageSrc} alt="" onError={() => setFailedSrc(imageSrc)} /> : (name || '?').slice(0, 1);
+}
+
 function CandidateCard({ record, type, selected, onSelect }) {
   const social = socialLine(record);
   const quality = readiness(record);
@@ -99,7 +105,7 @@ function CandidateCard({ record, type, selected, onSelect }) {
   return (
     <button type="button" className={`talent-card ${selected ? 'selected' : ''}`} onClick={() => onSelect(record)}>
       <span className="talent-avatar">
-        {(record.avatar_url || social?.avatar_url) ? <img src={record.avatar_url || social.avatar_url} alt="" /> : (record.name || '?').slice(0, 1)}
+        <AvatarFallback src={record.avatar_url || social?.avatar_url} name={record.name} />
       </span>
       <span>
         <strong>{record.name || social?.handle || 'Unnamed prospect'}</strong>

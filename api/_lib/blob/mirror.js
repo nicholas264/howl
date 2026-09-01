@@ -28,3 +28,21 @@ export async function mirrorAssetToBlob(buffer, mimeType, fileName) {
 }
 
 export const mirrorVideoToBlob = mirrorAssetToBlob;
+
+export async function mirrorImageUrlToBlob(url, fileName = 'avatar') {
+  try {
+    if (!url || !process.env.BLOB_READ_WRITE_TOKEN) return url || null;
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
+    if (!response.ok) throw new Error(`image fetch failed (${response.status})`);
+    const mimeType = response.headers.get('content-type') || 'image/jpeg';
+    if (!mimeType.startsWith('image/')) throw new Error(`unexpected content type: ${mimeType}`);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const extension = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+    return await mirrorAssetToBlob(buffer, mimeType, `${fileName}.${extension}`) || url;
+  } catch (err) {
+    console.error('mirrorImageUrlToBlob failed:', err.message);
+    return url || null;
+  }
+}

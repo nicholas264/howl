@@ -1,4 +1,5 @@
 import { requirePermission } from './_lib/app-access.js';
+import { mirrorImageUrlToBlob } from './_lib/blob/mirror.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import { discoverInstagramProfile, normalizeInstagramHandle } from './_lib/instagram-discovery.js';
 import { getUserGoogleAccessToken } from './_lib/google-user-oauth.js';
@@ -135,6 +136,7 @@ async function enrichRecord(sql, type, record) {
   const handle = normalizeInstagramHandle(instagram?.handle);
   if (!handle) throw new Error('No valid Instagram handle');
   const profile = await discoverInstagramProfile(handle);
+  profile.avatar_url = await mirrorImageUrlToBlob(profile.avatar_url, `creator-candidate-${type}-${record.id}-${profile.handle || handle}-avatar`);
   const socials = mergeInstagramSocial(record.socials, profile);
   const enrichment = {
     ...(record.enrichment || {}),
@@ -307,6 +309,7 @@ export default async function handler(req, res) {
       const handle = normalizeInstagramHandle(req.body?.handle);
       if (!handle) return res.status(400).json({ error: 'Instagram handle required.' });
       const profile = await discoverInstagramProfile(handle);
+      profile.avatar_url = await mirrorImageUrlToBlob(profile.avatar_url, `creator-discovery-${profile.handle || handle}-avatar`);
       const [existing] = await sql`
         SELECT * FROM creator_candidates
         WHERE EXISTS (

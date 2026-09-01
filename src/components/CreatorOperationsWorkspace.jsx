@@ -38,6 +38,12 @@ function actionDetail(item) {
   return `${item.stage} creator · ${item.category}`;
 }
 
+function AvatarFallback({ src, name }) {
+  const [failedSrc, setFailedSrc] = useState('');
+  const imageSrc = src && src !== failedSrc ? src : '';
+  return imageSrc ? <img src={imageSrc} alt="" onError={() => setFailedSrc(imageSrc)} /> : (name || '?').slice(0, 1);
+}
+
 function inlineActionLabel(item) {
   return ({
     review_draft_brief: 'Review script',
@@ -213,7 +219,7 @@ export default function CreatorOperationsWorkspace({ canManage = false, onOpenCr
         {visible.map(item => (
           <button key={item.id} className={`operations-row ${item.action_state}`} onClick={() => onOpenCreator(item, item.target_tab)}>
             <span className="operations-avatar">
-              {item.avatar_url ? <img src={item.avatar_url} alt="" /> : item.name.slice(0, 1)}
+              <AvatarFallback src={item.avatar_url} name={item.name} />
             </span>
             <span className="operations-person">
               <strong>{item.name}</strong>
