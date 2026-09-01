@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import CreatorAvatarImage from './CreatorAvatarImage';
 
 const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
 const EMPTY_QUALIFICATION = {
@@ -93,9 +94,7 @@ function fitAssessment(record) {
 }
 
 function AvatarFallback({ src, name }) {
-  const [failedSrc, setFailedSrc] = useState('');
-  const imageSrc = src && src !== failedSrc ? src : '';
-  return imageSrc ? <img src={imageSrc} alt="" onError={() => setFailedSrc(imageSrc)} /> : (name || '?').slice(0, 1);
+  return <CreatorAvatarImage src={src}>{(name || '?').slice(0, 1)}</CreatorAvatarImage>;
 }
 
 function CandidateCard({ record, type, selected, onSelect }) {

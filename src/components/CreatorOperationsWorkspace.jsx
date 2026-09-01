@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import CreatorAvatarImage from './CreatorAvatarImage';
 
 const FILTERS = [
   ['all', 'All'],
@@ -39,9 +40,7 @@ function actionDetail(item) {
 }
 
 function AvatarFallback({ src, name }) {
-  const [failedSrc, setFailedSrc] = useState('');
-  const imageSrc = src && src !== failedSrc ? src : '';
-  return imageSrc ? <img src={imageSrc} alt="" onError={() => setFailedSrc(imageSrc)} /> : (name || '?').slice(0, 1);
+  return <CreatorAvatarImage src={src}>{(name || '?').slice(0, 1)}</CreatorAvatarImage>;
 }
 
 function inlineActionLabel(item) {

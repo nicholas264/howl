@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Papa from 'papaparse';
 import { useAuth } from '@clerk/clerk-react';
 import CreatorAcquisitionWorkspace from './CreatorAcquisitionWorkspace';
+import CreatorAvatarImage from './CreatorAvatarImage';
 import CreatorDataHealthWorkspace from './CreatorDataHealthWorkspace';
 import CreatorOperationsWorkspace from './CreatorOperationsWorkspace';
 import { uploadPublicBlob } from '../utils/blobUpload';
@@ -104,11 +105,12 @@ function agreementPreview(value, creator, engagement) {
 }
 
 function CreatorAvatar({ creator, large = false }) {
-  const [failedSrc, setFailedSrc] = useState('');
-  const src = creator.avatar_url && creator.avatar_url !== failedSrc ? creator.avatar_url : '';
-  return src
-    ? <img className={`creator-avatar ${large ? 'large' : ''}`} src={src} alt="" onError={() => setFailedSrc(src)} />
-    : <div className={`creator-avatar fallback ${large ? 'large' : ''}`}>{initials(creator.name)}</div>;
+  const fallback = <div className={`creator-avatar fallback ${large ? 'large' : ''}`}>{initials(creator.name)}</div>;
+  return (
+    <CreatorAvatarImage src={creator.avatar_url} className={`creator-avatar ${large ? 'large' : ''}`}>
+      {fallback}
+    </CreatorAvatarImage>
+  );
 }
 
 function socialProfileUrl(account) {
