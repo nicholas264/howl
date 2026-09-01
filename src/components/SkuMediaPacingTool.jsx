@@ -6,7 +6,7 @@ import {
   SKU_MEDIA_MONTHS,
 } from '../data/skuMediaForecast';
 
-const STORAGE_KEY = 'howl_sku_media_pacing_assumptions_v2';
+const STORAGE_KEY = 'howl_sku_media_pacing_assumptions_v3';
 
 const DEFAULT_GLOBALS = {
   discountPct: 0,
@@ -14,7 +14,7 @@ const DEFAULT_GLOBALS = {
   variablePct: 7,
   fulfillment: 12,
   returnRate: 3,
-  targetCmPct: 22,
+  targetCmPct: 35,
   unitMultiplier: 100,
   returningRevenuePct: 18,
   returningRevenueOverride: '',
@@ -30,13 +30,18 @@ const fmtNumber = (value, digits = 0) => (Number(value) || 0).toLocaleString(und
 });
 const fmtPct = (value, digits = 1) => `${fmtNumber(value, digits)}%`;
 
+function clamp(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return min;
+  return Math.min(max, Math.max(min, number));
+}
+
 function monthKeyForIndex(index, year = 2026) {
   return `${year}-${String(index + 1).padStart(2, '0')}`;
 }
 
 function defaultSkuAssumption(item) {
   return {
-    enabled: true,
     price: item.dtcPrice,
     discountPct: DEFAULT_GLOBALS.discountPct,
     cogsPct: DEFAULT_GLOBALS.cogsPct,
@@ -78,20 +83,22 @@ function historicalFromRows(rows = []) {
       const newRevenue = Number(source.newRevenue || 0);
       const returningRevenue = Number(source.returningRevenue || 0);
       const classified = newRevenue + returningRevenue;
-      const returningRevenuePct = netSales > 0 && classified > 0
-        ? returningRevenue / netSales
-        : 0;
       const customers = Number(source.newCustomers || 0) + Number(source.returningCustomers || 0);
       const returningCustomerPct = customers > 0
         ? Number(source.returningCustomers || 0) / customers
         : 0;
+      const classifiedCoverage = netSales > 0 ? classified / netSales : 0;
+      const rawRevenuePct = classified > 0 ? returningRevenue / classified : 0;
+      const returningRevenuePct = classifiedCoverage >= 0.5 && classifiedCoverage <= 1.25
+        ? rawRevenuePct
+        : returningCustomerPct;
       return {
         month: row.month,
         netSales,
         newRevenue,
         returningRevenue,
-        returningRevenuePct,
-        returningCustomerPct,
+        returningRevenuePct: clamp(returningRevenuePct, 0, 0.75),
+        returningCustomerPct: clamp(returningCustomerPct, 0, 0.75),
         snapshotAt: source.snapshotAt || row.updated_at || null,
       };
     })
@@ -120,24 +127,22 @@ function historicalFromRows(rows = []) {
 function modelSku(item, assumption, monthIndex, monthReturningRevenue, monthRevenue) {
   const forecastUnits = Number(item.units[monthIndex]) || 0;
   const override = assumption.unitOverride === '' ? null : Number(assumption.unitOverride);
-  const plannedUnits = assumption.enabled
-    ? Math.max(0, override ?? forecastUnits * ((Number(assumption.unitMultiplier) || 0) / 100))
-    : 0;
+  const plannedUnits = Math.max(0, override ?? forecastUnits * ((Number(assumption.unitMultiplier) || 0) / 100));
   const soldUnits = plannedUnits * (1 - (Number(assumption.returnRate) || 0) / 100);
   const realizedPrice = Math.max(0, Number(assumption.price) || 0) * (1 - (Number(assumption.discountPct) || 0) / 100);
   const revenue = soldUnits * realizedPrice;
-  const returningPctOverride = assumption.returningRevenuePct === '' ? null : Number(assumption.returningRevenuePct) / 100;
+  const returningPctOverride = assumption.returningRevenuePct === '' ? null : clamp(assumption.returningRevenuePct, 0, 75) / 100;
   const revenueShare = monthRevenue > 0 ? revenue / monthRevenue : 0;
   const returningRevenue = Math.min(revenue, returningPctOverride == null
     ? monthReturningRevenue * revenueShare
-    : revenue * Math.max(0, returningPctOverride));
+    : revenue * returningPctOverride);
   const newRevenue = Math.max(0, revenue - returningRevenue);
   const acquiredUnits = realizedPrice > 0 ? newRevenue / realizedPrice : 0;
   const cogs = revenue * ((Number(assumption.cogsPct) || 0) / 100);
   const variableCost = revenue * ((Number(assumption.variablePct) || 0) / 100);
   const fulfillment = soldUnits * (Number(assumption.fulfillment) || 0);
   const contributionBeforeMedia = revenue - cogs - variableCost - fulfillment;
-  const targetContribution = revenue * ((Number(assumption.targetCmPct) || 0) / 100);
+  const targetContribution = revenue * (clamp(assumption.targetCmPct, 35, 80) / 100);
   const mediaBudget = Math.max(0, contributionBeforeMedia - targetContribution);
   const costCap = acquiredUnits > 0 ? mediaBudget / acquiredUnits : 0;
   const postMediaContribution = revenue - cogs - variableCost - fulfillment - mediaBudget;
@@ -235,9 +240,7 @@ export default function SkuMediaPacingTool() {
       const assumption = state.skus[item.sku];
       const forecastUnits = Number(item.units[index]) || 0;
       const override = assumption.unitOverride === '' ? null : Number(assumption.unitOverride);
-      const plannedUnits = assumption.enabled
-        ? Math.max(0, override ?? forecastUnits * ((Number(assumption.unitMultiplier) || 0) / 100))
-        : 0;
+      const plannedUnits = Math.max(0, override ?? forecastUnits * ((Number(assumption.unitMultiplier) || 0) / 100));
       const realizedPrice = Math.max(0, Number(assumption.price) || 0) * (1 - (Number(assumption.discountPct) || 0) / 100);
       const soldUnits = plannedUnits * (1 - (Number(assumption.returnRate) || 0) / 100);
       return { item, revenue: soldUnits * realizedPrice };
@@ -246,9 +249,13 @@ export default function SkuMediaPacingTool() {
     const historicalPct = useSeasonalReturnCurve
       ? (history.byCalendarMonth[index] ?? history.recentReturningPct)
       : history.recentReturningPct;
-    const returnPct = state.globals.returningRevenueOverride === ''
-      ? (historicalPct || (Number(state.globals.returningRevenuePct) || 0) / 100)
-      : Number(state.globals.returningRevenueOverride) / 100;
+    const returnPct = clamp(
+      state.globals.returningRevenueOverride === ''
+        ? (history.months.length ? historicalPct : (Number(state.globals.returningRevenuePct) || 0) / 100)
+        : Number(state.globals.returningRevenueOverride) / 100,
+      0,
+      0.75,
+    );
     const monthReturningRevenue = Math.max(0, monthRevenue * returnPct);
     const rows = SKU_MEDIA_FORECAST.map(item => modelSku(
       item,
@@ -363,14 +370,14 @@ export default function SkuMediaPacingTool() {
           </label>
           <div className="sku-pacing-fields">
             {[
-              ['returningRevenueOverride', 'Returning revenue %', 0, 80],
+              ['returningRevenueOverride', 'Returning revenue %', 0, 75],
               ['unitMultiplier', 'Unit plan %', 0, 250],
               ['discountPct', 'Discount %', 0, 80],
               ['cogsPct', 'COGS %', 0, 100],
               ['variablePct', 'Variable %', 0, 50],
               ['fulfillment', 'Fulfillment $', 0, 100],
               ['returnRate', 'Returns %', 0, 50],
-              ['targetCmPct', 'Target CM %', 0, 80],
+              ['targetCmPct', 'Target CM %', 35, 80],
             ].map(([key, label, min, max]) => (
               <label key={key}>
                 {label}
@@ -381,7 +388,13 @@ export default function SkuMediaPacingTool() {
                   step={key === 'fulfillment' ? 1 : 0.5}
                   placeholder={key === 'returningRevenueOverride' ? fmtPct(selected.returnPct * 100) : undefined}
                   value={state.globals[key]}
-                  onChange={event => applyGlobal({ [key]: event.target.value === '' ? '' : Number(event.target.value) })}
+                  onChange={event => applyGlobal({
+                    [key]: event.target.value === ''
+                      ? ''
+                      : key === 'targetCmPct'
+                        ? clamp(event.target.value, 35, 80)
+                        : Number(event.target.value),
+                  })}
                 />
               </label>
             ))}
@@ -441,14 +454,7 @@ export default function SkuMediaPacingTool() {
                 return (
                   <div className="sku-pacing-row" key={row.sku}>
                     <span className="sku-pacing-name">
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={assumption.enabled}
-                          onChange={event => updateSku(row.sku, { enabled: event.target.checked })}
-                        />
-                        <strong>{row.sku}</strong>
-                      </label>
+                      <strong>{row.sku}</strong>
                       <small>{fmtMoney(row.revenue)} revenue / {fmtPct(row.cmPct * 100)} CM</small>
                     </span>
                     <label>
@@ -503,11 +509,11 @@ export default function SkuMediaPacingTool() {
                         Target CM
                         <input
                           type="number"
-                          min="0"
+                          min="35"
                           max="80"
                           step="0.5"
                           value={assumption.targetCmPct}
-                          onChange={event => updateSku(row.sku, { targetCmPct: Number(event.target.value) })}
+                          onChange={event => updateSku(row.sku, { targetCmPct: clamp(event.target.value, 35, 80) })}
                         />
                       </label>
                     </div>
