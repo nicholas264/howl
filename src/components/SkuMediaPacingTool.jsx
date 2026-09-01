@@ -228,6 +228,8 @@ export default function SkuMediaPacingTool() {
   const [historyError, setHistoryError] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
   const [useSeasonalReturnCurve, setUseSeasonalReturnCurve] = useState(true);
+  const [assumptionsOpen, setAssumptionsOpen] = useState(false);
+  const [editingSku, setEditingSku] = useState('');
 
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
@@ -312,9 +314,6 @@ export default function SkuMediaPacingTool() {
   const blendedCostCap = selected.totals.acquiredUnits > 0
     ? selected.totals.mediaBudget / selected.totals.acquiredUnits
     : 0;
-  const monthlyDailyTarget = selected.pacing.daysInMonth > 0
-    ? selected.totals.mediaBudget / selected.pacing.daysInMonth
-    : 0;
   const requiredDailyTotal = selected.pacing.remainingDays > 0
     ? selected.totals.remainingSpend / selected.pacing.remainingDays
     : 0;
@@ -356,82 +355,77 @@ export default function SkuMediaPacingTool() {
 
   return (
     <div className="sku-pacing-workspace">
-      <header className="sku-pacing-hero">
-        <div className="sku-pacing-hero-copy">
-          <span className="workspace-kicker">Contribution pacing</span>
-          <h1>Fund the new-customer gap.</h1>
-          <p>Monthly SKU targets from the 6/13 sales plan, adjusted for expected returning-customer revenue before paid media budgets and Cost Caps are set.</p>
-          <small>{SKU_MEDIA_FORECAST_SOURCE.workbook} / {SKU_MEDIA_FORECAST_SOURCE.sheet}</small>
+      <header className="sku-pacing-topbar">
+        <div>
+          <span className="workspace-kicker">Performance</span>
+          <h1>SKU media pacing</h1>
+          <small>{SKU_MEDIA_FORECAST_SOURCE.sheet}</small>
         </div>
-        <div className="sku-pacing-command">
+        <div className="sku-pacing-actions">
           <label>
-            Planning month
+            Month
             <select value={monthIndex} onChange={event => setMonthIndex(Number(event.target.value))}>
               {SKU_MEDIA_MONTHS.map((month, index) => <option key={month} value={index}>{month}</option>)}
             </select>
           </label>
+          <label>
+            Sort
+            <select value={sortKey} onChange={event => setSortKey(event.target.value)}>
+              <option value="mediaBudget">Monthly spend</option>
+              <option value="requiredDaily">Required daily</option>
+              <option value="paceDelta">Pace delta</option>
+              <option value="costCap">Cost Cap</option>
+              <option value="acquiredUnits">New units</option>
+              <option value="returningRevenue">Returning revenue</option>
+            </select>
+          </label>
+          <button type="button" onClick={() => setAssumptionsOpen(value => !value)}>
+            {assumptionsOpen ? 'Hide assumptions' : 'Assumptions'}
+          </button>
           <button type="button" onClick={exportCsv}>Export CSV</button>
         </div>
       </header>
 
       <section className="sku-pacing-metrics">
         <div className="primary">
-          <span>{selected.month} paid media ceiling</span>
+          <span>Monthly spend</span>
           <strong>{fmtMoney(selected.totals.mediaBudget)}</strong>
-          <small>{fmtMoney(selected.totals.returningRevenue)} returning revenue removed from paid demand</small>
-        </div>
-        <div>
-          <span>Account Cost Cap</span>
-          <strong>{fmtMoney(blendedCostCap)}</strong>
-          <small>{fmtNumber(selected.totals.acquiredUnits)} paid-attributed units</small>
-        </div>
-        <div>
-          <span>Returning mix</span>
-          <strong>{fmtPct(selected.returnPct * 100)}</strong>
-          <small>{returnSource} / {latestHistory}</small>
-        </div>
-        <div>
-          <span>Post-media CM</span>
-          <strong>{fmtPct(totalCmPct * 100)}</strong>
-          <small>{fmtMoney(selected.totals.postMediaContribution)} contribution</small>
-        </div>
-      </section>
-
-      <section className="sku-pacing-daily">
-        <div>
-          <span>{selected.month} daily target</span>
-          <strong>{fmtMoney(monthlyDailyTarget)}</strong>
-          <small>{selected.pacing.elapsedDays} of {selected.pacing.daysInMonth} days elapsed</small>
-        </div>
-        <div className={totalPaceDelta < 0 ? 'behind' : 'ahead'}>
-          <span>Spend pace</span>
-          <strong>{totalPaceDelta < 0 ? '-' : '+'}{fmtMoney(Math.abs(totalPaceDelta))}</strong>
-          <small>{fmtMoney(selected.totals.spendToDate)} spent vs {fmtMoney(selected.totals.paceTargetToDate)} pace</small>
         </div>
         <div>
           <span>Required daily</span>
           <strong>{fmtMoney(requiredDailyTotal)}</strong>
-          <small>{fmtMoney(selected.totals.remainingSpend)} left across {selected.pacing.remainingDays} days</small>
+          <small>{fmtMoney(selected.totals.remainingSpend)} left</small>
+        </div>
+        <div className={totalPaceDelta < 0 ? 'behind' : 'ahead'}>
+          <span>Pace</span>
+          <strong>{totalPaceDelta < 0 ? '-' : '+'}{fmtMoney(Math.abs(totalPaceDelta))}</strong>
+          <small>{fmtMoney(selected.totals.spendToDate)} spent</small>
+        </div>
+        <div>
+          <span>Cost Cap</span>
+          <strong>{fmtMoney(blendedCostCap)}</strong>
+        </div>
+        <div>
+          <span>Returning</span>
+          <strong>{fmtPct(selected.returnPct * 100)}</strong>
+          <small>{returnSource}</small>
+        </div>
+        <div>
+          <span>CM floor</span>
+          <strong>{fmtPct(totalCmPct * 100)}</strong>
+          <small>Target min 35%</small>
         </div>
       </section>
 
-      <section className="sku-pacing-layout">
-        <aside className="sku-pacing-panel">
-          <header>
-            <strong>Control assumptions</strong>
+      {assumptionsOpen ? (
+        <section className="sku-pacing-panel">
+          {historyError ? <p className="sku-pacing-error">{historyError}</p> : null}
+          <div className="sku-pacing-panel-head">
+            <strong>Global assumptions</strong>
             <button type="button" onClick={loadHistory} disabled={historyLoading}>
               {historyLoading ? 'Loading' : 'Refresh Shopify'}
             </button>
-          </header>
-          {historyError ? <p className="sku-pacing-error">{historyError}</p> : null}
-          <label className="sku-pacing-toggle">
-            <input
-              type="checkbox"
-              checked={useSeasonalReturnCurve}
-              onChange={event => setUseSeasonalReturnCurve(event.target.checked)}
-            />
-            Use seasonal returning curve
-          </label>
+          </div>
           <div className="sku-pacing-fields">
             {[
               ['returningRevenueOverride', 'Returning revenue %', 0, 75],
@@ -461,151 +455,131 @@ export default function SkuMediaPacingTool() {
                   })}
                 />
               </label>
-            ))}
+              ))}
           </div>
-          <div className="sku-pacing-history">
-            {history.months.slice(-6).map(row => (
-              <div key={row.month}>
-                <span>{row.month}</span>
-                <strong>{fmtPct(row.returningRevenuePct * 100)}</strong>
-                <small>{fmtMoney(row.returningRevenue)}</small>
-              </div>
-            ))}
+          <div className="sku-pacing-assumption-note">
+            <button
+              type="button"
+              className={useSeasonalReturnCurve ? 'active' : ''}
+              onClick={() => setUseSeasonalReturnCurve(value => !value)}
+            >
+              Seasonal curve {useSeasonalReturnCurve ? 'on' : 'off'}
+            </button>
+            <span>Shopify history: {latestHistory}. Daily pacing: {selected.pacing.elapsedDays}/{selected.pacing.daysInMonth} days elapsed.</span>
           </div>
-        </aside>
+        </section>
+      ) : null}
 
-        <main className="sku-pacing-main">
-          <div className="sku-pacing-month-strip">
-            {rowsByMonth.map((month, index) => (
-              <button
-                key={month.month}
-                type="button"
-                className={index === monthIndex ? 'active' : ''}
-                onClick={() => setMonthIndex(index)}
-              >
-                <span>{month.month.slice(0, 3)}</span>
-                <strong>{fmtMoney(month.totals.mediaBudget)}</strong>
-                <small>{fmtPct(month.returnPct * 100)} ret</small>
-              </button>
-            ))}
+      <main className="sku-pacing-table-wrap">
+        <div className="sku-pacing-table">
+          <div className="sku-pacing-row sku-pacing-row-head">
+            <span>SKU</span>
+            <span>Units</span>
+            <span>Spend to date</span>
+            <span>Monthly spend</span>
+            <span>Req/day</span>
+            <span>Cost Cap</span>
+            <span>Pace</span>
+            <span></span>
           </div>
-
-          <div className="sku-pacing-table-wrap">
-            <div className="sku-pacing-table-toolbar">
-              <strong>{selected.month} SKU pacing</strong>
-              <label>
-                Sort
-                <select value={sortKey} onChange={event => setSortKey(event.target.value)}>
-                  <option value="mediaBudget">Paid media</option>
-                  <option value="costCap">Cost Cap</option>
-                  <option value="requiredDaily">Required daily</option>
-                  <option value="paceDelta">Pace delta</option>
-                  <option value="acquiredUnits">New units</option>
-                  <option value="returningRevenue">Returning revenue</option>
-                  <option value="revenue">Revenue</option>
-                </select>
-              </label>
-            </div>
-            <div className="sku-pacing-table">
-              <div className="sku-pacing-row sku-pacing-row-head">
-                <span>SKU</span>
-                <span>Units</span>
-                <span>New units</span>
-                <span>Returning rev</span>
-                <span>Cost Cap</span>
-                <span>Monthly target</span>
-                <span>Spend to date</span>
-                <span>Daily pace</span>
-              </div>
-              {selectedRows.map(row => {
-                const assumption = state.skus[row.sku];
-                return (
-                  <div className="sku-pacing-row" key={row.sku}>
-                    <span className="sku-pacing-name">
-                      <strong>{row.sku}</strong>
-                      <small>{fmtMoney(row.revenue)} revenue / {fmtPct(row.cmPct * 100)} CM</small>
-                    </span>
+          {selectedRows.map(row => {
+            const assumption = state.skus[row.sku];
+            const isEditing = editingSku === row.sku;
+            return (
+              <div className={`sku-pacing-row-group ${isEditing ? 'open' : ''}`} key={row.sku}>
+                <div className="sku-pacing-row">
+                  <span className="sku-pacing-name">
+                    <strong>{row.sku}</strong>
+                    <small>{fmtNumber(row.acquiredUnits)} new units / {fmtMoney(row.returningRevenue)} returning rev</small>
+                  </span>
+                  <label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder={fmtNumber(row.forecastUnits, 0)}
+                      value={assumption.unitOverride}
+                      onChange={event => updateSku(row.sku, { unitOverride: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="$0"
+                      value={assumption.spendToDate}
+                      onChange={event => updateSku(row.sku, { spendToDate: event.target.value })}
+                    />
+                  </label>
+                  <b>{fmtMoney(row.mediaBudget)}</b>
+                  <b>{fmtMoney(row.requiredDaily)}</b>
+                  <b>{fmtMoney(row.costCap)}</b>
+                  <span className={row.paceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
+                    <strong>{row.paceDelta < 0 ? '-' : '+'}{fmtMoney(Math.abs(row.paceDelta))}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    className="sku-pacing-edit"
+                    onClick={() => setEditingSku(isEditing ? '' : row.sku)}
+                  >
+                    {isEditing ? 'Close' : 'Edit'}
+                  </button>
+                </div>
+                {isEditing ? (
+                  <div className="sku-pacing-inline">
                     <label>
+                      Price
                       <input
                         type="number"
                         min="0"
                         step="1"
-                        placeholder={fmtNumber(row.forecastUnits, 0)}
-                        value={assumption.unitOverride}
-                        onChange={event => updateSku(row.sku, { unitOverride: event.target.value })}
+                        value={assumption.price}
+                        onChange={event => updateSku(row.sku, { price: Number(event.target.value) })}
                       />
                     </label>
-                    <b>{fmtNumber(row.acquiredUnits)}</b>
-                    <b>{fmtMoney(row.returningRevenue)}</b>
-                    <b>{fmtMoney(row.costCap)}</b>
-                    <b>{fmtMoney(row.mediaBudget)}</b>
                     <label>
+                      COGS %
                       <input
                         type="number"
                         min="0"
-                        step="1"
-                        placeholder="$0"
-                        value={assumption.spendToDate}
-                        onChange={event => updateSku(row.sku, { spendToDate: event.target.value })}
+                        max="100"
+                        step="0.5"
+                        value={assumption.cogsPct}
+                        onChange={event => updateSku(row.sku, { cogsPct: Number(event.target.value) })}
                       />
                     </label>
-                    <span className={row.paceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
-                      <strong>{fmtMoney(row.requiredDaily)}</strong>
-                      <small>{row.paceDelta < 0 ? 'Behind' : 'Ahead'} {fmtMoney(Math.abs(row.paceDelta))}</small>
-                    </span>
-                    <div className="sku-pacing-inline">
-                      <label>
-                        Price
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={assumption.price}
-                          onChange={event => updateSku(row.sku, { price: Number(event.target.value) })}
-                        />
-                      </label>
-                      <label>
-                        COGS %
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.5"
-                          value={assumption.cogsPct}
-                          onChange={event => updateSku(row.sku, { cogsPct: Number(event.target.value) })}
-                        />
-                      </label>
-                      <label>
-                        Ret %
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.5"
-                          placeholder={fmtNumber(selected.returnPct * 100, 1)}
-                          value={assumption.returningRevenuePct}
-                          onChange={event => updateSku(row.sku, { returningRevenuePct: event.target.value })}
-                        />
-                      </label>
-                      <label>
-                        Target CM
-                        <input
-                          type="number"
-                          min="35"
-                          max="80"
-                          step="0.5"
-                          value={assumption.targetCmPct}
-                          onChange={event => updateSku(row.sku, { targetCmPct: clamp(event.target.value, 35, 80) })}
-                        />
-                      </label>
-                    </div>
+                    <label>
+                      Ret %
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        placeholder={fmtNumber(selected.returnPct * 100, 1)}
+                        value={assumption.returningRevenuePct}
+                        onChange={event => updateSku(row.sku, { returningRevenuePct: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      Target CM
+                      <input
+                        type="number"
+                        min="35"
+                        max="80"
+                        step="0.5"
+                        value={assumption.targetCmPct}
+                        onChange={event => updateSku(row.sku, { targetCmPct: clamp(event.target.value, 35, 80) })}
+                      />
+                    </label>
+                    <span>{fmtMoney(row.revenue)} revenue / {fmtPct(row.cmPct * 100)} CM</span>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        </main>
-      </section>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </main>
     </div>
   );
 }
