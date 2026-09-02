@@ -30,6 +30,7 @@ const fmtNumber = (value, digits = 0) => (Number(value) || 0).toLocaleString(und
 });
 const fmtPct = (value, digits = 1) => `${fmtNumber(value, digits)}%`;
 const fmtPaceStatus = (value) => `${Number(value) < 0 ? 'Behind' : 'Ahead'} ${fmtNumber(Math.abs(Number(value) || 0))}`;
+const fmtMoneyPaceStatus = (value) => `${Number(value) < 0 ? 'Behind' : 'Ahead'} ${fmtMoney(Math.abs(Number(value) || 0))}`;
 
 function clamp(value, min, max) {
   const number = Number(value);
@@ -404,7 +405,6 @@ export default function SkuMediaPacingTool() {
   const requiredDailyTotal = selected.pacing.remainingDays > 0
     ? selected.totals.remainingSpend / selected.pacing.remainingDays
     : 0;
-  const totalPaceDelta = selected.totals.spendToDate - selected.totals.paceTargetToDate;
   const returnSource = history.months.length
     ? `${history.months.length} Shopify snapshot months`
     : 'manual fallback';
@@ -509,11 +509,6 @@ export default function SkuMediaPacingTool() {
           <strong>{fmtMoney(requiredDailyTotal)}</strong>
           <small>{fmtMoney(selected.totals.remainingSpend)} left</small>
         </div>
-        <div className={totalPaceDelta < 0 ? 'behind' : 'ahead'}>
-          <span>Pace</span>
-          <strong>{totalPaceDelta < 0 ? '-' : '+'}{fmtMoney(Math.abs(totalPaceDelta))}</strong>
-          <small>{fmtMoney(selected.totals.spendToDate)} spent</small>
-        </div>
         <div>
           <span>Cost Cap</span>
           <strong>{fmtMoney(blendedCostCap)}</strong>
@@ -589,10 +584,11 @@ export default function SkuMediaPacingTool() {
         <div className="sku-pacing-table">
           <div className="sku-pacing-row sku-pacing-row-head">
             <span>Product</span>
-            <span>Status</span>
+            <span>Unit status</span>
             <span>Target</span>
             <span>Ordered</span>
             <span>Spend to date</span>
+            <span>Spend status</span>
             <span>Monthly spend</span>
             <span>Req/day</span>
             <span>Cost Cap</span>
@@ -625,6 +621,9 @@ export default function SkuMediaPacingTool() {
                     <strong>{fmtNumber(row.orderedUnits)}</strong>
                   </span>
                   <b>{fmtMoney(row.spendToDate)}</b>
+                  <span className={row.paceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
+                    <strong>{fmtMoneyPaceStatus(row.paceDelta)}</strong>
+                  </span>
                   <b>{fmtMoney(row.mediaBudget)}</b>
                   <b>{fmtMoney(row.requiredDaily)}</b>
                   <b>{fmtMoney(row.costCap)}</b>
