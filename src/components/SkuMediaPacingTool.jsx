@@ -29,7 +29,7 @@ const fmtNumber = (value, digits = 0) => (Number(value) || 0).toLocaleString(und
   maximumFractionDigits: digits,
 });
 const fmtPct = (value, digits = 1) => `${fmtNumber(value, digits)}%`;
-const fmtSignedNumber = (value, digits = 0) => `${Number(value) < 0 ? '-' : '+'}${fmtNumber(Math.abs(Number(value) || 0), digits)}`;
+const fmtPaceStatus = (value) => `${Number(value) < 0 ? 'Behind' : 'Ahead'} ${fmtNumber(Math.abs(Number(value) || 0))}`;
 
 function clamp(value, min, max) {
   const number = Number(value);
@@ -517,7 +517,7 @@ export default function SkuMediaPacingTool() {
         </div>
         <div>
           <span>Unit pace</span>
-          <strong>{fmtSignedNumber(totalUnitPaceDelta)}</strong>
+          <strong>{fmtPaceStatus(totalUnitPaceDelta)}</strong>
           <small>{fmtNumber(selected.totals.orderedUnits)} ordered vs {fmtNumber(selected.totals.unitTargetToDate)} target to date</small>
         </div>
         <div>
@@ -597,7 +597,7 @@ export default function SkuMediaPacingTool() {
             <span>SKU</span>
             <span>Target</span>
             <span>Ordered</span>
-            <span>Projected</span>
+            <span>Status</span>
             <span>Spend to date</span>
             <span>Monthly spend</span>
             <span>Req/day</span>
@@ -612,7 +612,7 @@ export default function SkuMediaPacingTool() {
                 <div className="sku-pacing-row">
                   <span className="sku-pacing-name">
                     <strong>{row.sku}</strong>
-                    <small>{fmtSignedNumber(row.unitPaceDelta)} vs today / {fmtSignedNumber(row.unitGap)} EOM</small>
+                    <small>{fmtNumber(row.unitTargetToDate)} target to date / {fmtNumber(row.projectedUnits)} projected EOM</small>
                   </span>
                   <label>
                     <input
@@ -627,8 +627,8 @@ export default function SkuMediaPacingTool() {
                   <span className={row.unitPaceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
                     <strong>{fmtNumber(row.orderedUnits)}</strong>
                   </span>
-                  <span className={row.unitGap < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
-                    <strong>{fmtNumber(row.projectedUnits)}</strong>
+                  <span className={row.unitPaceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
+                    <strong>{fmtPaceStatus(row.unitPaceDelta)}</strong>
                   </span>
                   <b>{fmtMoney(row.spendToDate)}</b>
                   <b>{fmtMoney(row.mediaBudget)}</b>
