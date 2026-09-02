@@ -29,6 +29,7 @@ const fmtNumber = (value, digits = 0) => (Number(value) || 0).toLocaleString(und
   maximumFractionDigits: digits,
 });
 const fmtPct = (value, digits = 1) => `${fmtNumber(value, digits)}%`;
+const fmtSignedNumber = (value, digits = 0) => `${Number(value) < 0 ? '-' : '+'}${fmtNumber(Math.abs(Number(value) || 0), digits)}`;
 
 function clamp(value, min, max) {
   const number = Number(value);
@@ -418,7 +419,7 @@ export default function SkuMediaPacingTool() {
   const unmappedShopifyUnits = selectedShopify
     ? selectedShopify.unmapped.reduce((sum, row) => sum + Number(row.quantity || 0), 0)
     : 0;
-  const totalUnitGap = selected.totals.projectedUnits - selected.totals.plannedUnits;
+  const totalUnitPaceDelta = selected.totals.orderedUnits - selected.totals.unitTargetToDate;
   const metaSpendSource = selectedMeta
     ? `${fmtMoney(selectedMeta.mappedSpend)} mapped${unmappedMetaSpend ? ` / ${fmtMoney(unmappedMetaSpend)} unmapped` : ''}`
     : (metaSpend.loading ? 'Loading Meta' : 'No Meta spend loaded');
@@ -478,7 +479,7 @@ export default function SkuMediaPacingTool() {
             <select value={sortKey} onChange={event => setSortKey(event.target.value)}>
               <option value="mediaBudget">Monthly spend</option>
               <option value="requiredDaily">Required daily</option>
-              <option value="unitGap">Unit gap</option>
+              <option value="unitPaceDelta">Unit pace</option>
               <option value="paceDelta">Pace delta</option>
               <option value="costCap">Cost Cap</option>
               <option value="acquiredUnits">New units</option>
@@ -515,9 +516,9 @@ export default function SkuMediaPacingTool() {
           <small>{fmtMoney(selected.totals.spendToDate)} spent</small>
         </div>
         <div>
-          <span>Units</span>
-          <strong>{fmtNumber(selected.totals.projectedUnits)}</strong>
-          <small>{totalUnitGap < 0 ? '-' : '+'}{fmtNumber(Math.abs(totalUnitGap))} vs target</small>
+          <span>Unit pace</span>
+          <strong>{fmtSignedNumber(totalUnitPaceDelta)}</strong>
+          <small>{fmtNumber(selected.totals.orderedUnits)} ordered vs {fmtNumber(selected.totals.unitTargetToDate)} target to date</small>
         </div>
         <div>
           <span>Cost Cap</span>
@@ -611,7 +612,7 @@ export default function SkuMediaPacingTool() {
                 <div className="sku-pacing-row">
                   <span className="sku-pacing-name">
                     <strong>{row.sku}</strong>
-                    <small>{row.unitGap < 0 ? 'Behind' : 'Ahead'} {fmtNumber(Math.abs(row.unitGap))} units / {fmtMoney(row.returningRevenue)} returning rev</small>
+                    <small>{fmtSignedNumber(row.unitPaceDelta)} vs today / {fmtSignedNumber(row.unitGap)} EOM</small>
                   </span>
                   <label>
                     <input
@@ -623,7 +624,9 @@ export default function SkuMediaPacingTool() {
                       onChange={event => updateSku(row.sku, { unitOverride: event.target.value })}
                     />
                   </label>
-                  <b>{fmtNumber(row.orderedUnits)}</b>
+                  <span className={row.unitPaceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
+                    <strong>{fmtNumber(row.orderedUnits)}</strong>
+                  </span>
                   <span className={row.unitGap < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
                     <strong>{fmtNumber(row.projectedUnits)}</strong>
                   </span>
