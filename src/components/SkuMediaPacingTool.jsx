@@ -419,7 +419,6 @@ export default function SkuMediaPacingTool() {
   const unmappedShopifyUnits = selectedShopify
     ? selectedShopify.unmapped.reduce((sum, row) => sum + Number(row.quantity || 0), 0)
     : 0;
-  const totalUnitPaceDelta = selected.totals.orderedUnits - selected.totals.unitTargetToDate;
   const metaSpendSource = selectedMeta
     ? `${fmtMoney(selectedMeta.mappedSpend)} mapped${unmappedMetaSpend ? ` / ${fmtMoney(unmappedMetaSpend)} unmapped` : ''}`
     : (metaSpend.loading ? 'Loading Meta' : 'No Meta spend loaded');
@@ -516,11 +515,6 @@ export default function SkuMediaPacingTool() {
           <small>{fmtMoney(selected.totals.spendToDate)} spent</small>
         </div>
         <div>
-          <span>Unit pace</span>
-          <strong>{fmtPaceStatus(totalUnitPaceDelta)}</strong>
-          <small>{fmtNumber(selected.totals.orderedUnits)} ordered vs {fmtNumber(selected.totals.unitTargetToDate)} target to date</small>
-        </div>
-        <div>
           <span>Cost Cap</span>
           <strong>{fmtMoney(blendedCostCap)}</strong>
         </div>
@@ -594,10 +588,10 @@ export default function SkuMediaPacingTool() {
       <main className="sku-pacing-table-wrap">
         <div className="sku-pacing-table">
           <div className="sku-pacing-row sku-pacing-row-head">
-            <span>SKU</span>
+            <span>Product</span>
+            <span>Status</span>
             <span>Target</span>
             <span>Ordered</span>
-            <span>Status</span>
             <span>Spend to date</span>
             <span>Monthly spend</span>
             <span>Req/day</span>
@@ -612,7 +606,10 @@ export default function SkuMediaPacingTool() {
                 <div className="sku-pacing-row">
                   <span className="sku-pacing-name">
                     <strong>{row.sku}</strong>
-                    <small>{fmtNumber(row.unitTargetToDate)} target to date / {fmtNumber(row.projectedUnits)} projected EOM</small>
+                    <small>{fmtNumber(row.unitTargetToDate)} target to date</small>
+                  </span>
+                  <span className={row.unitPaceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
+                    <strong>{fmtPaceStatus(row.unitPaceDelta)}</strong>
                   </span>
                   <label>
                     <input
@@ -626,9 +623,6 @@ export default function SkuMediaPacingTool() {
                   </label>
                   <span className={row.unitPaceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
                     <strong>{fmtNumber(row.orderedUnits)}</strong>
-                  </span>
-                  <span className={row.unitPaceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
-                    <strong>{fmtPaceStatus(row.unitPaceDelta)}</strong>
                   </span>
                   <b>{fmtMoney(row.spendToDate)}</b>
                   <b>{fmtMoney(row.mediaBudget)}</b>
