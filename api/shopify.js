@@ -2,6 +2,24 @@ import { requirePermission } from './_lib/app-access.js';
 import { getShopifyAccessToken, shopifyContentConfig } from './_lib/shopify-content.js';
 import { createHash } from 'node:crypto';
 
+const SKU_UNIT_RULES = [
+  { sku: 'R1 RallyMount', terms: ['r1 rallymount', 'r1 rally mount', 'rallymount r1', 'rally mount r1'] },
+  { sku: 'R3 RallyMount', terms: ['r3 rallymount', 'r3 rally mount', 'rallymount r3', 'rally mount r3'] },
+  { sku: 'R1 HaulBag', terms: ['r1 haulbag', 'r1 haul bag', 'haulbag r1', 'haul bag r1'] },
+  { sku: 'R3 HaulBag', terms: ['r3 haulbag', 'r3 haul bag', 'haulbag r3', 'haul bag r3'] },
+  { sku: 'R4 HaulBag', terms: ['r4 haulbag', 'r4 haul bag', 'haulbag r4', 'haul bag r4'] },
+  { sku: '10 lb Tanks', terms: ['10 lb tank', '10lb tank', '10-pound tank', '10 pound tank'] },
+  { sku: '20 lb Tanks', terms: ['20 lb tank', '20lb tank', '20-pound tank', '20 pound tank'] },
+  { sku: 'Tank Mount', terms: ['tank mount'] },
+  { sku: 'Rally Straps', terms: ['rally straps', 'rally strap'] },
+  { sku: 'Ground Tarp', terms: ['ground tarp', 'tarp'] },
+  { sku: 'RV Kit', terms: ['rv kit'] },
+  { sku: 'Heater', terms: ['heater'] },
+  { sku: 'R4 Campfire', terms: ['r4 campfire', 'r4 mkii', 'r4 mk ii', 'r4'] },
+  { sku: 'R3 Campfire', terms: ['r3 campfire', 'r3'] },
+  { sku: 'R1 Campfire', terms: ['r1 campfire', 'r1'] },
+];
+
 function customerKey(order, store) {
   const email = (order.email || '').trim().toLowerCase();
   if (email) {
@@ -9,6 +27,34 @@ function customerKey(order, store) {
   }
   if (order.customer?.id) return `customer:${store}:${order.customer.id}`;
   return `guest:${store}:${order.id}`;
+}
+
+function normalizeSkuText(value) {
+  return String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function classifySkuUnit(lineItem) {
+  const haystack = normalizeSkuText([
+    lineItem.sku,
+    lineItem.name,
+    lineItem.variantTitle,
+    lineItem.productTitle,
+  ].filter(Boolean).join(' '));
+  if (!haystack) return null;
+  for (const rule of SKU_UNIT_RULES) {
+    if (rule.terms.some(term => {
+      const normalizedTerm = normalizeSkuText(term);
+      return new RegExp(`(^| )${normalizedTerm.replace(/\s+/g, ' ')}( |$)`).test(haystack);
+    })) {
+      return rule.sku;
+    }
+  }
+  return null;
 }
 
 // Per-store fetch + aggregation. Returns:
@@ -325,6 +371,126 @@ async function fetchStoreAnalytics(store, token) {
   };
 }
 
+async function fetchStoreSkuUnits(store, token, monthKey) {
+  const GQL = `https://${store}/admin/api/2026-04/graphql.json`;
+  const headers = { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': token };
+  const gql = async (query, variables = {}) => {
+    const r = await fetch(GQL, { method: 'POST', headers, body: JSON.stringify({ query, variables }) });
+    const d = await r.json();
+    if (d.errors) {
+      const errs = Array.isArray(d.errors) ? d.errors : [];
+      const msg = errs.length
+        ? errs.map(e => e.message || JSON.stringify(e)).join('; ')
+        : typeof d.errors === 'string' ? d.errors : JSON.stringify(d.errors);
+      throw new Error(`Shopify GraphQL error (${store} HTTP ${r.status}): ${msg}`);
+    }
+    if (!r.ok) throw new Error(`Shopify HTTP ${r.status}: ${JSON.stringify(d).slice(0, 400)}`);
+    return d.data;
+  };
+
+  const [year, month] = monthKey.split('-').map(Number);
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 0, 23, 59, 59));
+  const today = new Date();
+  const todayUtcEnd = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59));
+  const untilDate = start > todayUtcEnd ? end : (end < todayUtcEnd ? end : todayUtcEnd);
+  const sinceISO = start.toISOString();
+  const untilISO = untilDate.toISOString();
+  const queryFilter = `created_at:>=${sinceISO} created_at:<=${untilISO} test:false`;
+
+  const query = `query Orders($cursor: String) {
+    orders(first: 250, after: $cursor, query: "${queryFilter}", sortKey: CREATED_AT) {
+      pageInfo { hasNextPage endCursor }
+      edges { node {
+        id
+        name
+        createdAt
+        cancelledAt
+        displayFinancialStatus
+        currentSubtotalPriceSet { shopMoney { amount } }
+        lineItems(first: 100) {
+          edges { node {
+            name
+            quantity
+            currentQuantity
+            sku
+            originalTotalSet { shopMoney { amount } }
+            variant { id sku title product { id title handle } }
+          } }
+        }
+      } }
+    }
+  }`;
+
+  const KEEP_STATUS = new Set(['PAID', 'PARTIALLY_REFUNDED', 'PARTIALLY_PAID']);
+  const bySku = {};
+  const unmapped = [];
+  let cursor = null;
+  let pages = 0;
+  let ordersScanned = 0;
+  let rejected = 0;
+  while (pages < 50) {
+    const data = await gql(query, { cursor });
+    const conn = data.orders;
+    for (const edge of (conn.edges || [])) {
+      const order = edge.node;
+      ordersScanned++;
+      if (order.cancelledAt || !KEEP_STATUS.has((order.displayFinancialStatus || '').toUpperCase())) {
+        rejected++;
+        continue;
+      }
+      const lineItems = order.lineItems?.edges || [];
+      const originalOrderTotal = lineItems.reduce(
+        (sum, li) => sum + Number(li.node.originalTotalSet?.shopMoney?.amount || 0),
+        0,
+      );
+      const orderRevenue = Number(order.currentSubtotalPriceSet?.shopMoney?.amount || 0);
+      for (const li of lineItems) {
+        const node = li.node;
+        const quantity = Math.max(0, Number(node.currentQuantity ?? node.quantity ?? 0));
+        if (!quantity) continue;
+        const originalLineTotal = Number(node.originalTotalSet?.shopMoney?.amount || 0);
+        const revenue = originalOrderTotal > 0
+          ? orderRevenue * (originalLineTotal / originalOrderTotal)
+          : 0;
+        const sku = classifySkuUnit({
+          sku: node.sku || node.variant?.sku || '',
+          name: node.name || '',
+          variantTitle: node.variant?.title || '',
+          productTitle: node.variant?.product?.title || '',
+        });
+        if (!sku) {
+          unmapped.push({
+            order_id: order.id,
+            order_name: order.name,
+            line_name: node.name,
+            shopify_sku: node.sku || node.variant?.sku || '',
+            quantity,
+            revenue,
+          });
+          continue;
+        }
+        if (!bySku[sku]) bySku[sku] = { units: 0, revenue: 0, orders: 0 };
+        bySku[sku].units += quantity;
+        bySku[sku].revenue += revenue;
+        bySku[sku].orders += 1;
+      }
+    }
+    if (!conn.pageInfo.hasNextPage) break;
+    cursor = conn.pageInfo.endCursor;
+    pages++;
+  }
+
+  return {
+    monthKey,
+    since: sinceISO.slice(0, 10),
+    until: untilISO.slice(0, 10),
+    bySku,
+    unmapped,
+    _meta: { ordersScanned, ordersRejected: rejected, pages },
+  };
+}
+
 // Sum two store results into a combined per-month aggregate.
 function mergeStoreResults(stores) {
   const monthMap = {};
@@ -588,6 +754,15 @@ export default async function handler(req, res) {
       const merged = mergeInventoryResults(ok);
       merged._meta.errors = results.filter(r => r.error).map(r => ({ role: r.role, store: r.store, error: r.error, code: r.code || null }));
       return res.json(merged);
+    }
+
+    if (action === 'get_sku_units') {
+      const monthKey = String(req.body.monthKey || '').trim();
+      if (!/^\d{4}-\d{2}$/.test(monthKey)) return res.status(400).json({ error: 'monthKey must be YYYY-MM' });
+      const primary = stores.find(s => s.role === 'primary') || stores[0];
+      const token = await primary.getToken();
+      const result = await fetchStoreSkuUnits(primary.store, token, monthKey);
+      return res.json({ ...result, store: primary.store, role: primary.role });
     }
 
     if (action === 'get_analytics') {

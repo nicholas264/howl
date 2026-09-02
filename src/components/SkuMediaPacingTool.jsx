@@ -137,7 +137,7 @@ function historicalFromRows(rows = []) {
   };
 }
 
-function modelSku(item, assumption, monthIndex, monthReturningRevenue, monthRevenue, monthPacing, metaSpend = 0) {
+function modelSku(item, assumption, monthIndex, monthReturningRevenue, monthRevenue, monthPacing, metaSpend = 0, shopifyUnits = null) {
   const forecastUnits = Number(item.units[monthIndex]) || 0;
   const override = assumption.unitOverride === '' ? null : Number(assumption.unitOverride);
   const plannedUnits = Math.max(0, override ?? forecastUnits * ((Number(assumption.unitMultiplier) || 0) / 100));
@@ -160,6 +160,16 @@ function modelSku(item, assumption, monthIndex, monthReturningRevenue, monthReve
   const costCap = acquiredUnits > 0 ? mediaBudget / acquiredUnits : 0;
   const spendOverride = assumption.spendToDate === '' ? null : Math.max(0, Number(assumption.spendToDate) || 0);
   const spendToDate = spendOverride ?? Math.max(0, Number(metaSpend) || 0);
+  const orderedUnits = Math.max(0, Number(shopifyUnits?.units || 0));
+  const orderedRevenue = Math.max(0, Number(shopifyUnits?.revenue || 0));
+  const unitTargetToDate = monthPacing.daysInMonth > 0
+    ? plannedUnits * (monthPacing.elapsedDays / monthPacing.daysInMonth)
+    : 0;
+  const projectedUnits = monthPacing.elapsedDays > 0
+    ? orderedUnits * (monthPacing.daysInMonth / monthPacing.elapsedDays)
+    : orderedUnits;
+  const unitGap = projectedUnits - plannedUnits;
+  const unitPaceDelta = orderedUnits - unitTargetToDate;
   const dailyTarget = monthPacing.daysInMonth > 0 ? mediaBudget / monthPacing.daysInMonth : 0;
   const paceTargetToDate = dailyTarget * monthPacing.elapsedDays;
   const remainingSpend = Math.max(0, mediaBudget - spendToDate);
@@ -181,6 +191,12 @@ function modelSku(item, assumption, monthIndex, monthReturningRevenue, monthReve
     mediaBudget,
     metaSpend,
     spendOverride,
+    orderedUnits,
+    orderedRevenue,
+    projectedUnits,
+    unitTargetToDate,
+    unitGap,
+    unitPaceDelta,
     costCap,
     spendToDate,
     dailyTarget,
@@ -204,6 +220,10 @@ function sumRows(rows) {
     returningRevenue: acc.returningRevenue + row.returningRevenue,
     mediaBudget: acc.mediaBudget + row.mediaBudget,
     spendToDate: acc.spendToDate + row.spendToDate,
+    orderedUnits: acc.orderedUnits + row.orderedUnits,
+    orderedRevenue: acc.orderedRevenue + row.orderedRevenue,
+    projectedUnits: acc.projectedUnits + row.projectedUnits,
+    unitTargetToDate: acc.unitTargetToDate + row.unitTargetToDate,
     paceTargetToDate: acc.paceTargetToDate + row.paceTargetToDate,
     remainingSpend: acc.remainingSpend + row.remainingSpend,
     postMediaContribution: acc.postMediaContribution + row.postMediaContribution,
@@ -216,6 +236,10 @@ function sumRows(rows) {
     returningRevenue: 0,
     mediaBudget: 0,
     spendToDate: 0,
+    orderedUnits: 0,
+    orderedRevenue: 0,
+    projectedUnits: 0,
+    unitTargetToDate: 0,
     paceTargetToDate: 0,
     remainingSpend: 0,
     postMediaContribution: 0,
@@ -234,6 +258,7 @@ export default function SkuMediaPacingTool() {
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
   const [editingSku, setEditingSku] = useState('');
   const [metaSpend, setMetaSpend] = useState({ byMonth: {}, loading: false, error: '' });
+  const [shopifyUnits, setShopifyUnits] = useState({ byMonth: {}, loading: false, error: '' });
 
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
@@ -279,6 +304,32 @@ export default function SkuMediaPacingTool() {
 
   useEffect(() => { loadMetaSpend(monthIndex); }, [monthIndex, loadMetaSpend]);
 
+  const loadShopifyUnits = useCallback(async (index = monthIndex) => {
+    const monthKey = monthKeyForIndex(index);
+    setShopifyUnits(prev => ({ ...prev, loading: true, error: '' }));
+    try {
+      const data = await apiJson('/api/shopify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_sku_units', monthKey }),
+      }, 'Shopify SKU units failed');
+      if (data.error) throw new Error(data.error);
+      setShopifyUnits(prev => ({
+        ...prev,
+        loading: false,
+        error: '',
+        byMonth: {
+          ...prev.byMonth,
+          [monthKey]: data,
+        },
+      }));
+    } catch (err) {
+      setShopifyUnits(prev => ({ ...prev, loading: false, error: err.message }));
+    }
+  }, [monthIndex]);
+
+  useEffect(() => { loadShopifyUnits(monthIndex); }, [monthIndex, loadShopifyUnits]);
+
   const applyGlobal = (patch) => {
     setState(prev => {
       const globals = { ...prev.globals, ...patch };
@@ -303,6 +354,7 @@ export default function SkuMediaPacingTool() {
   const rowsByMonth = useMemo(() => SKU_MEDIA_MONTHS.map((month, index) => {
     const monthKey = monthKeyForIndex(index);
     const metaMonth = metaSpend.byMonth[monthKey] || null;
+    const shopifyMonth = shopifyUnits.byMonth[monthKey] || null;
     const monthPacing = getMonthPacing(index);
     const preRows = SKU_MEDIA_FORECAST.map(item => {
       const assumption = state.skus[item.sku];
@@ -333,9 +385,10 @@ export default function SkuMediaPacingTool() {
       monthRevenue,
       monthPacing,
       metaMonth?.bySku?.[item.sku] || 0,
+      shopifyMonth?.bySku?.[item.sku] || null,
     ));
-    return { month, key: monthKey, meta: metaMonth, returnPct, pacing: monthPacing, rows, totals: sumRows(rows) };
-  }), [history, metaSpend.byMonth, state.globals.returningRevenueOverride, state.globals.returningRevenuePct, state.skus, useSeasonalReturnCurve]);
+    return { month, key: monthKey, meta: metaMonth, shopify: shopifyMonth, returnPct, pacing: monthPacing, rows, totals: sumRows(rows) };
+  }), [history, metaSpend.byMonth, shopifyUnits.byMonth, state.globals.returningRevenueOverride, state.globals.returningRevenuePct, state.skus, useSeasonalReturnCurve]);
 
   const selected = rowsByMonth[monthIndex];
   const selectedRows = [...selected.rows]
@@ -358,19 +411,31 @@ export default function SkuMediaPacingTool() {
     ? new Date(history.latestSnapshotAt).toLocaleDateString()
     : 'No snapshot';
   const selectedMeta = selected.meta || null;
+  const selectedShopify = selected.shopify || null;
   const unmappedMetaSpend = selectedMeta
     ? Math.max(0, Number(selectedMeta.totalSpend || 0) - Number(selectedMeta.mappedSpend || 0))
     : 0;
+  const unmappedShopifyUnits = selectedShopify
+    ? selectedShopify.unmapped.reduce((sum, row) => sum + Number(row.quantity || 0), 0)
+    : 0;
+  const totalUnitGap = selected.totals.projectedUnits - selected.totals.plannedUnits;
   const metaSpendSource = selectedMeta
     ? `${fmtMoney(selectedMeta.mappedSpend)} mapped${unmappedMetaSpend ? ` / ${fmtMoney(unmappedMetaSpend)} unmapped` : ''}`
     : (metaSpend.loading ? 'Loading Meta' : 'No Meta spend loaded');
+  const shopifyUnitSource = selectedShopify
+    ? `${fmtNumber(selected.totals.orderedUnits)} ordered${unmappedShopifyUnits ? ` / ${fmtNumber(unmappedShopifyUnits)} unmapped` : ''}`
+    : (shopifyUnits.loading ? 'Loading Shopify' : 'No Shopify units loaded');
 
   const exportCsv = () => {
-    const headings = ['Month', 'SKU', 'Planned units', 'New units', 'Returning units', 'Revenue', 'New revenue', 'Returning revenue', 'Cost cap', 'Monthly paid media', 'Daily target', 'Spend to date', 'Pace target to date', 'Required daily', 'Post-media CM %'];
+    const headings = ['Month', 'SKU', 'Planned units', 'Ordered units', 'Projected EOM units', 'Unit pace delta', 'Unit gap', 'New units', 'Returning units', 'Revenue', 'New revenue', 'Returning revenue', 'Cost cap', 'Monthly paid media', 'Daily target', 'Spend to date', 'Pace target to date', 'Required daily', 'Post-media CM %'];
     const lines = rowsByMonth.flatMap(month => month.rows.map(row => [
       month.month,
       row.sku,
       row.plannedUnits.toFixed(2),
+      row.orderedUnits.toFixed(2),
+      row.projectedUnits.toFixed(2),
+      row.unitPaceDelta.toFixed(2),
+      row.unitGap.toFixed(2),
       row.acquiredUnits.toFixed(2),
       row.returningUnits.toFixed(2),
       row.revenue.toFixed(2),
@@ -413,6 +478,7 @@ export default function SkuMediaPacingTool() {
             <select value={sortKey} onChange={event => setSortKey(event.target.value)}>
               <option value="mediaBudget">Monthly spend</option>
               <option value="requiredDaily">Required daily</option>
+              <option value="unitGap">Unit gap</option>
               <option value="paceDelta">Pace delta</option>
               <option value="costCap">Cost Cap</option>
               <option value="acquiredUnits">New units</option>
@@ -424,6 +490,9 @@ export default function SkuMediaPacingTool() {
           </button>
           <button type="button" onClick={() => loadMetaSpend(monthIndex)} disabled={metaSpend.loading}>
             {metaSpend.loading ? 'Loading Meta' : 'Refresh Meta'}
+          </button>
+          <button type="button" onClick={() => loadShopifyUnits(monthIndex)} disabled={shopifyUnits.loading}>
+            {shopifyUnits.loading ? 'Loading Units' : 'Refresh units'}
           </button>
           <button type="button" onClick={exportCsv}>Export CSV</button>
         </div>
@@ -446,6 +515,11 @@ export default function SkuMediaPacingTool() {
           <small>{fmtMoney(selected.totals.spendToDate)} spent</small>
         </div>
         <div>
+          <span>Units</span>
+          <strong>{fmtNumber(selected.totals.projectedUnits)}</strong>
+          <small>{totalUnitGap < 0 ? '-' : '+'}{fmtNumber(Math.abs(totalUnitGap))} vs target</small>
+        </div>
+        <div>
           <span>Cost Cap</span>
           <strong>{fmtMoney(blendedCostCap)}</strong>
         </div>
@@ -464,6 +538,7 @@ export default function SkuMediaPacingTool() {
       {assumptionsOpen ? (
         <section className="sku-pacing-panel">
           {metaSpend.error ? <p className="sku-pacing-error">{metaSpend.error}</p> : null}
+          {shopifyUnits.error ? <p className="sku-pacing-error">{shopifyUnits.error}</p> : null}
           {historyError ? <p className="sku-pacing-error">{historyError}</p> : null}
           <div className="sku-pacing-panel-head">
             <strong>Global assumptions</strong>
@@ -510,7 +585,7 @@ export default function SkuMediaPacingTool() {
             >
               Seasonal curve {useSeasonalReturnCurve ? 'on' : 'off'}
             </button>
-            <span>Shopify history: {latestHistory}. Meta window: {selectedMeta?.since || selected.key} to {selectedMeta?.until || selected.key}.</span>
+            <span>Shopify history: {latestHistory}. Units: {shopifyUnitSource}. Meta: {selectedMeta?.since || selected.key} to {selectedMeta?.until || selected.key}.</span>
           </div>
         </section>
       ) : null}
@@ -519,12 +594,13 @@ export default function SkuMediaPacingTool() {
         <div className="sku-pacing-table">
           <div className="sku-pacing-row sku-pacing-row-head">
             <span>SKU</span>
-            <span>Units</span>
+            <span>Target</span>
+            <span>Ordered</span>
+            <span>Projected</span>
             <span>Spend to date</span>
             <span>Monthly spend</span>
             <span>Req/day</span>
             <span>Cost Cap</span>
-            <span>Pace</span>
             <span></span>
           </div>
           {selectedRows.map(row => {
@@ -535,7 +611,7 @@ export default function SkuMediaPacingTool() {
                 <div className="sku-pacing-row">
                   <span className="sku-pacing-name">
                     <strong>{row.sku}</strong>
-                    <small>{fmtNumber(row.acquiredUnits)} new units / {fmtMoney(row.returningRevenue)} returning rev</small>
+                    <small>{row.unitGap < 0 ? 'Behind' : 'Ahead'} {fmtNumber(Math.abs(row.unitGap))} units / {fmtMoney(row.returningRevenue)} returning rev</small>
                   </span>
                   <label>
                     <input
@@ -547,13 +623,14 @@ export default function SkuMediaPacingTool() {
                       onChange={event => updateSku(row.sku, { unitOverride: event.target.value })}
                     />
                   </label>
+                  <b>{fmtNumber(row.orderedUnits)}</b>
+                  <span className={row.unitGap < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
+                    <strong>{fmtNumber(row.projectedUnits)}</strong>
+                  </span>
                   <b>{fmtMoney(row.spendToDate)}</b>
                   <b>{fmtMoney(row.mediaBudget)}</b>
                   <b>{fmtMoney(row.requiredDaily)}</b>
                   <b>{fmtMoney(row.costCap)}</b>
-                  <span className={row.paceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
-                    <strong>{row.paceDelta < 0 ? '-' : '+'}{fmtMoney(Math.abs(row.paceDelta))}</strong>
-                  </span>
                   <button
                     type="button"
                     className="sku-pacing-edit"
