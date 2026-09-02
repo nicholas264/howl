@@ -3356,9 +3356,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
               />
               <input
                 type="text"
-                value={settings?.forecastSheetName || 'P&L Monthly'}
+                value={settings?.forecastSheetName || '615 Sales Plan $13M'}
                 onChange={e => setSettings({ ...settings, forecastSheetName: e.target.value })}
-                placeholder="P&L Monthly"
+                placeholder="615 Sales Plan $13M"
                 style={{ width: 160, padding: '8px 10px', background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, borderRadius: 4 }}
               />
               <button onClick={() => saveSettings(settings)} disabled={savingSettings} style={S.btn}>
@@ -3513,7 +3513,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           const projCm3 = isCurrent ? actCm3 * paceFactor : actCm3;
 
           // Targets pace against gross sales/topline revenue for the CFO view.
-          const tgtRevenue = f.dtcRevenue ?? f.netRevenue ?? 0;
+          const tgtRevenue = f.totalRevenue ?? f.netRevenue ?? f.dtcRevenue ?? 0;
           const tgtCac = f.cac || 0;
           const workbookTgtOpex = Number(f.totalOpex || 0);
           const workbookTgtCm3 = Number(f.contributionProfit || 0);
@@ -3688,7 +3688,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                 })}
               </div>
               <div style={{ fontSize: 9, color: '#88857f', marginTop: 10, letterSpacing: 1 }}>
-                Both plans follow their supplied workbook's monthly Net Revenue curve, scaled to the saved annual target.
+                Both plans follow their supplied workbook's monthly TOTAL HOWL REV curve, scaled to the saved annual target.
               </div>
             </div>
 
@@ -3798,7 +3798,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                 </table>
               </div>
               <div style={{ fontSize: 9, color: '#88857f', marginTop: 10, letterSpacing: 1 }}>
-                STATUS — actual: closed month, pace: current month projected to month-end, plan: forecast value used. Spend delta uses "lower is better"; revenue & CM3 use "higher is better". Forecast revenue line = DTC Revenue, paced against gross sales actuals.
+                STATUS — actual: closed month, pace: current month projected to month-end, plan: forecast value used. Spend delta uses "lower is better"; revenue & CM3 use "higher is better". Forecast revenue line = TOTAL HOWL REV when present, paced against gross sales actuals.
               </div>
             </div>
           </>

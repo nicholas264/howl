@@ -23,18 +23,34 @@ const DEFAULTS = {
   annualRevenueTargetBase: 13000000,
   annualRevenueTargetStretch: 15000000,
   annualRevenueCurveBase: [
-    286002.327, 326854.894, 509399.839, 487593.84,
-    598425.6439, 672240.6439, 1162449.05, 1263926.085,
-    1373676.285, 1527816.515, 3260132.345, 994944.915,
-  ], // 2026 Net Revenue seasonality from Updated 26' Forecast New Sales Assumptions (6)
+    262703.68, 467165.64, 443833.8, 489500,
+    755717.2, 618006, 1243662.9, 1398701.25,
+    1101355.25, 1287520.75, 4033326.52, 1455740.84,
+  ], // 2026 TOTAL HOWL REV seasonality from 6/15 Sales Plan $13M (6/13 workbook)
   annualRevenueCurveStretch: [
-    307279.9112, 471602.8484, 721536.7344, 738059.3916,
-    735743.7212, 996673.7412, 861438.8592, 1224937.8,
-    1537078.032, 1678832.376, 3792607.048, 1484514.324,
-  ], // 2026 Net Revenue seasonality from HOWL '26-'27 Projections (4)
-  forecastSheetId: '1uzteHW4sWB6Q49Rt7pOFzmIMD_s0Dxec0lQwgTfFHRI', // HOWL '26-'27 Projections sheet
+    262703.68, 467165.64, 443833.8, 489500,
+    755717.2, 618006, 907338.45, 1398701.25,
+    1101355.25, 1287520.75, 4033326.52, 1455740.84,
+  ], // 2026 TOTAL HOWL REV seasonality from 6/15 Sales Plan $15M (6/13 workbook)
+  forecastSheetId: '', // Paste the live Google Sheet ID for the 6/15 Sales + Production plan.
+  forecastSheetName: '615 Sales Plan $13M',
+};
+
+const LEGACY_DEFAULTS = {
+  forecastSheetId: '1uzteHW4sWB6Q49Rt7pOFzmIMD_s0Dxec0lQwgTfFHRI',
   forecastSheetName: 'P&L Monthly',
 };
+
+function normalizeSettings(value = {}) {
+  const next = { ...DEFAULTS, ...value };
+  if (next.forecastSheetId === LEGACY_DEFAULTS.forecastSheetId) {
+    next.forecastSheetId = DEFAULTS.forecastSheetId;
+  }
+  if (next.forecastSheetName === LEGACY_DEFAULTS.forecastSheetName) {
+    next.forecastSheetName = DEFAULTS.forecastSheetName;
+  }
+  return next;
+}
 
 async function ensureTable(sql) {
   await sql`
@@ -55,7 +71,7 @@ export default async function handler(req, res) {
         await ensureTable(sql);
         const rows = await sql`SELECT value FROM dashboard_settings WHERE key = 'cfo'`;
         const value = rows[0]?.value || {};
-        return res.json({ settings: { ...DEFAULTS, ...value } });
+        return res.json({ settings: normalizeSettings(value) });
       } catch (err) {
         // Never block the dashboard on settings — fall back to defaults.
         return res.json({ settings: DEFAULTS, _warning: err.message });
@@ -64,7 +80,7 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       await ensureTable(sql);
       const incoming = req.body?.settings || {};
-      const merged = { ...DEFAULTS, ...incoming };
+      const merged = normalizeSettings(incoming);
       await sql`
         INSERT INTO dashboard_settings (key, value, updated_at)
         VALUES ('cfo', ${JSON.stringify(merged)}::jsonb, now())
