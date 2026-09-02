@@ -5,6 +5,24 @@ import { normalizeCreativeAsset, normalizeCreativeAssetBatch } from './_lib/crea
 
 const DEFAULT_META_URL_TAGS = 'tw_source={{site_source_name}}&tw_adid={{ad.id}}';
 
+const SKU_SPEND_RULES = [
+  { sku: 'R1 RallyMount', productIds: ['r1-rallymount', 'rallymount-r1'], terms: ['r1 rallymount', 'r1 rally mount', 'rallymount r1', 'rally mount r1'] },
+  { sku: 'R3 RallyMount', productIds: ['r3-rallymount', 'rallymount-r3'], terms: ['r3 rallymount', 'r3 rally mount', 'rallymount r3', 'rally mount r3'] },
+  { sku: 'R1 HaulBag', productIds: ['r1-haulbag', 'haulbag-r1'], terms: ['r1 haulbag', 'r1 haul bag', 'haulbag r1', 'haul bag r1'] },
+  { sku: 'R3 HaulBag', productIds: ['r3-haulbag', 'haulbag-r3'], terms: ['r3 haulbag', 'r3 haul bag', 'haulbag r3', 'haul bag r3'] },
+  { sku: 'R4 HaulBag', productIds: ['r4-haulbag', 'haulbag-r4'], terms: ['r4 haulbag', 'r4 haul bag', 'haulbag r4', 'haul bag r4'] },
+  { sku: '10 lb Tanks', productIds: ['10-lb-tank', '10lb-tank'], terms: ['10 lb tank', '10lb tank', '10-pound tank', '10 pound tank'] },
+  { sku: '20 lb Tanks', productIds: ['20-lb-tank', '20lb-tank'], terms: ['20 lb tank', '20lb tank', '20-pound tank', '20 pound tank'] },
+  { sku: 'Tank Mount', productIds: ['tank-mount'], terms: ['tank mount'] },
+  { sku: 'Rally Straps', productIds: ['rally-straps'], terms: ['rally straps', 'rally strap'] },
+  { sku: 'Ground Tarp', productIds: ['ground-tarp'], terms: ['ground tarp', 'tarp'] },
+  { sku: 'RV Kit', productIds: ['rv-kit'], terms: ['rv kit'] },
+  { sku: 'Heater', productIds: ['heater'], terms: ['heater'] },
+  { sku: 'R4 Campfire', productIds: ['r4', 'r4mkii', 'r4-mkii'], terms: ['r4 campfire', 'r4 mkii', 'r4 mkii', 'r4 mk ii', 'r4'] },
+  { sku: 'R3 Campfire', productIds: ['r3'], terms: ['r3 campfire', 'r3'] },
+  { sku: 'R1 Campfire', productIds: ['r1'], terms: ['r1 campfire', 'r1'] },
+];
+
 function cleanMetaUrlTags(value) {
   return String(value || DEFAULT_META_URL_TAGS).trim().replace(/^[?&]+/, '');
 }
@@ -12,6 +30,40 @@ function cleanMetaUrlTags(value) {
 function appendUrlTags(params, urlParams) {
   const tags = cleanMetaUrlTags(urlParams);
   if (tags) params.set('url_tags', tags);
+}
+
+function normalizeSkuText(value) {
+  return String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function classifySkuSpend(row, launchProductId = null) {
+  const productId = normalizeSkuText(launchProductId).replace(/\s+/g, '-');
+  if (productId) {
+    const byProductId = SKU_SPEND_RULES.find(rule => rule.productIds.includes(productId));
+    if (byProductId) return { sku: byProductId.sku, confidence: 'launch_history' };
+  }
+
+  const haystack = normalizeSkuText([
+    row.campaign_name,
+    row.adset_name,
+    row.ad_name,
+  ].filter(Boolean).join(' '));
+  if (!haystack) return { sku: null, confidence: 'unmapped' };
+
+  for (const rule of SKU_SPEND_RULES) {
+    if (rule.terms.some(term => {
+      const normalizedTerm = normalizeSkuText(term);
+      return new RegExp(`(^| )${normalizedTerm.replace(/\s+/g, ' ')}( |$)`).test(haystack);
+    })) {
+      return { sku: rule.sku, confidence: 'name_rule' };
+    }
+  }
+  return { sku: null, confidence: 'unmapped' };
 }
 
 async function stampFlowLaunched(sql, { adId, groupKey, briefId, deliverableId }) {
@@ -1520,6 +1572,99 @@ export default async function handler(req, res) {
 
         const queuedForAnalysis = await enqueueCreativeAnalyses(sql, 'meta_sync');
         return res.json({ ok: true, adsUpserted, insightsUpserted, queuedForAnalysis, sinceDays });
+      }
+
+      case 'get_sku_spend_pacing': {
+        const monthKey = String(req.body.monthKey || '').trim();
+        if (!/^\d{4}-\d{2}$/.test(monthKey)) return res.status(400).json({ error: 'monthKey must be YYYY-MM' });
+        const [year, month] = monthKey.split('-').map(Number);
+        const start = new Date(Date.UTC(year, month - 1, 1));
+        const end = new Date(Date.UTC(year, month, 0));
+        const today = new Date();
+        const todayUtc = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+        const untilDate = start > todayUtc ? end : (end < todayUtc ? end : todayUtc);
+        const fmtYmd = (d) => `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+        const timeRange = encodeURIComponent(JSON.stringify({ since: fmtYmd(start), until: fmtYmd(untilDate) }));
+        const fields = [
+          'ad_id',
+          'ad_name',
+          'adset_id',
+          'adset_name',
+          'campaign_id',
+          'campaign_name',
+          'spend',
+        ].join(',');
+        let insightsPage = `${BASE}/${adAccountId}/insights?level=ad&time_range=${timeRange}&fields=${fields}&limit=500&access_token=${accessToken}`;
+        const insightRows = [];
+        for (let pageGuard = 0; pageGuard < 100 && insightsPage; pageGuard++) {
+          const r = await fetch(insightsPage);
+          const d = await r.json();
+          if (d.error) return res.status(400).json({ error: d.error.message, step: 'sku_spend_insights' });
+          insightRows.push(...(d.data || []));
+          insightsPage = d.paging?.next || null;
+        }
+
+        const adIds = insightRows.map(row => row.ad_id).filter(Boolean);
+        const launchProductByAd = new Map();
+        if (adIds.length && process.env.DATABASE_URL) {
+          const { neon } = await import('@neondatabase/serverless');
+          const sql = neon(process.env.DATABASE_URL);
+          try {
+            const launchRows = await sql`
+              SELECT DISTINCT ON (ad_id) ad_id, product_id
+              FROM launch_history
+              WHERE ad_id = ANY(${adIds})
+                AND product_id IS NOT NULL
+              ORDER BY ad_id, launched_at DESC
+            `;
+            launchRows.forEach(row => launchProductByAd.set(row.ad_id, row.product_id));
+          } catch (err) {
+            console.error('sku spend launch history lookup failed:', err.message);
+          }
+        }
+
+        const bySku = {};
+        const byConfidence = {};
+        const unmapped = [];
+        const rows = insightRows.map(row => {
+          const spend = Number(row.spend || 0);
+          const productId = launchProductByAd.get(row.ad_id) || null;
+          const mapped = classifySkuSpend(row, productId);
+          if (mapped.sku) bySku[mapped.sku] = (bySku[mapped.sku] || 0) + spend;
+          else if (spend > 0) unmapped.push({
+            ad_id: row.ad_id,
+            ad_name: row.ad_name || null,
+            adset_name: row.adset_name || null,
+            campaign_name: row.campaign_name || null,
+            spend,
+          });
+          byConfidence[mapped.confidence] = (byConfidence[mapped.confidence] || 0) + spend;
+          return {
+            ad_id: row.ad_id,
+            ad_name: row.ad_name || null,
+            adset_id: row.adset_id || null,
+            adset_name: row.adset_name || null,
+            campaign_id: row.campaign_id || null,
+            campaign_name: row.campaign_name || null,
+            spend,
+            sku: mapped.sku,
+            confidence: mapped.confidence,
+            launch_product_id: productId,
+          };
+        }).filter(row => row.spend > 0);
+
+        return res.json({
+          ok: true,
+          monthKey,
+          since: fmtYmd(start),
+          until: fmtYmd(untilDate),
+          bySku,
+          byConfidence,
+          unmapped,
+          rows,
+          totalSpend: rows.reduce((sum, row) => sum + row.spend, 0),
+          mappedSpend: Object.values(bySku).reduce((sum, spend) => sum + spend, 0),
+        });
       }
 
       case 'get_creative_table': {

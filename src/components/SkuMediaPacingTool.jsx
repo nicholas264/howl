@@ -137,7 +137,7 @@ function historicalFromRows(rows = []) {
   };
 }
 
-function modelSku(item, assumption, monthIndex, monthReturningRevenue, monthRevenue, monthPacing) {
+function modelSku(item, assumption, monthIndex, monthReturningRevenue, monthRevenue, monthPacing, metaSpend = 0) {
   const forecastUnits = Number(item.units[monthIndex]) || 0;
   const override = assumption.unitOverride === '' ? null : Number(assumption.unitOverride);
   const plannedUnits = Math.max(0, override ?? forecastUnits * ((Number(assumption.unitMultiplier) || 0) / 100));
@@ -158,7 +158,8 @@ function modelSku(item, assumption, monthIndex, monthReturningRevenue, monthReve
   const targetContribution = revenue * (clamp(assumption.targetCmPct, 35, 80) / 100);
   const mediaBudget = Math.max(0, contributionBeforeMedia - targetContribution);
   const costCap = acquiredUnits > 0 ? mediaBudget / acquiredUnits : 0;
-  const spendToDate = assumption.spendToDate === '' ? 0 : Math.max(0, Number(assumption.spendToDate) || 0);
+  const spendOverride = assumption.spendToDate === '' ? null : Math.max(0, Number(assumption.spendToDate) || 0);
+  const spendToDate = spendOverride ?? Math.max(0, Number(metaSpend) || 0);
   const dailyTarget = monthPacing.daysInMonth > 0 ? mediaBudget / monthPacing.daysInMonth : 0;
   const paceTargetToDate = dailyTarget * monthPacing.elapsedDays;
   const remainingSpend = Math.max(0, mediaBudget - spendToDate);
@@ -178,6 +179,8 @@ function modelSku(item, assumption, monthIndex, monthReturningRevenue, monthReve
     newRevenue,
     returningRevenue,
     mediaBudget,
+    metaSpend,
+    spendOverride,
     costCap,
     spendToDate,
     dailyTarget,
@@ -230,6 +233,7 @@ export default function SkuMediaPacingTool() {
   const [useSeasonalReturnCurve, setUseSeasonalReturnCurve] = useState(true);
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
   const [editingSku, setEditingSku] = useState('');
+  const [metaSpend, setMetaSpend] = useState({ byMonth: {}, loading: false, error: '' });
 
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
@@ -248,6 +252,32 @@ export default function SkuMediaPacingTool() {
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
   }, [state]);
+
+  const loadMetaSpend = useCallback(async (index = monthIndex) => {
+    const monthKey = monthKeyForIndex(index);
+    setMetaSpend(prev => ({ ...prev, loading: true, error: '' }));
+    try {
+      const data = await apiJson('/api/meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_sku_spend_pacing', monthKey }),
+      }, 'Meta SKU spend failed');
+      if (data.error) throw new Error(data.error);
+      setMetaSpend(prev => ({
+        ...prev,
+        loading: false,
+        error: '',
+        byMonth: {
+          ...prev.byMonth,
+          [monthKey]: data,
+        },
+      }));
+    } catch (err) {
+      setMetaSpend(prev => ({ ...prev, loading: false, error: err.message }));
+    }
+  }, [monthIndex]);
+
+  useEffect(() => { loadMetaSpend(monthIndex); }, [monthIndex, loadMetaSpend]);
 
   const applyGlobal = (patch) => {
     setState(prev => {
@@ -271,6 +301,8 @@ export default function SkuMediaPacingTool() {
   };
 
   const rowsByMonth = useMemo(() => SKU_MEDIA_MONTHS.map((month, index) => {
+    const monthKey = monthKeyForIndex(index);
+    const metaMonth = metaSpend.byMonth[monthKey] || null;
     const monthPacing = getMonthPacing(index);
     const preRows = SKU_MEDIA_FORECAST.map(item => {
       const assumption = state.skus[item.sku];
@@ -300,9 +332,10 @@ export default function SkuMediaPacingTool() {
       monthReturningRevenue,
       monthRevenue,
       monthPacing,
+      metaMonth?.bySku?.[item.sku] || 0,
     ));
-    return { month, key: monthKeyForIndex(index), returnPct, pacing: monthPacing, rows, totals: sumRows(rows) };
-  }), [history, state.globals.returningRevenueOverride, state.globals.returningRevenuePct, state.skus, useSeasonalReturnCurve]);
+    return { month, key: monthKey, meta: metaMonth, returnPct, pacing: monthPacing, rows, totals: sumRows(rows) };
+  }), [history, metaSpend.byMonth, state.globals.returningRevenueOverride, state.globals.returningRevenuePct, state.skus, useSeasonalReturnCurve]);
 
   const selected = rowsByMonth[monthIndex];
   const selectedRows = [...selected.rows]
@@ -324,6 +357,13 @@ export default function SkuMediaPacingTool() {
   const latestHistory = history.latestSnapshotAt
     ? new Date(history.latestSnapshotAt).toLocaleDateString()
     : 'No snapshot';
+  const selectedMeta = selected.meta || null;
+  const unmappedMetaSpend = selectedMeta
+    ? Math.max(0, Number(selectedMeta.totalSpend || 0) - Number(selectedMeta.mappedSpend || 0))
+    : 0;
+  const metaSpendSource = selectedMeta
+    ? `${fmtMoney(selectedMeta.mappedSpend)} mapped${unmappedMetaSpend ? ` / ${fmtMoney(unmappedMetaSpend)} unmapped` : ''}`
+    : (metaSpend.loading ? 'Loading Meta' : 'No Meta spend loaded');
 
   const exportCsv = () => {
     const headings = ['Month', 'SKU', 'Planned units', 'New units', 'Returning units', 'Revenue', 'New revenue', 'Returning revenue', 'Cost cap', 'Monthly paid media', 'Daily target', 'Spend to date', 'Pace target to date', 'Required daily', 'Post-media CM %'];
@@ -382,6 +422,9 @@ export default function SkuMediaPacingTool() {
           <button type="button" onClick={() => setAssumptionsOpen(value => !value)}>
             {assumptionsOpen ? 'Hide assumptions' : 'Assumptions'}
           </button>
+          <button type="button" onClick={() => loadMetaSpend(monthIndex)} disabled={metaSpend.loading}>
+            {metaSpend.loading ? 'Loading Meta' : 'Refresh Meta'}
+          </button>
           <button type="button" onClick={exportCsv}>Export CSV</button>
         </div>
       </header>
@@ -390,6 +433,7 @@ export default function SkuMediaPacingTool() {
         <div className="primary">
           <span>Monthly spend</span>
           <strong>{fmtMoney(selected.totals.mediaBudget)}</strong>
+          <small>{metaSpendSource}</small>
         </div>
         <div>
           <span>Required daily</span>
@@ -419,6 +463,7 @@ export default function SkuMediaPacingTool() {
 
       {assumptionsOpen ? (
         <section className="sku-pacing-panel">
+          {metaSpend.error ? <p className="sku-pacing-error">{metaSpend.error}</p> : null}
           {historyError ? <p className="sku-pacing-error">{historyError}</p> : null}
           <div className="sku-pacing-panel-head">
             <strong>Global assumptions</strong>
@@ -465,7 +510,7 @@ export default function SkuMediaPacingTool() {
             >
               Seasonal curve {useSeasonalReturnCurve ? 'on' : 'off'}
             </button>
-            <span>Shopify history: {latestHistory}. Daily pacing: {selected.pacing.elapsedDays}/{selected.pacing.daysInMonth} days elapsed.</span>
+            <span>Shopify history: {latestHistory}. Meta window: {selectedMeta?.since || selected.key} to {selectedMeta?.until || selected.key}.</span>
           </div>
         </section>
       ) : null}
@@ -502,16 +547,7 @@ export default function SkuMediaPacingTool() {
                       onChange={event => updateSku(row.sku, { unitOverride: event.target.value })}
                     />
                   </label>
-                  <label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      placeholder="$0"
-                      value={assumption.spendToDate}
-                      onChange={event => updateSku(row.sku, { spendToDate: event.target.value })}
-                    />
-                  </label>
+                  <b>{fmtMoney(row.spendToDate)}</b>
                   <b>{fmtMoney(row.mediaBudget)}</b>
                   <b>{fmtMoney(row.requiredDaily)}</b>
                   <b>{fmtMoney(row.costCap)}</b>
@@ -528,6 +564,17 @@ export default function SkuMediaPacingTool() {
                 </div>
                 {isEditing ? (
                   <div className="sku-pacing-inline">
+                    <label>
+                      Spend override
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder={fmtMoney(row.metaSpend || 0)}
+                        value={assumption.spendToDate}
+                        onChange={event => updateSku(row.sku, { spendToDate: event.target.value })}
+                      />
+                    </label>
                     <label>
                       Price
                       <input
@@ -572,7 +619,7 @@ export default function SkuMediaPacingTool() {
                         onChange={event => updateSku(row.sku, { targetCmPct: clamp(event.target.value, 35, 80) })}
                       />
                     </label>
-                    <span>{fmtMoney(row.revenue)} revenue / {fmtPct(row.cmPct * 100)} CM</span>
+                    <span>{fmtMoney(row.revenue)} revenue / {fmtPct(row.cmPct * 100)} CM / {fmtMoney(row.metaSpend || 0)} Meta</span>
                   </div>
                 ) : null}
               </div>
