@@ -693,15 +693,17 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
     offPlatformRevenueByMonth: {}, offPlatformOrdersByMonth: {}, cfoStartMonth: '2026-01',
     annualRevenueTargetBase: 13000000, annualRevenueTargetStretch: 15000000,
     annualRevenueCurveBase: [
-      286002.327, 326854.894, 509399.839, 487593.84,
-      598425.6439, 672240.6439, 1162449.05, 1263926.085,
-      1373676.285, 1527816.515, 3260132.345, 994944.915,
+      262703.68, 467165.64, 443833.8, 489500,
+      755717.2, 618006, 1243662.9, 1398701.25,
+      1101355.25, 1287520.75, 4033326.52, 1455740.84,
     ],
     annualRevenueCurveStretch: [
-      307279.9112, 471602.8484, 721536.7344, 738059.3916,
-      735743.7212, 996673.7412, 861438.8592, 1224937.8,
-      1537078.032, 1678832.376, 3792607.048, 1484514.324,
+      262703.68, 467165.64, 443833.8, 489500,
+      755717.2, 618006, 907338.45, 1398701.25,
+      1101355.25, 1287520.75, 4033326.52, 1455740.84,
     ],
+    forecastSheetId: '1uzteHW4sWB6Q49Rt7pOFzmIMD_s0Dxec0lQwgTfFHRI',
+    forecastSheetName: '615 Sales Plan $13M',
   });
 
   // Forecast (parsed from HOWL projections Google Sheet).

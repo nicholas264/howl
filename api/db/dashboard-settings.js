@@ -32,20 +32,16 @@ const DEFAULTS = {
     755717.2, 618006, 907338.45, 1398701.25,
     1101355.25, 1287520.75, 4033326.52, 1455740.84,
   ], // 2026 TOTAL HOWL REV seasonality from 6/15 Sales Plan $15M (6/13 workbook)
-  forecastSheetId: '', // Paste the live Google Sheet ID for the 6/15 Sales + Production plan.
+  forecastSheetId: '1uzteHW4sWB6Q49Rt7pOFzmIMD_s0Dxec0lQwgTfFHRI',
   forecastSheetName: '615 Sales Plan $13M',
 };
 
 const LEGACY_DEFAULTS = {
-  forecastSheetId: '1uzteHW4sWB6Q49Rt7pOFzmIMD_s0Dxec0lQwgTfFHRI',
   forecastSheetName: 'P&L Monthly',
 };
 
 function normalizeSettings(value = {}) {
   const next = { ...DEFAULTS, ...value };
-  if (next.forecastSheetId === LEGACY_DEFAULTS.forecastSheetId) {
-    next.forecastSheetId = DEFAULTS.forecastSheetId;
-  }
   if (next.forecastSheetName === LEGACY_DEFAULTS.forecastSheetName) {
     next.forecastSheetName = DEFAULTS.forecastSheetName;
   }

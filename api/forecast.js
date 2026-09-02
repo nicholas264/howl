@@ -13,7 +13,6 @@ import { getGoogleAccessToken } from './_lib/gcp-auth.js';
 const SHEETS_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
 const DEFAULT_SHEET_NAME = '615 Sales Plan $13M';
-const LEGACY_DEFAULT_SHEET_NAME = 'P&L Monthly';
 
 // Map of forecast row labels (case-insensitive, trimmed) to output field names.
 // Supports both the old P&L Monthly tab and the 6/15 Sales Plan workbook tabs.
@@ -88,9 +87,6 @@ export default async function handler(req, res) {
         `;
         const rows = await sql`SELECT value, updated_at FROM forecast_cache WHERE key = 'pnl_monthly'`;
         if (!rows[0]) return res.json({ forecast: null });
-        if (rows[0].value?.sheetName === LEGACY_DEFAULT_SHEET_NAME) {
-          return res.json({ forecast: null, updatedAt: rows[0].updated_at, staleForecastIgnored: true });
-        }
         return res.json({ forecast: rows[0].value, updatedAt: rows[0].updated_at });
       } catch (err) {
         return res.status(500).json({ error: err.message });
