@@ -204,6 +204,27 @@ function productCopyOptions(productId) {
   return PRODUCT_COPY_OPTIONS[productId] || [];
 }
 
+function launcherCopyOptions(productId, variants = []) {
+  const seen = new Set();
+  const options = [
+    ...productCopyOptions(productId).map(option => ({ ...option, source: 'Product' })),
+    ...variants
+      .filter(option => option?.headline || option?.primaryText)
+      .map(option => ({
+        label: option.label || 'Saved copy',
+        headline: option.headline || '',
+        primaryText: option.primaryText || '',
+        source: 'Library',
+      })),
+  ];
+  return options.filter(option => {
+    const key = `${option.headline.trim()}__${option.primaryText.trim()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function defaultProductCopy(productId) {
   return productCopyOptions(productId)[0] || { headline: '', primaryText: '' };
 }
@@ -1729,16 +1750,16 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                   <textarea style={{ ...S.input, fontFamily: 'inherit', resize: 'vertical', minHeight: 32 }} value={m.primaryText || ''} onChange={e => updateMeta(id, { primaryText: e.target.value })} placeholder="2-3 sentences" rows={2} />
                 </div>
               </div>
-              {productCopyOptions(m.productId).length > 0 && (
+              {launcherCopyOptions(m.productId, library.variants).length > 0 && (
                 <div style={{ marginTop: 10 }}>
-                  <label style={S.label}>Product copy options</label>
+                  <label style={S.label}>Copy options</label>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 8 }}>
-                    {productCopyOptions(m.productId).map(option => {
+                    {launcherCopyOptions(m.productId, library.variants).map(option => {
                       const active = option.headline === (m.headline || '').trim()
                         && option.primaryText === (m.primaryText || '').trim();
                       return (
                         <button
-                          key={option.label}
+                          key={`${option.source}:${option.label}:${option.headline}:${option.primaryText}`}
                           type="button"
                           onClick={() => updateMeta(id, { headline: option.headline, primaryText: option.primaryText })}
                           style={{
@@ -1753,7 +1774,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                           }}
                         >
                           <span style={{ display: 'block', color: active ? '#d84a17' : '#77746f', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700, marginBottom: 5 }}>
-                            {option.label}
+                            {option.source} · {option.label}
                           </span>
                           <span style={{ display: 'block', fontSize: 11, fontWeight: 700, lineHeight: 1.25, marginBottom: 4 }}>
                             {option.headline}
