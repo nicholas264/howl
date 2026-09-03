@@ -74,6 +74,60 @@ const SOURCE_ATTRIBUTIONS = [
   { value: 'tool_generated', label: 'Made in tool', hint: 'Use for static, callout, review, or other in-app generated ads.' },
 ];
 
+const PRODUCT_COPY_OPTIONS = {
+  r1: [
+    {
+      label: 'Portable proof',
+      headline: 'Fire That Fits Anywhere',
+      primaryText: 'R1 folds to shoebox size, throws huge flame, and runs all night on one tank.',
+    },
+    {
+      label: 'Lightweight shock',
+      headline: '11 Pounds. Real Campfire.',
+      primaryText: 'Tiny enough to live in your rig. Big enough to make the stop worth it.',
+    },
+    {
+      label: 'Warm weather',
+      headline: 'Your 45 Degree Fire',
+      primaryText: 'Built for fast setup, long burn time, and firelight wherever the road quits.',
+    },
+  ],
+  r3: [
+    {
+      label: 'Middle fire',
+      headline: 'The Missing Middle Fire',
+      primaryText: 'More radiant warmth than R1, more packable than R4, built for three-season camps.',
+    },
+    {
+      label: 'Shoulder season',
+      headline: 'Own Shoulder Season',
+      primaryText: 'R3 brings BarCoal heat and A-Flame light when the nights start getting rude.',
+    },
+    {
+      label: 'Packable radiant',
+      headline: 'Radiant Heat. Still Packable.',
+      primaryText: 'The three-season HOWL for overlanders, river camps, and cold mornings outside.',
+    },
+  ],
+  r4mkii: [
+    {
+      label: 'Cold proof',
+      headline: 'Never Camp Cold Again',
+      primaryText: 'R4 MKii throws real radiant heat for winter nights, wind, rain, and high-altitude camps.',
+    },
+    {
+      label: 'Heat shock',
+      headline: '1,300 Degrees From Propane',
+      primaryText: 'BarCoal radiant heaters crank out the kind of warmth ordinary propane pits cannot touch.',
+    },
+    {
+      label: 'Four season',
+      headline: 'Your Zero Degree Fire',
+      primaryText: 'Built for ski lots, hunting camps, whiteout weather, and crews who stay out late.',
+    },
+  ],
+};
+
 function todayISO() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -122,6 +176,49 @@ function applyNameTemplate(template, { creator, product, asset, date, source, in
 
 function destUrlFor(productId) {
   return PRODUCTS.find(p => p.id === productId)?.url || '';
+}
+
+const LEGACY_PRODUCT_URLS = {
+  r1: new Set([
+    'https://howlcampfires.com/products/r1',
+    'https://www.howlcampfires.com/products/r1',
+  ]),
+  r3: new Set([
+    'https://howlcampfires.com/products/r3',
+    'https://www.howlcampfires.com/products/r3',
+  ]),
+  r4mkii: new Set([
+    'https://howlcampfires.com/products/r4-mkii',
+    'https://www.howlcampfires.com/products/r4-mkii',
+  ]),
+};
+
+function normalizedDestUrlFor(productId, value) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return destUrlFor(productId);
+  if (LEGACY_PRODUCT_URLS[productId]?.has(trimmed)) return destUrlFor(productId);
+  return trimmed;
+}
+
+function productCopyOptions(productId) {
+  return PRODUCT_COPY_OPTIONS[productId] || [];
+}
+
+function defaultProductCopy(productId) {
+  return productCopyOptions(productId)[0] || { headline: '', primaryText: '' };
+}
+
+function isBuiltInProductCopy(headline = '', primaryText = '') {
+  const h = String(headline || '').trim();
+  const b = String(primaryText || '').trim();
+  return Object.values(PRODUCT_COPY_OPTIONS).flat().some(option =>
+    option.headline === h && option.primaryText === b
+  );
+}
+
+function shouldAutoReplaceCopy(meta = {}) {
+  return (!meta.headline?.trim() && !meta.primaryText?.trim())
+    || isBuiltInProductCopy(meta.headline, meta.primaryText);
 }
 
 function cleanUrlParams(value) {
@@ -453,6 +550,24 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   // Single state map keyed by unified item id (drive ids are file ids; cart ids prefixed).
   const [meta, setMeta] = useState({});
   const updateMeta = (id, patch) => setMeta(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  const updateProduct = (id, productId) => {
+    const productCopy = defaultProductCopy(productId);
+    setMeta(prev => {
+      const current = prev[id] || {};
+      return {
+        ...prev,
+        [id]: {
+          ...current,
+          productId,
+          destUrl: destUrlFor(productId),
+          ...(shouldAutoReplaceCopy(current) ? {
+            headline: productCopy.headline,
+            primaryText: productCopy.primaryText,
+          } : {}),
+        },
+      };
+    });
+  };
   const findCreatorByName = useCallback((name) => {
     const needle = normalizeCreatorName(name);
     if (!needle) return null;
@@ -543,6 +658,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           const suggestion = autoMatchCreator(assetName);
           const creatorName = suggestion?.creatorName || topFolder || filePrefix || config.defaultCreator;
           const creator = suggestion ? { id: suggestion.creatorId, name: suggestion.creatorName } : findCreatorByName(creatorName);
+          const productCopy = defaultProductCopy(config.defaultProduct);
           next[id] = {
             creator: creator?.name || creatorName,
             creatorId: creator?.id || null,
@@ -552,8 +668,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
             productId: config.defaultProduct,
             destUrl: destUrlFor(config.defaultProduct),
             urlParams: config.defaultUrlParams || DEFAULT_URL_PARAMS,
-            headline: '',
-            primaryText: '',
+            headline: productCopy.headline,
+            primaryText: productCopy.primaryText,
           };
         } else if (next[id].creator && !next[id].creatorId) {
           const assetName = f.kind === 'pair'
@@ -576,6 +692,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         const id = `cart:${c.id}`;
         if (!next[id]) {
           const suggestion = c.creatorId ? null : autoMatchCreator(`${c.creator || ''} ${c.name || ''} ${c.title || ''} ${c.sourceLabel || ''}`.trim());
+          const productCopy = defaultProductCopy(config.defaultProduct);
           next[id] = {
             creator: c.creator || suggestion?.creatorName || config.defaultCreator || 'Static Builder',
             creatorId: c.creatorId || suggestion?.creatorId || null,
@@ -587,10 +704,21 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
             productId: config.defaultProduct,
             destUrl: c.destUrl || destUrlFor(config.defaultProduct),
             urlParams: c.urlParams || config.defaultUrlParams || DEFAULT_URL_PARAMS,
-            headline: c.hook || '',
-            primaryText: c.body || '',
+            headline: c.hook || productCopy.headline,
+            primaryText: c.body || productCopy.primaryText,
           };
         }
+      }
+      for (const id of Object.keys(next)) {
+        if (next[id].headline?.trim() || next[id].primaryText?.trim()) continue;
+        const productId = next[id].productId || config.defaultProduct;
+        const productCopy = defaultProductCopy(productId);
+        next[id] = {
+          ...next[id],
+          productId,
+          headline: productCopy.headline,
+          primaryText: productCopy.primaryText,
+        };
       }
       return next;
     });
@@ -663,7 +791,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   };
   const focusedItem = useMemo(() => queue.find(item => item.unifiedId === focusedItemId) || selectedQueue[0] || null, [queue, focusedItemId, selectedQueue]);
   const focusedAdsetName = focusedItem ? buildNamesForItem(focusedItem).adsetName : '';
-  const destUrlForMeta = (m = {}) => (m.destUrl || destUrlFor(m.productId)).trim();
+  const destUrlForMeta = (m = {}) => normalizedDestUrlFor(m.productId, m.destUrl);
   const urlParamsForMeta = (m = {}) => cleanUrlParams(m.urlParams ?? config.defaultUrlParams ?? DEFAULT_URL_PARAMS);
   const clearLaunchedItem = (item) => {
     const id = item.unifiedId;
@@ -1565,7 +1693,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                   <select
                     style={S.select}
                     value={m.productId || ''}
-                    onChange={e => updateMeta(id, { productId: e.target.value, destUrl: destUrlFor(e.target.value) })}
+                    onChange={e => updateProduct(id, e.target.value)}
                   >
                     {PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
@@ -1601,6 +1729,44 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                   <textarea style={{ ...S.input, fontFamily: 'inherit', resize: 'vertical', minHeight: 32 }} value={m.primaryText || ''} onChange={e => updateMeta(id, { primaryText: e.target.value })} placeholder="2-3 sentences" rows={2} />
                 </div>
               </div>
+              {productCopyOptions(m.productId).length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <label style={S.label}>Product copy options</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 8 }}>
+                    {productCopyOptions(m.productId).map(option => {
+                      const active = option.headline === (m.headline || '').trim()
+                        && option.primaryText === (m.primaryText || '').trim();
+                      return (
+                        <button
+                          key={option.label}
+                          type="button"
+                          onClick={() => updateMeta(id, { headline: option.headline, primaryText: option.primaryText })}
+                          style={{
+                            padding: '9px 10px',
+                            background: active ? 'rgba(220,68,10,0.08)' : '#faf9f6',
+                            border: `1px solid ${active ? '#d84a17' : '#ebe8e1'}`,
+                            borderRadius: 4,
+                            color: '#171717',
+                            fontFamily: 'inherit',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <span style={{ display: 'block', color: active ? '#d84a17' : '#77746f', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700, marginBottom: 5 }}>
+                            {option.label}
+                          </span>
+                          <span style={{ display: 'block', fontSize: 11, fontWeight: 700, lineHeight: 1.25, marginBottom: 4 }}>
+                            {option.headline}
+                          </span>
+                          <span style={{ display: 'block', fontSize: 10, color: '#77746f', lineHeight: 1.35 }}>
+                            {option.primaryText}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {(status.status === 'pushing' || status.status === 'success' || status.status === 'error') && (
                 <div style={{ marginTop: 12 }}>

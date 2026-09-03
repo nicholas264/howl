@@ -575,7 +575,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
             <span style={{ fontSize: 10, color: '#77746f' }}>Destination URL</span>
             <input
               style={S.input}
-              placeholder="https://howlcampfires.com/products/r4-mkii"
+              placeholder="https://howlcampfires.com/products/the-howl-r4mkii"
               value={config.destUrl}
               onChange={e => updateConfig('destUrl', e.target.value)}
             />

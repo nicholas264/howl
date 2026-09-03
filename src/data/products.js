@@ -4,7 +4,7 @@ export const PRODUCTS = [
     name: "R1",
     price: "$374",
     // Used as the launch destination URL whenever this product is tagged on a creative.
-    url: "https://howlcampfires.com/products/r1",
+    url: "https://howlcampfires.com/products/the-howl-r1",
     tagline: "World's Most Portable Campfire",
     subtitle: "Your 40°F Fire",
     specs: {
@@ -31,7 +31,7 @@ export const PRODUCTS = [
     id: "r3",
     name: "R3",
     price: "$875",
-    url: "https://howlcampfires.com/products/r3",
+    url: "https://howlcampfires.com/products/the-howl-r3",
     tagline: "The Three-Season Campfire",
     subtitle: "Your 25°F Fire",
     specs: {
@@ -57,7 +57,7 @@ export const PRODUCTS = [
     id: "r4mkii",
     name: "R4 MKii",
     price: "$1,474",
-    url: "https://howlcampfires.com/products/r4-mkii",
+    url: "https://howlcampfires.com/products/the-howl-r4mkii",
     tagline: "World's Hottest Propane Fire Pit",
     subtitle: "Your 0°F Fire",
     specs: {
