@@ -88,7 +88,7 @@ const PRODUCT_COPY_OPTIONS = {
     },
     {
       label: 'Warm weather',
-      headline: 'Your 45 Degree Fire',
+      headline: 'Your 40 Degree Fire',
       primaryText: 'Built for fast setup, long burn time, and firelight wherever the road quits.',
     },
   ],
@@ -209,7 +209,8 @@ function launcherCopyOptions(productId, variants = []) {
   const options = [
     ...productCopyOptions(productId).map(option => ({ ...option, source: 'Product' })),
     ...variants
-      .filter(option => option?.headline || option?.primaryText)
+      .filter(option => (!option?.productIds?.length || option.productIds.includes(productId))
+        && (option?.headline || option?.primaryText))
       .map(option => ({
         label: option.label || 'Saved copy',
         headline: option.headline || '',

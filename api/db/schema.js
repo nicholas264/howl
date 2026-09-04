@@ -48,9 +48,11 @@ export default async function handler(req, res) {
         label        TEXT,
         headline     TEXT,
         primary_text TEXT,
+        product_ids  JSONB NOT NULL DEFAULT '[]'::jsonb,
         created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
       )
     `;
+    await sql`ALTER TABLE copy_library ADD COLUMN IF NOT EXISTS product_ids JSONB NOT NULL DEFAULT '[]'::jsonb`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS dashboard_settings (

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { PRODUCTS } from '../data';
 
 const LS_LEGACY = 'howl_copy_library';
 const LS_MIGRATED = 'howl_copy_library_migrated_v1';
@@ -12,13 +13,23 @@ async function apiGet() {
     label: r.label || '',
     headline: r.headline || '',
     primaryText: r.primary_text || '',
+    productIds: Array.isArray(r.product_ids) ? r.product_ids : [],
     createdAt: r.created_at,
   }));
 }
-async function apiAdd({ label, headline, primaryText }) {
+async function apiAdd({ label, headline, primaryText, productIds }) {
   const r = await fetch('/api/db/copy-library', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'add', label, headline, primaryText }),
+    body: JSON.stringify({ action: 'add', label, headline, primaryText, productIds }),
+  });
+  const d = await r.json();
+  if (d.error) throw new Error(d.error);
+  return d.row;
+}
+async function apiUpdateProducts(id, productIds) {
+  const r = await fetch('/api/db/copy-library', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'update_products', id, productIds }),
   });
   const d = await r.json();
   if (d.error) throw new Error(d.error);
@@ -45,13 +56,19 @@ async function apiBulkImport(items) {
 export function useCopyLibrary() {
   const [variants, setVariants] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState('');
 
   const refresh = useCallback(async () => {
     try {
       const rows = await apiGet();
       setVariants(rows);
+      setError('');
       setLoaded(true);
-    } catch (err) { console.error('Copy library load:', err); }
+    } catch (err) {
+      console.error('Copy library load:', err);
+      setError(err.message || 'Copy library could not load');
+      setLoaded(true);
+    }
   }, []);
 
   // One-time migration: move localStorage entries into DB, then clear local.
@@ -81,9 +98,19 @@ export function useCopyLibrary() {
     try {
       const row = await apiAdd(v);
       setVariants(prev => [{
-        id: row.id, label: row.label || '', headline: row.headline || '', primaryText: row.primary_text || '', createdAt: row.created_at,
+        id: row.id, label: row.label || '', headline: row.headline || '', primaryText: row.primary_text || '',
+        productIds: Array.isArray(row.product_ids) ? row.product_ids : [], createdAt: row.created_at,
       }, ...prev]);
     } catch (err) { alert(`Save failed: ${err.message}`); }
+  };
+  const updateProducts = async (id, productIds) => {
+    try {
+      const row = await apiUpdateProducts(id, productIds);
+      setVariants(prev => prev.map(v => v.id === id ? {
+        ...v,
+        productIds: Array.isArray(row.product_ids) ? row.product_ids : [],
+      } : v));
+    } catch (err) { alert(`Update failed: ${err.message}`); }
   };
   const remove = async (id) => {
     try {
@@ -92,7 +119,7 @@ export function useCopyLibrary() {
     } catch (err) { alert(`Delete failed: ${err.message}`); }
   };
 
-  return { variants, add, remove, refresh, loaded };
+  return { variants, add, remove, updateProducts, refresh, loaded, error };
 }
 
 const S = {
@@ -102,7 +129,7 @@ const S = {
   label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#77746f', marginBottom: 6, display: 'block' },
   input: { background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', width: '100%' },
   textarea: { background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', width: '100%', resize: 'vertical', minHeight: 60 },
-  addRow: { display: 'grid', gridTemplateColumns: '1fr 1fr 2fr auto', gap: 10, alignItems: 'flex-end' },
+  addRow: { display: 'grid', gridTemplateColumns: 'minmax(120px, .8fr) minmax(130px, 1fr) minmax(140px, 1fr) minmax(220px, 2fr) auto', gap: 10, alignItems: 'flex-end' },
   btn: (disabled) => ({
     padding: '8px 14px', background: disabled ? '#dedbd3' : '#d84a17', border: 'none',
     color: disabled ? '#88857f' : '#fff', fontFamily: 'inherit', fontSize: 10,
@@ -118,12 +145,17 @@ const S = {
 
 export default function CopyLibrary({ library, onUse }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ label: '', headline: '', primaryText: '' });
+  const [form, setForm] = useState({ productId: '', label: '', headline: '', primaryText: '' });
 
   const submit = async () => {
     if (!form.headline.trim() && !form.primaryText.trim()) return;
-    await library.add({ label: form.label.trim(), headline: form.headline.trim(), primaryText: form.primaryText.trim() });
-    setForm({ label: '', headline: '', primaryText: '' });
+    await library.add({
+      productIds: form.productId ? [form.productId] : [],
+      label: form.label.trim(),
+      headline: form.headline.trim(),
+      primaryText: form.primaryText.trim(),
+    });
+    setForm({ productId: '', label: '', headline: '', primaryText: '' });
   };
 
   return (
@@ -139,7 +171,19 @@ export default function CopyLibrary({ library, onUse }) {
       </div>
       {open && (
         <div style={S.body}>
+          {library.error && (
+            <div style={{ marginBottom: 12, padding: '8px 10px', border: '1px solid #efb4a2', background: '#fff4ef', color: '#9f3212', fontSize: 10, borderRadius: 4 }}>
+              Copy Library could not load. <button type="button" onClick={library.refresh} style={{ border: 0, padding: 0, background: 'transparent', color: '#d84a17', font: 'inherit', fontWeight: 700, cursor: 'pointer' }}>Retry</button>
+            </div>
+          )}
           <div style={S.addRow}>
+            <div>
+              <label style={S.label}>Product</label>
+              <select style={S.input} value={form.productId} onChange={e => setForm(p => ({ ...p, productId: e.target.value }))}>
+                <option value="">All products</option>
+                {PRODUCTS.map(product => <option key={product.id} value={product.id}>{product.name}</option>)}
+              </select>
+            </div>
             <div>
               <label style={S.label}>Label</label>
               <input style={S.input} placeholder="e.g. Burn ban hook" value={form.label} onChange={e => setForm(p => ({ ...p, label: e.target.value }))} />
@@ -160,6 +204,17 @@ export default function CopyLibrary({ library, onUse }) {
               {library.variants.map(v => (
                 <div key={v.id} style={S.variantCard}>
                   <div>
+                    <div style={{ marginBottom: 6 }}>
+                      <select
+                        aria-label={`Product for ${v.label || v.headline || 'saved copy'}`}
+                        style={{ ...S.input, width: 'auto', minWidth: 130, padding: '5px 7px', fontSize: 10 }}
+                        value={v.productIds?.[0] || ''}
+                        onChange={e => library.updateProducts(v.id, e.target.value ? [e.target.value] : [])}
+                      >
+                        <option value="">All products</option>
+                        {PRODUCTS.map(product => <option key={product.id} value={product.id}>{product.name}</option>)}
+                      </select>
+                    </div>
                     {v.label && <div style={S.vLabel}>{v.label}</div>}
                     {v.headline && <div style={S.vHeadline}>{v.headline}</div>}
                     {v.primaryText && <div style={S.vBody}>{v.primaryText}</div>}
