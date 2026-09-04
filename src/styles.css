@@ -847,6 +847,20 @@ input, textarea, select, button { font-family: inherit; }
 @media(max-width:1100px){.creator-apply-redesign{grid-template-columns:1fr}.creator-apply-redesign .apply-story{position:relative;height:auto;min-height:520px}.creator-apply-redesign .apply-form-shell{min-height:auto}}
 @media(max-width:760px){.apply-step-tabs{grid-template-columns:1fr 1fr}.creator-apply-redesign .apply-form-shell{padding:42px 18px 70px}.creator-apply-redesign .apply-form-shell fieldset{padding:16px}.apply-preview-list a{grid-template-columns:1fr}.apply-actions{display:grid;grid-template-columns:1fr}.creator-apply-redesign .apply-submit,.apply-actions>button:first-child{width:100%}}
 
+/* Launcher */
+.launcher-tool{box-sizing:border-box;width:100%}
+.launcher-tool *{box-sizing:border-box}
+@media(max-width:760px){
+  .launcher-tool{max-width:100%!important;padding:18px 12px 48px!important}
+  .launcher-queue-card{grid-template-columns:1fr!important;align-items:start!important}
+  .launcher-queue-thumb{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start}
+  .launcher-url-grid,.launcher-copy-grid{grid-template-columns:1fr!important}
+  .launcher-queue-actions{align-items:stretch!important}
+  .launcher-queue-actions>button,.launcher-queue-actions>a{width:100%;text-align:center}
+  .copy-library-card{grid-template-columns:1fr!important}
+  .copy-library-actions{flex-direction:row!important;justify-content:flex-end;align-items:center!important;flex-wrap:wrap}
+}
+
 /* SKU pacing */
 .sku-pacing-workspace{--ink:#171913;--muted:#68705f;--rule:#d8ddcf;--paper:#fbfbf8;--soft:#f2f4ec;--signal:#d84a17;max-width:1420px;margin:0 auto;padding:20px 28px 48px;color:var(--ink)}
 .sku-pacing-topbar{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:12px}

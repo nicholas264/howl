@@ -20,7 +20,7 @@
 // the legacy Publish tool until a follow-up folds it in.
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { PRODUCTS } from '../data';
-import CopyLibrary, { useCopyLibrary } from './CopyLibrary';
+import CopyLibrary, { getCopyWarnings, useCopyLibrary } from './CopyLibrary';
 import LaunchTimeline from './LaunchTimeline';
 import { ls, lsSet } from '../utils/localStorage';
 import {
@@ -213,10 +213,6 @@ function validHttpUrl(value) {
 function productForDestination(value) {
   const normalized = String(value || '').trim().replace(/\/$/, '');
   return PRODUCTS.find(product => product.url.replace(/\/$/, '') === normalized) || null;
-}
-
-function wordCount(value) {
-  return String(value || '').trim().split(/\s+/).filter(Boolean).length;
 }
 
 function friendlyDriveError(value) {
@@ -1123,8 +1119,11 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
 
   const launchWarningsForItem = (item) => {
     const m = meta[item.unifiedId] || {};
-    const warnings = [];
-    if (wordCount(m.headline) > 6) warnings.push(`Headline is ${wordCount(m.headline)} words; the target is 6 or fewer.`);
+    const warnings = getCopyWarnings({
+      headline: m.headline || '',
+      primaryText: m.primaryText || '',
+      productIds: m.productId ? [m.productId] : [],
+    });
     if (!m.primaryText?.trim()) warnings.push('Primary text is blank and will fall back to the headline.');
     const canonicalUrl = destUrlFor(m.productId);
     const destination = destUrlForMeta(m);
@@ -1384,7 +1383,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
 
   // ── render ────────────────────────────────────────────────────────────
   return (
-    <div style={S.wrap}>
+    <div className="launcher-tool" style={S.wrap}>
       <h1 style={S.h1}>Launcher</h1>
       <p style={S.sub}>Drive UGC and in-app generated creatives in one place. Settings apply to every launch.</p>
 
@@ -1459,7 +1458,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
 
         <div style={{ ...S.divider, margin: '16px 0' }} />
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(190px, .7fr) minmax(210px, 1fr) minmax(210px, 1fr) minmax(110px, .4fr)', gap: 10, alignItems: 'flex-end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, alignItems: 'flex-end' }}>
           <div>
             <label style={S.label}>Launch structure</label>
             <select style={S.select} value={config.namingMode || 'batch_adsets'} onChange={e => updateConfig({ namingMode: e.target.value })}>
@@ -1489,7 +1488,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
 
         {selectedCampaignId === '__new__' && (
           <div style={{ marginTop: 12, padding: 12, border: '1px dashed #dedbd3', borderRadius: 6 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 8, alignItems: 'flex-end' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, alignItems: 'flex-end' }}>
               <div>
                 <label style={S.label}>Campaign name</label>
                 <input style={S.input} placeholder="e.g. HOWL | UGC | Sales" value={newCampaign.name} onChange={e => setNewCampaign({ ...newCampaign, name: e.target.value })} />
@@ -1534,7 +1533,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                 Use selected
               </button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr auto', gap: 8, alignItems: 'flex-end' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, alignItems: 'flex-end' }}>
               <div>
                 <label style={S.label}>Ad set name</label>
                 <input style={S.input} placeholder={focusedAdsetName || 'Select a creative below'} value={newAdset.name} onChange={e => { setNewAdsetNameEdited(true); setNewAdset({ ...newAdset, name: e.target.value }); }} />
@@ -1635,9 +1634,9 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         const launchDisabled = batchLaunching || !canLaunchItem(item);
 
         return (
-          <div key={id} style={{ ...S.card, borderColor: selectedItems.has(id) ? '#d84a17' : '#dedbd3', boxShadow: selectedItems.has(id) ? 'inset 3px 0 #d84a17' : 'none' }}>
+          <div className="launcher-queue-card" key={id} style={{ ...S.card, borderColor: selectedItems.has(id) ? '#d84a17' : '#dedbd3', boxShadow: selectedItems.has(id) ? 'inset 3px 0 #d84a17' : 'none' }}>
             {/* THUMB COL */}
-            <div>
+            <div className="launcher-queue-thumb">
               <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8, color: '#77746f', fontSize: 10, cursor: 'pointer' }}>
                 <input type="checkbox" checked={selectedItems.has(id)} onChange={() => toggleSelected(id)} style={{ accentColor: '#d84a17' }} />
                 Include
@@ -1891,7 +1890,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                   </select>
                 </div>
               </div>
-              <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'minmax(220px, 1.3fr) minmax(220px, 1fr)', gap: 8 }}>
+              <div className="launcher-url-grid" style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'minmax(220px, 1.3fr) minmax(220px, 1fr)', gap: 8 }}>
                 <div>
                   <label style={S.label}>Ad URL</label>
                   <input
@@ -1911,7 +1910,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                   />
                 </div>
               </div>
-              <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8 }}>
+              <div className="launcher-copy-grid" style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8 }}>
                 <div>
                   <label style={S.label}>Headline</label>
                   <input style={S.input} value={m.headline || ''} onChange={e => updateMeta(id, { headline: e.target.value })} placeholder="6 words max" />
@@ -1973,7 +1972,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
             </div>
 
             {/* ACTION COL */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+            <div className="launcher-queue-actions" style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
               <button
                 onClick={() => requestPreflight([item])}
                 disabled={launchDisabled}

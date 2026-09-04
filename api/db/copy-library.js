@@ -5,7 +5,22 @@ let schemaReady = null;
 
 function normalizeProductIds(value) {
   if (!Array.isArray(value)) return [];
-  return [...new Set(value.map(id => String(id || '').trim()).filter(Boolean))];
+  const validProductIds = new Set(['r1', 'r3', 'r4mkii']);
+  return [...new Set(value.map(id => String(id || '').trim()).filter(id => validProductIds.has(id)))];
+}
+
+function cleanText(value, maxLength) {
+  return String(value || '').trim().slice(0, maxLength) || null;
+}
+
+export function inferProductIds(value) {
+  const text = String(value || '').toLowerCase();
+  const matches = [
+    /\br1\b|the-howl-r1/.test(text) && 'r1',
+    /\br3\b|the-howl-r3/.test(text) && 'r3',
+    /\br4(?:\s*mkii)?\b|the-howl-r4/.test(text) && 'r4mkii',
+  ].filter(Boolean);
+  return matches.length === 1 ? matches : [];
 }
 
 function ensureSchema(sql) {
@@ -55,13 +70,36 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const { action, id, label, headline, primaryText, productIds } = req.body || {};
       if (action === 'add') {
-        if (!headline?.trim() && !primaryText?.trim()) return res.status(400).json({ error: 'headline or primaryText required' });
+        const cleanedHeadline = cleanText(headline, 255);
+        const cleanedPrimaryText = cleanText(primaryText, 5000);
+        if (!cleanedHeadline && !cleanedPrimaryText) return res.status(400).json({ error: 'headline or primaryText required' });
         const normalizedProductIds = normalizeProductIds(productIds);
+        const effectiveProductIds = normalizedProductIds.length
+          ? normalizedProductIds
+          : inferProductIds(`${label || ''} ${cleanedHeadline || ''} ${cleanedPrimaryText || ''}`);
         const rows = await sql`
           INSERT INTO copy_library (label, headline, primary_text, product_ids)
-          VALUES (${label || null}, ${headline || null}, ${primaryText || null}, ${JSON.stringify(normalizedProductIds)}::jsonb)
+          VALUES (${cleanText(label, 120)}, ${cleanedHeadline}, ${cleanedPrimaryText}, ${JSON.stringify(effectiveProductIds)}::jsonb)
           RETURNING id, label, headline, primary_text, product_ids, created_at
         `;
+        return res.json({ row: rows[0] });
+      }
+      if (action === 'update') {
+        if (!id) return res.status(400).json({ error: 'id required' });
+        const cleanedHeadline = cleanText(headline, 255);
+        const cleanedPrimaryText = cleanText(primaryText, 5000);
+        if (!cleanedHeadline && !cleanedPrimaryText) return res.status(400).json({ error: 'headline or primaryText required' });
+        const normalizedProductIds = normalizeProductIds(productIds);
+        const rows = await sql`
+          UPDATE copy_library
+          SET label = ${cleanText(label, 120)},
+              headline = ${cleanedHeadline},
+              primary_text = ${cleanedPrimaryText},
+              product_ids = ${JSON.stringify(normalizedProductIds)}::jsonb
+          WHERE id = ${id}
+          RETURNING id, label, headline, primary_text, product_ids, created_at
+        `;
+        if (!rows[0]) return res.status(404).json({ error: 'copy option not found' });
         return res.json({ row: rows[0] });
       }
       if (action === 'update_products') {
@@ -86,11 +124,16 @@ export default async function handler(req, res) {
         if (!Array.isArray(items)) return res.status(400).json({ error: 'items array required' });
         let inserted = 0;
         for (const it of items) {
-          if (!it.headline && !it.primaryText) continue;
+          const cleanedHeadline = cleanText(it.headline, 255);
+          const cleanedPrimaryText = cleanText(it.primaryText, 5000);
+          if (!cleanedHeadline && !cleanedPrimaryText) continue;
           const normalizedProductIds = normalizeProductIds(it.productIds);
+          const effectiveProductIds = normalizedProductIds.length
+            ? normalizedProductIds
+            : inferProductIds(`${it.label || ''} ${cleanedHeadline || ''} ${cleanedPrimaryText || ''}`);
           await sql`
             INSERT INTO copy_library (label, headline, primary_text, product_ids)
-            VALUES (${it.label || null}, ${it.headline || null}, ${it.primaryText || null}, ${JSON.stringify(normalizedProductIds)}::jsonb)
+            VALUES (${cleanText(it.label, 120)}, ${cleanedHeadline}, ${cleanedPrimaryText}, ${JSON.stringify(effectiveProductIds)}::jsonb)
           `;
           inserted++;
         }
