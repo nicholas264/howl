@@ -10,8 +10,30 @@ function normalizeProductIds(value) {
 
 function ensureSchema(sql) {
   if (!schemaReady) {
-    schemaReady = sql`ALTER TABLE copy_library ADD COLUMN IF NOT EXISTS product_ids JSONB NOT NULL DEFAULT '[]'::jsonb`
-      .catch(err => {
+    schemaReady = (async () => {
+      await sql`ALTER TABLE copy_library ADD COLUMN IF NOT EXISTS product_ids JSONB NOT NULL DEFAULT '[]'::jsonb`;
+      await sql`
+        UPDATE copy_library
+        SET product_ids = '["r1"]'::jsonb
+        WHERE product_ids = '[]'::jsonb
+          AND concat_ws(' ', label, headline, primary_text) ~* '(^|[^a-z0-9])r1([^a-z0-9]|$)|the-howl-r1'
+          AND concat_ws(' ', label, headline, primary_text) !~* '(^|[^a-z0-9])r3([^a-z0-9]|$)|the-howl-r3|(^|[^a-z0-9])r4([^a-z0-9]|$)|the-howl-r4'
+      `;
+      await sql`
+        UPDATE copy_library
+        SET product_ids = '["r3"]'::jsonb
+        WHERE product_ids = '[]'::jsonb
+          AND concat_ws(' ', label, headline, primary_text) ~* '(^|[^a-z0-9])r3([^a-z0-9]|$)|the-howl-r3'
+          AND concat_ws(' ', label, headline, primary_text) !~* '(^|[^a-z0-9])r1([^a-z0-9]|$)|the-howl-r1|(^|[^a-z0-9])r4([^a-z0-9]|$)|the-howl-r4'
+      `;
+      await sql`
+        UPDATE copy_library
+        SET product_ids = '["r4mkii"]'::jsonb
+        WHERE product_ids = '[]'::jsonb
+          AND concat_ws(' ', label, headline, primary_text) ~* '(^|[^a-z0-9])r4([^a-z0-9]|$)|the-howl-r4'
+          AND concat_ws(' ', label, headline, primary_text) !~* '(^|[^a-z0-9])r1([^a-z0-9]|$)|the-howl-r1|(^|[^a-z0-9])r3([^a-z0-9]|$)|the-howl-r3'
+      `;
+    })().catch(err => {
         schemaReady = null;
         throw err;
       });

@@ -113,12 +113,23 @@ const app = isCreatorSubmission ? (
     <CreatorApplicationPage />
   </React.Suspense>
 ) : DEV_AUTH_BYPASS ? (
-  <App appAccess={{
-    user: { status: 'active', display_name: 'Local Developer', email: 'dev@local' },
-    role: 'owner',
-    permissions: ['*'],
-    localAuthBypass: true,
-  }} />
+  PUB_KEY ? (
+    <ClerkProvider publishableKey={PUB_KEY} appearance={appearance}>
+      <App appAccess={{
+        user: { status: 'active', display_name: 'Local Developer', email: 'dev@local' },
+        role: 'owner',
+        permissions: ['*'],
+        localAuthBypass: true,
+      }} />
+    </ClerkProvider>
+  ) : (
+    <App appAccess={{
+      user: { status: 'active', display_name: 'Local Developer', email: 'dev@local' },
+      role: 'owner',
+      permissions: ['*'],
+      localAuthBypass: true,
+    }} />
+  )
 ) : (
   <ClerkProvider publishableKey={PUB_KEY} appearance={appearance}>
     <SignedIn>

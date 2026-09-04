@@ -7,6 +7,7 @@ import {
 } from '../data/skuMediaForecast';
 
 const STORAGE_KEY = 'howl_sku_media_pacing_assumptions_v3';
+const CORE_UNIT_SKUS = new Set(['R1 Campfire', 'R3 Campfire', 'R4 Campfire']);
 
 const DEFAULT_GLOBALS = {
   discountPct: 0,
@@ -379,7 +380,7 @@ export default function SkuMediaPacingTool() {
       0.75,
     );
     const monthReturningRevenue = Math.max(0, monthRevenue * returnPct);
-    const rows = SKU_MEDIA_FORECAST.map(item => modelSku(
+    const modeledRows = SKU_MEDIA_FORECAST.map(item => modelSku(
       item,
       state.skus[item.sku],
       index,
@@ -389,6 +390,15 @@ export default function SkuMediaPacingTool() {
       metaMonth?.bySku?.[item.sku] || 0,
       shopifyMonth?.bySku?.[item.sku] || null,
     ));
+    const coreOrderedUnits = modeledRows.reduce(
+      (sum, row) => sum + (CORE_UNIT_SKUS.has(row.sku) ? row.orderedUnits : 0),
+      0,
+    );
+    const rows = modeledRows.map(row => ({
+      ...row,
+      coreOrderedUnits,
+      productMix: coreOrderedUnits > 0 ? row.orderedUnits / coreOrderedUnits : 0,
+    }));
     return { month, key: monthKey, meta: metaMonth, shopify: shopifyMonth, returnPct, pacing: monthPacing, rows, totals: sumRows(rows) };
   }), [history, metaSpend.byMonth, shopifyUnits.byMonth, state.globals.returningRevenueOverride, state.globals.returningRevenuePct, state.skus, useSeasonalReturnCurve]);
 
@@ -427,12 +437,14 @@ export default function SkuMediaPacingTool() {
     : (shopifyUnits.loading ? 'Loading Shopify' : 'No Shopify units loaded');
 
   const exportCsv = () => {
-    const headings = ['Month', 'SKU', 'Planned units', 'Ordered units', 'Projected EOM units', 'Unit pace delta', 'Unit gap', 'New units', 'Returning units', 'Revenue', 'New revenue', 'Returning revenue', 'Cost cap', 'Monthly paid media', 'Daily target', 'Spend to date', 'Pace target to date', 'Required daily', 'Post-media CM %'];
+    const headings = ['Month', 'SKU', 'Planned units', 'Ordered units', 'MTD product mix %', 'Core ordered units', 'Projected EOM units', 'Unit pace delta', 'Unit gap', 'New units', 'Returning units', 'Revenue', 'New revenue', 'Returning revenue', 'Cost cap', 'Monthly paid media', 'Daily target', 'Spend to date', 'Pace target to date', 'Required daily', 'Post-media CM %'];
     const lines = rowsByMonth.flatMap(month => month.rows.map(row => [
       month.month,
       row.sku,
       row.plannedUnits.toFixed(2),
       row.orderedUnits.toFixed(2),
+      (row.productMix * 100).toFixed(2),
+      row.coreOrderedUnits.toFixed(2),
       row.projectedUnits.toFixed(2),
       row.unitPaceDelta.toFixed(2),
       row.unitGap.toFixed(2),
@@ -479,6 +491,7 @@ export default function SkuMediaPacingTool() {
               <option value="mediaBudget">Monthly spend</option>
               <option value="requiredDaily">Required daily</option>
               <option value="unitPaceDelta">Unit pace</option>
+              <option value="productMix">Product mix</option>
               <option value="paceDelta">Pace delta</option>
               <option value="costCap">Cost Cap</option>
               <option value="acquiredUnits">New units</option>
@@ -587,6 +600,7 @@ export default function SkuMediaPacingTool() {
             <span>Unit status</span>
             <span>Target</span>
             <span>Ordered</span>
+            <span>MTD mix</span>
             <span>Spend to date</span>
             <span>Spend status</span>
             <span>Monthly spend</span>
@@ -619,6 +633,10 @@ export default function SkuMediaPacingTool() {
                   </label>
                   <span className={row.unitPaceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
                     <strong>{fmtNumber(row.orderedUnits)}</strong>
+                  </span>
+                  <span className="sku-pacing-mix">
+                    <strong>{fmtPct(row.productMix * 100)}</strong>
+                    <small>of core</small>
                   </span>
                   <b>{fmtMoney(row.spendToDate)}</b>
                   <span className={row.paceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>

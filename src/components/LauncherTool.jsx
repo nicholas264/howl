@@ -29,6 +29,7 @@ import {
 
 const LS_CONFIG = 'howl_launcher_config';
 const LS_SELECTED = 'howl_launcher_selected_items';
+const LS_META = 'howl_launcher_item_meta_v1';
 const DEFAULT_URL_PARAMS = 'tw_source={{site_source_name}}&tw_adid={{ad.id}}';
 
 const DEFAULT_LAUNCHER_CONFIG = {
@@ -198,6 +199,32 @@ function normalizedDestUrlFor(productId, value) {
   if (!trimmed) return destUrlFor(productId);
   if (LEGACY_PRODUCT_URLS[productId]?.has(trimmed)) return destUrlFor(productId);
   return trimmed;
+}
+
+function validHttpUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+function productForDestination(value) {
+  const normalized = String(value || '').trim().replace(/\/$/, '');
+  return PRODUCTS.find(product => product.url.replace(/\/$/, '') === normalized) || null;
+}
+
+function wordCount(value) {
+  return String(value || '').trim().split(/\s+/).filter(Boolean).length;
+}
+
+function friendlyDriveError(value) {
+  const message = String(value || 'Drive could not load.');
+  if (/service account|impersonation|getAccessToken|iam\.serviceAccounts/i.test(message)) {
+    return 'Google Drive access needs attention. The service account cannot create an access token; restore its Token Creator permission in Google Cloud.';
+  }
+  return message;
 }
 
 function productCopyOptions(productId) {
@@ -450,7 +477,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   useEffect(() => { lsSet('howl_launcher_adset', selectedAdsetId); }, [selectedAdsetId]);
   useEffect(() => { lsSet('howl_launcher_batch_budget', batchAdsetBudget); }, [batchAdsetBudget]);
 
-  const loadCampaigns = async () => {
+  const loadCampaigns = useCallback(async () => {
     setLoadingCampaigns(true);
     try {
       const r = await fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'list_campaigns' }) });
@@ -463,7 +490,9 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     } finally {
       setLoadingCampaigns(false);
     }
-  };
+  }, []);
+
+  useEffect(() => { loadCampaigns(); }, [loadCampaigns]);
 
   const loadAdsets = async (campaignId) => {
     if (!campaignId || campaignId === '__new__') { setAdsets([]); return; }
@@ -561,7 +590,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       if (d.error) throw new Error(d.error);
       setDriveItems(d.items || (d.files || []).map(f => ({ kind: 'single', ...f })));
     } catch (err) {
-      setDriveError(err.message);
+      setDriveError(friendlyDriveError(err.message));
     } finally {
       setLoadingDrive(false);
     }
@@ -570,7 +599,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
 
   // ── per-item editable metadata (creator, product, angle, headline, primaryText, status) ──
   // Single state map keyed by unified item id (drive ids are file ids; cart ids prefixed).
-  const [meta, setMeta] = useState({});
+  const [meta, setMeta] = useState(() => ls(LS_META, {}));
+  useEffect(() => { lsSet(LS_META, meta); }, [meta]);
   const updateMeta = (id, patch) => setMeta(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
   const updateProduct = (id, productId) => {
     const productCopy = defaultProductCopy(productId);
@@ -828,6 +858,11 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       return next;
     });
     setFocusedItemId(current => current === id ? null : current);
+    setMeta(prev => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -1056,6 +1091,49 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
 
   const launch = (item, options = {}) => item.source === 'drive' ? launchDriveItem(item, options) : launchCartItem(item, options);
 
+  const launchIssuesForItem = (item) => {
+    const id = item.unifiedId;
+    const m = meta[id] || {};
+    const issues = [];
+    const attribution = sourceConfig(m.sourceType || (item.source === 'drive' ? 'external_creator' : (m.creatorId ? 'external_creator' : 'tool_generated')));
+    const destination = destUrlForMeta(m);
+    const destinationProduct = productForDestination(destination);
+
+    if ((statuses[id] || {}).status === 'pushing') issues.push('Launch is already in progress.');
+    if (!config.pageId.trim()) issues.push('Pick a Facebook Page.');
+    if (!selectedCampaignId || selectedCampaignId === '__new__') issues.push('Pick a campaign.');
+    if ((config.namingMode || 'batch_adsets') === 'existing_adset' && (!selectedAdsetId || selectedAdsetId === '__new__')) {
+      issues.push('Pick an ad set.');
+    }
+    if ((config.namingMode || 'batch_adsets') !== 'existing_adset' && !(Number(batchAdsetBudget) > 0)) {
+      issues.push('Enter a valid ad set budget.');
+    }
+    if (!m.productId) issues.push('Pick a product.');
+    if (!destination) issues.push('Add an ad URL.');
+    else if (!validHttpUrl(destination)) issues.push('Enter a valid http or https ad URL.');
+    else if (destinationProduct && destinationProduct.id !== m.productId) {
+      issues.push(`The ad URL belongs to ${destinationProduct.name}, not ${PRODUCTS.find(product => product.id === m.productId)?.name || 'the selected product'}.`);
+    }
+    if (item.source === 'drive' && !m.headline?.trim() && !m.primaryText?.trim()) issues.push('Add a headline or primary text.');
+    if (item.source !== 'drive' && !m.headline?.trim()) issues.push('Add a headline.');
+    if (attribution.requiresCreator && !m.creatorId) issues.push('Choose an exact creator record.');
+    if (attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim()) issues.push('Add the person responsible for this creative.');
+    return issues;
+  };
+
+  const launchWarningsForItem = (item) => {
+    const m = meta[item.unifiedId] || {};
+    const warnings = [];
+    if (wordCount(m.headline) > 6) warnings.push(`Headline is ${wordCount(m.headline)} words; the target is 6 or fewer.`);
+    if (!m.primaryText?.trim()) warnings.push('Primary text is blank and will fall back to the headline.');
+    const canonicalUrl = destUrlFor(m.productId);
+    const destination = destUrlForMeta(m);
+    if (destination && canonicalUrl && destination.replace(/\/$/, '') !== canonicalUrl.replace(/\/$/, '')) {
+      warnings.push('This creative uses a custom destination URL.');
+    }
+    return warnings;
+  };
+
   const launchWithAdsetForItem = async (item, index = 1) => {
     if (!selectedCampaignId || selectedCampaignId === '__new__') throw new Error('Pick a campaign first.');
     if (!config.pageId.trim()) throw new Error('Pick a Facebook Page.');
@@ -1073,7 +1151,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
 
   const launchOne = async (item) => {
     setGlobalError('');
-    if (!canLaunchItem(item)) return setGlobalError('This creative is missing required launch fields.');
+    const issues = launchIssuesForItem(item);
+    if (issues.length) return setGlobalError(issues[0]);
     setBatchLaunching(true);
     try {
       await launchWithAdsetForItem(item, 1);
@@ -1086,22 +1165,13 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   };
 
   const canLaunchItem = (item) => {
-    const id = item.unifiedId;
-    const m = meta[id] || {};
-    const attribution = sourceConfig(m.sourceType || (item.source === 'drive' ? 'external_creator' : (m.creatorId ? 'external_creator' : 'tool_generated')));
-    if ((statuses[id] || {}).status === 'pushing') return false;
-    if (!destUrlForMeta(m)) return false;
-    if (item.source === 'drive' && !m.headline?.trim() && !m.primaryText?.trim()) return false;
-    if (item.source !== 'drive' && !m.headline?.trim()) return false;
-    if (attribution.requiresCreator && !m.creatorId) return false;
-    if (attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim()) return false;
-    return true;
+    return launchIssuesForItem(item).length === 0;
   };
   const selectedLaunchReadyCount = selectedQueue.filter(canLaunchItem).length;
 
-  const launchSelected = async () => {
+  const launchSelected = async (requestedItems = null) => {
     setGlobalError('');
-    const items = selectedQueue.filter(canLaunchItem);
+    const items = (requestedItems || selectedQueue).filter(canLaunchItem);
     if (!items.length) return setGlobalError('Select at least one launch-ready item.');
     if (!selectedCampaignId || selectedCampaignId === '__new__') return setGlobalError('Pick a campaign first.');
     if (!config.pageId.trim()) return setGlobalError('Pick a Facebook Page.');
@@ -1239,6 +1309,78 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   const library = useCopyLibrary();
   const [openCreatorPickerId, setOpenCreatorPickerId] = useState(null);
   const [creatingCreatorFor, setCreatingCreatorFor] = useState('');
+  const [bulkProductId, setBulkProductId] = useState('');
+  const [bulkCopyIndex, setBulkCopyIndex] = useState('');
+  const [preflightIds, setPreflightIds] = useState([]);
+  const selectedProductIds = [...new Set(selectedQueue.map(item => meta[item.unifiedId]?.productId).filter(Boolean))];
+  const effectiveBulkProductId = bulkProductId || (selectedProductIds.length === 1 ? selectedProductIds[0] : '');
+  const bulkCopyOptions = effectiveBulkProductId ? launcherCopyOptions(effectiveBulkProductId, library.variants) : [];
+  const preflightItems = preflightIds.map(id => queue.find(item => item.unifiedId === id)).filter(Boolean);
+
+  useEffect(() => {
+    if (!preflightIds.length) return undefined;
+    const closeOnEscape = event => {
+      if (event.key === 'Escape') setPreflightIds([]);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [preflightIds.length]);
+
+  const applyProductToSelected = () => {
+    if (!bulkProductId || !selectedQueue.length) return;
+    const productCopy = defaultProductCopy(bulkProductId);
+    setMeta(prev => {
+      const next = { ...prev };
+      selectedQueue.forEach(item => {
+        const current = next[item.unifiedId] || {};
+        next[item.unifiedId] = {
+          ...current,
+          productId: bulkProductId,
+          destUrl: destUrlFor(bulkProductId),
+          ...(shouldAutoReplaceCopy(current) ? {
+            headline: productCopy.headline,
+            primaryText: productCopy.primaryText,
+          } : {}),
+        };
+      });
+      return next;
+    });
+    setBulkCopyIndex('');
+  };
+
+  const applyCopyToSelected = () => {
+    const option = bulkCopyOptions[Number(bulkCopyIndex)];
+    if (!option || !selectedQueue.length) return;
+    setMeta(prev => {
+      const next = { ...prev };
+      selectedQueue.forEach(item => {
+        next[item.unifiedId] = {
+          ...next[item.unifiedId],
+          headline: option.headline,
+          primaryText: option.primaryText,
+        };
+      });
+      return next;
+    });
+  };
+
+  const requestPreflight = (items) => {
+    const ready = items.filter(canLaunchItem);
+    if (!ready.length) {
+      const firstIssue = items[0] ? launchIssuesForItem(items[0])[0] : 'Select at least one launch-ready creative.';
+      setGlobalError(firstIssue || 'Select at least one launch-ready creative.');
+      return;
+    }
+    setGlobalError('');
+    setPreflightIds(ready.map(item => item.unifiedId));
+  };
+
+  const confirmPreflight = async () => {
+    const items = [...preflightItems];
+    setPreflightIds([]);
+    if (items.length === 1) await launchOne(items[0]);
+    else await launchSelected(items);
+  };
 
   // ── render ────────────────────────────────────────────────────────────
   return (
@@ -1260,6 +1402,12 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           <div>
             <label style={S.label}>Default Creator</label>
             <input style={S.input} value={config.defaultCreator} onChange={e => updateConfig({ defaultCreator: e.target.value })} placeholder="e.g. Austin" />
+          </div>
+          <div>
+            <label style={S.label}>Default Product</label>
+            <select style={S.select} value={config.defaultProduct} onChange={e => updateConfig({ defaultProduct: e.target.value })}>
+              {PRODUCTS.map(product => <option key={product.id} value={product.id}>{product.name}</option>)}
+            </select>
           </div>
           <div>
             <label style={S.label}>Default Pixel ID</label>
@@ -1426,7 +1574,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         }} style={S.ghost}>
           Clear
         </button>
-        <button onClick={launchSelected} disabled={batchLaunching || selectedLaunchReadyCount === 0} style={S.btn(batchLaunching || selectedLaunchReadyCount === 0)}>
+        <button onClick={() => requestPreflight(selectedQueue)} disabled={batchLaunching || selectedLaunchReadyCount === 0} style={S.btn(batchLaunching || selectedLaunchReadyCount === 0)}>
           {batchLaunching ? 'Launching…' : `Launch ready (${selectedLaunchReadyCount})`}
         </button>
         <div style={{ fontSize: 11, color: '#77746f' }}>
@@ -1442,6 +1590,29 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           </div>
         )}
       </div>
+
+      {selectedQueue.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8, alignItems: 'flex-end', padding: 12, marginBottom: 14, border: '1px solid #dedbd3', borderRadius: 6, background: '#faf9f6' }}>
+          <div>
+            <label style={S.label}>Product for {selectedQueue.length} selected</label>
+            <select style={S.select} value={bulkProductId} onChange={e => { setBulkProductId(e.target.value); setBulkCopyIndex(''); }}>
+              <option value="">Choose product</option>
+              {PRODUCTS.map(product => <option key={product.id} value={product.id}>{product.name}</option>)}
+            </select>
+          </div>
+          <button type="button" onClick={applyProductToSelected} disabled={!bulkProductId} style={S.ghost}>Apply product</button>
+          <div>
+            <label style={S.label}>Copy for {effectiveBulkProductId ? PRODUCTS.find(product => product.id === effectiveBulkProductId)?.name : 'selected product'}</label>
+            <select style={S.select} value={bulkCopyIndex} onChange={e => setBulkCopyIndex(e.target.value)} disabled={!bulkCopyOptions.length}>
+              <option value="">Choose copy option</option>
+              {bulkCopyOptions.map((option, index) => (
+                <option key={`${option.source}:${option.label}:${index}`} value={index}>{option.source}: {option.label} - {option.headline}</option>
+              ))}
+            </select>
+          </div>
+          <button type="button" onClick={applyCopyToSelected} disabled={bulkCopyIndex === ''} style={S.ghost}>Apply copy</button>
+        </div>
+      )}
 
       {globalError && <div style={S.err}>{globalError}</div>}
       {driveError && <div style={S.err}>Drive: {driveError}</div>}
@@ -1459,9 +1630,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         const stepDef = item.source === 'drive' ? DRIVE_STEPS : CART_STEPS;
         const attribution = sourceConfig(m.sourceType || (item.source === 'drive' ? 'external_creator' : (m.creatorId ? 'external_creator' : 'tool_generated')));
         const isCreatorLinked = Boolean(m.creatorId);
-        const missingExternalCreator = attribution.requiresCreator && !isCreatorLinked;
-        const missingSourceLabel = attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim();
         const creatorMatch = m.creatorMatch;
+        const launchIssues = launchIssuesForItem(item);
         const launchDisabled = batchLaunching || !canLaunchItem(item);
 
         return (
@@ -1805,13 +1975,16 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
             {/* ACTION COL */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
               <button
-                onClick={() => launchOne(item)}
+                onClick={() => requestPreflight([item])}
                 disabled={launchDisabled}
-                title={missingExternalCreator ? 'Pick an exact creator record before launching creator UGC.' : missingSourceLabel ? 'Add the internal/founder name before launching.' : ''}
+                title={launchIssues[0] || ''}
                 style={S.btn(launchDisabled)}
               >
                 {status.status === 'pushing' ? 'Launching…' : status.status === 'success' ? 'Re-launch' : 'Launch'}
               </button>
+              {launchIssues[0] && status.status !== 'pushing' && (
+                <div style={{ maxWidth: 150, color: '#9f3212', fontSize: 9, lineHeight: 1.35, textAlign: 'right' }}>{launchIssues[0]}</div>
+              )}
               {item.source === 'drive' && (
                 <>
                   {item.webViewLink && (
@@ -1843,6 +2016,60 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
           </div>
         );
       })}
+
+      {preflightItems.length > 0 && (
+        <div
+          role="presentation"
+          onClick={() => setPreflightIds([])}
+          style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'rgba(23,23,23,0.58)' }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="launcher-preflight-title"
+            onClick={event => event.stopPropagation()}
+            style={{ width: 'min(760px, 100%)', maxHeight: 'calc(100vh - 40px)', overflow: 'auto', background: '#fff', border: '1px solid #c9c5bc', borderRadius: 6, boxShadow: '0 18px 50px rgba(0,0,0,0.24)' }}
+          >
+            <div style={{ position: 'sticky', top: 0, zIndex: 1, padding: '18px 20px 14px', borderBottom: '1px solid #dedbd3', background: '#fff' }}>
+              <div id="launcher-preflight-title" style={{ fontSize: 18, fontWeight: 700, color: '#171717' }}>Review {preflightItems.length} paused ad{preflightItems.length === 1 ? '' : 's'}</div>
+              <div style={{ marginTop: 5, color: '#77746f', fontSize: 11, lineHeight: 1.45 }}>
+                Campaign: <strong style={{ color: '#171717' }}>{campaigns.find(campaign => String(campaign.id) === String(selectedCampaignId))?.name || selectedCampaignId}</strong>
+                {' | '}{(config.namingMode || 'batch_adsets') === 'existing_adset'
+                  ? `Existing ad set: ${adsets.find(adset => String(adset.id) === String(selectedAdsetId))?.name || selectedAdsetId}`
+                  : `One new ad set per creative at $${batchAdsetBudget}/day`}
+              </div>
+            </div>
+
+            <div style={{ padding: 20 }}>
+              {preflightItems.map((item, index) => {
+                const m = meta[item.unifiedId] || {};
+                const product = PRODUCTS.find(candidate => candidate.id === m.productId);
+                const itemAttribution = sourceConfig(m.sourceType || (item.source === 'drive' ? 'external_creator' : 'tool_generated'));
+                const warnings = launchWarningsForItem(item);
+                return (
+                  <div key={item.unifiedId} style={{ padding: '12px 0', borderBottom: index === preflightItems.length - 1 ? 0 : '1px solid #ebe8e1' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' }}>
+                      <strong style={{ color: '#171717', fontSize: 12 }}>{assetLabel(item)}</strong>
+                      <span style={{ color: '#77746f', fontSize: 10 }}>{product?.name || 'No product'} | {itemAttribution.label}</span>
+                    </div>
+                    <div style={{ marginTop: 5, color: '#171717', fontSize: 11, lineHeight: 1.4 }}>{m.headline}</div>
+                    <div style={{ marginTop: 3, color: '#77746f', fontSize: 10, lineHeight: 1.4, wordBreak: 'break-word' }}>{destUrlForMeta(m)}</div>
+                    <div style={{ marginTop: 3, color: '#88857f', fontSize: 9 }}>{buildNamesForItem(item, index + 1).adName}</div>
+                    {warnings.map(warning => <div key={warning} style={{ marginTop: 5, color: '#9f5b12', fontSize: 10 }}>{warning}</div>)}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ position: 'sticky', bottom: 0, display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '14px 20px', borderTop: '1px solid #dedbd3', background: '#faf9f6' }}>
+              <button type="button" onClick={() => setPreflightIds([])} style={S.ghost}>Keep editing</button>
+              <button type="button" onClick={confirmPreflight} disabled={batchLaunching} style={S.btn(batchLaunching)}>
+                Create {preflightItems.length} paused ad{preflightItems.length === 1 ? '' : 's'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
