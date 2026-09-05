@@ -1,3 +1,5 @@
+import { assertLaunchReady } from '../_lib/launch-preflight.js';
+import { createMetaOperationFetch } from '../_lib/operation-journal.js';
 // UGC inbox: Workload-Identity-Federation-backed Drive operations.
 // Vercel OIDC → GCP STS → service account impersonation → Drive API.
 // Actions: list, download, mark_launched, ensure_subfolders, launch_meta_ad
@@ -402,6 +404,8 @@ export default async function handler(req, res) {
   const rootId = process.env.UGC_INBOX_FOLDER_ID;
   if (!rootId) return res.status(500).json({ error: 'UGC_INBOX_FOLDER_ID not configured' });
 
+  const fetch = req.body?.action === 'launch_meta_ad'
+    ? await createMetaOperationFetch(appAccess.sql, req, appAccess.userId) : globalThis.fetch;
   try {
     const token = await getAccessToken();
     const { action } = req.body;
@@ -535,6 +539,7 @@ export default async function handler(req, res) {
       const attributionSourceLabel = sourceLabel || creator || null;
       const isPair = !!pair && pair.feedFileId && pair.storyFileId;
       await ensureCreatorOpsTables(appAccess.sql);
+      await assertLaunchReady(appAccess.sql, req.body);
       await assertBrandSafe(appAccess.sql, [adName, headline, primaryText].filter(Boolean).join('\n'));
       // Instagram User ID is required by Meta when the ad targets Instagram
       // placements (Reels, Stories). Allow per-launch override but fall back
@@ -842,6 +847,8 @@ export default async function handler(req, res) {
             }
           } catch (dbErr) {
             emit({ step: 'db_log', status: 'error', error: dbErr.message });
+        emit({ done: true, adId: adData.id, error: `Ad ${adData.id} exists, but launch bookkeeping failed. Review before retrying.` });
+        return res.end();
           }
 
           emit({ done: true, adId: adData.id, paired: true, feedVideoId: feed.videoId, storyVideoId: story.videoId, feedImageHash: feed.imageHash, storyImageHash: story.imageHash });
@@ -1087,6 +1094,8 @@ export default async function handler(req, res) {
         }
       } catch (dbErr) {
         emit({ step: 'db_log', status: 'error', error: dbErr.message });
+        emit({ done: true, adId: adData.id, error: `Ad ${adData.id} exists, but launch bookkeeping failed. Review before retrying.` });
+        return res.end();
       }
 
       emit({ done: true, adId: adData.id, videoId, imageHash });

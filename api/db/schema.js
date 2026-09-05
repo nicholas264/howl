@@ -1,3 +1,6 @@
+import { ensureSyncState } from '../_lib/sync-state.js';
+import { ensureOperationJournal } from '../_lib/operation-journal.js';
+import { ensureOperationBudgets } from '../_lib/operation-budget.js';
 // One-shot endpoint to ensure schema exists. Idempotent — safe to call repeatedly.
 import { neon } from '@neondatabase/serverless';
 import { requireAdmin } from '../_lib/auth.js';
@@ -11,12 +14,10 @@ import { ensureMapMonitorTables } from '../_lib/map-monitor.js';
 import { ensureCreativeAuditTables } from '../_lib/creative-audit.js';
 import { ensureCreativeEvidenceTaskTables } from '../_lib/creative-evidence-tasks.js';
 
-export default async function handler(req, res) {
-  if (!(await requireAdmin(req, res))) return;
-  if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).end();
-
-  const sql = neon(process.env.DATABASE_URL);
-  try {
+export async function initializeSchema(sql) {
+    await ensureSyncState(sql);
+    await ensureOperationJournal(sql);
+    await ensureOperationBudgets(sql);
     await sql`
       CREATE TABLE IF NOT EXISTS launch_history (
         id           BIGSERIAL PRIMARY KEY,
@@ -292,6 +293,13 @@ export default async function handler(req, res) {
     await ensureContentStudioTables(sql);
     await ensureMapMonitorTables(sql);
 
+}
+
+export default async function handler(req, res) {
+  if (!(await requireAdmin(req, res))) return;
+  if (req.method !== 'POST') return res.status(405).end();
+  try {
+    await initializeSchema(neon(process.env.DATABASE_URL));
     return res.json({ ok: true });
   } catch (err) {
     return res.status(500).json({ error: err.message });

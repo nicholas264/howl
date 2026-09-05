@@ -1,3 +1,4 @@
+import { saveSessionEdits } from '../_lib/session-edits.js';
 import { neon } from '@neondatabase/serverless';
 import { del } from '@vercel/blob';
 import { requirePermission } from '../_lib/app-access.js';
@@ -42,7 +43,7 @@ export default async function handler(req, res) {
       }
       const limit = Math.min(parseInt(req.query.limit || '50'), 200);
       const rows = await sql`
-        SELECT u.id, u.title, u.file_name, u.file_size, u.duration, u.video_url,
+        SELECT u.id, u.revision, u.title, u.file_name, u.file_size, u.duration, u.video_url,
           u.thumbnail_url, u.status, u.last_error, u.creator_id, u.brief_id, u.deliverable_id, u.rendered_url,
           u.source_type, u.source_label,
           u.created_at, u.updated_at, c.name AS creator_name,
@@ -131,18 +132,12 @@ export default async function handler(req, res) {
       for (const k of allowed) if (k in fields) set[k] = fields[k];
       if (!Object.keys(set).length) return res.status(400).json({ error: 'no fields to update' });
 
-      if ('title' in set) await sql`UPDATE ugc_sessions SET title = ${set.title}, updated_at = now() WHERE id = ${id}`;
-      if ('duration' in set) await sql`UPDATE ugc_sessions SET duration = ${set.duration}, updated_at = now() WHERE id = ${id}`;
-      if ('words' in set) await sql`UPDATE ugc_sessions SET words = ${JSON.stringify(set.words)}, updated_at = now() WHERE id = ${id}`;
-      if ('settings' in set) await sql`UPDATE ugc_sessions SET settings = ${JSON.stringify(set.settings)}, updated_at = now() WHERE id = ${id}`;
-      if ('audio_url' in set) await sql`UPDATE ugc_sessions SET audio_url = ${set.audio_url}, updated_at = now() WHERE id = ${id}`;
-      if ('thumbnail_url' in set) await sql`UPDATE ugc_sessions SET thumbnail_url = ${set.thumbnail_url}, updated_at = now() WHERE id = ${id}`;
-      if ('status' in set) await sql`UPDATE ugc_sessions SET status = ${set.status}, updated_at = now() WHERE id = ${id}`;
-      if ('creator_id' in set) await sql`UPDATE ugc_sessions SET creator_id = ${Number(set.creator_id) || null}, updated_at = now() WHERE id = ${id}`;
-      if ('source_type' in set) await sql`UPDATE ugc_sessions SET source_type = ${set.source_type || null}, updated_at = now() WHERE id = ${id}`;
-      if ('source_label' in set) await sql`UPDATE ugc_sessions SET source_label = ${set.source_label || null}, updated_at = now() WHERE id = ${id}`;
-      if ('brief_id' in set) await sql`UPDATE ugc_sessions SET brief_id = ${Number(set.brief_id) || null}, updated_at = now() WHERE id = ${id}`;
-      if ('deliverable_id' in set) await sql`UPDATE ugc_sessions SET deliverable_id = ${Number(set.deliverable_id) || null}, updated_at = now() WHERE id = ${id}`;
+      const expectedRevision = Number(fields.expected_revision);
+      if (!Number.isInteger(expectedRevision) || expectedRevision < 0 || fields.expected_revision == null) {
+        return res.status(428).json({ error: 'Reload the session before saving; expected_revision required' });
+      }
+      const saved = await saveSessionEdits(sql, id, set, expectedRevision);
+      if (!saved) return res.status(409).json({ error: 'This session changed elsewhere. Reload it before saving.' });
 
       return res.json({ session: await ownRow(id) });
     }

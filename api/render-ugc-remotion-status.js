@@ -1,3 +1,4 @@
+import { completeRender } from './_lib/render-completion.js';
 import { getRenderProgress } from '@remotion/lambda/client';
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
@@ -7,28 +8,6 @@ export const config = {
   api: { bodyParser: { sizeLimit: '1mb' } },
   maxDuration: 60,
 };
-
-function appendRenderHistory(settings, renderState, outputFile, costs) {
-  const current = settings && typeof settings === 'object' ? settings : {};
-  const history = Array.isArray(current.remotion_renders) ? current.remotion_renders : [];
-  const nextItem = {
-    provider: 'remotion_lambda',
-    render_key: renderState.render_key || 'polished',
-    render_label: renderState.render_label || 'Polished ad',
-    render_id: renderState.render_id,
-    output_file: outputFile,
-    region: renderState.region,
-    duration_in_frames: renderState.duration_in_frames || null,
-    rendered_at: new Date().toISOString(),
-    costs: costs || null,
-    settings: renderState.input?.settings || null,
-  };
-  const withoutDuplicate = history.filter(item => item.render_id !== nextItem.render_id && item.output_file !== outputFile);
-  return {
-    ...current,
-    remotion_renders: [nextItem, ...withoutDuplicate].slice(0, 12),
-  };
-}
 
 export default async function handler(req, res) {
   const access = await requirePermission(req, res, 'assets.write');
@@ -58,10 +37,15 @@ export default async function handler(req, res) {
   if (!session) return res.status(404).json({ error: 'Session not found' });
 
   const renderState = session.settings?.remotion_render || {};
-  const renderId = req.query?.render_id || renderState.render_id;
-  const bucketName = req.query?.bucket_name || renderState.bucket_name;
-  const functionName = req.query?.function_name || renderState.function_name || lambda.functionName;
-  const region = req.query?.region || renderState.region || lambda.region;
+  for (const key of ['render_id', 'bucket_name', 'function_name', 'region']) {
+    if (req.query?.[key] && req.query[key] !== renderState[key]) {
+      return res.status(409).json({ error: 'This render is no longer current. Reload the session.' });
+    }
+  }
+  const renderId = renderState.render_id;
+  const bucketName = renderState.bucket_name;
+  const functionName = renderState.function_name;
+  const region = renderState.region;
   if (!renderId || !bucketName || !functionName || !region) {
     return res.status(400).json({ error: 'No Remotion render is attached to this session' });
   }
@@ -78,32 +62,15 @@ export default async function handler(req, res) {
       await sql`
         UPDATE ugc_sessions
         SET status = 'render_error', last_error = ${message}, updated_at = now()
-        WHERE id = ${sessionId}
+        WHERE id = ${sessionId} AND settings->'remotion_render'->>'render_id' = ${renderId}
       `.catch(() => {});
       return res.status(500).json({ error: message, progress });
     }
     if (progress.done && progress.outputFile) {
-      const nextSettings = appendRenderHistory(session.settings, renderState, progress.outputFile, progress.costs || null);
-      await sql`
-        UPDATE ugc_sessions
-        SET rendered_url = ${progress.outputFile},
-            settings = ${JSON.stringify(nextSettings)}::jsonb,
-            status = 'rendered',
-            last_error = NULL,
-            updated_at = now()
-        WHERE id = ${sessionId}
-      `;
-      if (session.deliverable_id) {
-        await sql`
-          UPDATE creator_deliverables
-          SET output_url = ${progress.outputFile}, status = 'edited',
-              completed_asset_count = GREATEST(completed_asset_count, 1),
-              completed_at = COALESCE(completed_at, now()), updated_at = now()
-          WHERE id = ${session.deliverable_id}
-            AND creator_id = ${session.creator_id}
-        `.catch(() => {});
-      }
+      const saved = await completeRender(sql, sessionId, renderState, progress.outputFile, progress.costs);
+      if (!saved) return res.status(409).json({ error: 'A newer render has started. Reload the session.' });
     }
+
     return res.json({
       ok: true,
       done: progress.done,

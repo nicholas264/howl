@@ -241,37 +241,38 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     }
   }
 
-  // ── Autosave words + settings on change ────────────────────────────────────
+  const saveChain = useRef(Promise.resolve());
+  const savedRevisions = useRef(new Map());
+  const editGeneration = useRef(0);
+  const markDirty = () => { dirtyRef.current = true; editGeneration.current += 1; };
+
+  const persistSessionEdits = () => {
+    if (!activeSession) return Promise.resolve();
+    const session = activeSession;
+    const generation = editGeneration.current;
+    const snapshot = { words, settings, duration };
+    const save = saveChain.current.catch(() => {}).then(async () => {
+      const expected = savedRevisions.current.get(session.id) ?? session.revision ?? 0;
+      const response = await fetch(`/api/db/ugc-sessions?id=${session.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...snapshot, expected_revision: expected }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not save current edits');
+      savedRevisions.current.set(session.id, data.session.revision);
+      if (generation === editGeneration.current) dirtyRef.current = false;
+    });
+    saveChain.current = save;
+    return save;
+  };
+
   useEffect(() => {
     if (!activeSession || !dirtyRef.current) return;
-    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-    autosaveTimer.current = setTimeout(async () => {
-      try {
-        await fetch(`/api/db/ugc-sessions?id=${activeSession.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ words, settings, duration }),
-        });
-        dirtyRef.current = false;
-      } catch (err) {
-        console.error('autosave failed', err);
-      }
+    autosaveTimer.current = setTimeout(() => {
+      persistSessionEdits().catch(err => setError(`Edits were not saved: ${err.message}`));
     }, AUTOSAVE_DEBOUNCE_MS);
-    return () => { if (autosaveTimer.current) clearTimeout(autosaveTimer.current); };
+    return () => clearTimeout(autosaveTimer.current);
   }, [words, settings, duration, activeSession]);
-
-  const markDirty = () => { dirtyRef.current = true; };
-
-  const persistSessionEdits = async () => {
-    if (!activeSession) return;
-    const response = await fetch(`/api/db/ugc-sessions?id=${activeSession.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ words, settings, duration }),
-    });
-    if (!response.ok) throw new Error('Could not save current transcript before AI edit');
-    dirtyRef.current = false;
-  };
 
   const sessionStats = useMemo(() => sessions.reduce((stats, session) => {
     stats.all += 1;
@@ -626,6 +627,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       const sess = data.session;
 
       if (videoUrl && videoUrl.startsWith('blob:')) URL.revokeObjectURL(videoUrl);
+      savedRevisions.current.set(sess.id, sess.revision ?? 0);
       setActiveSession(sess);
       setFile(null);
       setVideoUrl(sess.video_url);

@@ -1,3 +1,4 @@
+import { checkWorkLimit } from './_lib/work-limits.js';
 // Hardened proxy to Anthropic. The browser cannot pass arbitrary fields:
 // only model (whitelisted), max_tokens (capped), system, messages,
 // temperature pass through. Tool calls and other features are not exposed.
@@ -13,8 +14,10 @@ const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const MAX_TOKENS_CAP = 8192;
 
 export default async function handler(req, res) {
-  if (!(await requirePermission(req, res, 'briefs.write'))) return;
+  const access = await requirePermission(req, res, 'briefs.write');
+  if (!access) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!(await checkWorkLimit(access, res, 'generation'))) return;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });

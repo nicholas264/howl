@@ -61,7 +61,7 @@ function sourceLabel(source) {
   return `${source.title || 'Untitled'} · ${source.source_type || 'other'}`;
 }
 
-export default function ContentStudio() {
+export default function ContentStudio({ canPublish = false }) {
   const [projects, setProjects] = useState([]);
   const [sources, setSources] = useState([]);
   const [drafts, setDrafts] = useState([]);
@@ -791,7 +791,7 @@ export default function ContentStudio() {
                         <button type="button" disabled={!draft.trim() || generating === 'publish-draft'} onClick={() => sendToShopify({ publishLive: false })}>
                           {generating === 'publish-draft' ? 'Sending…' : 'Send as draft'}
                         </button>
-                        <button type="button" disabled={!draft.trim() || generating === 'publish-live'} onClick={() => sendToShopify({ publishLive: true })}>
+                        <button type="button" disabled={!canPublish || !draft.trim() || generating === 'publish-live'} onClick={() => sendToShopify({ publishLive: true })}>
                           {generating === 'publish-live' ? 'Publishing…' : 'Publish live'}
                         </button>
                       </div>

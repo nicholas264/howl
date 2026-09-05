@@ -1,3 +1,4 @@
+import { resolveEmail } from '../_lib/auth.js';
 // Issues short-lived client upload tokens for Vercel Blob direct-from-browser uploads.
 // Used by the UGC Editor to upload multi-GB source videos without proxying through
 // a Vercel function.
@@ -48,8 +49,9 @@ export default async function handler(req, res) {
             const payload = await verifyToken(clientPayload, { secretKey: process.env.CLERK_SECRET_KEY });
             const access = await getAppAccess({
               userId: payload.sub,
-              email: payload.email || null,
+              email: await resolveEmail(payload.sub, payload.email),
             });
+            if (!access.user || access.user.status !== 'active') throw new Error('Active workspace membership required');
             if (!hasPermission(access, 'assets.write') && !hasPermission(access, 'creators.write')) {
               throw new Error('assets.write or creators.write required');
             }

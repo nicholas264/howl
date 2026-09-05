@@ -1,3 +1,4 @@
+import { ensureOperationJournal, runExternalStep, operationKey } from './_lib/operation-journal.js';
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import { getGoogleConnection, getUserGoogleAccessToken } from './_lib/google-user-oauth.js';
@@ -166,13 +167,18 @@ export default async function handler(req, res) {
         SELECT id, status FROM creator_agreements
         WHERE id = ${agreementId} AND creator_id = ${creatorId}
       `;
-      if (!agreement || agreement.status !== 'draft') {
+      if (!agreement || !['draft', 'sent'].includes(agreement.status)) {
         return res.status(400).json({ error: 'A draft agreement for this creator is required' });
       }
     }
     const followUpAt = timestamp(req.body?.next_follow_up_at);
     if (followUpAt === undefined) return res.status(400).json({ error: 'Follow-up date is invalid' });
 
+    await ensureOperationJournal(sql);
+    const requestKey = operationKey(req, access.userId, 'creator-email');
+    const { provider, externalId, externalThreadId, providerMessageId } = await runExternalStep(sql, {
+      operationKey: requestKey, stepKey: 'send', payload: { to, subject, body, agreementId }, actorId: access.userId,
+    }, async () => {
     let provider = 'gmail';
     let externalId = null;
     let externalThreadId = null;
@@ -188,7 +194,7 @@ export default async function handler(req, res) {
         replyTo: validEmail(access.email),
       });
       if (email.skipped) {
-        return res.status(502).json({ error: email.reason || 'Resend send failed' });
+        throw new Error(email.reason || 'Resend send failed');
       }
       providerMessageId = email.id || null;
     } else {
@@ -214,21 +220,25 @@ export default async function handler(req, res) {
       if (!gmailResponse.ok) {
         const message = gmailData.error?.message || 'Gmail send failed';
         const reconnect = /scope|permission|credential|auth/i.test(message);
-        return res.status(reconnect ? 401 : 502).json({ error: message, reconnect_required: reconnect });
+        throw Object.assign(new Error(message), { reconnectRequired: reconnect });
       }
       externalId = gmailData.id || null;
       externalThreadId = gmailData.threadId || null;
       providerMessageId = externalId;
     }
 
+      return { provider, externalId, externalThreadId, providerMessageId };
+    });
+
     const [message] = await sql`
       INSERT INTO creator_outreach (
         creator_id, channel, direction, subject, body, status,
-        external_id, external_thread_id, recipient, sent_at, next_follow_up_at, created_by
+        external_id, external_thread_id, recipient, sent_at, next_follow_up_at, created_by, request_key
       ) VALUES (
         ${creatorId}, 'email', 'outbound', ${subject}, ${body}, 'sent',
-        ${externalId}, ${externalThreadId}, ${to}, now(), ${followUpAt}, ${access.userId}
+        ${externalId}, ${externalThreadId}, ${to}, now(), ${followUpAt}, ${access.userId}, ${requestKey}
       )
+      ON CONFLICT (request_key) DO UPDATE SET request_key = EXCLUDED.request_key
       RETURNING *
     `;
     await sql`
@@ -259,6 +269,6 @@ export default async function handler(req, res) {
     if (err.reconnectRequired) {
       return res.status(401).json({ error: err.message, reconnect_required: true });
     }
-    return res.status(500).json({ error: err.message });
+    return res.status(err.statusCode || 500).json({ error: err.message });
   }
 }

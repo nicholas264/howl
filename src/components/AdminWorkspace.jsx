@@ -358,6 +358,21 @@ export default function AdminWorkspace({ onOpenEditor }) {
         </div>
       </section>
 
+      <section className="admin-panel">
+        <h2>Operations needing review</h2>
+        <p>Check the provider before retrying an action whose result is uncertain.</p>
+        {(data.operations || []).map(item => <div key={`${item.operation_key}:${item.step_key}`} style={{ padding: 12, overflowWrap: 'anywhere' }}>
+          <strong>{item.step_key} — {item.status}</strong><br />
+          <small>Operation {item.operation_key} · {new Date(item.updated_at).toLocaleString()}</small>
+        </div>)}
+        {!(data.operations || []).length && <p>No uncertain or stalled external operations.</p>}
+        <h2>Data ingestion</h2>
+        {(data.syncs || []).map(item => <p key={item.name}>
+          {item.name}: {item.phase || 'not started'} · Last complete: {item.last_completed_at ? new Date(item.last_completed_at).toLocaleString() : 'never'}
+          {item.last_error ? ` · ${item.last_error}` : ''}
+        </p>)}
+      </section>
+
       <section className="admin-panel admin-health-panel">
         <div className="admin-panel-head">
           <div><span>Workflow health</span></div>

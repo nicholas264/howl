@@ -664,6 +664,7 @@ export default function CreativePerformanceWorkspace({
     setPlaybackMessage('');
     setPlaybackError(false);
     try {
+      if (!onNormalizeAsset) throw new Error('Asset repair requires write permission.');
       const result = await onNormalizeAsset(group.groupKey, group.assetId || null);
       setPlaybackMessage(result.ok
         ? `Playback repaired for ${group.name || 'creative'}.`
@@ -945,6 +946,7 @@ export default function CreativePerformanceWorkspace({
     let completed = 0;
     try {
       for (const item of toRun) {
+        if (!onAnalyze) throw new Error('Analysis requires write permission.');
         await onAnalyze(item.group.groupKey, item.group.name, item.transcript, item.group.assetId || null);
         completed += 1;
       }
@@ -1280,7 +1282,7 @@ export default function CreativePerformanceWorkspace({
                 <p>{quality.action}</p>
                 <button
                   type="button"
-                  onClick={() => group.isAnalyzed ? openGroupAnalysis(group) : onAnalyze(group.groupKey, group.name, '', group.assetId || null)}
+                  onClick={() => group.isAnalyzed ? openGroupAnalysis(group) : onAnalyze?.(group.groupKey, group.name, '', group.assetId || null)}
                 >
                   {group.isAnalyzed ? 'Review' : 'Analyze'}
                 </button>
@@ -1548,7 +1550,7 @@ export default function CreativePerformanceWorkspace({
           </select>
         </div>
         <div className="motion-toolbar-group">
-          <button onClick={onSync} disabled={syncing}>{syncing ? 'Syncing…' : 'Sync Meta'}</button>
+          <button onClick={onSync} disabled={!onSync || syncing}>{syncing ? 'Syncing…' : 'Sync Meta'}</button>
           <button
             className="motion-primary"
             onClick={sendToConcepts}
@@ -1607,9 +1609,9 @@ export default function CreativePerformanceWorkspace({
             </button>
           ) : null}
           {(analysisQueue?.summary?.failed || 0) > 0
-            ? <button onClick={onRetryAnalysisBatch}>Retry failed</button>
+            ? <button disabled={!onRetryAnalysisBatch} onClick={onRetryAnalysisBatch}>Retry failed</button>
             : null}
-          <button className="motion-primary" onClick={onProcessAnalysisBatch} disabled={analysisBatchRunning || !(analysisQueue?.summary?.pending || 0)}>
+          <button className="motion-primary" onClick={onProcessAnalysisBatch} disabled={!onProcessAnalysisBatch || analysisBatchRunning || !(analysisQueue?.summary?.pending || 0)}>
             {analysisBatchRunning ? 'Analyzing…' : 'Run next 5'}
           </button>
         </div>
@@ -1731,7 +1733,7 @@ export default function CreativePerformanceWorkspace({
                     <div key={key}><dt>{METRICS[key].label}</dt><dd>{METRICS[key].format(g[key])}</dd></div>
                   ))}
                 </dl>
-                <button className="motion-analysis-link" onClick={() => g.isAnalyzed ? openGroupAnalysis(g) : onAnalyze(g.groupKey, g.name, '', g.assetId || null)}>
+                <button className="motion-analysis-link" onClick={() => g.isAnalyzed ? openGroupAnalysis(g) : onAnalyze?.(g.groupKey, g.name, '', g.assetId || null)}>
                   {g.isAnalyzed
                     ? 'Open review'
                     : g.analysisQueueStatus === 'processing'

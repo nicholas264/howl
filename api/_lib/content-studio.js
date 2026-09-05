@@ -1,3 +1,4 @@
+import { fetchPublicText } from './safe-fetch.js';
 const SOURCE_TYPES = new Set(['email', 'blog', 'landing_page', 'other']);
 const PROJECT_STATUSES = new Set(['draft', 'outlining', 'drafting', 'ready', 'archived']);
 const MAX_SOURCE_BODY = 120000;
@@ -491,14 +492,7 @@ export function extractArticleHtml(html) {
 export async function scrapeUrlToSource(url, { sourceType = 'blog', tags = [] } = {}) {
   const parsed = new URL(cleanText(url, 1200));
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Only http and https URLs can be imported');
-  const response = await fetch(parsed.toString(), {
-    headers: {
-      Accept: 'text/html,application/xhtml+xml',
-      'User-Agent': 'HOWL Content Studio/1.0',
-    },
-  });
-  if (!response.ok) throw new Error(`Could not fetch ${parsed.toString()} (${response.status})`);
-  const html = (await response.text()).slice(0, MAX_SCRAPE_BYTES);
+  const { text: html } = await fetchPublicText(parsed.toString(), { maxBytes: MAX_SCRAPE_BYTES });
   const body = stripHtml(extractArticleHtml(html));
   if (body.length < 120) throw new Error(`No substantial article text found at ${parsed.toString()}`);
   return sourcePayload({

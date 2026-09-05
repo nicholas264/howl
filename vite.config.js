@@ -45,6 +45,11 @@ function localApiPlugin(root) {
             if (!res.headersSent) res.setHeader('content-type', 'application/json')
             res.end(JSON.stringify(payload))
           }
+          res.redirect = (statusOrUrl, url) => {
+            res.statusCode = typeof statusOrUrl === 'number' ? statusOrUrl : 302
+            res.setHeader('location', url || statusOrUrl)
+            res.end()
+          }
           res.send = payload => {
             if (typeof payload === 'object' && payload !== null && !Buffer.isBuffer(payload)) return res.json(payload)
             res.end(payload)
@@ -67,6 +72,9 @@ function localApiPlugin(root) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  for (const [key, value] of Object.entries(env)) {
+    if (process.env[key] === undefined) process.env[key] = value
+  }
   if (env.VITE_AUTH_DISABLED === 'true' && !process.env.AUTH_DISABLED) process.env.AUTH_DISABLED = 'true'
   if (!process.env.NODE_ENV) process.env.NODE_ENV = mode === 'production' ? 'production' : 'development'
 

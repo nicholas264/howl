@@ -1,3 +1,5 @@
+import { ensureOperationJournal, runExternalStep, digest } from './_lib/operation-journal.js';
+import { reserveOperationBudget } from './_lib/operation-budget.js';
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import { getShopifyAccessToken } from './_lib/shopify-content.js';
@@ -7,7 +9,10 @@ function clean(value, max = 1000) {
   return result ? result.slice(0, max) : null;
 }
 
-async function shopifyGraphql(query, variables, token) {
+async function shopifyGraphql(query, variables, token, operation = null) {
+  if (operation) {
+    return runExternalStep(operation.sql, { operationKey: operation.key, stepKey: query.match(/mutation\s+(\w+)/)?.[1] || 'mutation', payload: { query, variables }, actorId: operation.actorId }, () => shopifyGraphql(query, variables, token));
+  }
   const store = process.env.SHOPIFY_STORE || 'howl-campfires.myshopify.com';
   if (!token) throw new Error('Shopify store is not connected');
   const response = await fetch(`https://${store}/admin/api/2026-04/graphql.json`, {
@@ -62,7 +67,8 @@ export default async function handler(req, res) {
     const [existingSeed] = await sql`
       SELECT * FROM creator_product_seeds WHERE request_key = ${requestKey} LIMIT 1
     `;
-    if (existingSeed) return res.status(200).json({ seed: existingSeed, duplicate: true });
+    if (existingSeed && (Number(existingSeed.creator_id) !== creatorId || existingSeed.shopify_variant_id !== variantId || Number(existingSeed.quantity) !== quantity)) return res.status(409).json({ error: 'Request key already belongs to another seed.' });
+    if (existingSeed?.status === 'ordered') return res.status(200).json({ seed: existingSeed, duplicate: true });
     const dailyLimit = Math.max(1, Math.min(Number(process.env.SHOPIFY_SEEDING_DAILY_LIMIT) || 10, 100));
     const [dailyUsage] = await sql`
       SELECT count(*)::int AS orders
@@ -70,11 +76,6 @@ export default async function handler(req, res) {
       WHERE requested_at >= date_trunc('day', now())
         AND status IN ('draft_created', 'ordered')
     `;
-    if (Number(dailyUsage?.orders || 0) >= dailyLimit) {
-      return res.status(429).json({
-        error: `The Shopify creator-seeding daily safety limit of ${dailyLimit} orders has been reached.`,
-      });
-    }
     const [creator] = await sql`
       SELECT id, name, email, phone, shipping_address1, shipping_address2,
         shipping_city, shipping_region, shipping_postal_code, shipping_country_code
@@ -105,6 +106,10 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'The requested quantity exceeds available Shopify inventory.' });
     }
     const productTitle = catalogVariant.product.title;
+
+    await ensureOperationJournal(sql);
+    const operation = { sql, key: digest(['seed', requestKey]), actorId: access.userId };
+    if (!existingSeed) await reserveOperationBudget(sql, 'shopify.seed', operation.key, dailyLimit, Number(dailyUsage?.orders || 0));
 
     const lineItem = {
       variantId,
@@ -138,7 +143,7 @@ export default async function handler(req, res) {
           phone: creator.phone || undefined,
         },
       },
-    }, seedingToken);
+    }, seedingToken, operation);
     const createResult = created.draftOrderCreate;
     if (createResult.userErrors?.length) {
       return res.status(400).json({ error: createResult.userErrors.map(error => error.message).join('; ') });
@@ -162,6 +167,7 @@ export default async function handler(req, res) {
         ${quantity}, 'draft_created', ${draft.id}, ${draft.name}, ${requestKey},
         ${clean(req.body?.notes, 2000)}, ${access.userId}
       )
+      ON CONFLICT (request_key) DO UPDATE SET request_key = EXCLUDED.request_key
       RETURNING *
     `;
     const { data: completed } = await shopifyGraphql(`mutation CompleteCreatorSeed($id: ID!) {
@@ -169,7 +175,7 @@ export default async function handler(req, res) {
         draftOrder { id name status order { id name displayFulfillmentStatus } }
         userErrors { field message }
       }
-    }`, { id: draft.id }, seedingToken);
+    }`, { id: draft.id }, seedingToken, operation);
     const completeResult = completed.draftOrderComplete;
     if (completeResult.userErrors?.length) {
       return res.status(202).json({
@@ -199,7 +205,7 @@ export default async function handler(req, res) {
     `;
     return res.status(201).json({ seed: orderedSeed });
   } catch (err) {
-    return res.status(500).json({
+    return res.status(err.statusCode || 500).json({
       error: /access denied|scope/i.test(err.message)
         ? 'The separate Shopify seeding token needs draft-order permission.'
         : err.message,

@@ -1,3 +1,5 @@
+import { checkWorkLimit } from './_lib/work-limits.js';
+import { randomUUID } from 'node:crypto';
 import { renderMediaOnLambda } from '@remotion/lambda/client';
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
@@ -21,6 +23,7 @@ export default async function handler(req, res) {
   const access = await requirePermission(req, res, 'assets.write');
   if (!access) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!(await checkWorkLimit(access, res, 'render'))) return;
 
   const lambda = remotionConfig();
   if (!lambda.configured) {
@@ -71,12 +74,16 @@ export default async function handler(req, res) {
     showOutro: inputProps.showOutro,
   });
 
+  const attemptId = randomUUID();
   try {
-    await sql`
+    const [claimed] = await sql`
       UPDATE ugc_sessions
-      SET status = 'rendering', last_error = NULL, updated_at = now()
-      WHERE id = ${sessionId}
+      SET status = 'rendering', last_error = NULL,
+          settings = COALESCE(settings, '{}'::jsonb) || ${JSON.stringify({ remotion_attempt: attemptId, remotion_render: { attempt_id: attemptId, provider: 'starting' } })}::jsonb, updated_at = now()
+      WHERE id = ${sessionId} AND status <> 'rendering'
+      RETURNING id
     `;
+    if (!claimed) return res.status(409).json({ error: 'A render is already running. Check its status before starting another.' });
     const { renderId, bucketName } = await renderMediaOnLambda({
       region: lambda.region,
       functionName: lambda.functionName,
@@ -117,7 +124,7 @@ export default async function handler(req, res) {
       UPDATE ugc_sessions
       SET settings = COALESCE(settings, '{}'::jsonb) || ${JSON.stringify({ remotion_render: renderState })}::jsonb,
           updated_at = now()
-      WHERE id = ${sessionId}
+      WHERE id = ${sessionId} AND settings->>'remotion_attempt' = ${attemptId}
     `;
     return res.json({
       ok: true,
@@ -133,7 +140,7 @@ export default async function handler(req, res) {
     await sql`
       UPDATE ugc_sessions
       SET status = 'render_error', last_error = ${message}, updated_at = now()
-      WHERE id = ${sessionId}
+      WHERE id = ${sessionId} AND settings->>'remotion_attempt' = ${attemptId}
     `.catch(() => {});
     return res.status(500).json({ error: message });
   }

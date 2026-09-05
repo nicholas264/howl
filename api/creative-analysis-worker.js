@@ -43,7 +43,9 @@ export default async function handler(req, res) {
     const claimed = await sql`
       INSERT INTO creative_analysis_cron_slots (run_key, run_date, run_hour)
       VALUES (${slot.run_key}, CURRENT_DATE, ${slot.run_hour})
-      ON CONFLICT (run_key) DO NOTHING
+      ON CONFLICT (run_key) DO UPDATE SET started_at = now()
+      WHERE creative_analysis_cron_slots.completed_at IS NULL
+        AND creative_analysis_cron_slots.started_at < now()-interval '10 minutes'
       RETURNING run_key
     `;
     if (!claimed.length) return res.status(200).json({ ok: true, skipped: 'already_ran_this_slot', runKey: slot.run_key });

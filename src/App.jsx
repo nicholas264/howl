@@ -1,3 +1,4 @@
+import ToolErrorBoundary from './components/ToolErrorBoundary.jsx';
 import React, { useState, useCallback, useEffect, useMemo, Suspense, lazy } from "react";
 import { UserButton } from "@clerk/clerk-react";
 import { apiJson } from "./lib/api";
@@ -330,7 +331,7 @@ export default function HowlAdEngine({ appAccess }) {
         )
       )}
 
-      <Suspense fallback={<TabFallback />}>
+      <ToolErrorBoundary key={activeTab}><Suspense fallback={<TabFallback />}>
         {activeTab === "creators" && (
           <CreatorWorkspace
             canManageCreators={can('creators.write')}
@@ -357,18 +358,18 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={navigate} can={can} />}
         {activeTab === "admin" && can('admin.users') && <AdminWorkspace onOpenEditor={openEditorSession} />}
         {activeTab === "from-winners" && <FromWinnersTool setActiveTab={navigate} setVariations={setVariations} onOpenCreator={openPlannedCreator} />}
-        {activeTab === "content-studio" && <ContentStudio />}
+        {activeTab === "content-studio" && <ContentStudio canPublish={can('content.publish')} />}
         {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} driveAuth={driveAuth} onAddToCart={addToCart} />}
         {activeTab === "callout" && <CalloutAdTool onAddToCart={addToCart} />}
         {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} onAddToCart={addToCart} />}
         {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} onAddToCart={addToCart} />}
         {activeTab === "founder" && <FounderAdTool />}
         {activeTab === "gallery" && <GalleryTab cart={cart} />}
-        {activeTab === "dashboard-cfo" && <DashboardTool setActiveTab={navigate} view="cfo" />}
+        {activeTab === "dashboard-cfo" && <DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="cfo" />}
         {activeTab === "map-monitor" && <MapMonitorWorkspace canManage={can('admin.users')} />}
-        {activeTab === "dashboard-creative" && <DashboardTool setActiveTab={navigate} view="creative" canManageCreators={can('creators.write')} />}
-        {activeTab === "creative-analytics" && <DashboardTool setActiveTab={navigate} view="creative" canManageCreators={can('creators.write')} />}
-        {activeTab === "dashboard-forecast" && <DashboardTool setActiveTab={navigate} view="forecast" />}
+        {activeTab === "dashboard-creative" && <DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="creative" canManageCreators={can('creators.write')} />}
+        {activeTab === "creative-analytics" && <DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="creative" canManageCreators={can('creators.write')} />}
+        {activeTab === "dashboard-forecast" && <DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="forecast" />}
         {activeTab === "sku-media-pacing" && <SkuMediaPacingTool />}
         {activeTab === "log" && <LaunchLogTool />}
         {activeTab === "ugc-editor" && (
@@ -397,7 +398,7 @@ export default function HowlAdEngine({ appAccess }) {
             onRemoveCartItem={removeCartItem}
           />
         )}
-      </Suspense>
+      </Suspense></ToolErrorBoundary>
         </main>
       </div>
       <FeedbackWidget />

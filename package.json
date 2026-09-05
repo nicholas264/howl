@@ -13,7 +13,11 @@
     "remotion:policy:user": "remotion lambda policies user",
     "remotion:policy:validate": "remotion lambda policies validate",
     "remotion:lambda:deploy": "remotion lambda functions deploy",
-    "remotion:site:deploy": "remotion lambda sites create src/remotion/index.jsx --site-name=howl-ugc"
+    "remotion:site:deploy": "remotion lambda sites create src/remotion/index.jsx --site-name=howl-ugc",
+    "test": "node --test tests/*.test.mjs",
+    "check:api": "node scripts/check-api.mjs",
+    "check": "npm run check:api && npm test && npm run build",
+    "db:migrate": "node scripts/migrate.mjs"
   },
   "dependencies": {
     "@clerk/backend": "^3.4.1",
@@ -21,8 +25,8 @@
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
     "@neondatabase/serverless": "^1.1.0",
-    "@remotion/lambda": "4.0.457",
-    "@remotion/player": "4.0.457",
+    "@remotion/lambda": "4.0.521",
+    "@remotion/player": "4.0.521",
     "@vercel/blob": "^2.3.3",
     "@vercel/functions": "^3.4.4",
     "ffmpeg-static": "^5.3.0",
@@ -32,9 +36,10 @@
     "papaparse": "^5.5.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "remotion": "4.0.457"
+    "remotion": "4.0.521"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@vitejs/plugin-react": "^4.3.4",
     "vite": "^6.0.0"
   }

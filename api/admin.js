@@ -1,3 +1,5 @@
+import { ensureOperationJournal } from './_lib/operation-journal.js';
+import { ensureSyncState } from './_lib/sync-state.js';
 import { createClerkClient } from '@clerk/backend';
 import { ensureAppTables, isValidRole, ROLE_LABELS, ROLE_PERMISSIONS, requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
@@ -27,6 +29,8 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       await Promise.all([
+        ensureOperationJournal(sql),
+        ensureSyncState(sql),
         ensureCreatorOpsTables(sql),
         ensureCreativeAnalysisQueue(sql),
         ensureGoogleOAuthTables(sql),
@@ -121,8 +125,13 @@ export default async function handler(req, res) {
           max(connected_at) AS last_connected_at
         FROM app_google_connections
       `;
+      const operations = await sql`SELECT operation_key, step_key, status, actor_id, created_at, updated_at
+        FROM app_operation_steps WHERE status = 'uncertain' OR (status = 'pending' AND updated_at < now()-interval '10 minutes')
+        ORDER BY updated_at DESC LIMIT 30`;
+      const syncs = await sql`SELECT name, state->>'phase' AS phase, last_completed_at, last_error, updated_at FROM app_sync_state ORDER BY updated_at DESC`;
       return res.json({
         users,
+        operations, syncs,
         invitations,
         feedback,
         audit_log: auditLog,

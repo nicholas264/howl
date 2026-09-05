@@ -1,3 +1,4 @@
+import { checkWorkLimit } from './_lib/work-limits.js';
 // Server-side audio extraction + Whisper transcription for multi-GB UGC source videos.
 // Replaces the in-browser ffmpeg.wasm path which OOMs above ~200 MB.
 //
@@ -34,6 +35,7 @@ export default async function handler(req, res) {
   const access = await requirePermission(req, res, 'assets.write');
   if (!access) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!(await checkWorkLimit(access, res, 'transcription'))) return;
 
   if (!process.env.OPENAI_API_KEY) {
     return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });

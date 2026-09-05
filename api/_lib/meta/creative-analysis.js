@@ -583,7 +583,9 @@ export async function processCreativeAnalysisQueue({ ctx, batchSize: rawBatchSiz
   await enqueueCreativeAnalyses(sql, 'worker');
   const results = [];
 
+  const deadline = Date.now() + 220000;
   for (let index = 0; index < batchSize; index++) {
+    if (Date.now() > deadline) break;
     const job = await claimCreativeAnalysisJob(sql);
     if (!job) break;
     try {
@@ -605,7 +607,7 @@ export async function processCreativeAnalysisQueue({ ctx, batchSize: rawBatchSiz
   return { status: 200, body: { ok: true, processed: results.length, results, queue } };
 }
 
-export async function getCreativeAnalysisQueue({ enqueue = true } = {}) {
+export async function getCreativeAnalysisQueue({ enqueue = false } = {}) {
   if (!process.env.DATABASE_URL) return { status: 200, body: { error: 'DATABASE_URL not configured' } };
   const sql = neon(process.env.DATABASE_URL);
   await ensureCreativeAnalysisColumns(sql);

@@ -1,4 +1,4 @@
-import { requirePermission } from './_lib/app-access.js';
+import { hasPermission, requirePermission } from './_lib/app-access.js';
 import {
   cleanText,
   classifySiteUrl,
@@ -112,7 +112,10 @@ export default async function handler(req, res) {
       const markdown = cleanText(req.body?.bodyMarkdown || req.body?.body_markdown, 200000);
       if (!blogId) return res.status(400).json({ error: 'blogId required' });
       if (!markdown) return res.status(400).json({ error: 'bodyMarkdown required' });
-      const publishLive = Boolean(req.body?.publishLive || req.body?.publish_live);
+      const publishLive = req.body?.publishLive === true || req.body?.publish_live === true;
+      if (publishLive && !hasPermission(access, 'content.publish')) {
+        return res.status(403).json({ error: 'Forbidden - content.publish required' });
+      }
 
       const siteLinks = await loadSiteLinks(sql);
       const linked = resolveInternalLinks(stripEmDashes(markdown), siteLinks);

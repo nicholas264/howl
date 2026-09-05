@@ -1,3 +1,4 @@
+import { createAuthenticatedFetch } from './lib/authenticatedFetch.js'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { ClerkProvider, SignedIn, SignedOut, SignIn, UserButton, useAuth } from '@clerk/clerk-react'
@@ -26,16 +27,7 @@ function AuthenticatedApp() {
     if (!isSignedIn) return
     const orig = window.fetch
     let active = true
-    const authenticatedFetch = async (input, init = {}) => {
-      const url = typeof input === 'string' ? input : input.url
-      if (url && (url.startsWith('/api/') || url.includes('/api/'))) {
-        try {
-          const token = await getToken()
-          if (token) init = { ...init, headers: { ...(init.headers || {}), Authorization: `Bearer ${token}` } }
-        } catch {}
-      }
-      return orig(input, init)
-    }
+    const authenticatedFetch = createAuthenticatedFetch(orig, getToken, window.location.origin)
     window.fetch = authenticatedFetch
 
     authenticatedFetch('/api/app-context')

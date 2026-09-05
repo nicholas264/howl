@@ -6,19 +6,19 @@ export const ROLE_PERMISSIONS = {
   admin: [
     'creators.read', 'creators.write', 'briefs.read', 'briefs.write',
     'assets.read', 'assets.write', 'launch.read', 'launch.write',
-    'analytics.read', 'admin.users', 'shopify.seed',
+    'analytics.read', 'analytics.write', 'jobs.run', 'content.publish', 'admin.users', 'shopify.seed',
   ],
   strategist: [
     'creators.read', 'creators.write', 'briefs.read', 'briefs.write',
-    'assets.read', 'analytics.read',
+    'assets.read', 'analytics.read', 'analytics.write', 'jobs.run',
   ],
   producer: [
     'creators.read', 'briefs.read', 'briefs.write', 'assets.read',
-    'assets.write', 'launch.read',
+    'assets.write', 'launch.read', 'jobs.run',
   ],
   launcher: [
     'creators.read', 'briefs.read', 'assets.read', 'assets.write',
-    'launch.read', 'launch.write', 'analytics.read',
+    'launch.read', 'launch.write', 'analytics.read', 'jobs.run',
   ],
   analyst: ['creators.read', 'assets.read', 'launch.read', 'analytics.read'],
   viewer: ['creators.read', 'briefs.read', 'assets.read', 'launch.read', 'analytics.read'],
@@ -152,6 +152,7 @@ export async function getAppAccess(auth, sql = neon(process.env.DATABASE_URL)) {
       SELECT id, role
       FROM app_invitations
       WHERE lower(email) = ${email} AND status = 'pending'
+        AND (expires_at IS NULL OR expires_at > now())
       ORDER BY created_at DESC
       LIMIT 1
     `;
@@ -195,7 +196,7 @@ export async function getAppAccess(auth, sql = neon(process.env.DATABASE_URL)) {
   return {
     user,
     role,
-    permissions: ROLE_PERMISSIONS[role],
+    permissions: user?.status === 'active' ? ROLE_PERMISSIONS[role] : [],
     role_labels: ROLE_LABELS,
   };
 }

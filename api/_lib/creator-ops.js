@@ -209,6 +209,8 @@ async function createCreatorOpsTables(sql) {
     )
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_outreach_creator ON creator_outreach(creator_id, created_at DESC)`;
+  await sql`ALTER TABLE creator_outreach ADD COLUMN IF NOT EXISTS request_key TEXT`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_creator_outreach_request ON creator_outreach(request_key)`;
   await sql`ALTER TABLE creator_outreach ADD COLUMN IF NOT EXISTS external_thread_id TEXT`;
   await sql`ALTER TABLE creator_outreach ADD COLUMN IF NOT EXISTS recipient TEXT`;
   await sql`ALTER TABLE creator_outreach ADD COLUMN IF NOT EXISTS replied_at TIMESTAMPTZ`;
@@ -603,6 +605,7 @@ async function createCreatorOpsTables(sql) {
   await sql`ALTER TABLE ugc_sessions ADD COLUMN IF NOT EXISTS source_label TEXT`;
   await sql`ALTER TABLE ugc_sessions ADD COLUMN IF NOT EXISTS rendered_url TEXT`;
   await sql`ALTER TABLE ugc_sessions ADD COLUMN IF NOT EXISTS last_error TEXT`;
+  await sql`ALTER TABLE ugc_sessions ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 0`;
   await sql`ALTER TABLE creator_deliverables ADD COLUMN IF NOT EXISTS output_url TEXT`;
   await sql`CREATE INDEX IF NOT EXISTS idx_ugc_sessions_creator_id ON ugc_sessions(creator_id)`;
 }

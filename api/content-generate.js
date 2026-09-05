@@ -1,3 +1,4 @@
+import { checkWorkLimit } from './_lib/work-limits.js';
 import { requirePermission } from './_lib/app-access.js';
 import { loadBrandGuidelines, validateBrandCopy } from './_lib/brand-guardrails.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
@@ -53,6 +54,7 @@ export default async function handler(req, res) {
   const access = await requirePermission(req, res, 'briefs.write');
   if (!access) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!(await checkWorkLimit(access, res, 'generation'))) return;
   const apiKey = process.env.ANTHROPIC_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!apiKey && !openaiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY or OPENAI_API_KEY required' });

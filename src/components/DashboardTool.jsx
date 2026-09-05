@@ -311,7 +311,7 @@ const DASH_TABS = [
   { key: 'dashboard-forecast', view: 'forecast', label: 'Forecast' },
 ];
 
-export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCreators = false }) {
+export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCreators = false, canWriteAnalytics = false, canRunJobs = false, canWriteAssets = false }) {
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
@@ -412,12 +412,17 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
   const syncCreativeAnalytics = useCallback(async () => {
     setCreativeSyncing(true); setCreativeSyncMsg('');
     try {
-      const d = await apiJson('/api/meta', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'sync_creative_analytics', sinceDays: 30, force: true }),
-      }, 'Creative sync failed');
+      let d;
+      for (let part = 0; part < 12; part++) {
+        d = await apiJson('/api/meta', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'sync_creative_analytics', sinceDays: 30, force: part === 0 }),
+        }, 'Creative sync failed');
+        if (d.complete !== false) break;
+        setCreativeSyncMsg(`Sync in progress: ${d.adsUpserted || 0} ads, ${d.insightsUpserted || 0} daily rows`);
+      }
       if (d.error) throw new Error(d.error);
-      setCreativeSyncMsg(`Synced ${d.adsUpserted || 0} ads · ${d.insightsUpserted || 0} daily rows · ${d.queuedForAnalysis || 0} queued`);
+      setCreativeSyncMsg(d.skipped ? 'Sync is already running or recently completed.' : d.complete === false ? 'Sync checkpoint saved. Click Sync again to continue; scheduled sync will also resume it.' : `Synced ${d.adsUpserted || 0} ads · ${d.insightsUpserted || 0} daily rows · ${d.queuedForAnalysis || 0} queued`);
       await loadCreativeTable(creativeWindowDays);
       await loadAnalysisQueue();
     } catch (err) { setCreativeSyncMsg(`Sync failed: ${err.message}`); }
@@ -1138,19 +1143,19 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           setWindowDays={setCreativeWindowDays}
           syncing={creativeSyncing}
           syncMessage={creativeSyncMsg}
-          onSync={syncCreativeAnalytics}
+          onSync={canWriteAnalytics ? syncCreativeAnalytics : undefined}
           analysisQueue={analysisQueue}
           analysisQueueLoading={analysisQueueLoading}
           analysisQueueMessage={analysisQueueMessage}
           analysisBatchRunning={analysisBatchRunning}
-          onProcessAnalysisBatch={processAnalysisBatch}
-          onRetryAnalysisBatch={retryAnalysisBatch}
+          onProcessAnalysisBatch={canRunJobs ? processAnalysisBatch : undefined}
+          onRetryAnalysisBatch={canRunJobs ? retryAnalysisBatch : undefined}
           onRefreshAnalysisQueue={loadAnalysisQueue}
-          onNormalizeAsset={normalizeCreativeAssetForPlayback}
-          onNormalizeAssetBatch={normalizeCreativePlaybackBatch}
+          onNormalizeAsset={canWriteAssets && canRunJobs ? normalizeCreativeAssetForPlayback : undefined}
+          onNormalizeAssetBatch={canWriteAssets && canRunJobs ? normalizeCreativePlaybackBatch : undefined}
           playbackRepairRunning={playbackRepairRunning}
           playbackRepairMessage={playbackRepairMessage}
-          onAnalyze={runAnalysis}
+          onAnalyze={canWriteAnalytics && canRunJobs ? runAnalysis : undefined}
           onOpenAnalysis={openAnalysis}
           onAssignCreator={assignCreativeCreator}
           onAssignCreators={assignCreativeCreators}
@@ -1279,7 +1284,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                     cursor: creativeTableLoading ? 'not-allowed' : 'pointer', borderRadius: 3,
                   }}>{d}d</button>
                 ))}
-                <button onClick={syncCreativeAnalytics} disabled={creativeSyncing} style={S.ghostBtn}>
+                <button onClick={syncCreativeAnalytics} disabled={!canWriteAnalytics || creativeSyncing} style={S.ghostBtn}>
                   {creativeSyncing ? 'Syncing…' : 'Sync from Meta'}
                 </button>
               </div>

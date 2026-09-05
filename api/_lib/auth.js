@@ -13,7 +13,7 @@ function getClerk() {
 const userCache = new Map(); // userId -> { email, ts }
 const USER_TTL_MS = 60 * 1000;
 
-async function resolveEmail(userId, payloadEmail) {
+export async function resolveEmail(userId, payloadEmail) {
   if (payloadEmail) return payloadEmail;
   const hit = userCache.get(userId);
   if (hit && Date.now() - hit.ts < USER_TTL_MS) return hit.email;

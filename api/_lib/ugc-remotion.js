@@ -37,9 +37,10 @@ export function validSegments(input, duration) {
     const start = Number(segment?.start);
     const end = Number(segment?.end);
     if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) return null;
-    if (duration && end > duration + 1) return null;
+    if (end > 3600 || (duration && end > duration + 1)) return null;
     result.push({ start: Number(start.toFixed(3)), end: Number(end.toFixed(3)) });
   }
+  if (result.reduce((total, part) => total + part.end - part.start, 0) > 600) return null;
   return result;
 }
 

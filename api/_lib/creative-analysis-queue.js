@@ -30,9 +30,7 @@ export async function ensureCreativeAnalysisQueue(sql) {
 
 export async function enqueueCreativeAnalyses(sql, source = 'meta_sync') {
   await ensureCreativeAnalysisQueue(sql);
-  // Rebuild untouched pending work from current performance data. Jobs already
-  // attempted keep their retry/backoff state, and processing jobs keep leases.
-  await sql`DELETE FROM creative_analysis_queue WHERE status = 'pending' AND attempts = 0`;
+  // Additive reconciliation: launches may not yet exist in performance ingestion.
   const rows = await sql`
     WITH latest AS (
       SELECT max(date)::date AS max_date FROM creative_insights_daily
@@ -115,7 +113,7 @@ export async function claimCreativeAnalysisJob(sql) {
   await ensureCreativeAnalysisQueue(sql);
   await sql`
     UPDATE creative_analysis_queue
-    SET status = 'pending',
+    SET status = CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'pending' END,
         available_at = now(),
         started_at = NULL,
         last_error = COALESCE(last_error, 'Worker lease expired'),
@@ -170,6 +168,7 @@ export async function failCreativeAnalysisJob(sql, job, error) {
         started_at = NULL,
         updated_at = now()
     WHERE group_key = ${job.group_key}
+      AND status = 'processing' AND attempts = ${job.attempts}
   `;
   return exhausted ? 'failed' : 'retrying';
 }

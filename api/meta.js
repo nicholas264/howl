@@ -1,3 +1,8 @@
+import { checkWorkLimit } from './_lib/work-limits.js';
+import { assertLaunchReady } from './_lib/launch-preflight.js';
+import { syncCreativeAnalytics } from './_lib/meta/sync.js';
+import { createMetaOperationFetch } from './_lib/operation-journal.js';
+import { canRunMetaAction } from './_lib/meta-permissions.js';
 import { mirrorVideoToBlob } from './_lib/blob/mirror.js';
 import { backfillCreativeAssetsFromLaunchHistory, ensureCreativeAssetTables } from './_lib/creative-assets.js';
 import { enqueueCreativeAnalyses, enqueueCreativeAssetAnalysis, ensureCreativeAnalysisQueue } from './_lib/creative-analysis-queue.js';
@@ -88,7 +93,7 @@ async function stampFlowLaunched(sql, { adId, groupKey, briefId, deliverableId }
   }
 }
 
-// Best-effort launch logger — swallows errors so a DB outage doesn't break Meta publishes.
+// Report bookkeeping failure. Provider creations are journaled and never blindly repeated.
 async function logLaunch(row) {
   try {
     if (!process.env.DATABASE_URL) return;
@@ -146,6 +151,7 @@ async function logLaunch(row) {
     return launch;
   } catch (err) {
     console.error('launch_history insert failed:', err.message);
+    throw Object.assign(new Error(`Meta ad ${row.ad_id} exists, but recording the launch failed. Review the ad before retrying.`), { statusCode: 503 });
   }
 }
 
@@ -409,22 +415,21 @@ export default async function handler(req, res) {
     'upload_video_url',
     'create_creative_test',
   ]);
-  if (launchActions.has(action) && !hasPermission(appAccess, 'launch.write')) {
-    return res.status(403).json({ error: 'Forbidden - launch.write required' });
-  }
-  if (!launchActions.has(action)
-      && !hasPermission(appAccess, 'analytics.read')
-      && !hasPermission(appAccess, 'launch.read')
-      && !hasPermission(appAccess, 'briefs.write')) {
-    return res.status(403).json({ error: 'Forbidden - analytics access required' });
-  }
-  if (['assign_creative_creator', 'assign_creative_creators'].includes(action) && !hasPermission(appAccess, 'creators.write')) {
-    return res.status(403).json({ error: 'Forbidden - creators.write required' });
+  if (!canRunMetaAction(appAccess, action)) {
+    return res.status(403).json({ error: 'Forbidden - action permission required' });
   }
 
+  if (['analyze_creative_group', 'process_creative_analysis_queue', 'normalize_creative_asset', 'normalize_creative_asset_batch'].includes(action)
+      && !(await checkWorkLimit(appAccess, res, 'analysis'))) return;
+  const fetch = launchActions.has(action)
+    ? await createMetaOperationFetch(appAccess.sql, req, appAccess.userId) : globalThis.fetch;
   try {
     if (launchActions.has(action)) {
       await ensureCreatorOpsTables(appAccess.sql);
+      if (!['upload_image', 'upload_video', 'upload_video_url', 'create_campaign', 'create_adset'].includes(action)) {
+        await assertLaunchReady(appAccess.sql, req.body);
+        for (const item of req.body.items || []) await assertLaunchReady(appAccess.sql, { ...req.body, ...item });
+      }
       const launchCopy = [
         req.body?.adName, req.body?.headline, req.body?.primaryText,
         ...(req.body?.items || []).flatMap(item => [item.name, item.hook, item.body]),
@@ -1333,7 +1338,8 @@ export default async function handler(req, res) {
           results.push({ item: item.name, adsetId: adsetData.id, adId: adData.id, success: true });
         }
 
-        return res.json({ success: true, campaignId, results });
+        const succeeded = results.filter(item => item.success).length;
+        return res.json({ success: succeeded === items.length, status: succeeded === items.length ? 'complete' : succeeded ? 'partial' : 'failed', campaignId, results });
       }
 
       case 'get_cpa_analysis': {
@@ -1399,179 +1405,8 @@ export default async function handler(req, res) {
       }
 
       case 'sync_creative_analytics': {
-        if (!process.env.DATABASE_URL) return res.json({ error: 'DATABASE_URL not configured' });
-        const sinceDays = Math.max(1, Math.min(365, parseInt(req.body.sinceDays || 30, 10)));
-        const force = !!req.body.force;
-        const { neon } = await import('@neondatabase/serverless');
-        const sql = neon(process.env.DATABASE_URL);
-        await ensureCreativeAssetTables(sql);
-        await backfillCreativeAssetsFromLaunchHistory(sql);
-
-        // Throttle to once / 10 min unless forced
-        if (!force) {
-          const [last] = await sql`SELECT MAX(synced_at) AS t FROM creative_performance`;
-          if (last?.t && Date.now() - new Date(last.t).getTime() < 10 * 60 * 1000) {
-            return res.json({ ok: true, skipped: 'throttled', lastSyncedAt: last.t });
-          }
-        }
-
-        // 1) Walk /act_X/ads pages, upserting ad + creative metadata
-        // Tight subfield expansion to stay under Meta's per-page byte budget.
-        // object_story_spec / asset_feed_spec full payloads are large; we only
-        // need the IDs / hashes that anchor a creative group.
-        const creativeSubfields = [
-          'id',
-          'video_id',
-          'image_hash',
-          'thumbnail_url',
-          'effective_object_story_id',
-          'object_story_spec{video_data{video_id},link_data{image_hash,child_attachments{video_id,image_hash}},photo_data{image_hash}}',
-          'asset_feed_spec{videos{video_id},images{hash}}',
-        ].join(',');
-        let adsPage = `${BASE}/${adAccountId}/ads?fields=id,name,status,adset_id,campaign_id,created_time,creative{${creativeSubfields}}&limit=50&access_token=${accessToken}`;
-        let adsUpserted = 0;
-        const adIds = [];
-        // Resolve video_id / image_hash from any of the places Meta hides them.
-        // Direct fields work for simple link ads; page-post / dynamic ads bury
-        // them in object_story_spec or asset_feed_spec.
-        const resolveCreativeIds = (creative) => {
-          let videoId = creative.video_id || null;
-          let imageHash = creative.image_hash || null;
-          const oss = creative.object_story_spec || {};
-          if (!videoId && oss.video_data?.video_id) videoId = oss.video_data.video_id;
-          if (!imageHash && oss.link_data?.image_hash) imageHash = oss.link_data.image_hash;
-          if (!imageHash && oss.photo_data?.image_hash) imageHash = oss.photo_data.image_hash;
-          // Carousel: link_data.child_attachments[].video_id / image_hash — first child as the group key.
-          if (!videoId && Array.isArray(oss.link_data?.child_attachments)) {
-            for (const c of oss.link_data.child_attachments) {
-              if (c.video_id) { videoId = c.video_id; break; }
-            }
-          }
-          if (!imageHash && Array.isArray(oss.link_data?.child_attachments)) {
-            for (const c of oss.link_data.child_attachments) {
-              if (c.image_hash) { imageHash = c.image_hash; break; }
-            }
-          }
-          // Dynamic / Advantage+ creative: asset_feed_spec.videos[] / images[]
-          const afs = creative.asset_feed_spec || {};
-          if (!videoId && Array.isArray(afs.videos) && afs.videos[0]?.video_id) videoId = afs.videos[0].video_id;
-          if (!imageHash && Array.isArray(afs.images) && afs.images[0]?.hash) imageHash = afs.images[0].hash;
-          return { videoId, imageHash };
-        };
-
-        for (let pageGuard = 0; pageGuard < 50 && adsPage; pageGuard++) {
-          const r = await fetch(adsPage);
-          const d = await r.json();
-          if (d.error) return res.status(400).json({ error: d.error.message, step: 'list_ads' });
-          for (const ad of (d.data || [])) {
-            const creative = ad.creative || {};
-            const { videoId, imageHash } = resolveCreativeIds(creative);
-            const groupKey = videoId || imageHash || ad.id;
-            const thumb = creative.thumbnail_url || null;
-            await sql`
-              INSERT INTO creative_performance
-                (ad_id, ad_name, adset_id, campaign_id, creative_id, video_id, image_hash, group_key, thumbnail_url, status, created_time, synced_at)
-              VALUES
-                (${ad.id}, ${ad.name || null}, ${ad.adset_id || null}, ${ad.campaign_id || null}, ${creative.id || null}, ${videoId}, ${imageHash}, ${groupKey}, ${thumb}, ${ad.status || null}, ${ad.created_time || null}, NOW())
-              ON CONFLICT (ad_id) DO UPDATE SET
-                ad_name = EXCLUDED.ad_name,
-                adset_id = EXCLUDED.adset_id,
-                campaign_id = EXCLUDED.campaign_id,
-                creative_id = EXCLUDED.creative_id,
-                video_id = EXCLUDED.video_id,
-                image_hash = EXCLUDED.image_hash,
-                group_key = EXCLUDED.group_key,
-                thumbnail_url = COALESCE(EXCLUDED.thumbnail_url, creative_performance.thumbnail_url),
-                status = EXCLUDED.status,
-                synced_at = NOW()
-            `;
-            await sql`
-              UPDATE creative_assets SET
-                ad_id = COALESCE(ad_id, ${ad.id}),
-                meta_video_id = COALESCE(meta_video_id, ${videoId}),
-                meta_image_hash = COALESCE(meta_image_hash, ${imageHash}),
-                group_key = ${groupKey},
-                updated_at = now()
-              WHERE ad_id = ${ad.id}
-                 OR (${videoId}::text IS NOT NULL AND meta_video_id = ${videoId})
-                 OR (${imageHash}::text IS NOT NULL AND meta_image_hash = ${imageHash})
-            `;
-            adsUpserted++;
-            adIds.push(ad.id);
-          }
-          adsPage = d.paging?.next || null;
-        }
-
-        // 2) Pull daily insights for the window. Use account-level call with time_increment=1.
-        const fmtYmd = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        const tsNow = new Date();
-        const tsSince = new Date(tsNow.getTime() - sinceDays * 24 * 60 * 60 * 1000);
-        const timeRange = encodeURIComponent(JSON.stringify({ since: fmtYmd(tsSince), until: fmtYmd(tsNow) }));
-        const fields = [
-          'ad_id', 'date_start', 'spend', 'impressions', 'clicks', 'unique_inline_link_clicks',
-          'actions', 'action_values',
-          'video_thruplay_watched_actions',
-        ].join(',');
-
-        const PURCHASE_TYPES = ['omni_purchase', 'offsite_conversion.fb_pixel_purchase', 'purchase', 'web_in_store_purchase'];
-        const pickAction = (arr) => {
-          if (!Array.isArray(arr)) return 0;
-          for (const t of PURCHASE_TYPES) {
-            const hit = arr.find(a => a.action_type === t);
-            if (hit) return parseFloat(hit.value || 0);
-          }
-          return 0;
-        };
-        const pickVideoAction = (arr) => {
-          if (!Array.isArray(arr) || arr.length === 0) return 0;
-          // Sum across action_type variants (Meta returns a small list keyed by action_type)
-          return arr.reduce((s, a) => s + (parseFloat(a.value) || 0), 0);
-        };
-
-        let insightsPage = `${BASE}/${adAccountId}/insights?level=ad&time_increment=1&time_range=${timeRange}&fields=${fields}&limit=500&access_token=${accessToken}`;
-        let insightsUpserted = 0;
-        for (let pageGuard = 0; pageGuard < 100 && insightsPage; pageGuard++) {
-          const r = await fetch(insightsPage);
-          const d = await r.json();
-          if (d.error) return res.status(400).json({ error: d.error.message, step: 'insights' });
-          // Pull a specific action_type from the actions[] array (e.g. video_view = 3-sec views).
-          const pickActionType = (arr, type) => {
-            if (!Array.isArray(arr)) return 0;
-            const hit = arr.find(a => a.action_type === type);
-            return hit ? parseFloat(hit.value || 0) : 0;
-          };
-          for (const row of (d.data || [])) {
-            if (!row.ad_id || !row.date_start) continue;
-            const purchases = pickAction(row.actions);
-            const purchaseValue = pickAction(row.action_values);
-            // 3-sec video views moved into actions[] under action_type 'video_view' in newer Graph versions.
-            const v3s = pickActionType(row.actions, 'video_view');
-            const vThru = pickVideoAction(row.video_thruplay_watched_actions);
-            const vAvg = 0;
-            await sql`
-              INSERT INTO creative_insights_daily
-                (ad_id, date, spend, impressions, clicks, unique_link_clicks, purchases, purchase_value, video_3s_views, video_thruplays, video_avg_watch, synced_at)
-              VALUES
-                (${row.ad_id}, ${row.date_start}, ${parseFloat(row.spend || 0)}, ${parseInt(row.impressions || 0, 10)}, ${parseInt(row.clicks || 0, 10)}, ${parseInt(row.unique_inline_link_clicks || 0, 10)}, ${purchases}, ${purchaseValue}, ${v3s}, ${vThru}, ${vAvg}, NOW())
-              ON CONFLICT (ad_id, date) DO UPDATE SET
-                spend = EXCLUDED.spend,
-                impressions = EXCLUDED.impressions,
-                clicks = EXCLUDED.clicks,
-                unique_link_clicks = EXCLUDED.unique_link_clicks,
-                purchases = EXCLUDED.purchases,
-                purchase_value = EXCLUDED.purchase_value,
-                video_3s_views = EXCLUDED.video_3s_views,
-                video_thruplays = EXCLUDED.video_thruplays,
-                video_avg_watch = EXCLUDED.video_avg_watch,
-                synced_at = NOW()
-            `;
-            insightsUpserted++;
-          }
-          insightsPage = d.paging?.next || null;
-        }
-
-        const queuedForAnalysis = await enqueueCreativeAnalyses(sql, 'meta_sync');
-        return res.json({ ok: true, adsUpserted, insightsUpserted, queuedForAnalysis, sinceDays });
+        const result = await syncCreativeAnalytics({ sql: appAccess.sql, accessToken, adAccountId, sinceDays: req.body.sinceDays, force: req.body.force === true });
+        return res.json(result);
       }
 
       case 'get_sku_spend_pacing': {
@@ -2279,6 +2114,6 @@ export default async function handler(req, res) {
     }
   } catch (err) {
     console.error('Meta API error:', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(err.statusCode || 500).json({ error: err.message });
   }
 }
