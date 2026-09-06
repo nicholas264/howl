@@ -31,13 +31,15 @@ The legacy callout batch path also now fails closed: a failed vision request can
 
 ## Runtime integration
 
-This extends the established React/Vite, Vercel functions, Neon, Blob and Anthropic stack; it introduces no new hosted framework or dependency.
+This extends the established React/Vite, Vercel functions, Neon, Blob and provider API stack; it introduces no new hosted framework or dependency.
 
 Existing server configuration used:
 
 - `DATABASE_URL`: studio records and existing access/work limits.
 - `BLOB_READ_WRITE_TOKEN`: originals, analysis previews and finished PNGs.
-- `ANTHROPIC_API_KEY`: existing `claude-sonnet-4-6` integration for art direction, analysis and critique.
+- `OPENAI_API_KEY`: GPT-6 Astra creative direction, photo analysis and revisions by default.
+- `ANTHROPIC_API_KEY`: Claude Fable 5.1 visual review by default; Opus 5 is also selectable.
+- Apply `npm run db:migrate` with the intended database migration credential before deploying the costs feature. Request handlers do not create its tables.
 - Existing Clerk/workspace access configuration: every studio API operation requires `assets.write`.
 - `GCP_WIF_AUDIENCE`, `GCP_SERVICE_ACCOUNT_EMAIL` and Vercel OIDC: existing Drive connection, requesting `drive.readonly` for intake. Share the supplied folders with that connection.
 
