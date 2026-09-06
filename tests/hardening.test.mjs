@@ -1,3 +1,4 @@
+import { ensureLocalReceipts } from '../api/_lib/local-receipts.js';
 import { ensureRateLimits } from '../api/_lib/rate-limit.js';
 import { reservePaidWork } from '../api/_lib/paid-work.js';
 import { scopedMeteredFetch, withProviderMetering } from '../api/_lib/metered-fetch.js';
@@ -26,11 +27,11 @@ import { ensureLaunchDrafts, saveLaunchDraft } from '../api/_lib/launch-drafts.j
 import { recoverRenders } from '../api/_lib/render-recovery.js';
 import { boundedWork, workSignal, checkWork } from '../api/_lib/bounded-work.js';
 import { approveDeliverable, ensureApprovalSnapshots } from '../api/_lib/approval-snapshots.js';
-import { journalMediaUpload } from '../api/_lib/provider-media.js';
+import { ensureProviderMedia, journalMediaUpload } from '../api/_lib/provider-media.js';
 import { creativeVariant, readCreativeVariants, ensureCreativeVariants, ensureVariantObservations } from '../api/_lib/creative-variants.js';
 import { ensureExperiments, validateProtocol, bindExperimentAds, experimentEvidence } from '../api/_lib/experiments.js';
 import { ensureAuthIdentities, resolveWorkspaceIdentity } from '../api/_lib/auth-identities.js';
-import { claimTranscription, saveTranscription } from '../api/_lib/transcription-jobs.js';
+import { ensureTranscriptionJobs, claimTranscription, saveTranscription } from '../api/_lib/transcription-jobs.js';
 import { verifyRecoveredMetaAd } from '../api/_lib/operation-recovery.js';
 
 const db = new PGlite();
@@ -99,6 +100,10 @@ test('complete schema bootstraps an empty PostgreSQL database', async () => {
   await ensureWorkControls(sql);
   await ensureRateLimits(sql);
   await ensureOperationJournal(sql);
+  await ensureProviderMedia(sql);
+  await ensureTranscriptionJobs(sql);
+  await ensureLocalReceipts(sql);
+  await ensureApprovalSnapshots(sql);
 });
 
 test('suspended users have no permissions; expired invitations cannot grant access', async () => {

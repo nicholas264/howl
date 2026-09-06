@@ -1,4 +1,4 @@
-import { ensureOperationJournal, runExternalStep, operationKey, digest } from './operation-journal.js';
+import { runExternalStep, operationKey, digest } from './operation-journal.js';
 
 export async function ensureProviderMedia(sql) {
   await sql`CREATE TABLE IF NOT EXISTS provider_media (
@@ -10,8 +10,7 @@ export async function ensureProviderMedia(sql) {
 }
 
 export async function journalMediaUpload(sql, req, actorId, accountId, kind, perform) {
-  await ensureOperationJournal(sql);
-  await ensureProviderMedia(sql);
+
   const key = operationKey(req,actorId,'meta-upload');
   const result = await runExternalStep(sql,{operationKey:key,stepKey:'upload',actorId,
     payload:{action:req.body.action,input_hash:digest(req.body)}},perform);

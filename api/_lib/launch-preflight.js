@@ -1,11 +1,6 @@
 import { driveContentDigest } from './approval-evidence.js';
-import { ensureApprovalSnapshots } from './approval-snapshots.js';
-import { ensureProviderMedia, resolveLaunchMedia } from './provider-media.js';
-import { ensureOperationJournal } from './operation-journal.js';
+import { resolveLaunchMedia } from './provider-media.js';
 export async function assertLaunchReady(sql, input) {
-  await ensureApprovalSnapshots(sql);
-  await ensureProviderMedia(sql);
-  await ensureOperationJournal(sql);
   const media = await resolveLaunchMedia(sql,input);
   let creatorId = Number(input.creatorId || input.creator_id) || null;
   let deliverableId = Number(input.deliverableId || input.deliverable_id) || null;

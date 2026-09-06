@@ -63,7 +63,7 @@ export async function rememberProviderRead(sql, key, step, read) {
 }
 
 export async function createMetaOperationFetch(sql, req, actorId, fetchImpl = globalThis.fetch) {
-  await ensureOperationJournal(sql);
+
   const key = operationKey(req, actorId, 'meta');
   let step = 0;
   return async (url, init = {}) => {

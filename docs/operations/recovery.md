@@ -134,3 +134,9 @@ new database. Paid-work requests no longer create `app_work_lanes`, `app_work_ru
 verification cover these tables. Production tables were verified and the missing
 preview rate-limit table was migrated on September 6, 2026. Do not restrict the
 entire runtime role yet: other application paths still contain runtime DDL.
+
+Workflow schema setup is also migration-only for provider/local receipts, operation
+journals, draft saves, transcription ownership, and approval snapshots. The existing
+`db:migrate` command and restored-backup checks cover these structures. Their
+additive migrations were verified against production and preview before the
+request-time calls were removed.

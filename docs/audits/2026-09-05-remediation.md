@@ -83,6 +83,12 @@ not claim that the remaining infrastructure and product roadmap is complete.
   build, and the high-severity dependency audit. Tests run with an isolated temporary
   home and an environment allowlist that excludes deployment credentials.
 
+- Upload and local receipts, external-operation journals, draft saves, approval
+  preflight, and transcription no longer initialize schema during requests. Existing
+  additive migrations were verified in production and preview. Restricted-role
+  PostgreSQL tests cover upload replay, changed-request rejection, draft conflicts,
+  transcription ownership, and missing creator-approval rejection.
+
 ## Remaining work / external prerequisites
 
 1. Grant the narrowly scoped AWS permissions in `../operations/backup-provisioning-policy.json`,

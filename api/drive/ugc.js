@@ -1,4 +1,3 @@
-import { ensureLocalReceipts } from '../_lib/local-receipts.js';
 import { assertLaunchReady } from '../_lib/launch-preflight.js';
 import { createHash } from 'node:crypto';
 import { boundedResponseBytes } from '../_lib/response-bytes.js';
@@ -470,7 +469,7 @@ export default async function handler(req, res) {
         try {
           const sql = neon(process.env.DATABASE_URL);
           await ensureCreatorOpsTables(sql);
-          await ensureLocalReceipts(sql);
+
           await ensureCreativeAssetTables(sql);
           for (let i = 0; i < enriched.length; i += 20) {
             await Promise.all(
@@ -542,7 +541,7 @@ export default async function handler(req, res) {
 
     if (action === 'launch_meta_ad') {
       await ensureCreatorOpsTables(appAccess.sql);
-      await ensureLocalReceipts(appAccess.sql);
+
       const launchApproval=await assertLaunchReady(appAccess.sql, req.body);
       // End-to-end launch: streams NDJSON progress events so the client can render a live timeline.
       // Events: { step, status: "start"|"done"|"error", detail? }. Final: { done: true, adId, ... } or { done: true, error }.
@@ -1038,7 +1037,7 @@ export default async function handler(req, res) {
         try {
           const sql = neon(process.env.DATABASE_URL);
           await ensureCreatorOpsTables(sql);
-          await ensureLocalReceipts(sql);
+
           await ensureCreativeAssetTables(sql);
           await upsertDriveAsset(sql, current, current.drive_folder_path || '', false);
           const asset = await markCreativeAssetLaunched(sql, {
