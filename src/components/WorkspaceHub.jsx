@@ -1,4 +1,5 @@
 const CREATIVE_TOOLS = [
+  { tab: 'static-studio', permission: 'assets.write', label: 'Static Studio', description: 'Turn approved product photography into art-directed feed and story campaigns.' },
   { tab: 'from-winners', permission: 'briefs.write', label: 'Concept Studio', description: 'Turn proven creative patterns into grounded concepts and scripts.' },
   { tab: 'content-studio', permission: 'briefs.write', label: 'Blog Studio', description: 'Tell HOWL what the blog is about. It researches the reference library and writes the draft.' },
   { tab: 'ugc-editor', permission: 'assets.write', label: 'UGC Editor', description: 'Edit creator footage, captions, pacing, and exports.' },

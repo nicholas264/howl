@@ -53,7 +53,7 @@ export default async function handler(req, res) {
       `drive_connected=; ${baseAttrs}`,
       `gmail_connected=; ${baseAttrs}`,
     ]);
-    res.redirect(oauthState.purpose === 'creator_email' ? '/?gmail_connected=1' : '/?drive_connected=1');
+    res.redirect(oauthState.purpose === 'static_studio' ? '/?tab=static-studio&drive_connected=1' : oauthState.purpose === 'creator_email' ? '/?gmail_connected=1' : '/?drive_connected=1');
   } catch {
     res.redirect('/?drive_error=1');
   }

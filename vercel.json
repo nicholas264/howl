@@ -21,6 +21,9 @@
     },
     "api/render-recovery-cron.js": {
       "maxDuration": 300
+    },
+    "api/static-studio.js": {
+      "maxDuration": 300
     }
   },
   "crons": [
