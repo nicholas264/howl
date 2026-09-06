@@ -1,6 +1,5 @@
 import { clerkSecretKey } from './_lib/clerk-config.js';
 import { ensureOperationJournal } from './_lib/operation-journal.js';
-import { ensureWorkControls } from './_lib/work-controls.js';
 import { ensureSyncState } from './_lib/sync-state.js';
 import { createClerkClient } from '@clerk/backend';
 import { ensureAppTables, isValidRole, ROLE_LABELS, ROLE_PERMISSIONS, requirePermission } from './_lib/app-access.js';
@@ -32,7 +31,6 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       await Promise.all([
         ensureOperationJournal(sql),
-        ensureWorkControls(sql),
         ensureSyncState(sql),
         ensureCreatorOpsTables(sql),
         ensureCreativeAnalysisQueue(sql),

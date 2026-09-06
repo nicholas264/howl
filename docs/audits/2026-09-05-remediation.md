@@ -74,6 +74,15 @@ not claim that the remaining infrastructure and product roadmap is complete.
   Preview targets, and six legacy preview builds were retired. Development and
   superseded production deployment snapshots still require isolation/retirement.
 
+- Paid-work lanes, usage records, daily budgets, and rate limits now use only
+  data operations during requests; release migrations create their tables. A real
+  PostgreSQL restricted-role regression verifies both budget denials and successful
+  usage recording without CREATE or ALTER privileges. Other runtime schema helpers
+  remain; the production runtime role has not yet been restricted.
+- Vercel publication now requires syntax checks, all regression tests, the frontend
+  build, and the high-severity dependency audit. Tests run with an isolated temporary
+  home and an environment allowlist that excludes deployment credentials.
+
 ## Remaining work / external prerequisites
 
 1. Grant the narrowly scoped AWS permissions in `../operations/backup-provisioning-policy.json`,

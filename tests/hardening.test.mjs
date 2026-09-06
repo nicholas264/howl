@@ -1,3 +1,4 @@
+import { ensureRateLimits } from '../api/_lib/rate-limit.js';
 import { reservePaidWork } from '../api/_lib/paid-work.js';
 import { scopedMeteredFetch, withProviderMetering } from '../api/_lib/metered-fetch.js';
 import test from 'node:test';
@@ -13,7 +14,7 @@ import { ensureOperationJournal, runExternalStep, rememberProviderRead } from '.
 import metaHandler, { logLaunch } from '../api/meta.js';
 import { useTestDatabase } from './neon-test-adapter.mjs';
 import { resolveEmail, verifiedUserEmail } from '../api/_lib/auth.js';
-import { claimWork, finishWork, recordProviderUsage } from '../api/_lib/work-controls.js';
+import { ensureWorkControls, claimWork, finishWork, recordProviderUsage } from '../api/_lib/work-controls.js';
 import { initializeSchema } from '../api/db/schema.js';
 import { enqueueCreativeAssetAnalysis, enqueueCreativeAnalyses, claimCreativeAnalysisJob, claimManualCreativeAnalysis, deferCreativeAnalysisJob, completeCreativeAnalysisJob, failCreativeAnalysisJob } from '../api/_lib/creative-analysis-queue.js';
 import { saveSessionEdits } from '../api/_lib/session-edits.js';
@@ -95,6 +96,8 @@ test('URL imports reject internal DNS answers and literal/private IPv6 addresses
 
 test('complete schema bootstraps an empty PostgreSQL database', async () => {
   await initializeSchema(sql);
+  await ensureWorkControls(sql);
+  await ensureRateLimits(sql);
   await ensureOperationJournal(sql);
 });
 

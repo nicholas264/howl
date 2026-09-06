@@ -1,3 +1,4 @@
+import { ensureRateLimits } from '../api/_lib/rate-limit.js';
 import { ensureWorkControls } from '../api/_lib/work-controls.js';
 import { ensureExperiments } from '../api/_lib/experiments.js';
 import { ensureAuthIdentities } from '../api/_lib/auth-identities.js';
@@ -42,6 +43,8 @@ await ensureApprovalSnapshots(sql);
 await ensureProviderMedia(sql);
 await ensureLocalReceipts(sql);
 await ensureWorkControls(sql);
+await ensureRateLimits(sql);
+await ensureOperationBudgets(sql);
 await ensureExperiments(sql);
 await ensureAppTables(sql);
 await ensureAuthIdentities(sql);

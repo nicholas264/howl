@@ -9,7 +9,6 @@ export async function ensureOperationBudgets(sql) {
 // A reservation remains charged after an uncertain provider result. Retrying
 // the same request is free; concurrent distinct requests share one atomic limit.
 export async function reserveOperationBudget(sql, scope, key, limit, baseline = 0) {
-  await ensureOperationBudgets(sql);
   await sql`INSERT INTO app_operation_budgets (scope, used) VALUES (${scope}, ${baseline}) ON CONFLICT DO NOTHING`;
   const [reserved] = await sql`
     UPDATE app_operation_budgets
