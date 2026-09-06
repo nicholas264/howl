@@ -95,6 +95,12 @@ not claim that the remaining infrastructure and product roadmap is complete.
   Studio isolation, and revision conflicts; production and preview schema setup
   passed before deployment. Other feature schema helpers remain.
 
+- Google OAuth storage now relies on release migrations rather than request-time
+  DDL. The real callback regression runs with a restricted role and covers replay,
+  required scopes, refresh, expiry, account isolation, and disconnect. The isolated
+  Neon adapter now emits PostgreSQL timestamp text so freshness assertions exercise
+  the driver correctly. Google encryption-key activation remains pending.
+
 ## Remaining work / external prerequisites
 
 1. Grant the narrowly scoped AWS permissions in `../operations/backup-provisioning-policy.json`,

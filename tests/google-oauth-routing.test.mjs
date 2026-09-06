@@ -23,7 +23,7 @@ test('actual OAuth callback preserves Studio failures and stores credentials onl
  const {PGlite}=await import('@electric-sql/pglite');
  const {neon}=await import('@neondatabase/serverless');
  const {useTestDatabase}=await import('./neon-test-adapter.mjs');
- const {createGoogleOAuthState}=await import('../api/_lib/google-user-oauth.js');
+ const {ensureGoogleOAuthTables,createGoogleOAuthState,consumeGoogleOAuthState,getGoogleConnection,getUserGoogleAccessToken,disconnectGoogle}=await import('../api/_lib/google-user-oauth.js');
  const {default:callback}=await import('../api/auth/callback.js');
  const db=new PGlite(),restore=useTestDatabase(db),oldFetch=globalThis.fetch,previous={...process.env};
  Object.assign(process.env,env,{DATABASE_URL:'postgresql://test:test@fixture.local/test',GOOGLE_TOKEN_ENCRYPTION_KEY_V2:'isolated-test-key'});
@@ -32,6 +32,13 @@ test('actual OAuth callback preserves Studio failures and stores credentials onl
  globalThis.fetch=async url=>{providerCalls++;if(String(url).includes('/userinfo'))return Response.json({email:'fixture@example.test'});return Response.json(providerResult,{status:providerStatus});};
  const invoke=async query=>{const res={setHeader(){},redirect(url){this.url=url;}};await callback({query},res);return res.url;};
  try {
+  await ensureGoogleOAuthTables(sql);
+  await db.exec(`CREATE ROLE oauth_runtime NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+    REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+    GRANT USAGE ON SCHEMA public TO oauth_runtime;
+    GRANT SELECT,INSERT,UPDATE,DELETE ON app_google_connections,app_google_oauth_states TO oauth_runtime;
+    SET ROLE oauth_runtime;`);
+  await assert.rejects(sql`ALTER TABLE app_google_connections ADD COLUMN forbidden int`,{code:'42501'});
   let state=await createGoogleOAuthState(sql,'fixture-owner','static_studio');
   assert.equal(await invoke({state,error:'access_denied'}),'/?tab=static-studio&drive_error=access_denied');assert.equal(providerCalls,0);
   assert.equal(await invoke({state,code:'used'}),'/?drive_error=invalid_state');assert.equal(providerCalls,0);
@@ -46,5 +53,17 @@ test('actual OAuth callback preserves Studio failures and stores credentials onl
   assert.equal(await invoke({state,code:'fixture-code'}),'/?tab=static-studio&drive_connected=1');
   const rows=(await db.query('SELECT * FROM app_google_connections')).rows;
   assert.equal(rows.length,1);assert.equal(rows[0].user_id,'fixture-owner');assert.ok(!rows[0].encrypted_refresh_token.includes('fixture-refresh'));
+  const connection=await getGoogleConnection(sql,'fixture-owner');assert.equal(connection.encrypted_refresh_token,undefined);
+  assert.equal(await getGoogleConnection(sql,'other-user'),null);
+  globalThis.fetch=async(url,init)=>{assert.equal(String(url),'https://oauth2.googleapis.com/token');assert.equal(init.body.get('refresh_token'),'fixture-refresh');return Response.json({access_token:'refreshed-fixture'});};
+  assert.equal(await getUserGoogleAccessToken(sql,'fixture-owner'),'refreshed-fixture');
+  assert.ok((await db.query("SELECT last_used_at FROM app_google_connections WHERE user_id='fixture-owner'")).rows[0].last_used_at);
+  assert.ok((await getGoogleConnection(sql,'fixture-owner')).last_used_at);
+  state=await createGoogleOAuthState(sql,'fixture-owner','static_studio');
+  await sql`UPDATE app_google_oauth_states SET expires_at=now()-interval '1 minute'`;
+  assert.equal(await consumeGoogleOAuthState(sql,state),null);
+  await disconnectGoogle(sql,'other-user');assert.ok(await getGoogleConnection(sql,'fixture-owner'));
+  await disconnectGoogle(sql,'fixture-owner');assert.equal(await getGoogleConnection(sql,'fixture-owner'),null);
+  await assert.rejects(getUserGoogleAccessToken(sql,'fixture-owner'),/not connected/);
  }finally{globalThis.fetch=oldFetch;restore();for(const key of Object.keys(process.env))if(!(key in previous))delete process.env[key];Object.assign(process.env,previous);await db.close();}
 });

@@ -5,7 +5,6 @@ import { isValidRole, ROLE_LABELS, ROLE_PERMISSIONS, requirePermission } from '.
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import { ensureCreativeAnalysisQueue } from './_lib/creative-analysis-queue.js';
 import { getIntegrationHealth, testIntegrationHealth } from './_lib/integration-health.js';
-import { ensureGoogleOAuthTables } from './_lib/google-user-oauth.js';
 
 function cleanEmail(value) {
   const email = (value || '').toString().trim().toLowerCase();
@@ -32,7 +31,6 @@ export default async function handler(req, res) {
         ensureSyncState(sql),
         ensureCreatorOpsTables(sql),
         ensureCreativeAnalysisQueue(sql),
-        ensureGoogleOAuthTables(sql),
       ]);
       const users = await sql`
         SELECT user_id, email, display_name, role, status, last_seen_at, created_at, updated_at

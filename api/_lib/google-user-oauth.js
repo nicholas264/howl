@@ -1,9 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { encryptGoogleToken as encrypt, decryptGoogleToken as decrypt } from './google-token-crypto.js';
 
-let tablesReady = null;
-
-async function createTables(sql) {
+export async function ensureGoogleOAuthTables(sql) {
   await sql`
     CREATE TABLE IF NOT EXISTS app_google_connections (
       user_id                 TEXT PRIMARY KEY,
@@ -27,22 +25,11 @@ async function createTables(sql) {
   await sql`CREATE INDEX IF NOT EXISTS idx_google_oauth_states_expiry ON app_google_oauth_states(expires_at)`;
 }
 
-export async function ensureGoogleOAuthTables(sql) {
-  if (!tablesReady) tablesReady = createTables(sql);
-  try {
-    await tablesReady;
-  } catch (error) {
-    tablesReady = null;
-    throw error;
-  }
-}
-
 function stateHash(state) {
   return createHash('sha256').update(state).digest('hex');
 }
 
 export async function createGoogleOAuthState(sql, userId, purpose) {
-  await ensureGoogleOAuthTables(sql);
   const state = randomBytes(32).toString('base64url');
   await sql`DELETE FROM app_google_oauth_states WHERE expires_at <= now() OR user_id = ${userId}`;
   await sql`
@@ -53,7 +40,6 @@ export async function createGoogleOAuthState(sql, userId, purpose) {
 }
 
 export async function consumeGoogleOAuthState(sql, state) {
-  await ensureGoogleOAuthTables(sql);
   if (!state) return null;
   const [record] = await sql`
     DELETE FROM app_google_oauth_states
@@ -69,7 +55,6 @@ export async function saveGoogleConnection(sql, {
   scopes = [],
   googleEmail = null,
 }) {
-  await ensureGoogleOAuthTables(sql);
   await sql`
     INSERT INTO app_google_connections (
       user_id, encrypted_refresh_token, scopes, google_email, connected_at, updated_at
@@ -86,7 +71,6 @@ export async function saveGoogleConnection(sql, {
 }
 
 export async function getGoogleConnection(sql, userId) {
-  await ensureGoogleOAuthTables(sql);
   const [connection] = await sql`
     SELECT user_id, scopes, google_email, connected_at, last_used_at, updated_at
     FROM app_google_connections
@@ -96,12 +80,10 @@ export async function getGoogleConnection(sql, userId) {
 }
 
 export async function disconnectGoogle(sql, userId) {
-  await ensureGoogleOAuthTables(sql);
   await sql`DELETE FROM app_google_connections WHERE user_id = ${userId}`;
 }
 
 export async function getUserGoogleAccessToken(sql, userId) {
-  await ensureGoogleOAuthTables(sql);
   const [connection] = await sql`
     SELECT encrypted_refresh_token
     FROM app_google_connections

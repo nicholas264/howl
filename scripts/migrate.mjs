@@ -1,3 +1,4 @@
+import { ensureGoogleOAuthTables } from '../api/_lib/google-user-oauth.js';
 import { ensureStudioTables } from '../api/_lib/static-studio-store.js';
 import { ensureRateLimits } from '../api/_lib/rate-limit.js';
 import { ensureWorkControls } from '../api/_lib/work-controls.js';
@@ -45,6 +46,7 @@ await ensureProviderMedia(sql);
 await ensureLocalReceipts(sql);
 await ensureWorkControls(sql);
 await ensureStudioTables(sql);
+await ensureGoogleOAuthTables(sql);
 await ensureRateLimits(sql);
 await ensureOperationBudgets(sql);
 await ensureExperiments(sql);
