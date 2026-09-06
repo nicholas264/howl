@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-import { ensureAppTables, requirePermission, requireWorkspaceAccess } from './_lib/app-access.js';
+import { requirePermission, requireWorkspaceAccess } from './_lib/app-access.js';
 
 const KINDS = new Set(['bug', 'feature', 'edge_case']);
 const STATUSES = new Set(['open', 'planned', 'resolved', 'dismissed']);
@@ -17,7 +17,6 @@ export default async function handler(req, res) {
     if (msg.length > 5000) return res.status(400).json({ error: 'message too long (max 5000)' });
     const userAgent = (req.headers['user-agent'] || '').toString().slice(0, 500);
     try {
-      await ensureAppTables(sql);
       const [row] = await sql`
         INSERT INTO feedback (user_id, email, kind, message, page_url, user_agent)
         VALUES (${auth.userId}, ${auth.email || null}, ${kind}, ${msg}, ${(page_url || '').toString().slice(0, 500) || null}, ${userAgent || null})
@@ -33,7 +32,6 @@ export default async function handler(req, res) {
     const access = await requirePermission(req, res, 'admin.users');
     if (!access) return;
     try {
-      await ensureAppTables(access.sql);
       const status = (req.query.status || '').toString();
       const limit = Math.min(parseInt(req.query.limit || '200'), 1000);
       const rows = status
@@ -51,7 +49,6 @@ export default async function handler(req, res) {
     const { id, status } = req.body || {};
     if (!id || !STATUSES.has(status)) return res.status(400).json({ error: 'Valid id and status required' });
     try {
-      await ensureAppTables(access.sql);
       await access.sql`UPDATE feedback SET status = ${status} WHERE id = ${id}`;
       return res.json({ ok: true });
     } catch (err) {
