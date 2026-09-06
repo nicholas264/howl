@@ -6,14 +6,12 @@ export async function ensureStudioTables(sql) {
   )`;
 }
 export async function loadStudio(sql,userId) {
-  await ensureStudioTables(sql);
   const [row]=await sql`SELECT revision,payload,updated_at FROM static_studios WHERE user_id=${userId}`;
   return row || {revision:0,payload:blankWorkspace(),updated_at:null};
 }
 export async function saveStudio(sql,userId,payload,revision) {
   if(!Number.isInteger(revision) || revision<0) throw new Error('Expected revision required.');
   const normalized=normalizeWorkspace(payload);
-  await ensureStudioTables(sql);
   let rows;
   if(revision===0) rows=await sql`INSERT INTO static_studios(user_id,payload) VALUES(${userId},${JSON.stringify(normalized)}::jsonb)
     ON CONFLICT DO NOTHING RETURNING revision,payload,updated_at`;

@@ -89,6 +89,12 @@ not claim that the remaining infrastructure and product roadmap is complete.
   PostgreSQL tests cover upload replay, changed-request rejection, draft conflicts,
   transcription ownership, and missing creator-approval rejection.
 
+- Membership, admin/feedback access, and Static Studio storage no longer create
+  schema during requests. Studio setup is now included in release and backup
+  migrations. Restricted-role tests verify invitation consumption, suspension,
+  Studio isolation, and revision conflicts; production and preview schema setup
+  passed before deployment. Other feature schema helpers remain.
+
 ## Remaining work / external prerequisites
 
 1. Grant the narrowly scoped AWS permissions in `../operations/backup-provisioning-policy.json`,

@@ -42,9 +42,7 @@ export function hasPermission(access, permission) {
   return access?.permissions?.includes('*') || access?.permissions?.includes(permission);
 }
 
-let appTablesReady = null;
-
-async function createAppTables(sql) {
+export async function ensureAppTables(sql) {
   await sql`
     CREATE TABLE IF NOT EXISTS app_users (
       user_id       TEXT PRIMARY KEY,
@@ -104,16 +102,6 @@ async function createAppTables(sql) {
   await sql`CREATE INDEX IF NOT EXISTS idx_app_admin_audit_created ON app_admin_audit(created_at DESC)`;
 }
 
-export async function ensureAppTables(sql) {
-  if (!appTablesReady) appTablesReady = createAppTables(sql);
-  try {
-    await appTablesReady;
-  } catch (err) {
-    appTablesReady = null;
-    throw err;
-  }
-}
-
 function adminEmails() {
   return (process.env.ADMIN_EMAILS || '')
     .split(',')
@@ -136,7 +124,6 @@ export async function getAppAccess(auth, sql = neon(process.env.DATABASE_URL)) {
       role_labels: ROLE_LABELS,
     };
   }
-  await ensureAppTables(sql);
   const email = (auth.email || '').trim().toLowerCase();
   const isBootstrapAdmin = email && adminEmails().includes(email);
 

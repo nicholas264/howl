@@ -1,7 +1,7 @@
 import { clerkSecretKey } from './_lib/clerk-config.js';
 import { ensureSyncState } from './_lib/sync-state.js';
 import { createClerkClient } from '@clerk/backend';
-import { ensureAppTables, isValidRole, ROLE_LABELS, ROLE_PERMISSIONS, requirePermission } from './_lib/app-access.js';
+import { isValidRole, ROLE_LABELS, ROLE_PERMISSIONS, requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import { ensureCreativeAnalysisQueue } from './_lib/creative-analysis-queue.js';
 import { getIntegrationHealth, testIntegrationHealth } from './_lib/integration-health.js';
@@ -25,7 +25,6 @@ export default async function handler(req, res) {
   const { sql } = access;
 
   try {
-    await ensureAppTables(sql);
 
     if (req.method === 'GET') {
       await Promise.all([

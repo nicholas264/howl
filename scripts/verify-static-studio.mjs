@@ -12,6 +12,7 @@ import { useTestDatabase } from '../tests/neon-test-adapter.mjs';
 import { ensureRateLimits } from '../api/_lib/rate-limit.js';
 import { ensureLaunchDrafts } from '../api/_lib/launch-drafts.js';
 import { ensureOperationJournal } from '../api/_lib/operation-journal.js';
+import { ensureStudioTables } from '../api/_lib/static-studio-store.js';
 import { ensureStudioCosts } from '../api/_lib/static-studio-costs.js';
 import { ensureWorkControls } from '../api/_lib/work-controls.js';
 import { ensureOperationBudgets } from '../api/_lib/operation-budget.js';
@@ -34,7 +35,7 @@ function Harness(){const [launch,setLaunch]=React.useState(false),[cart,setCart]
 try {
  const sql=async(parts,...values)=>(await db.query(parts.reduce((q,p,i)=>q+(i?`$${i}`:'')+p,''),values)).rows;
  await ensureRateLimits(sql);await ensureLaunchDrafts(sql);await ensureOperationJournal(sql);
- await ensureStudioCosts(sql);await ensureWorkControls(sql);await ensureOperationBudgets(sql);
+ await ensureStudioTables(sql);await ensureStudioCosts(sql);await ensureWorkControls(sql);await ensureOperationBudgets(sql);
  server=await createServer({configFile:false,root:process.cwd(),envDir:path.join(output,'empty-env'),define:{'import.meta.env.VITE_AUTH_DISABLED':'"true"'},plugins:[react(),{name:'isolated-studio-fixture',resolveId(id){if(id==='/fixture.jsx')return path.join(process.cwd(),'__static_qa__.jsx');},load(id){if(id===path.join(process.cwd(),'__static_qa__.jsx'))return entry;},configureServer(s){s.middlewares.use(async(req,res,next)=>{
   const url=new URL(req.url,'http://localhost');
   if(url.pathname==='/'){res.setHeader('Content-Type','text/html');return res.end(await s.transformIndexHtml('/', '<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="margin:0"><div id="root"></div><script type="module" src="/@vite/client"></script><script type="module" src="/fixture.jsx"></script></body></html>'));}

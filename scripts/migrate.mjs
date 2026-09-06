@@ -1,4 +1,5 @@
 import { ensureStudioCosts } from '../api/_lib/static-studio-costs.js';
+import { ensureStudioTables } from '../api/_lib/static-studio-store.js';
 import { ensureRateLimits } from '../api/_lib/rate-limit.js';
 import { ensureWorkControls } from '../api/_lib/work-controls.js';
 import { ensureExperiments } from '../api/_lib/experiments.js';
@@ -44,6 +45,7 @@ await ensureApprovalSnapshots(sql);
 await ensureProviderMedia(sql);
 await ensureLocalReceipts(sql);
 await ensureWorkControls(sql);
+await ensureStudioTables(sql);
 await ensureRateLimits(sql);
 await ensureOperationBudgets(sql);
 await ensureExperiments(sql);

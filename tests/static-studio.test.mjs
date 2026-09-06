@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PGlite } from '@electric-sql/pglite';
 import { blankWorkspace, normalizeWorkspace, normalizeAsset, generateConcepts, conceptFingerprint, containRect, designGeometry, DIRECTIONS, applyArtDirectionRepair } from '../src/lib/static-studio/model.js';
-import { loadStudio, saveStudio } from '../api/_lib/static-studio-store.js';
+import { ensureStudioTables, loadStudio, saveStudio } from '../api/_lib/static-studio-store.js';
 import { folderId } from '../api/static-studio.js';
 const fixture=(id='r1')=>({id:`asset-${id}`,url:`https://test.public.blob.vercel-storage.com/${id}.png`,name:`${id}.png`,sha256:'a'.repeat(64),width:2400,height:1800,productId:id,approved:true,role:'product',features:[],notes:'',analysis:''});
 function workspace(){return {...blankWorkspace(),assets:['r1','r3','r4mkii'].map(fixture)};}
@@ -61,6 +61,13 @@ test('Drive folder parsing accepts canonical links and rejects injected queries'
 test('studio persistence is isolated per user and rejects stale concurrent writes',async()=>{
  const db=new PGlite();const sql=async(parts,...values)=>(await db.query(parts.reduce((t,p,i)=>t+(i?`$${i}`:'')+p,''),values)).rows;
  try {
+ await ensureStudioTables(sql);
+ await db.exec(`CREATE ROLE studio_runtime NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+ GRANT USAGE ON SCHEMA public TO studio_runtime;
+ GRANT SELECT,INSERT,UPDATE ON static_studios TO studio_runtime;
+ SET ROLE studio_runtime;`);
+ await assert.rejects(sql`ALTER TABLE static_studios ADD COLUMN forbidden int`,{code:'42501'});
  assert.equal((await loadStudio(sql,'owner-a')).revision,0);
  const first=await saveStudio(sql,'owner-a',workspace(),0);assert.equal(first.revision,1);
  assert.equal((await loadStudio(sql,'owner-b')).payload.assets.length,0);
