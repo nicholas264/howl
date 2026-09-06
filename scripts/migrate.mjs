@@ -1,3 +1,4 @@
+import { ensureMonthlyMetrics } from '../api/_lib/monthly-metrics.js';
 import { ensureGoogleOAuthTables } from '../api/_lib/google-user-oauth.js';
 import { ensureStudioCosts } from '../api/_lib/static-studio-costs.js';
 import { ensureStudioTables } from '../api/_lib/static-studio-store.js';
@@ -47,6 +48,7 @@ await ensureProviderMedia(sql);
 await ensureLocalReceipts(sql);
 await ensureWorkControls(sql);
 await ensureStudioTables(sql);
+await ensureMonthlyMetrics(sql);
 await ensureGoogleOAuthTables(sql);
 await ensureRateLimits(sql);
 await ensureOperationBudgets(sql);

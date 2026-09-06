@@ -1,3 +1,4 @@
+import { upsertMonthlySnapshot } from './_lib/monthly-metrics.js';
 import { neon } from '@neondatabase/serverless';
 import { requirePermission } from './_lib/app-access.js';
 
@@ -176,39 +177,6 @@ function metricCoverage(metrics, metricIds) {
   }));
 }
 
-async function upsertMonthly(sql, monthsArr) {
-  await sql`
-    CREATE TABLE IF NOT EXISTS monthly_metrics (
-      month      TEXT PRIMARY KEY,
-      shopify    JSONB,
-      meta       JSONB,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    )
-  `;
-  await sql`ALTER TABLE monthly_metrics ADD COLUMN IF NOT EXISTS shopify_dealer JSONB`;
-  await sql`ALTER TABLE monthly_metrics ADD COLUMN IF NOT EXISTS google JSONB`;
-  await sql`ALTER TABLE monthly_metrics ADD COLUMN IF NOT EXISTS klaviyo JSONB`;
-  for (const m of monthsArr) {
-    const existing = await sql`SELECT shopify, shopify_dealer, meta, google, klaviyo FROM monthly_metrics WHERE month = ${m.month}`;
-    const prev = existing[0] || {};
-    await sql`
-      INSERT INTO monthly_metrics (month, shopify, shopify_dealer, meta, google, klaviyo, updated_at)
-      VALUES (
-        ${m.month},
-        ${prev.shopify ? JSON.stringify(prev.shopify) : null}::jsonb,
-        ${prev.shopify_dealer ? JSON.stringify(prev.shopify_dealer) : null}::jsonb,
-        ${prev.meta ? JSON.stringify(prev.meta) : null}::jsonb,
-        ${prev.google ? JSON.stringify(prev.google) : null}::jsonb,
-        ${JSON.stringify({ ...m, snapshotAt: new Date().toISOString() })}::jsonb,
-        now()
-      )
-      ON CONFLICT (month) DO UPDATE SET
-        klaviyo    = EXCLUDED.klaviyo,
-        updated_at = now()
-    `;
-  }
-}
-
 export default async function handler(req, res) {
   if (!(await requirePermission(req, res, 'analytics.read'))) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -315,7 +283,7 @@ export default async function handler(req, res) {
     if (process.env.DATABASE_URL && monthsArr.length) {
       try {
         const sql = neon(process.env.DATABASE_URL);
-        await upsertMonthly(sql, monthsArr);
+        for (const m of monthsArr) await upsertMonthlySnapshot(sql,{month:m.month,klaviyo:{...m,snapshotAt:new Date().toISOString()}});
       } catch (err) {
         console.error('klaviyo upsert failed:', err.message);
       }

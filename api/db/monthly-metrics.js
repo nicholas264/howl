@@ -1,26 +1,12 @@
-import { neon } from '@neondatabase/serverless';
+import { upsertMonthlySnapshot } from '../_lib/monthly-metrics.js';
 import { requirePermission } from '../_lib/app-access.js';
 
-async function ensureTable(sql) {
-  await sql`
-    CREATE TABLE IF NOT EXISTS monthly_metrics (
-      month      TEXT PRIMARY KEY,
-      shopify    JSONB,
-      meta       JSONB,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    )
-  `;
-  // Lazy migration: add shopify_dealer column on existing tables.
-  await sql`ALTER TABLE monthly_metrics ADD COLUMN IF NOT EXISTS shopify_dealer JSONB`;
-  await sql`ALTER TABLE monthly_metrics ADD COLUMN IF NOT EXISTS google JSONB`;
-  await sql`ALTER TABLE monthly_metrics ADD COLUMN IF NOT EXISTS klaviyo JSONB`;
-}
-
-export default async function handler(req, res) {
-  if (!(await requirePermission(req, res, 'analytics.read'))) return;
-  const sql = neon(process.env.DATABASE_URL);
+export function createMonthlyMetricsHandler(authorize = requirePermission) {
+return async function handler(req, res) {
+  const access = await authorize(req, res, req.method === 'GET' ? 'analytics.read' : 'analytics.write');
+  if (!access) return;
+  const {sql} = access;
   try {
-    await ensureTable(sql);
 
     if (req.method === 'GET') {
       const rows = await sql`SELECT month, shopify, shopify_dealer, meta, google, klaviyo, updated_at FROM monthly_metrics ORDER BY month ASC`;
@@ -34,42 +20,9 @@ export default async function handler(req, res) {
       if (action === 'snapshot') {
         const { snapshots } = req.body || {};
         if (!Array.isArray(snapshots)) return res.status(400).json({ error: 'snapshots[] required' });
+        if (snapshots.length > 120 || snapshots.some(s => !s || typeof s !== 'object' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(s.month || ''))) return res.status(400).json({error:'Provide up to 120 snapshots with YYYY-MM months'});
         let upserted = 0;
-        for (const s of snapshots) {
-          if (!s.month) continue;
-          // Merge with existing row so a partial push doesn't blow away other fields.
-          const existing = await sql`SELECT shopify, shopify_dealer, meta, google, klaviyo FROM monthly_metrics WHERE month = ${s.month}`;
-          const prevShopify = existing[0]?.shopify || null;
-          const prevDealer = existing[0]?.shopify_dealer || null;
-          const prevMeta = existing[0]?.meta || null;
-          const prevGoogle = existing[0]?.google || null;
-          const prevKlaviyo = existing[0]?.klaviyo || null;
-          const nextShopify = s.shopify !== undefined ? s.shopify : prevShopify;
-          const nextDealer = s.shopify_dealer !== undefined ? s.shopify_dealer : prevDealer;
-          const nextMeta = s.meta !== undefined ? s.meta : prevMeta;
-          const nextGoogle = s.google !== undefined ? s.google : prevGoogle;
-          const nextKlaviyo = s.klaviyo !== undefined ? s.klaviyo : prevKlaviyo;
-          await sql`
-            INSERT INTO monthly_metrics (month, shopify, shopify_dealer, meta, google, klaviyo, updated_at)
-            VALUES (
-              ${s.month},
-              ${nextShopify ? JSON.stringify(nextShopify) : null}::jsonb,
-              ${nextDealer ? JSON.stringify(nextDealer) : null}::jsonb,
-              ${nextMeta ? JSON.stringify(nextMeta) : null}::jsonb,
-              ${nextGoogle ? JSON.stringify(nextGoogle) : null}::jsonb,
-              ${nextKlaviyo ? JSON.stringify(nextKlaviyo) : null}::jsonb,
-              now()
-            )
-            ON CONFLICT (month) DO UPDATE SET
-              shopify        = EXCLUDED.shopify,
-              shopify_dealer = EXCLUDED.shopify_dealer,
-              meta           = EXCLUDED.meta,
-              google         = EXCLUDED.google,
-              klaviyo        = EXCLUDED.klaviyo,
-              updated_at     = now()
-          `;
-          upserted++;
-        }
+        for (const snapshot of snapshots) {await upsertMonthlySnapshot(sql,snapshot);upserted++;}
         return res.json({ upserted });
       }
 
@@ -88,3 +41,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+
+}
+export default createMonthlyMetricsHandler();

@@ -101,6 +101,15 @@ not claim that the remaining infrastructure and product roadmap is complete.
   Neon adapter now emits PostgreSQL timestamp text so freshness assertions exercise
   the driver correctly. Google encryption-key activation remains pending.
 
+- Monthly snapshot mutation now requires analytics.write. Partial provider updates
+  merge inside PostgreSQL rather than restoring a stale pre-read row; explicit
+  null clears only the selected provider. Google/Klaviyo share this writer and
+  the release-owned monthly schema. Restricted-role endpoint tests cover writes,
+  read-only denial, invalid batches, and interleaved provider updates.
+- Retired the legacy public Google Ads auth/callback routes with HTTP 410. They
+  can no longer exchange codes or render refresh/access tokens. Existing configured
+  Google Ads reporting credentials remain in use; historical exposure is not ruled out.
+
 ## Remaining work / external prerequisites
 
 1. Grant the narrowly scoped AWS permissions in `../operations/backup-provisioning-policy.json`,

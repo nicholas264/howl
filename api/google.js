@@ -1,9 +1,9 @@
+import { upsertMonthlySnapshot } from './_lib/monthly-metrics.js';
 // Google Ads API integration.
 // One endpoint, action-based, mirrors api/meta.js style.
 //
 // Actions:
-//   GET  /api/google?action=auth                → 302 to Google OAuth consent
-//   GET  /api/google?action=callback&code=...   → exchanges code, renders refresh_token for copy
+//   Legacy auth/callback actions return 410; credentials are managed outside this public API.
 //   POST /api/google  body: {action:'get_monthly', months?: 14}
 //                                               → searchStream by month, upsert into Neon
 //
@@ -14,13 +14,11 @@
 //   GOOGLE_ADS_CUSTOMER_ID         (10-digit, dashes stripped — the account being queried)
 //   GOOGLE_ADS_LOGIN_CUSTOMER_ID   (10-digit, dashes stripped — the manager (MCC) account that owns the dev token)
 //   GOOGLE_ADS_REFRESH_TOKEN       (captured once via callback, pasted into Vercel env)
-//   GOOGLE_OAUTH_REDIRECT_URI      (e.g. https://howl-teal.vercel.app/api/google?action=callback)
 
 import { neon } from '@neondatabase/serverless';
 import { requirePermission } from './_lib/app-access.js';
 
 const GOOGLE_ADS_API_VERSION = 'v25';
-const SCOPE = 'https://www.googleapis.com/auth/adwords';
 
 function requiredEnv(keys) {
   return keys.filter(key => !process.env[key]);
@@ -28,28 +26,6 @@ function requiredEnv(keys) {
 
 function normalizeCustomerId(value) {
   return String(value || '').replace(/\D/g, '');
-}
-
-function redirectUri() {
-  return process.env.GOOGLE_OAUTH_REDIRECT_URI
-    || 'https://howl-teal.vercel.app/api/google?action=callback';
-}
-
-async function exchangeCodeForTokens(code) {
-  const r = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      code,
-      client_id: process.env.GOOGLE_ADS_CLIENT_ID,
-      client_secret: process.env.GOOGLE_ADS_CLIENT_SECRET,
-      redirect_uri: redirectUri(),
-      grant_type: 'authorization_code',
-    }),
-  });
-  const d = await r.json();
-  if (d.error) throw new Error(`${d.error}: ${d.error_description || ''}`);
-  return d; // { access_token, refresh_token, expires_in, ... }
 }
 
 async function getAccessToken() {
@@ -122,82 +98,12 @@ async function searchStream(customerId, query, accessToken) {
   return rows;
 }
 
-async function upsertMonthly(sql, monthsArr) {
-  await sql`
-    CREATE TABLE IF NOT EXISTS monthly_metrics (
-      month      TEXT PRIMARY KEY,
-      shopify    JSONB,
-      meta       JSONB,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    )
-  `;
-  await sql`ALTER TABLE monthly_metrics ADD COLUMN IF NOT EXISTS shopify_dealer JSONB`;
-  await sql`ALTER TABLE monthly_metrics ADD COLUMN IF NOT EXISTS google JSONB`;
-  await sql`ALTER TABLE monthly_metrics ADD COLUMN IF NOT EXISTS klaviyo JSONB`;
-
-  for (const m of monthsArr) {
-    const existing = await sql`SELECT shopify, shopify_dealer, meta, klaviyo FROM monthly_metrics WHERE month = ${m.month}`;
-    const prev = existing[0] || {};
-    await sql`
-      INSERT INTO monthly_metrics (month, shopify, shopify_dealer, meta, google, klaviyo, updated_at)
-      VALUES (
-        ${m.month},
-        ${prev.shopify ? JSON.stringify(prev.shopify) : null}::jsonb,
-        ${prev.shopify_dealer ? JSON.stringify(prev.shopify_dealer) : null}::jsonb,
-        ${prev.meta ? JSON.stringify(prev.meta) : null}::jsonb,
-        ${JSON.stringify({
-          spend: m.spend, impressions: m.impressions, clicks: m.clicks,
-          conversions: m.conversions, conversionValue: m.conversionValue,
-          snapshotAt: new Date().toISOString(),
-        })}::jsonb,
-        ${prev.klaviyo ? JSON.stringify(prev.klaviyo) : null}::jsonb,
-        now()
-      )
-      ON CONFLICT (month) DO UPDATE SET
-        google     = EXCLUDED.google,
-        updated_at = now()
-    `;
-  }
-}
-
 export default async function handler(req, res) {
   const action = (req.query?.action || req.body?.action || '').toString();
 
-  // OAuth init — public (no Clerk), but leak-safe: reads only env vars.
-  if (req.method === 'GET' && action === 'auth') {
-    const missing = requiredEnv(['GOOGLE_ADS_CLIENT_ID', 'GOOGLE_ADS_CLIENT_SECRET']);
-    if (missing.length) return res.status(500).send(`Missing Google Ads OAuth env: ${missing.join(', ')}`);
-    const params = new URLSearchParams({
-      client_id: process.env.GOOGLE_ADS_CLIENT_ID || '',
-      redirect_uri: redirectUri(),
-      response_type: 'code',
-      scope: SCOPE,
-      access_type: 'offline',
-      prompt: 'consent',
-    });
-    res.writeHead(302, { Location: `https://accounts.google.com/o/oauth2/v2/auth?${params}` });
-    return res.end();
-  }
-
-  // OAuth callback — public, renders refresh token for one-time copy.
-  if (req.method === 'GET' && action === 'callback') {
-    const code = req.query?.code;
-    if (!code) return res.status(400).send('Missing ?code');
-    try {
-      const tokens = await exchangeCodeForTokens(String(code));
-      res.setHeader('Content-Type', 'text/html');
-      return res.end(`
-        <html><body style="font-family:system-ui;padding:40px;background:#0d1117;color:#c9d1d9;">
-          <h2 style="color:#DC440A;">Google Ads OAuth — Refresh Token</h2>
-          <p>Copy this into Vercel env as <code>GOOGLE_ADS_REFRESH_TOKEN</code>, then redeploy.</p>
-          <pre style="padding:14px;background:#161b22;border:1px solid #2a3441;border-radius:6px;word-break:break-all;white-space:pre-wrap;">${tokens.refresh_token || '(no refresh_token returned — make sure prompt=consent and access_type=offline)'}</pre>
-          <p style="color:#8b949e;font-size:12px;">Access token (expires in ${tokens.expires_in}s, not needed long-term):</p>
-          <pre style="padding:10px;background:#161b22;border:1px solid #2a3441;border-radius:6px;word-break:break-all;white-space:pre-wrap;font-size:11px;color:#6e7681;">${tokens.access_token}</pre>
-        </body></html>
-      `);
-    } catch (err) {
-      return res.status(500).send(`OAuth exchange failed: ${err.message}`);
-    }
+  if (['auth','callback'].includes(action)) {
+    res.setHeader('Cache-Control','no-store');
+    return res.status(410).json({error:'This legacy OAuth setup endpoint is retired. Contact the workspace administrator to configure Google Ads credentials securely.'});
   }
 
   // Everything else requires Clerk auth.
@@ -215,7 +121,7 @@ export default async function handler(req, res) {
     ]);
     if (missing.length) {
       const reconnect = missing.includes('GOOGLE_ADS_REFRESH_TOKEN')
-        ? ' Run /api/google?action=auth first, then add GOOGLE_ADS_REFRESH_TOKEN in Vercel.'
+        ? ' Ask the workspace administrator to configure GOOGLE_ADS_REFRESH_TOKEN securely in Vercel.'
         : '';
       return res.status(500).json({ error: `Missing Google Ads env: ${missing.join(', ')}.${reconnect}` });
     }
@@ -281,13 +187,13 @@ export default async function handler(req, res) {
       }
       if (monthsArr.length) {
         const sql = neon(process.env.DATABASE_URL);
-        await upsertMonthly(sql, monthsArr);
+        for (const m of monthsArr) await upsertMonthlySnapshot(sql,{month:m.month,google:{spend:m.spend,impressions:m.impressions,clicks:m.clicks,conversions:m.conversions,conversionValue:m.conversionValue,snapshotAt:new Date().toISOString()}});
       }
 
       return res.json({ months: monthsArr, customerId, persisted: true });
     } catch (err) {
       const hint = /invalid_grant|expired|revoked|Refresh token exchange failed/i.test(err.message)
-        ? 'Reconnect Google Ads with /api/google?action=auth, then update GOOGLE_ADS_REFRESH_TOKEN in Vercel.'
+        ? 'Ask the workspace administrator to refresh the Google Ads credential securely in Vercel.'
         : /CUSTOMER_NOT_FOUND|USER_PERMISSION_DENIED|login-customer-id|authorization/i.test(err.message)
           ? 'Check GOOGLE_ADS_CUSTOMER_ID, GOOGLE_ADS_LOGIN_CUSTOMER_ID, and that the refresh-token user can access the Ads account.'
           : /developer.?token|DEVELOPER_TOKEN|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(err.message)

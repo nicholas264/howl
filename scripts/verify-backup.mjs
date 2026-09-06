@@ -1,3 +1,4 @@
+import { ensureMonthlyMetrics } from '../api/_lib/monthly-metrics.js';
 import { ensureStudioCosts } from '../api/_lib/static-studio-costs.js';
 import { ensureGoogleOAuthTables } from '../api/_lib/google-user-oauth.js';
 import { ensureStudioTables } from '../api/_lib/static-studio-store.js';
@@ -34,7 +35,7 @@ try {
   for (const {tablename} of tables) counts[tablename] = Number((await db.query(`SELECT count(*) AS count FROM public."${tablename.replaceAll('"','""')}"`)).rows[0].count);
   const restoredAt = Date.now();
   // Exercise additive migrations on the real restored schema, without providers.
-  for (const migrate of [ensureStudioCosts,ensureGoogleOAuthTables,ensureStudioTables,ensureRateLimits,ensureOperationBudgets,ensureTranscriptionJobs,ensureAuthIdentities,ensureExperiments,ensureWorkControls,ensureCreativeAnalysisQueue,ensureLaunchDrafts,ensureCreativeVariants,ensureVariantObservations,ensureApprovalSnapshots,ensureProviderMedia,ensureLocalReceipts,ensureOperationJournal]) await migrate(sql);
+  for (const migrate of [ensureMonthlyMetrics,ensureStudioCosts,ensureGoogleOAuthTables,ensureStudioTables,ensureRateLimits,ensureOperationBudgets,ensureTranscriptionJobs,ensureAuthIdentities,ensureExperiments,ensureWorkControls,ensureCreativeAnalysisQueue,ensureLaunchDrafts,ensureCreativeVariants,ensureVariantObservations,ensureApprovalSnapshots,ensureProviderMedia,ensureLocalReceipts,ensureOperationJournal]) await migrate(sql);
   const report = {backupSha256:createHash('sha256').update(raw).digest('hex'),tables:tables.length,
     rows:Object.values(counts).reduce((a,b)=>a+b,0),restoreMilliseconds:restoredAt-start,migrationMilliseconds:Date.now()-restoredAt,counts};
   await writeFile(`${file}.verification.json`,JSON.stringify(report,null,2),{mode:0o600});
