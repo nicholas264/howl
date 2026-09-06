@@ -1,4 +1,5 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import { encryptGoogleToken as encrypt, decryptGoogleToken as decrypt } from './google-token-crypto.js';
 
 let tablesReady = null;
 
@@ -34,32 +35,6 @@ export async function ensureGoogleOAuthTables(sql) {
     tablesReady = null;
     throw error;
   }
-}
-
-function encryptionKey() {
-  const material = process.env.GOOGLE_TOKEN_ENCRYPTION_KEY
-    || `${process.env.CLERK_SECRET_KEY || ''}:${process.env.GOOGLE_CLIENT_SECRET || ''}`;
-  if (!material || material === ':') throw new Error('Google token encryption is not configured');
-  return createHash('sha256').update(material).digest();
-}
-
-function encrypt(value) {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', encryptionKey(), iv);
-  const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `${iv.toString('base64url')}.${tag.toString('base64url')}.${encrypted.toString('base64url')}`;
-}
-
-function decrypt(value) {
-  const [ivRaw, tagRaw, encryptedRaw] = (value || '').split('.');
-  if (!ivRaw || !tagRaw || !encryptedRaw) throw new Error('Stored Google credential is invalid');
-  const decipher = createDecipheriv('aes-256-gcm', encryptionKey(), Buffer.from(ivRaw, 'base64url'));
-  decipher.setAuthTag(Buffer.from(tagRaw, 'base64url'));
-  return Buffer.concat([
-    decipher.update(Buffer.from(encryptedRaw, 'base64url')),
-    decipher.final(),
-  ]).toString('utf8');
 }
 
 function stateHash(state) {
@@ -139,6 +114,7 @@ export async function getUserGoogleAccessToken(sql, userId) {
   }
   const response = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
+    signal: AbortSignal.timeout(20_000),
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       refresh_token: decrypt(connection.encrypted_refresh_token),

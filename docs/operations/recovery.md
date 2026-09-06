@@ -87,3 +87,26 @@ uses it as part of its encryption fallback. Do not rotate/delete it until those
 records have been re-encrypted with a dedicated encryption secret. Rollback must
 restore the matching frontend key and auth selector together; rolling back only
 one will make sign-in fail.
+
+### Dedicated Google token encryption migration
+
+`api/_lib/google-token-crypto.js` reads both existing unversioned credentials and
+`v2` credentials. Do not set `GOOGLE_TOKEN_ENCRYPTION_KEY_V2` until every deployment
+that uses the database runs compatible readers with the same dedicated key.
+In particular, isolate preview databases first; an old preview must not read a
+production database after credentials are converted.
+
+Provision a random, production-only V2 secret through the environment manager.
+Retain the old encryption material while taking a protected backup and deploying
+compatible readers. Then run `scripts/reencrypt-google-tokens.mjs` with the selected
+database, both key materials, and `CONFIRM_GOOGLE_CRYPTO_READERS_READY=true`.
+The script authenticates every ciphertext, checks each replacement by decrypting
+it, and uses compare-and-swap updates to preserve concurrent reconnections. Reruns
+are safe. It prints counts only. Investigate any concurrently changed rows and
+rerun until all current rows verify under V2.
+
+After migration, rollback only to a V2-compatible release. Keep old key material
+in the restricted recovery system for retained backups; removing it from live
+authentication configuration does not make old encrypted backups recoverable
+without that key. This migration is prepared in code but has not been activated
+in production while preview isolation remains outstanding.
