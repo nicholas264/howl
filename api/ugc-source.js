@@ -1,3 +1,6 @@
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { parseMediaRange } from './_lib/media-range.js';
 import { neon } from '@neondatabase/serverless';
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
@@ -7,22 +10,6 @@ export const config = {
   api: { bodyParser: false },
   maxDuration: 60,
 };
-
-function parseRange(rangeHeader, size) {
-  if (!rangeHeader || !/^bytes=\d*-\d*$/i.test(rangeHeader)) return null;
-  const [startRaw, endRaw] = rangeHeader.replace(/bytes=/i, '').split('-');
-  let start = startRaw === '' ? null : Number(startRaw);
-  let end = endRaw === '' ? null : Number(endRaw);
-  if (start === null && end !== null) {
-    start = Math.max(0, size - end);
-    end = size - 1;
-  } else {
-    if (start === null) start = 0;
-    if (end === null) end = size - 1;
-  }
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start) return null;
-  return { start, end: Math.min(end, size - 1) };
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(405).end();
@@ -59,56 +46,70 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Session source must be stored in HOWL Vercel Blob' });
   }
 
-  const head = await fetch(sourceUrl, { method: 'HEAD' });
-  if (!head.ok) return res.status(head.status).json({ error: 'Source video is not available' });
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), 55_000);
+  const disconnect = () => controller.abort();
+  res.once('close', disconnect);
+  try {
+    const head = await fetch(sourceUrl, { method: 'HEAD', redirect: 'error', signal: controller.signal });
+    if (!head.ok) return res.status(head.status).json({ error: 'Source video is not available' });
 
-  const size = Number(head.headers.get('content-length') || 0);
-  const type = head.headers.get('content-type') || 'video/mp4';
-  const range = size ? parseRange(req.headers.range, size) : null;
-  const upstreamHeaders = {};
-  if (range) upstreamHeaders.Range = `bytes=${range.start}-${range.end}`;
+    const size = Number(head.headers.get('content-length') || 0);
+    const type = head.headers.get('content-type') || 'video/mp4';
+    const range = parseMediaRange(req.headers.range, size);
+    if (range === false) {
+      res.setHeader('Content-Range', `bytes */${size}`);
+      return res.status(416).end();
+    }
+    const upstreamHeaders = {};
+    if (range) upstreamHeaders.Range = `bytes=${range.start}-${range.end}`;
 
-  res.setHeader('Accept-Ranges', 'bytes');
-  res.setHeader('Content-Type', type);
-  res.setHeader('Cache-Control', 'private, max-age=60');
-  res.setHeader('Content-Disposition', `inline; filename="${(session.file_name || `ugc-${sessionId}.mp4`).replace(/"/g, '')}"`);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Content-Type', type);
+    res.setHeader('Cache-Control', 'private, max-age=60');
+    res.setHeader('Content-Disposition', `inline; filename="${(session.file_name || `ugc-${sessionId}.mp4`).replace(/["\r\n\x00-\x1f\x7f]/g, '')}"`);
 
-  if (req.method === 'HEAD') {
-    if (range) {
+    if (req.method === 'HEAD') {
+      if (range) {
+        res.statusCode = 206;
+        res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${size}`);
+        res.setHeader('Content-Length', String(range.end - range.start + 1));
+      } else if (size) {
+        res.setHeader('Content-Length', String(size));
+      }
+      return res.end();
+    }
+
+    const upstream = await fetch(sourceUrl, { headers: upstreamHeaders, redirect: 'error', signal: controller.signal });
+    if (!upstream.ok && upstream.status !== 206) {
+      return res.status(upstream.status).json({ error: 'Source video is not available' });
+    }
+
+    if (range && (upstream.status !== 206 || upstream.headers.get('content-range') !== `bytes ${range.start}-${range.end}/${size}`)) {
+      await upstream.body?.cancel();
+      return res.status(502).json({ error: 'Source returned an inconsistent byte range' });
+    }
+    if (range && size) {
       res.statusCode = 206;
       res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${size}`);
       res.setHeader('Content-Length', String(range.end - range.start + 1));
-    } else if (size) {
-      res.setHeader('Content-Length', String(size));
+    } else {
+      res.statusCode = 200;
+      const upstreamLength = upstream.headers.get('content-length');
+      if (upstreamLength) res.setHeader('Content-Length', upstreamLength);
     }
-    return res.end();
-  }
 
-  const upstream = await fetch(sourceUrl, { headers: upstreamHeaders });
-  if (!upstream.ok && upstream.status !== 206) {
-    return res.status(upstream.status).json({ error: 'Source video is not available' });
-  }
-
-  if (range && size) {
-    res.statusCode = 206;
-    res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${size}`);
-    res.setHeader('Content-Length', String(range.end - range.start + 1));
-  } else {
-    res.statusCode = 200;
-    const upstreamLength = upstream.headers.get('content-length');
-    if (upstreamLength) res.setHeader('Content-Length', upstreamLength);
-  }
-
-  const reader = upstream.body?.getReader();
-  if (!reader) return res.status(502).json({ error: 'Source stream unavailable' });
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      res.write(Buffer.from(value));
-    }
-    res.end();
+    if (!upstream.body) return res.status(502).json({ error: 'Source stream unavailable' });
+    await pipeline(Readable.fromWeb(upstream.body), res, { signal: controller.signal });
   } catch (err) {
-    res.destroy(err);
+    if (res.headersSent) res.destroy(err);
+    else if (!res.destroyed) {
+      res.removeHeader('Content-Length');
+      res.removeHeader('Content-Range');
+      res.status(502).json({ error: 'Source stream unavailable' });
+    }
+  } finally {
+    clearTimeout(deadline);
+    res.off('close', disconnect);
   }
 }

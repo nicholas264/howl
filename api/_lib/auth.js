@@ -43,7 +43,12 @@ export async function requireAuth(req, res) {
     return { userId: 'local-dev', email: 'dev@local' };
   }
 
-  if (!clerkSecretKey()) {
+  let secretKey;
+  try { secretKey = clerkSecretKey(); } catch {
+    res.status(503).json({ error: 'Authentication is temporarily unavailable. Contact the workspace administrator.' });
+    return null;
+  }
+  if (!secretKey) {
     res.status(500).json({ error: 'CLERK_SECRET_KEY not configured' });
     return null;
   }
@@ -56,7 +61,7 @@ export async function requireAuth(req, res) {
   }
 
   try {
-    const payload = await verifyToken(token, { secretKey: clerkSecretKey() });
+    const payload = await verifyToken(token, { secretKey });
     const email = await resolveEmail(payload.sub, payload.email);
     const userId = process.env.CLERK_IDENTITY_MIGRATION_ISSUER === payload.iss
       ? await resolveWorkspaceIdentity(neon(process.env.DATABASE_URL), {issuer:payload.iss,subject:payload.sub,email})
