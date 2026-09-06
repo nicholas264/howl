@@ -1,3 +1,4 @@
+import { fetchPublicText } from './safe-fetch.js';
 import { neon } from '@neondatabase/serverless';
 import { HOWL_DEALERS } from '../_data/howl-dealers.js';
 import { sendResendEmail } from './resend-email.js';
@@ -720,26 +721,7 @@ function isListingSearchPage(url) {
 }
 
 async function fetchText(url) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), fetchTimeoutMs());
-  const response = await fetch(url, {
-    signal: controller.signal,
-    headers: {
-      'user-agent': 'HOWL MAP Monitor (+https://howlcampfires.com)',
-      accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    },
-  }).finally(() => clearTimeout(timeout));
-  try {
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const contentType = response.headers.get('content-type') || '';
-    if (!contentType.includes('text/html') && !contentType.includes('application/xhtml') && !contentType.includes('xml')) {
-      throw new Error(`Unsupported content type: ${contentType || 'unknown'}`);
-    }
-    return response.text();
-  } catch (err) {
-    clearTimeout(timeout);
-    throw err;
-  }
+  return (await fetchPublicText(url, { timeoutMs: fetchTimeoutMs() })).text;
 }
 
 async function fetchOptionalText(url) {

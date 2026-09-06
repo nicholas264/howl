@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../lib/apiFetch.js';
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { Player } from '@remotion/player';
@@ -244,6 +245,21 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   const saveChain = useRef(Promise.resolve());
   const savedRevisions = useRef(new Map());
   const editGeneration = useRef(0);
+  useEffect(() => {
+    const beforeUnload = event => {
+      if (dirtyRef.current) { event.preventDefault(); event.returnValue = ''; }
+    };
+    const beforeToolChange = event => {
+      if (dirtyRef.current && !window.confirm('This edit has unsaved changes. Leave without saving?')) event.preventDefault();
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    window.addEventListener('howl:before-tool-change', beforeToolChange);
+    return () => {
+      window.removeEventListener('beforeunload', beforeUnload);
+      window.removeEventListener('howl:before-tool-change', beforeToolChange);
+    };
+  }, []);
+
   const markDirty = () => { dirtyRef.current = true; editGeneration.current += 1; };
 
   const persistSessionEdits = () => {
@@ -619,6 +635,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
 
   // ── Loading an existing session from sidebar ──────────────────────────────
   const loadSession = useCallback(async (sessionId) => {
+    if (dirtyRef.current && !window.confirm('Discard unsaved changes and load this session?')) return;
     setError('');
     try {
       const r = await fetch(`/api/db/ugc-sessions?id=${sessionId}`);
@@ -657,6 +674,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   }, [initialSessionId, loadSession, onInitialSessionLoaded]);
 
   const newSession = () => {
+    if (dirtyRef.current && !window.confirm('Discard unsaved changes and start a new session?')) return;
     if (videoUrl && videoUrl.startsWith('blob:')) URL.revokeObjectURL(videoUrl);
     setActiveSession(null);
     setFile(null);

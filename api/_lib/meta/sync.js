@@ -1,3 +1,4 @@
+import { creativeVariant, ensureCreativeVariants } from '../creative-variants.js';
 import { ensureCreativeAssetTables, backfillCreativeAssetsFromLaunchHistory } from '../creative-assets.js';
 import { enqueueCreativeAnalyses } from '../creative-analysis-queue.js';
 import { claimSync, checkpointSync, releaseSync, withoutAccessToken, withAccessToken } from '../sync-state.js';
@@ -15,6 +16,7 @@ export async function syncCreativeAnalytics({ sql, accessToken, adAccountId, sin
   let state = job.state;
   const deadline = Date.now() + 180000;
   try {
+    await ensureCreativeVariants(sql);
     await ensureCreativeAssetTables(sql);
     await backfillCreativeAssetsFromLaunchHistory(sql);
         // 1) Walk /act_X/ads pages, upserting ad + creative metadata
@@ -27,8 +29,8 @@ export async function syncCreativeAnalytics({ sql, accessToken, adAccountId, sin
           'image_hash',
           'thumbnail_url',
           'effective_object_story_id',
-          'object_story_spec{video_data{video_id},link_data{image_hash,child_attachments{video_id,image_hash}},photo_data{image_hash}}',
-          'asset_feed_spec{videos{video_id},images{hash}}',
+          'object_story_spec',
+          'asset_feed_spec',
         ].join(',');
         let adsPage = state.phase === 'ads' ? (state.cursor || `${BASE}/${adAccountId}/ads?fields=id,name,status,adset_id,campaign_id,created_time,creative{${creativeSubfields}}&limit=50`) : null;
         let adsUpserted = state.adsUpserted || 0;
@@ -67,19 +69,22 @@ export async function syncCreativeAnalytics({ sql, accessToken, adAccountId, sin
           if (!r.ok || d.error) throw new Error(d.error?.message || 'Meta ads fetch failed');
           for (const ad of (d.data || [])) {
             const creative = ad.creative || {};
+            const variant = creativeVariant(ad);
+            await sql`INSERT INTO creative_variants (variant_key,creative_id,definition) VALUES (${variant.key},${variant.creativeId},${JSON.stringify(variant.definition)}::jsonb) ON CONFLICT DO NOTHING`;
             const { videoId, imageHash } = resolveCreativeIds(creative);
             const groupKey = videoId || imageHash || ad.id;
             const thumb = creative.thumbnail_url || null;
             await sql`
               INSERT INTO creative_performance
-                (ad_id, ad_name, adset_id, campaign_id, creative_id, video_id, image_hash, group_key, thumbnail_url, status, created_time, synced_at)
+                (ad_id, ad_name, adset_id, campaign_id, creative_id, video_id, image_hash, group_key, thumbnail_url, status, created_time, synced_at, variant_key)
               VALUES
-                (${ad.id}, ${ad.name || null}, ${ad.adset_id || null}, ${ad.campaign_id || null}, ${creative.id || null}, ${videoId}, ${imageHash}, ${groupKey}, ${thumb}, ${ad.status || null}, ${ad.created_time || null}, NOW())
+                (${ad.id}, ${ad.name || null}, ${ad.adset_id || null}, ${ad.campaign_id || null}, ${creative.id || null}, ${videoId}, ${imageHash}, ${groupKey}, ${thumb}, ${ad.status || null}, ${ad.created_time || null}, NOW(), ${variant.key})
               ON CONFLICT (ad_id) DO UPDATE SET
                 ad_name = EXCLUDED.ad_name,
                 adset_id = EXCLUDED.adset_id,
                 campaign_id = EXCLUDED.campaign_id,
                 creative_id = EXCLUDED.creative_id,
+                variant_key = EXCLUDED.variant_key,
                 video_id = EXCLUDED.video_id,
                 image_hash = EXCLUDED.image_hash,
                 group_key = EXCLUDED.group_key,
@@ -143,33 +148,25 @@ export async function syncCreativeAnalytics({ sql, accessToken, adAccountId, sin
             const hit = arr.find(a => a.action_type === type);
             return hit ? parseFloat(hit.value || 0) : 0;
           };
-          for (const row of (d.data || [])) {
-            if (!row.ad_id || !row.date_start) continue;
-            const purchases = pickAction(row.actions);
-            const purchaseValue = pickAction(row.action_values);
-            // 3-sec video views moved into actions[] under action_type 'video_view' in newer Graph versions.
-            const v3s = pickActionType(row.actions, 'video_view');
-            const vThru = pickVideoAction(row.video_thruplay_watched_actions);
-            const vAvg = 0;
-            await sql`
-              INSERT INTO creative_insights_daily
-                (ad_id, date, spend, impressions, clicks, unique_link_clicks, purchases, purchase_value, video_3s_views, video_thruplays, video_avg_watch, synced_at)
-              VALUES
-                (${row.ad_id}, ${row.date_start}, ${parseFloat(row.spend || 0)}, ${parseInt(row.impressions || 0, 10)}, ${parseInt(row.clicks || 0, 10)}, ${parseInt(row.unique_inline_link_clicks || 0, 10)}, ${purchases}, ${purchaseValue}, ${v3s}, ${vThru}, ${vAvg}, NOW())
-              ON CONFLICT (ad_id, date) DO UPDATE SET
-                spend = EXCLUDED.spend,
-                impressions = EXCLUDED.impressions,
-                clicks = EXCLUDED.clicks,
-                unique_link_clicks = EXCLUDED.unique_link_clicks,
-                purchases = EXCLUDED.purchases,
-                purchase_value = EXCLUDED.purchase_value,
-                video_3s_views = EXCLUDED.video_3s_views,
-                video_thruplays = EXCLUDED.video_thruplays,
-                video_avg_watch = EXCLUDED.video_avg_watch,
-                synced_at = NOW()
-            `;
-            insightsUpserted++;
-          }
+          const records = (d.data || []).filter(row => row.ad_id && row.date_start).map(row => ({
+            ad_id:row.ad_id, date:row.date_start, spend:Number(row.spend || 0), impressions:Number(row.impressions || 0),
+            clicks:Number(row.clicks || 0), unique_link_clicks:Number(row.unique_inline_link_clicks || 0),
+            purchases:pickAction(row.actions), purchase_value:pickAction(row.action_values),
+            video_3s_views:pickActionType(row.actions,'video_view'), video_thruplays:pickVideoAction(row.video_thruplay_watched_actions),
+          }));
+          if (records.length) await sql`
+            INSERT INTO creative_insights_daily
+              (ad_id,date,spend,impressions,clicks,unique_link_clicks,purchases,purchase_value,video_3s_views,video_thruplays,video_avg_watch,synced_at)
+            SELECT ad_id,date,spend,impressions,clicks,unique_link_clicks,purchases,purchase_value,video_3s_views,video_thruplays,0,now()
+            FROM jsonb_to_recordset(${JSON.stringify(records)}::jsonb) AS r(
+              ad_id text,date date,spend numeric,impressions bigint,clicks bigint,unique_link_clicks bigint,
+              purchases numeric,purchase_value numeric,video_3s_views bigint,video_thruplays bigint)
+            ON CONFLICT (ad_id,date) DO UPDATE SET
+              spend=EXCLUDED.spend,impressions=EXCLUDED.impressions,clicks=EXCLUDED.clicks,
+              unique_link_clicks=EXCLUDED.unique_link_clicks,purchases=EXCLUDED.purchases,purchase_value=EXCLUDED.purchase_value,
+              video_3s_views=EXCLUDED.video_3s_views,video_thruplays=EXCLUDED.video_thruplays,synced_at=now()
+          `;
+          insightsUpserted += records.length;
           insightsPage = withoutAccessToken(d.paging?.next);
           state = { ...state, phase: insightsPage ? 'insights' : 'done', cursor: insightsPage, insightsUpserted };
           await checkpointSync(sql, job, state, !insightsPage);

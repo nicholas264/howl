@@ -1,4 +1,6 @@
+import { clerkSecretKey } from '../_lib/clerk-config.js';
 import { resolveEmail } from '../_lib/auth.js';
+import { resolveWorkspaceIdentity } from '../_lib/auth-identities.js';
 // Issues short-lived client upload tokens for Vercel Blob direct-from-browser uploads.
 // Used by the UGC Editor to upload multi-GB source videos without proxying through
 // a Vercel function.
@@ -43,13 +45,15 @@ export default async function handler(req, res) {
         // Local-dev escape hatch — matches requireAuth's behavior.
         const isLocalBypass = process.env.NODE_ENV !== 'production' && process.env.AUTH_DISABLED === 'true';
         if (!isLocalBypass) {
-          if (!process.env.CLERK_SECRET_KEY) throw new Error('CLERK_SECRET_KEY not configured');
+          if (!clerkSecretKey()) throw new Error('CLERK_SECRET_KEY not configured');
           if (!clientPayload) throw new Error('Unauthorized — clientPayload missing');
           try {
-            const payload = await verifyToken(clientPayload, { secretKey: process.env.CLERK_SECRET_KEY });
+            const payload = await verifyToken(clientPayload, { secretKey: clerkSecretKey() });
+            const email = await resolveEmail(payload.sub, payload.email);
+            const userId = process.env.CLERK_IDENTITY_MIGRATION_ISSUER === payload.iss
+              ? await resolveWorkspaceIdentity(sql,{issuer:payload.iss,subject:payload.sub,email}) : payload.sub;
             const access = await getAppAccess({
-              userId: payload.sub,
-              email: await resolveEmail(payload.sub, payload.email),
+              userId, email,
             });
             if (!access.user || access.user.status !== 'active') throw new Error('Active workspace membership required');
             if (!hasPermission(access, 'assets.write') && !hasPermission(access, 'creators.write')) {

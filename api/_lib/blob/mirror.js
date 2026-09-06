@@ -4,6 +4,7 @@
 // Best-effort: any failure returns null and the caller continues. We never want
 // a Blob hiccup to break a Meta launch.
 import { put } from '@vercel/blob';
+import { fetchPublicResource } from '../safe-fetch.js';
 
 const sanitize = (name) =>
   (name || 'video').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'video';
@@ -32,13 +33,8 @@ export const mirrorVideoToBlob = mirrorAssetToBlob;
 export async function mirrorImageUrlToBlob(url, fileName = 'avatar') {
   try {
     if (!url || !process.env.BLOB_READ_WRITE_TOKEN) return url || null;
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-    });
-    if (!response.ok) throw new Error(`image fetch failed (${response.status})`);
-    const mimeType = response.headers.get('content-type') || 'image/jpeg';
-    if (!mimeType.startsWith('image/')) throw new Error(`unexpected content type: ${mimeType}`);
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const {bytes:buffer,contentType:mimeType} = await fetchPublicResource(url,
+      {maxBytes:10*1024*1024,timeoutMs:15000,contentTypes:/^image\/(jpeg|png|webp)(;|$)/i});
     const extension = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
     return await mirrorAssetToBlob(buffer, mimeType, `${fileName}.${extension}`) || url;
   } catch (err) {

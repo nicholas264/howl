@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../lib/apiFetch.js';
 import { useEffect, useState } from 'react';
 
 export default function CreatorAvatarImage({ src, className = '', alt = '', children }) {

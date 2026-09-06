@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../lib/apiFetch.js';
 // Shared image library — Vercel Blob upload + Neon record. Used by
 // ImageAdTool and ReviewAdTool. Replaces the old localStorage key
 // 'howl_saved_images', which silently dropped uploads past the LS quota.

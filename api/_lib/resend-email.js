@@ -7,7 +7,7 @@ export function resendConfigured() {
   return Boolean(process.env.RESEND_API_KEY);
 }
 
-export async function sendResendEmail({ from, to, subject, text, html, replyTo }) {
+export async function sendResendEmail({ from, to, subject, text, html, replyTo, idempotencyKey }) {
   if (!process.env.RESEND_API_KEY) {
     return { skipped: true, reason: 'RESEND_API_KEY not configured' };
   }
@@ -29,8 +29,10 @@ export async function sendResendEmail({ from, to, subject, text, html, replyTo }
     headers: {
       Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
       'Content-Type': 'application/json',
+      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
     },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(30000),
   });
   const body = await response.text();
   let data = {};

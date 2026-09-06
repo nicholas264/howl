@@ -1,4 +1,78 @@
-# Audit remediation — first hardening release
+# Audit remediation status — September 6, 2026
+
+The first release is deployed. The second release adds the fixes below; its
+additive production migration and restored-backup migration checks have passed.
+Deployment verification is recorded in the release report. This document does
+not claim that the remaining infrastructure and product roadmap is complete.
+
+## Second release
+
+- Explicit authenticated API clients replace the global fetch override. Account
+  changes invalidate pending token acquisition and unmount private workspace state.
+- Invitation acceptance and membership creation are atomic; only verified primary
+  Clerk email addresses participate in email-based membership decisions.
+- Production Clerk domain and five DNS records are verified. The two approved
+  existing members have production identities mapped to their original internal
+  IDs. A production-only secret and coordinated cutover switch preserve legacy
+  Google OAuth encryption while authentication moves to production.
+- Analysis jobs use unique lease tokens, guarded result writes, abortable network
+  and ffmpeg work, and hard deadlines. Abandoned known renders recover by cron;
+  unknown starts remain quarantined instead of being blindly repeated.
+- Shared, paginated launch drafts persist across devices with optimistic revisions.
+  Nested local media becomes durable before saving. Old browser carts are imported
+  only by explicit user action. Unsaved editor navigation is guarded.
+- Immutable approval snapshots contain output fingerprints and terms/brief linkage.
+  Launch preflight resolves known asset ownership and verifies provider media
+  receipts. Drive uploads compare actual downloaded bytes to approved checksums,
+  including when replaying a saved upload receipt.
+- Provider upload receipts, stable thumbnail reads, idempotent launch/media/activity
+  bookkeeping, and Resend idempotency keys support safe retries. Shopify resumes
+  known drafts independently of subsequent catalog or address changes.
+- Admin can recover an uncertain Meta ad receipt after server-side verification
+  of the existing provider object. Unsupported uncertain outcomes remain blocked
+  pending provider-specific reconciliation.
+- Creative definitions retain copy and all carousel/dynamic alternatives as
+  distinct variants. Shared-media reports are explicitly descriptive. Prospective
+  comparison protocols freeze ad assignments, require a full observation window
+  and minimum evidence, detect changed definitions, and store immutable decisions.
+  They do not establish randomized causal lift or reconstruct historical variants.
+- Analytics insight pages write in batches. DNS-pinned, bounded resource fetching
+  also covers sitemap/MAP imports, image upload/vision/mirroring, and normalization.
+- Transcription has a claim, source/revision guards, bounded streaming, and a
+  four-minute deadline. It cannot overwrite edits made during processing.
+- Paid work has global/per-user concurrency lanes, daily workspace request budgets,
+  token/media usage records, recorded Remotion cost, unknown-expiration recovery,
+  and Admin visibility. Unpriced requests are shown as unknown cost, not zero.
+- A real database dump restored 65 tables and 14,592 rows in an isolated engine,
+  then passed additive migrations. The approved offsite bucket remains blocked by
+  AWS IAM permissions; no production backup was uploaded to S3.
+
+## Remaining work / external prerequisites
+
+1. Grant the narrowly scoped AWS permissions in `../operations/backup-provisioning-policy.json`,
+   provision the approved private destination, automate backups, and perform a timed
+   offsite restore. RPO/RTO targets are documented but not yet proven.
+2. Complete production authentication deployment and real member sign-in verification;
+   isolate preview databases/provider credentials; re-encrypt legacy Google OAuth
+   records under a dedicated key before retiring the old Clerk secret.
+3. Finish reconciliation for uncertain uploads, Meta creative/campaign/ad-set creation,
+   Shopify draft/order outcomes, email sends, and unknown Remotion starts. Add render
+   cancellation, email delivery/bounce ingestion, and seeding fulfillment synchronization.
+4. Bind an entire launch packet (copy, destination, placement, paired deliverables,
+   approval and rights exceptions), and preserve historical ad/variant assignments
+   at ingestion rather than applying current creative identity to past observations.
+5. Establish private media access, lifecycle/retention policy, reference-aware orphan
+   cleanup, proactive operational alert delivery, and provider completeness checks.
+6. Instrument remaining paid provider paths, configure a complete price book and
+   dollar budget reservations, remove runtime DDL, and restrict the runtime DB role.
+
+See `../operations/recovery.md` for release, backup, authentication, and operation
+recovery procedures. Regression checks exercise isolated PostgreSQL and injected
+provider failures; actual paid launches, orders, and email sends are not smoke tests.
+
+---
+
+# First hardening release (historical record)
 
 This release addresses the highest-risk defects and adds regression/release
 infrastructure. It does not close the entire audit or claim that every production

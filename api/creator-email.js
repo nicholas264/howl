@@ -1,3 +1,4 @@
+import { ensureLocalReceipts } from './_lib/local-receipts.js';
 import { ensureOperationJournal, runExternalStep, operationKey } from './_lib/operation-journal.js';
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
@@ -174,6 +175,7 @@ export default async function handler(req, res) {
     const followUpAt = timestamp(req.body?.next_follow_up_at);
     if (followUpAt === undefined) return res.status(400).json({ error: 'Follow-up date is invalid' });
 
+    await ensureLocalReceipts(sql);
     await ensureOperationJournal(sql);
     const requestKey = operationKey(req, access.userId, 'creator-email');
     const { provider, externalId, externalThreadId, providerMessageId } = await runExternalStep(sql, {
@@ -192,6 +194,7 @@ export default async function handler(req, res) {
         subject,
         text: body,
         replyTo: validEmail(access.email),
+        idempotencyKey: requestKey,
       });
       if (email.skipped) {
         throw new Error(email.reason || 'Resend send failed');
@@ -242,12 +245,12 @@ export default async function handler(req, res) {
       RETURNING *
     `;
     await sql`
-      INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+      INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id, event_key)
       VALUES (
         ${creatorId}, 'outreach', 'Email sent',
         ${JSON.stringify({ outreach_id: message.id, provider, external_id: providerMessageId, to })}::jsonb,
-        ${access.userId}
-      )
+        ${access.userId}, ${requestKey+':outreach'}
+      ) ON CONFLICT (event_key) DO NOTHING
     `;
     if (agreementId) {
       await sql`
@@ -256,12 +259,12 @@ export default async function handler(req, res) {
         WHERE id = ${agreementId} AND creator_id = ${creatorId} AND status = 'draft'
       `;
       await sql`
-        INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+        INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id, event_key)
         VALUES (
           ${creatorId}, 'agreement_sent', 'Usage agreement sent',
           ${JSON.stringify({ agreement_id: agreementId, provider, external_id: providerMessageId, to })}::jsonb,
-          ${access.userId}
-        )
+          ${access.userId}, ${requestKey+':agreement'}
+        ) ON CONFLICT (event_key) DO NOTHING
       `;
     }
     return res.status(201).json({ message });

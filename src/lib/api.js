@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from './apiFetch.js';
 export async function readApiJson(response, fallback = 'Request failed') {
   const text = await response.text();
   const contentType = response.headers.get('content-type') || '';

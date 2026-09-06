@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../lib/apiFetch.js';
 import { useEffect, useMemo, useState } from 'react';
 import CreatorAvatarImage from './CreatorAvatarImage';
 

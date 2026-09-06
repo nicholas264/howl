@@ -148,37 +148,41 @@ export async function getAppAccess(auth, sql = neon(process.env.DATABASE_URL)) {
   `;
 
   if (!user && email) {
-    const [invitation] = await sql`
-      SELECT id, role
-      FROM app_invitations
-      WHERE lower(email) = ${email} AND status = 'pending'
-        AND (expires_at IS NULL OR expires_at > now())
-      ORDER BY created_at DESC
-      LIMIT 1
-    `;
-    if (!isBootstrapAdmin && !invitation) {
-      return {
-        user: null,
-        role: 'uninvited',
-        permissions: [],
-        role_labels: ROLE_LABELS,
-      };
-    }
-    const role = isBootstrapAdmin ? 'owner' : (invitation?.role || 'viewer');
-    [user] = await sql`
-      INSERT INTO app_users (user_id, email, role, status, last_seen_at)
-      VALUES (${auth.userId}, ${email}, ${role}, 'active', now())
-      ON CONFLICT (user_id) DO UPDATE
-      SET email = EXCLUDED.email, last_seen_at = now(), updated_at = now()
-      RETURNING user_id, email, display_name, role, status, last_seen_at, created_at
-    `;
-    if (invitation) {
-      await sql`
-        UPDATE app_invitations
-        SET status = 'accepted', accepted_by = ${auth.userId}, updated_at = now()
-        WHERE id = ${invitation.id}
+    // Provisioning and consumption share one SQL statement. The invitation row
+    // lock serializes acceptance, and a conflicting identity never consumes it.
+    if (isBootstrapAdmin) {
+      [user] = await sql`
+        INSERT INTO app_users (user_id, email, role, status, last_seen_at)
+        VALUES (${auth.userId}, ${email}, 'owner', 'active', now())
+        ON CONFLICT DO NOTHING
+        RETURNING user_id, email, display_name, role, status, last_seen_at, created_at
+      `;
+    } else {
+      [user] = await sql`
+        WITH invitation AS MATERIALIZED (
+          SELECT id, role FROM app_invitations
+          WHERE lower(email) = ${email} AND status = 'pending'
+            AND (expires_at IS NULL OR expires_at > now())
+          ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE
+        ), provisioned AS (
+          INSERT INTO app_users (user_id, email, role, status, last_seen_at)
+          SELECT ${auth.userId}, ${email}, role, 'active', now() FROM invitation
+          ON CONFLICT DO NOTHING
+          RETURNING user_id, email, display_name, role, status, last_seen_at, created_at
+        ), consumed AS (
+          UPDATE app_invitations SET status = 'accepted', accepted_by = ${auth.userId}, updated_at = now()
+          WHERE id IN (SELECT id FROM invitation) AND EXISTS (SELECT 1 FROM provisioned)
+          RETURNING id
+        )
+        SELECT provisioned.* FROM provisioned, consumed
       `;
     }
+    // A concurrent request for the same authenticated identity may have won.
+    if (!user) [user] = await sql`
+      SELECT user_id, email, display_name, role, status, last_seen_at, created_at
+      FROM app_users WHERE user_id = ${auth.userId} LIMIT 1
+    `;
+    if (!user) return { user: null, role: 'uninvited', permissions: [], role_labels: ROLE_LABELS };
   } else if (user) {
     if (isBootstrapAdmin && user.role !== 'owner') {
       [user] = await sql`

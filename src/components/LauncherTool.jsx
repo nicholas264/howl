@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../lib/apiFetch.js';
 // LauncherTool — unified ad launcher.
 //
 // Merges the previous "UGC Inbox" (Drive-pulled raw assets) and "Publish"
@@ -740,7 +741,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         const id = `cart:${c.id}`;
         if (!next[id]) {
           const suggestion = c.creatorId ? null : autoMatchCreator(`${c.creator || ''} ${c.name || ''} ${c.title || ''} ${c.sourceLabel || ''}`.trim());
-          const productCopy = defaultProductCopy(config.defaultProduct);
+          const cartProduct = PRODUCTS.some(product => product.id === c.product) ? c.product : config.defaultProduct;
+          const productCopy = defaultProductCopy(cartProduct);
           next[id] = {
             creator: c.creator || suggestion?.creatorName || config.defaultCreator || 'Static Builder',
             creatorId: c.creatorId || suggestion?.creatorId || null,
@@ -749,11 +751,11 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
             creatorMatch: suggestion,
             briefId: c.briefId || null,
             deliverableId: c.deliverableId || null,
-            productId: config.defaultProduct,
-            destUrl: c.destUrl || destUrlFor(config.defaultProduct),
+            productId: cartProduct,
+            destUrl: c.destUrl || destUrlFor(cartProduct),
             urlParams: c.urlParams || config.defaultUrlParams || DEFAULT_URL_PARAMS,
-            headline: c.hook || productCopy.headline,
-            primaryText: c.body || productCopy.primaryText,
+            headline: c.hook || c.headline || productCopy.headline,
+            primaryText: c.body || c.primaryText || productCopy.primaryText,
           };
         }
       }

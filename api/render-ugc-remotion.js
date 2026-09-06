@@ -1,3 +1,4 @@
+import { finishWork } from './_lib/work-controls.js';
 import { checkWorkLimit } from './_lib/work-limits.js';
 import { randomUUID } from 'node:crypto';
 import { renderMediaOnLambda } from '@remotion/lambda/client';
@@ -23,7 +24,6 @@ export default async function handler(req, res) {
   const access = await requirePermission(req, res, 'assets.write');
   if (!access) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!(await checkWorkLimit(access, res, 'render'))) return;
 
   const lambda = remotionConfig();
   if (!lambda.configured) {
@@ -74,16 +74,20 @@ export default async function handler(req, res) {
     showOutro: inputProps.showOutro,
   });
 
+  if (!(await checkWorkLimit(access,res,'render',{holdUntilCompletion:true}))) return;
   const attemptId = randomUUID();
   try {
     const [claimed] = await sql`
       UPDATE ugc_sessions
       SET status = 'rendering', last_error = NULL,
-          settings = COALESCE(settings, '{}'::jsonb) || ${JSON.stringify({ remotion_attempt: attemptId, remotion_render: { attempt_id: attemptId, provider: 'starting' } })}::jsonb, updated_at = now()
-      WHERE id = ${sessionId} AND status <> 'rendering'
+          settings = COALESCE(settings, '{}'::jsonb) || ${JSON.stringify({ remotion_attempt: attemptId, remotion_render: { work_id:access.workId, attempt_id: attemptId, provider: 'starting', started_at: new Date().toISOString() } })}::jsonb, updated_at = now()
+      WHERE id = ${sessionId} AND status NOT IN ('rendering', 'render_unknown')
       RETURNING id
     `;
-    if (!claimed) return res.status(409).json({ error: 'A render is already running. Check its status before starting another.' });
+    if (!claimed) {
+      await finishWork(sql,access.workId,'render',409);
+      return res.status(409).json({ error: 'A render is already running or needs reconciliation. Check its status before starting another.' });
+    }
     const { renderId, bucketName } = await renderMediaOnLambda({
       region: lambda.region,
       functionName: lambda.functionName,
@@ -105,6 +109,7 @@ export default async function handler(req, res) {
     });
     const renderState = {
       provider: 'remotion_lambda',
+      work_id:access.workId,
       render_key: renderKey,
       render_label: renderLabel,
       render_id: renderId,
@@ -139,7 +144,7 @@ export default async function handler(req, res) {
     const message = (err.message || 'Remotion render failed to start').slice(0, 2000);
     await sql`
       UPDATE ugc_sessions
-      SET status = 'render_error', last_error = ${message}, updated_at = now()
+      SET status = 'render_unknown', last_error = ${message}, updated_at = now()
       WHERE id = ${sessionId} AND settings->>'remotion_attempt' = ${attemptId}
     `.catch(() => {});
     return res.status(500).json({ error: message });

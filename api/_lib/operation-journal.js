@@ -14,6 +14,7 @@ export async function ensureOperationJournal(sql) {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (operation_key, step_key)
   )`;
+  await sql`ALTER TABLE app_operation_steps ADD COLUMN IF NOT EXISTS request_payload JSONB`;
 }
 
 export function operationKey(req, actorId, scope) {
@@ -26,9 +27,11 @@ export function operationKey(req, actorId, scope) {
 export async function runExternalStep(sql, { operationKey, stepKey, payload, actorId }, perform) {
   const hash = digest(payload);
   const [claim] = await sql`
-    INSERT INTO app_operation_steps (operation_key, step_key, request_hash, actor_id)
-    VALUES (${operationKey}, ${stepKey}, ${hash}, ${actorId || null})
-    ON CONFLICT DO NOTHING RETURNING operation_key
+    INSERT INTO app_operation_steps (operation_key, step_key, request_hash, actor_id, request_payload)
+    VALUES (${operationKey}, ${stepKey}, ${hash}, ${actorId || null}, ${JSON.stringify(payload)}::jsonb)
+    ON CONFLICT (operation_key,step_key) DO UPDATE SET status = 'pending', updated_at = now()
+      WHERE app_operation_steps.status = 'rejected' AND app_operation_steps.request_hash = EXCLUDED.request_hash
+    RETURNING operation_key
   `;
   if (!claim) {
     const [existing] = await sql`SELECT * FROM app_operation_steps WHERE operation_key = ${operationKey} AND step_key = ${stepKey}`;
@@ -43,10 +46,20 @@ export async function runExternalStep(sql, { operationKey, stepKey, payload, act
     return result;
   } catch (error) {
     // A timeout or lost DB acknowledgement is NOT proof the provider did nothing.
-    await sql`UPDATE app_operation_steps SET status = 'uncertain', updated_at = now()
+    await sql`UPDATE app_operation_steps SET status = ${error.definitelyNotApplied ? 'rejected' : 'uncertain'}, updated_at = now()
       WHERE operation_key = ${operationKey} AND step_key = ${stepKey} AND status = 'pending'`.catch(() => {});
     throw error;
   }
+}
+
+export async function rememberProviderRead(sql, key, step, read) {
+  const [cached] = await sql`SELECT result FROM app_operation_steps WHERE operation_key = ${key} AND step_key = ${step} AND status = 'completed'`;
+  if (cached) return cached.result;
+  const result = await read();
+  const [saved] = await sql`INSERT INTO app_operation_steps (operation_key,step_key,request_hash,status,result)
+    VALUES (${key},${step},${digest([key,step])},'completed',${JSON.stringify(result)}::jsonb)
+    ON CONFLICT (operation_key,step_key) DO UPDATE SET operation_key = EXCLUDED.operation_key RETURNING result`;
+  return saved.result;
 }
 
 export async function createMetaOperationFetch(sql, req, actorId, fetchImpl = globalThis.fetch) {
@@ -66,6 +79,7 @@ export async function createMetaOperationFetch(sql, req, actorId, fetchImpl = gl
       const response = await fetchImpl(url, init);
       const body = await response.json();
       if (response.status >= 500) throw new Error('Meta returned an uncertain server failure; review the operation before retrying.');
+      if (!response.ok && body.error && !body.id) throw Object.assign(new Error(body.error.message || 'Meta rejected this request'), { statusCode: response.status, definitelyNotApplied: true });
       return { status: response.status, body };
     });
     return new Response(JSON.stringify(result.body), { status: result.status, headers: { 'Content-Type': 'application/json' } });

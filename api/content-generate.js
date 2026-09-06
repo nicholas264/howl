@@ -1,3 +1,4 @@
+import { meteredFetch } from './_lib/metered-fetch.js';
 import { checkWorkLimit } from './_lib/work-limits.js';
 import { requirePermission } from './_lib/app-access.js';
 import { loadBrandGuidelines, validateBrandCopy } from './_lib/brand-guardrails.js';
@@ -102,7 +103,7 @@ export default async function handler(req, res) {
     const system = buildSystemPrompt(guidelines);
     const user = buildUserPrompt({ action, project, sources, feedback, outline, draft, siteLinks: promptLinks });
 
-    const generated = await generateContentText({ action, apiKey, openaiKey, model, system, user });
+    const generated = await generateContentText({ action, apiKey, openaiKey, model, system, user, fetch:meteredFetch(access) });
     if (!generated.ok) {
       return res.status(generated.status || 500).json({
         error: generated.error,
@@ -214,7 +215,7 @@ function evaluateSeoAeo(markdown, parsed = {}, project = {}) {
   };
 }
 
-async function generateContentText({ action, apiKey, openaiKey, model, system, user }) {
+async function generateContentText({ action, apiKey, openaiKey, model, system, user, fetch }) {
   const maxTokens = action === 'draft' ? 12000 : 6000;
   const temperature = action === 'draft' ? 0.45 : 0.35;
   if (apiKey) {
@@ -244,17 +245,17 @@ async function generateContentText({ action, apiKey, openaiKey, model, system, u
     }
     const error = anthropicErrorMessage(data) || `Anthropic request failed (${response.status})`;
     if (!openaiKey) return { ok: false, status: response.status, error, detail: data?.error || data };
-    const fallback = await generateOpenAiContent({ action, apiKey: openaiKey, system, user, maxTokens, temperature });
+    const fallback = await generateOpenAiContent({ action, apiKey: openaiKey, system, user, maxTokens, temperature, fetch });
     return {
       ...fallback,
       fallbackReason: error,
       detail: fallback.ok ? undefined : { anthropic: data?.error || data, openai: fallback.detail },
     };
   }
-  return generateOpenAiContent({ action, apiKey: openaiKey, system, user, maxTokens, temperature });
+  return generateOpenAiContent({ action, apiKey: openaiKey, system, user, maxTokens, temperature, fetch });
 }
 
-async function generateOpenAiContent({ apiKey, system, user, maxTokens, temperature }) {
+async function generateOpenAiContent({ apiKey, system, user, maxTokens, temperature, fetch }) {
   if (!apiKey) return { ok: false, status: 500, error: 'OPENAI_API_KEY not configured' };
   const model = process.env.OPENAI_CONTENT_MODEL || process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL;
   const response = await fetch('https://api.openai.com/v1/chat/completions', {

@@ -1,3 +1,4 @@
+import { finishWork } from './_lib/work-controls.js';
 import { completeRender } from './_lib/render-completion.js';
 import { getRenderProgress } from '@remotion/lambda/client';
 import { requirePermission } from './_lib/app-access.js';
@@ -64,6 +65,7 @@ export default async function handler(req, res) {
         SET status = 'render_error', last_error = ${message}, updated_at = now()
         WHERE id = ${sessionId} AND settings->'remotion_render'->>'render_id' = ${renderId}
       `.catch(() => {});
+      if (renderState.work_id) await finishWork(sql,renderState.work_id,'render',500);
       return res.status(500).json({ error: message, progress });
     }
     if (progress.done && progress.outputFile) {

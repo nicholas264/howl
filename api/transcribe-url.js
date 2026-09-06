@@ -1,4 +1,6 @@
 import { checkWorkLimit } from './_lib/work-limits.js';
+import { claimTranscription, saveTranscription } from './_lib/transcription-jobs.js';
+import { recordProviderUsage } from './_lib/work-controls.js';
 // Server-side audio extraction + Whisper transcription for multi-GB UGC source videos.
 // Replaces the in-browser ffmpeg.wasm path which OOMs above ~200 MB.
 //
@@ -13,7 +15,7 @@ import { spawn } from 'node:child_process';
 import { createReadStream, statSync, unlinkSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Readable } from 'node:stream';
+import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
 import { put } from '@vercel/blob';
@@ -63,15 +65,13 @@ export default async function handler(req, res) {
   }
 
   const audioPath = join(tmpdir(), `audio_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`);
+  const job=await claimTranscription(sql,sessionId,sourceUrl.href);
+  if (!job) return res.status(409).json({error:'This session is already processing or its source changed. Reload before retrying.'});
+  const signal=AbortSignal.timeout(240000);
 
   try {
-    await sql`
-      UPDATE ugc_sessions
-      SET status = 'transcribing', last_error = NULL, updated_at = now()
-      WHERE id = ${sessionId}
-    `;
     // 1. Stream the source video into ffmpeg via stdin, write audio to /tmp
-    const videoRes = await fetch(sourceUrl);
+    const videoRes = await fetch(sourceUrl,{signal,redirect:'error'});
     if (!videoRes.ok || !videoRes.body) {
       throw new Error(`Failed to fetch source video: ${videoRes.status}`);
     }
@@ -84,10 +84,10 @@ export default async function handler(req, res) {
       '-b:a', '64k',
       '-f', 'mp3',
       audioPath,
-    ], { stdio: ['pipe', 'ignore', 'pipe'] });
+    ], { stdio: ['pipe', 'ignore', 'pipe'], signal, killSignal:'SIGKILL' });
 
     let ffErr = '';
-    ff.stderr.on('data', (chunk) => { ffErr += chunk.toString(); });
+    ff.stderr.on('data', (chunk) => { ffErr = (ffErr+chunk.toString()).slice(-4000); });
 
     const ffmpegDone = new Promise((resolve, reject) => {
       ff.on('error', reject);
@@ -97,26 +97,25 @@ export default async function handler(req, res) {
     // Pipe the fetch body into ffmpeg stdin. Node's web Readable → Node Readable.
     const nodeReadable = Readable.fromWeb(videoRes.body);
     nodeReadable.on('error', (err) => { ff.stdin.destroy(err); });
-    await pipeline(nodeReadable, ff.stdin).catch(() => {
-      // ffmpeg sometimes closes stdin early once it has enough; that's not fatal.
-    });
-    await ffmpegDone;
+    let received=0;
+    const limiter=new Transform({transform(chunk,_encoding,callback){received+=chunk.length;
+      callback(received>2*1024*1024*1024 ? new Error('Video exceeds the 2 GB transcription limit') : null,chunk);}});
+    try {await Promise.all([pipeline(nodeReadable,limiter,ff.stdin,{signal}),ffmpegDone]);}
+    catch(error){ff.kill('SIGKILL');throw error;}
 
     const audioStat = statSync(audioPath);
     if (audioStat.size === 0) throw new Error('ffmpeg produced empty audio output');
 
+    if (audioStat.size > WHISPER_MAX_BYTES) throw Object.assign(new Error('Extracted audio exceeds the 25 MB transcription limit'),{statusCode:413});
+    signal.throwIfAborted();
     // 2. Upload audio to Blob (so re-transcribe is fast and the audio is shareable with future render jobs)
     const audioStream = createReadStream(audioPath);
     const audioBlob = await put(`ugc-audio/session-${sessionId || 'tmp'}-${Date.now()}.mp3`, audioStream, {
       access: 'public',
       contentType: 'audio/mpeg',
       addRandomSuffix: true,
+      abortSignal:signal,
     });
-    await sql`
-      UPDATE ugc_sessions
-      SET audio_url = ${audioBlob.url}, updated_at = now()
-      WHERE id = ${sessionId}
-    `;
 
     // 3. Hand the audio to Whisper. Whisper has a 25 MB cap; if we exceed it,
     //    surface a clear error rather than silently truncating.
@@ -150,6 +149,7 @@ export default async function handler(req, res) {
       method: 'POST',
       headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
       body: form,
+      signal,
     });
     const whisperData = await whisperRes.json();
     if (!whisperRes.ok) {
@@ -164,16 +164,10 @@ export default async function handler(req, res) {
     );
     const duration = whisperData.duration || (words.length ? words[words.length - 1].end : 0);
 
-    await sql`
-      UPDATE ugc_sessions
-      SET words = ${JSON.stringify(words)},
-          duration = ${duration},
-          audio_url = ${audioBlob.url},
-          status = 'transcribed',
-          last_error = NULL,
-          updated_at = now()
-      WHERE id = ${sessionId}
-    `;
+    await recordProviderUsage(sql,access.workId,{provider:'openai',model:'whisper-1',mediaSeconds:duration});
+    signal.throwIfAborted();
+    if (!(await saveTranscription(sql,sessionId,sourceUrl.href,job,{words,duration,audioUrl:audioBlob.url})))
+      throw Object.assign(new Error('Session changed during transcription. Your edits were preserved; reload before retrying.'),{statusCode:409});
 
     return res.json({ words, duration, audioUrl: audioBlob.url });
   } catch (err) {
@@ -181,8 +175,8 @@ export default async function handler(req, res) {
     const message = (err.message || 'Transcription failed').slice(0, 2000);
     await sql`
       UPDATE ugc_sessions
-      SET status = 'transcription_error', last_error = ${message}, updated_at = now()
-      WHERE id = ${sessionId}
+      SET status = 'transcription_error', transcription_token=NULL,last_error = ${message}, updated_at = now()
+      WHERE id = ${sessionId} AND transcription_token=${job.token}
     `.catch(() => {});
     return res.status(err.statusCode || 500).json({ error: message });
   } finally {

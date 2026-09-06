@@ -1,3 +1,14 @@
+import { ensureWorkControls } from '../api/_lib/work-controls.js';
+import { ensureExperiments } from '../api/_lib/experiments.js';
+import { ensureAuthIdentities } from '../api/_lib/auth-identities.js';
+import { ensureTranscriptionJobs } from '../api/_lib/transcription-jobs.js';
+import { ensureAppTables } from '../api/_lib/app-access.js';
+import { ensureLocalReceipts } from '../api/_lib/local-receipts.js';
+import { ensureProviderMedia } from '../api/_lib/provider-media.js';
+import { ensureApprovalSnapshots } from '../api/_lib/approval-snapshots.js';
+import { ensureCreativeVariants } from '../api/_lib/creative-variants.js';
+import { ensureLaunchDrafts } from '../api/_lib/launch-drafts.js';
+import { ensureCreativeAnalysisQueue } from '../api/_lib/creative-analysis-queue.js';
 import { ensureSyncState } from '../api/_lib/sync-state.js';
 import { ensureOperationBudgets } from '../api/_lib/operation-budget.js';
 import { neon } from '@neondatabase/serverless';
@@ -23,4 +34,17 @@ if (!applied) {
   await ensureOperationJournal(sql);
   await sql`INSERT INTO app_schema_migrations (version) VALUES (${version}) ON CONFLICT DO NOTHING`;
 }
-console.log(applied ? 'Schema already current.' : 'Schema migration applied.');
+await ensureCreativeAnalysisQueue(sql);
+await ensureLaunchDrafts(sql);
+await ensureCreativeVariants(sql);
+await ensureApprovalSnapshots(sql);
+await ensureProviderMedia(sql);
+await ensureLocalReceipts(sql);
+await ensureWorkControls(sql);
+await ensureExperiments(sql);
+await ensureAppTables(sql);
+await ensureAuthIdentities(sql);
+await ensureTranscriptionJobs(sql);
+await ensureOperationJournal(sql);
+await sql`INSERT INTO app_schema_migrations (version) VALUES ('2026-09-05-hardening-2') ON CONFLICT DO NOTHING`;
+console.log('Schema migrations applied.');

@@ -9,6 +9,9 @@ import { pipeline } from 'node:stream/promises';
 import ffmpegPath from 'ffmpeg-static';
 import { ensureCreativeAssetTables } from './creative-assets.js';
 import { getGoogleAccessToken } from './gcp-auth.js';
+import { fetchPublicResource } from './safe-fetch.js';
+import { boundedWork, workSignal, checkWork, workFetch as fetch } from './bounded-work.js';
+import { writeFile } from 'node:fs/promises';
 
 const DRIVE = 'https://www.googleapis.com/drive/v3';
 const VIDEO_EXT_RE = /\.(mp4|mov|m4v|webm)(\?|$)/i;
@@ -22,9 +25,10 @@ function statusBody(status, body) {
 
 function runFfmpeg(args) {
   return new Promise((resolve, reject) => {
-    const child = spawn(ffmpegPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    checkWork();
+    const child = spawn(ffmpegPath, args, { stdio: ['ignore', 'ignore', 'pipe'], signal:workSignal(),killSignal:'SIGKILL' });
     let stderr = '';
-    child.stderr.on('data', chunk => { stderr += chunk.toString(); });
+    child.stderr.on('data', chunk => { stderr = (stderr+chunk.toString()).slice(-4000); });
     child.on('error', reject);
     child.on('close', code => code === 0
       ? resolve(stderr)
@@ -40,13 +44,21 @@ async function downloadToTemp({ url, driveFileId, fileName }) {
       headers: { Authorization: `Bearer ${token}` },
     });
   } else {
-    response = await fetch(url);
+    const media=await fetchPublicResource(url,{maxBytes:256*1024*1024,timeoutMs:60000,contentTypes:/^(video\/|application\/octet-stream)/i});
+    checkWork();
+    const path=join(tmpdir(),`creative-normalize-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`);
+    await writeFile(path,media.bytes);
+    return {path,contentType:media.contentType};
   }
   if (!response.ok || !response.body) throw new Error(`source fetch failed: HTTP ${response.status}`);
   const type = response.headers.get('content-type') || '';
   const ext = extname((fileName || '').split('?')[0]) || (type.includes('quicktime') ? '.mov' : type.includes('webm') ? '.webm' : '.mp4');
   const path = join(tmpdir(), `creative-normalize-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
-  await pipeline(Readable.fromWeb(response.body), createWriteStream(path));
+  let bytes=0;
+  try {
+    await pipeline(Readable.fromWeb(response.body),async function* (source){for await(const chunk of source){bytes+=chunk.length;
+      if(bytes>256*1024*1024)throw new Error('Normalization source exceeds 256 MB');yield chunk;}},createWriteStream(path),{signal:workSignal()});
+  } catch(error){try{unlinkSync(path);}catch{}throw error;}
   return { path, contentType: type };
 }
 
@@ -56,6 +68,7 @@ async function uploadFile(path, key, contentType) {
     access: 'public',
     contentType,
     addRandomSuffix: true,
+    abortSignal:workSignal(),
   });
   return url;
 }
@@ -164,10 +177,14 @@ function parseDuration(ffmpegStderr) {
   return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
 }
 
-export async function normalizeCreativeAsset({ groupKey, assetId = null, ctx = {} }) {
+export async function normalizeCreativeAsset(input) {
+  return boundedWork(()=>normalizeCreativeAssetWork(input),240000);
+}
+async function normalizeCreativeAssetWork({ groupKey, assetId = null, ctx = {} }) {
   if (!process.env.DATABASE_URL) return statusBody(200, { error: 'DATABASE_URL not configured' });
   if (!groupKey && !assetId) return statusBody(400, { error: 'groupKey or assetId required' });
-  const sql = neon(process.env.DATABASE_URL);
+  const database = neon(process.env.DATABASE_URL);
+  const sql=(...args)=>{checkWork();return database(...args);};
   await ensureCreativeAssetTables(sql);
 
   const asset = await pickAsset(sql, { groupKey, assetId });

@@ -1,5 +1,8 @@
+import { ensureLocalReceipts } from '../_lib/local-receipts.js';
 import { assertLaunchReady } from '../_lib/launch-preflight.js';
-import { createMetaOperationFetch } from '../_lib/operation-journal.js';
+import { createHash } from 'node:crypto';
+import { boundedResponseBytes } from '../_lib/response-bytes.js';
+import { createMetaOperationFetch, runExternalStep, operationKey, rememberProviderRead } from '../_lib/operation-journal.js';
 // UGC inbox: Workload-Identity-Federation-backed Drive operations.
 // Vercel OIDC → GCP STS → service account impersonation → Drive API.
 // Actions: list, download, mark_launched, ensure_subfolders, launch_meta_ad
@@ -22,6 +25,16 @@ function cleanMetaUrlTags(value) {
 function appendUrlTags(params, urlParams) {
   const tags = cleanMetaUrlTags(urlParams);
   if (tags) params.set('url_tags', tags);
+}
+
+async function moveLaunchedFile(token,fileId,folderId,name) {
+  const current = await driveFetch(token,`/files/${encodeURIComponent(fileId)}?fields=name,parents&supportsAllDrives=true`);
+  if (current.name === name && current.parents?.includes(folderId)) return current;
+  const query = new URLSearchParams({fields:'id,name',supportsAllDrives:'true'});
+  if (!current.parents?.includes(folderId)) query.set('addParents',folderId);
+  const remove = (current.parents || []).filter(id=>id !== folderId);
+  if (remove.length) query.set('removeParents',remove.join(','));
+  return driveFetch(token,`/files/${encodeURIComponent(fileId)}?${query}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
 }
 
 async function getAccessToken() {
@@ -457,6 +470,7 @@ export default async function handler(req, res) {
         try {
           const sql = neon(process.env.DATABASE_URL);
           await ensureCreatorOpsTables(sql);
+          await ensureLocalReceipts(sql);
           await ensureCreativeAssetTables(sql);
           for (let i = 0; i < enriched.length; i += 20) {
             await Promise.all(
@@ -527,6 +541,9 @@ export default async function handler(req, res) {
     }
 
     if (action === 'launch_meta_ad') {
+      await ensureCreatorOpsTables(appAccess.sql);
+      await ensureLocalReceipts(appAccess.sql);
+      const launchApproval=await assertLaunchReady(appAccess.sql, req.body);
       // End-to-end launch: streams NDJSON progress events so the client can render a live timeline.
       // Events: { step, status: "start"|"done"|"error", detail? }. Final: { done: true, adId, ... } or { done: true, error }.
       // Accepts EITHER a single fileId OR a pair { feedFileId, storyFileId } for placement-asset customization.
@@ -538,8 +555,6 @@ export default async function handler(req, res) {
       const attributionSourceType = sourceType || (creatorId ? 'external_creator' : null);
       const attributionSourceLabel = sourceLabel || creator || null;
       const isPair = !!pair && pair.feedFileId && pair.storyFileId;
-      await ensureCreatorOpsTables(appAccess.sql);
-      await assertLaunchReady(appAccess.sql, req.body);
       await assertBrandSafe(appAccess.sql, [adName, headline, primaryText].filter(Boolean).join('\n'));
       // Instagram User ID is required by Meta when the ad targets Instagram
       // placements (Reels, Stories). Allow per-launch override but fall back
@@ -580,7 +595,9 @@ export default async function handler(req, res) {
       // Helper: download a Drive file, upload to Meta (video resumable or image),
       // poll for video thumbnail. Returns { videoId, imageHash, thumbnailUrl, fileMeta, mimeType }.
       // Emits: drive_download, meta_upload, meta_thumbnail steps with role suffix when paired.
-      const processAsset = async (fid, role) => {
+      const uploadAsset = async (fid, role) => runExternalStep(appAccess.sql,{
+        operationKey:operationKey(req,appAccess.userId,'drive-upload'),stepKey:fid,payload:{fileId:fid,adName},actorId:appAccess.userId,
+      },async () => {
         const stepLabel = (s) => role ? `${s}_${role}` : s;
         emit({ step: stepLabel('drive_download'), status: 'start' });
         const fmeta = await driveFetch(token, `/files/${fid}?fields=name,mimeType,parents&supportsAllDrives=true`);
@@ -591,9 +608,12 @@ export default async function handler(req, res) {
         }
         const dl = await fetch(`${DRIVE}/files/${fid}?alt=media&supportsAllDrives=true`, {
           headers: { Authorization: `Bearer ${token}` },
+          signal:AbortSignal.timeout(60000),
         });
         if (!dl.ok) throw new Error(`drive_download${role ? ` (${role})` : ''}: ${(await dl.text()).slice(0, 200)}`);
-        const buf = Buffer.from(await dl.arrayBuffer());
+        const buf = await boundedResponseBytes(dl,256*1024*1024);
+        if(launchApproval?.driveDigests?.[fid] && createHash('md5').update(buf).digest('hex')!==launchApproval.driveDigests[fid])
+          throw Object.assign(new Error('Drive content changed after approval. Review the current file before launching.'),{definitelyNotApplied:true});
         const mt = fmeta.mimeType || dl.headers.get('content-type') || 'application/octet-stream';
         const isVid = mt.startsWith('video/');
         emit({ step: stepLabel('drive_download'), status: 'done', detail: `${(buf.length / 1024 / 1024).toFixed(1)}MB` });
@@ -643,6 +663,22 @@ export default async function handler(req, res) {
           emit({ step: stepLabel('meta_upload'), status: 'done', detail: `image ${iHash.slice(0, 8)}…` });
         }
 
+        // Mirror the original asset so analysis is independent of expiring Drive
+        // and Meta URLs. Best-effort — never breaks launch.
+        let blobUrl = null;
+        emit({ step: stepLabel('blob_mirror'), status: 'start' });
+        blobUrl = await mirrorAssetToBlob(buf, mt, fmeta.name);
+        emit({ step: stepLabel('blob_mirror'), status: 'done', detail: blobUrl ? 'mirrored' : 'skipped' });
+
+        return {videoId:vId,imageHash:iHash,fileMeta:fmeta,mimeType:mt,blobUrl,contentMd5:createHash('md5').update(buf).digest('hex')};
+      });
+      const processAsset = async (fid,role) => {
+        const uploaded = await uploadAsset(fid,role);
+        if(launchApproval?.driveDigests?.[fid] && uploaded.contentMd5!==launchApproval.driveDigests[fid])
+          throw new Error('The saved upload receipt belongs to a different or unverified Drive revision. Start a new launch for the approved revision.');
+        const vId = uploaded.videoId;
+        const stepLabel = name => role ? `${name}_${role}` : name;
+        const thumbnail = await rememberProviderRead(appAccess.sql,operationKey(req,appAccess.userId,'drive-thumbnail'),fid,async () => {
         let thumb = null;
         if (vId) {
           emit({ step: stepLabel('meta_thumbnail'), status: 'start' });
@@ -678,14 +714,9 @@ export default async function handler(req, res) {
           emit({ step: stepLabel('meta_thumbnail'), status: 'done', detail: thumb ? 'ready' : 'ready (no thumb — auto)' });
         }
 
-        // Mirror the original asset so analysis is independent of expiring Drive
-        // and Meta URLs. Best-effort — never breaks launch.
-        let blobUrl = null;
-        emit({ step: stepLabel('blob_mirror'), status: 'start' });
-        blobUrl = await mirrorAssetToBlob(buf, mt, fmeta.name);
-        emit({ step: stepLabel('blob_mirror'), status: 'done', detail: blobUrl ? 'mirrored' : 'skipped' });
-
-        return { videoId: vId, imageHash: iHash, thumbnailUrl: thumb, fileMeta: fmeta, mimeType: mt, blobUrl };
+        return {url:thumb};
+        });
+        return {...uploaded,thumbnailUrl:thumbnail.url};
       };
 
       // ── PAIR PATH ───────────────────────────────────────────────────────────
@@ -796,11 +827,7 @@ export default async function handler(req, res) {
             const ext = fmeta.name.includes('.') ? fmeta.name.substring(fmeta.name.lastIndexOf('.')) : '';
             const base = fmeta.name.replace(ext, '');
             const finalName = `${base}__LAUNCHED__${adData.id}${ext}`;
-            const removeParents = (fmeta.parents || []).join(',');
-            await driveFetch(token, `/files/${fid}?addParents=${launchedId}&removeParents=${encodeURIComponent(removeParents)}&fields=id,name&supportsAllDrives=true`, {
-              method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: finalName }),
-            });
+            await moveLaunchedFile(token,fid,launchedId,finalName);
           }
           emit({ step: 'drive_move', status: 'done', detail: 'both files moved' });
 
@@ -811,9 +838,10 @@ export default async function handler(req, res) {
               const sql = neon(process.env.DATABASE_URL);
               await sql`
                 INSERT INTO launch_history
-                  (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, source_type, source_label, brief_id, deliverable_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
+                  (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, source_type, source_label, brief_id, deliverable_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url, operation_key)
                 VALUES
-                  (${adData.id}, ${adsetId}, ${campaignId || null}, ${pair.feedFileId}, ${feed.fileMeta.name + ' + ' + story.fileMeta.name}, ${creator || null}, ${creatorId || null}, ${attributionSourceType}, ${attributionSourceLabel}, ${briefId || null}, ${deliverableId || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${feed.mimeType + ' (paired)'}, ${appAccess.userId}, ${appAccess.email || null}, ${feed.blobUrl || null})
+                  (${adData.id}, ${adsetId}, ${campaignId || null}, ${pair.feedFileId}, ${feed.fileMeta.name + ' + ' + story.fileMeta.name}, ${creator || null}, ${creatorId || null}, ${attributionSourceType}, ${attributionSourceLabel}, ${briefId || null}, ${deliverableId || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${feed.mimeType + ' (paired)'}, ${appAccess.userId}, ${appAccess.email || null}, ${feed.blobUrl || null}, ${'drive:'+adData.id})
+                ON CONFLICT (operation_key) DO NOTHING
               `;
               await Promise.all([
                 markCreativeAssetLaunched(sql, {
@@ -858,138 +886,9 @@ export default async function handler(req, res) {
         }
       }
 
-      // ── SINGLE PATH (existing flow) ────────────────────────────────────────
-      // 1. Fetch bytes from Drive
-      emit({ step: 'drive_download', status: 'start' });
-      const fileMeta = await driveFetch(token, `/files/${fileId}?fields=name,mimeType,parents&supportsAllDrives=true`);
-      if ((fileMeta.name || '').includes('__LAUNCHED__')) {
-        return fail('drive_download', 'Already launched (file renamed by another user). Refresh the inbox.');
-      }
-      const dlRes = await fetch(`${DRIVE}/files/${fileId}?alt=media&supportsAllDrives=true`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!dlRes.ok) {
-        const txt = await dlRes.text();
-        return fail('drive_download', txt.slice(0, 200));
-      }
-      const fileBuffer = Buffer.from(await dlRes.arrayBuffer());
-      const mimeType = fileMeta.mimeType || dlRes.headers.get('content-type') || 'application/octet-stream';
-      const isVideo = mimeType.startsWith('video/');
-      emit({ step: 'drive_download', status: 'done', detail: `${(fileBuffer.length / 1024 / 1024).toFixed(1)}MB` });
-
-      // 2. Upload to Meta
-      emit({ step: 'meta_upload', status: 'start', detail: isVideo ? 'video (resumable)' : 'image' });
-      let videoId = null, imageHash = null;
-
-      if (isVideo) {
-        // Use Meta's Resumable Upload API for videos: start → transfer (chunks) → finish.
-        // Avoids sync-upload timeouts and body-size limits that hit around 100MB+.
-        const fileSize = fileBuffer.length;
-
-        // Phase 1: start
-        const startForm = new URLSearchParams({
-          upload_phase: 'start',
-          file_size: String(fileSize),
-          access_token: metaToken,
-        });
-        const startRes = await fetch(`${GRAPH}/${metaAdAccount}/advideos`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: startForm,
-        });
-        const startData = await parseMeta(startRes, 'meta_upload_video_start');
-        if (startData.error) return fail('meta_upload', startData.error.message, startData.error);
-        const uploadSessionId = startData.upload_session_id;
-        videoId = startData.video_id;
-        let startOffset = parseInt(startData.start_offset);
-        let endOffset = parseInt(startData.end_offset);
-        const total = fileBuffer.length;
-
-        // Phase 2: transfer chunks until start_offset === end_offset
-        while (startOffset < endOffset) {
-          const chunk = fileBuffer.slice(startOffset, endOffset);
-          const transferForm = new FormData();
-          transferForm.append('access_token', metaToken);
-          transferForm.append('upload_phase', 'transfer');
-          transferForm.append('upload_session_id', uploadSessionId);
-          transferForm.append('start_offset', String(startOffset));
-          transferForm.append('video_file_chunk', new Blob([chunk], { type: mimeType }), `chunk-${startOffset}`);
-          const transferRes = await fetch(`${GRAPH}/${metaAdAccount}/advideos`, {
-            method: 'POST',
-            body: transferForm,
-          });
-          const transferData = await parseMeta(transferRes, 'meta_upload_video_transfer');
-          if (transferData.error) return fail('meta_upload', transferData.error.message, transferData.error);
-          startOffset = parseInt(transferData.start_offset);
-          endOffset = parseInt(transferData.end_offset);
-          emit({ step: 'meta_upload', status: 'progress', detail: `${Math.round(startOffset / total * 100)}%` });
-        }
-
-        // Phase 3: finish
-        const finishForm = new URLSearchParams({
-          upload_phase: 'finish',
-          upload_session_id: uploadSessionId,
-          title: adName,
-          access_token: metaToken,
-        });
-        const finishRes = await fetch(`${GRAPH}/${metaAdAccount}/advideos`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: finishForm,
-        });
-        const finishData = await parseMeta(finishRes, 'meta_upload_video_finish');
-        if (finishData.error) return fail('meta_upload', finishData.error.message, finishData.error);
-        emit({ step: 'meta_upload', status: 'done', detail: `video ${videoId}` });
-      }
-
-      // Mirror video to Blob in parallel with Meta thumbnail polling.
-      // Best-effort: failure does not break the launch.
-      let sourceVideoUrl = null;
-      const blobMirrorPromise =
-        (emit({ step: 'blob_mirror', status: 'start' }),
-           mirrorAssetToBlob(fileBuffer, mimeType, fileMeta.name).then(url => {
-             sourceVideoUrl = url;
-             emit({ step: 'blob_mirror', status: 'done', detail: url ? 'mirrored' : 'skipped' });
-           }));
-
-      // Ads with video_data need a thumbnail. Poll Meta for the auto-generated one
-      // with exponential-ish backoff to stay gentle on the rate limit.
-      let videoThumbnailUrl = null;
-      if (videoId) {
-        emit({ step: 'meta_thumbnail', status: 'start' });
-        const delaysMs = [5000, 5000, 7000, 10000, 15000, 20000, 20000, 30000]; // ~112s total
-        for (let i = 0; i < delaysMs.length; i++) {
-          await new Promise(r => setTimeout(r, delaysMs[i]));
-          const thumbRes = await fetch(`${GRAPH}/${videoId}/thumbnails?fields=uri,is_preferred&access_token=${metaToken}`);
-          const thumbData = await parseMeta(thumbRes, 'meta_thumbnail');
-          if (thumbData.error) {
-            if (thumbData.error.code === 17 || /request limit/i.test(thumbData.error.message || '')) {
-              return fail('meta_thumbnail', 'Meta rate limit — wait a few minutes and retry.', thumbData.error);
-            }
-            if (i >= delaysMs.length - 1) return fail('meta_thumbnail', `Thumbnail not ready: ${thumbData.error.message}`, thumbData.error);
-            emit({ step: 'meta_thumbnail', status: 'progress', detail: `attempt ${i + 1}` });
-            continue;
-          }
-          const thumbs = thumbData.data || [];
-          const preferred = thumbs.find(t => t.is_preferred) || thumbs[0];
-          if (preferred?.uri) { videoThumbnailUrl = preferred.uri; break; }
-          emit({ step: 'meta_thumbnail', status: 'progress', detail: `waiting for processing` });
-        }
-        if (!videoThumbnailUrl) return fail('meta_thumbnail', 'No thumbnail generated in time (video still processing)');
-        emit({ step: 'meta_thumbnail', status: 'done' });
-      }
-
-      if (!videoId) {
-        const form = new FormData();
-        form.append('access_token', metaToken);
-        form.append('source', new Blob([fileBuffer], { type: mimeType }), fileMeta.name);
-        const r = await fetch(`${GRAPH}/${metaAdAccount}/adimages`, { method: 'POST', body: form });
-        const d = await parseMeta(r, 'meta_upload_image');
-        if (d.error) return fail('meta_upload', d.error.message, d.error);
-        imageHash = Object.values(d.images || {})[0]?.hash;
-        if (!imageHash) return fail('meta_upload', 'No image hash returned');
-        emit({ step: 'meta_upload', status: 'done', detail: `image ${imageHash.slice(0, 8)}…` });
-      }
+      // Single and paired launches use the same durable upload receipt.
+      const uploaded = await processAsset(fileId,'');
+      const {videoId,imageHash,fileMeta,mimeType,blobUrl:sourceVideoUrl,thumbnailUrl:videoThumbnailUrl} = uploaded;
 
       // 3. Create creative
       emit({ step: 'meta_creative', status: 'start' });
@@ -1040,29 +939,20 @@ export default async function handler(req, res) {
       const ext = fileMeta.name.includes('.') ? fileMeta.name.substring(fileMeta.name.lastIndexOf('.')) : '';
       const base = fileMeta.name.replace(ext, '');
       const finalName = `${base}__LAUNCHED__${adData.id}${ext}`;
-      const removeParents = (fileMeta.parents || []).join(',');
-      await driveFetch(
-        token,
-        `/files/${fileId}?addParents=${launchedId}&removeParents=${encodeURIComponent(removeParents)}&fields=id,name&supportsAllDrives=true`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: finalName }),
-        }
-      );
+      await moveLaunchedFile(token,fileId,launchedId,finalName);
       emit({ step: 'drive_move', status: 'done', detail: finalName });
 
-      // 6. Log to launch_history (best-effort — don't fail the launch on DB error)
-      await blobMirrorPromise;
+      // 6. Persist launch bookkeeping; failed writes remain recoverable on retry.
       emit({ step: 'db_log', status: 'start' });
       try {
         if (process.env.DATABASE_URL) {
           const sql = neon(process.env.DATABASE_URL);
           await sql`
             INSERT INTO launch_history
-              (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, source_type, source_label, brief_id, deliverable_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
+              (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, source_type, source_label, brief_id, deliverable_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url, operation_key)
             VALUES
-              (${adData.id}, ${adsetId}, ${campaignId || null}, ${fileId}, ${fileMeta.name}, ${creator || null}, ${creatorId || null}, ${attributionSourceType}, ${attributionSourceLabel}, ${briefId || null}, ${deliverableId || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${mimeType}, ${appAccess.userId}, ${appAccess.email || null}, ${sourceVideoUrl})
+              (${adData.id}, ${adsetId}, ${campaignId || null}, ${fileId}, ${fileMeta.name}, ${creator || null}, ${creatorId || null}, ${attributionSourceType}, ${attributionSourceLabel}, ${briefId || null}, ${deliverableId || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${mimeType}, ${appAccess.userId}, ${appAccess.email || null}, ${sourceVideoUrl}, ${'drive:'+adData.id})
+            ON CONFLICT (operation_key) DO NOTHING
           `;
           await markCreativeAssetLaunched(sql, {
             driveFileId: fileId,
@@ -1148,6 +1038,7 @@ export default async function handler(req, res) {
         try {
           const sql = neon(process.env.DATABASE_URL);
           await ensureCreatorOpsTables(sql);
+          await ensureLocalReceipts(sql);
           await ensureCreativeAssetTables(sql);
           await upsertDriveAsset(sql, current, current.drive_folder_path || '', false);
           const asset = await markCreativeAssetLaunched(sql, {
@@ -1168,14 +1059,14 @@ export default async function handler(req, res) {
           if (logLaunch) {
             await sql`
               INSERT INTO launch_history
-                (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, source_type, source_label, brief_id, deliverable_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
+                (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, source_type, source_label, brief_id, deliverable_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url, operation_key)
               SELECT
-                ${adId}, ${adsetId || null}, ${campaignId || null}, ${fileId}, ${driveFileName || current.name}, ${creator || null}, ${creatorId || null}, ${sourceType || null}, ${sourceLabel || creator || null}, ${briefId || null}, ${deliverableId || null}, ${productId || null}, ${angleId || null}, ${adName || null}, ${headline || null}, ${primaryText || null}, ${destUrl || null}, ${current.mimeType || null}, ${appAccess.userId}, ${appAccess.email || null}, ${durableUrl || null}
+                ${adId}, ${adsetId || null}, ${campaignId || null}, ${fileId}, ${driveFileName || current.name}, ${creator || null}, ${creatorId || null}, ${sourceType || null}, ${sourceLabel || creator || null}, ${briefId || null}, ${deliverableId || null}, ${productId || null}, ${angleId || null}, ${adName || null}, ${headline || null}, ${primaryText || null}, ${destUrl || null}, ${current.mimeType || null}, ${appAccess.userId}, ${appAccess.email || null}, ${durableUrl || null}, ${'drive:'+adId}
               WHERE NOT EXISTS (
                 SELECT 1 FROM launch_history
                 WHERE ad_id = ${adId}
                   AND drive_file_id = ${fileId}
-              )
+              ) ON CONFLICT (operation_key) DO NOTHING
             `;
           }
           await stampFlowLaunched(sql, {

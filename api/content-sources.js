@@ -1,3 +1,4 @@
+import { fetchPublicText } from './_lib/safe-fetch.js';
 import { requirePermission } from './_lib/app-access.js';
 import {
   ensureContentStudioTables,
@@ -120,13 +121,7 @@ export default async function handler(req, res) {
 }
 
 async function fetchSitemapXml(url) {
-  const parsed = new URL(url);
-  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Only http and https sitemap URLs can be imported');
-  const response = await fetch(parsed.toString(), {
-    headers: { Accept: 'application/xml,text/xml,text/plain', 'User-Agent': 'HOWL Content Studio/1.0' },
-  });
-  if (!response.ok) throw new Error(`Could not fetch sitemap (${response.status})`);
-  return response.text();
+  return (await fetchPublicText(url)).text;
 }
 
 async function collectSitemapPageUrls(sitemapUrl, limit) {

@@ -36,7 +36,7 @@ function sourceTypeLabel(type) {
 
 function statusFor(g) {
   if ((g.spend || 0) < 50 && !(g.purchases > 0)) return 'Learning';
-  if ((g.roas || 0) >= 2 && (g.purchases || 0) >= 2) return 'Winner';
+  if ((g.roas || 0) >= 2 && (g.purchases || 0) >= 20) return 'Promising';
   if ((g.spend || 0) >= 100 && (g.roas || 0) < 1) return 'Stop';
   if ((g.ctr || 0) < 0.008 && (g.spend || 0) >= 75) return 'Hook weak';
   if ((g.hookRate || 0) > 0.25 && (g.roas || 0) < 1.5) return 'Fix offer';

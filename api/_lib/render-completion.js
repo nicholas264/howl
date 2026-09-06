@@ -1,3 +1,4 @@
+import { finishWork } from './work-controls.js';
 export async function completeRender(sql, sessionId, renderState, outputFile, costs) {
   const entry = {
     provider: 'remotion_lambda', render_key: renderState.render_key || 'polished',
@@ -30,5 +31,7 @@ export async function completeRender(sql, sessionId, renderState, outputFile, co
         AND d.status IN ('requested', 'received', 'editing', 'edited')
     ) SELECT id FROM saved
   `;
+  if (saved && renderState.work_id) await finishWork(sql,renderState.work_id,'render',200,
+    {provider:'remotion',costUsd:Number.isFinite(costs?.accruedSoFar) ? costs.accruedSoFar : null});
   return saved || null;
 }

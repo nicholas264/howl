@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 export async function ensureCreativeAnalysisQueue(sql) {
   await sql`
     CREATE TABLE IF NOT EXISTS creative_analysis_queue (
@@ -15,6 +16,7 @@ export async function ensureCreativeAnalysisQueue(sql) {
       updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+  await sql`ALTER TABLE creative_analysis_queue ADD COLUMN IF NOT EXISTS lease_token TEXT`;
   await sql`
     CREATE INDEX IF NOT EXISTS idx_creative_analysis_queue_claim
     ON creative_analysis_queue(status, available_at, priority DESC)
@@ -99,6 +101,7 @@ export async function enqueueCreativeAssetAnalysis(sql, groupKey, source = 'laun
         WHEN creative_analysis_queue.status IN ('completed', 'failed') THEN now()
         ELSE creative_analysis_queue.available_at
       END,
+      attempts = CASE WHEN creative_analysis_queue.status IN ('completed', 'failed') THEN 0 ELSE creative_analysis_queue.attempts END,
       last_error = CASE
         WHEN creative_analysis_queue.status = 'failed' THEN NULL
         ELSE creative_analysis_queue.last_error
@@ -116,6 +119,7 @@ export async function claimCreativeAnalysisJob(sql) {
     SET status = CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'pending' END,
         available_at = now(),
         started_at = NULL,
+        lease_token = NULL,
         last_error = COALESCE(last_error, 'Worker lease expired'),
         updated_at = now()
     WHERE status = 'processing'
@@ -125,6 +129,7 @@ export async function claimCreativeAnalysisJob(sql) {
     UPDATE creative_analysis_queue q
     SET status = 'processing',
         attempts = q.attempts + 1,
+        lease_token = ${randomUUID()},
         started_at = now(),
         last_error = NULL,
         updated_at = now()
@@ -143,7 +148,15 @@ export async function claimCreativeAnalysisJob(sql) {
   return job || null;
 }
 
-export async function completeCreativeAnalysisJob(sql, groupKey) {
+export async function completeCreativeAnalysisJob(sql, groupKey, job = null) {
+  if (job) {
+    const rows = await sql`
+      UPDATE creative_analysis_queue SET status = 'completed', last_error = NULL, completed_at = now(), lease_token = NULL, updated_at = now()
+      WHERE group_key = ${groupKey} AND status = 'processing' AND lease_token = ${job.lease_token}
+      RETURNING group_key
+    `;
+    return rows.length === 1;
+  }
   await ensureCreativeAnalysisQueue(sql);
   await sql`
     INSERT INTO creative_analysis_queue
@@ -154,6 +167,7 @@ export async function completeCreativeAnalysisJob(sql, groupKey) {
       last_error = NULL,
       completed_at = now(),
       updated_at = now()
+    WHERE creative_analysis_queue.status <> 'processing'
   `;
 }
 
@@ -168,7 +182,7 @@ export async function failCreativeAnalysisJob(sql, job, error) {
         started_at = NULL,
         updated_at = now()
     WHERE group_key = ${job.group_key}
-      AND status = 'processing' AND attempts = ${job.attempts}
+      AND status = 'processing' AND lease_token = ${job.lease_token}
   `;
   return exhausted ? 'failed' : 'retrying';
 }
@@ -179,6 +193,7 @@ export async function retryFailedCreativeAnalysisJobs(sql) {
     UPDATE creative_analysis_queue
     SET status = 'pending',
         attempts = 0,
+        lease_token = NULL,
         last_error = NULL,
         available_at = now(),
         started_at = NULL,

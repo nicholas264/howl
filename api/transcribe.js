@@ -1,3 +1,5 @@
+import { checkWorkLimit } from './_lib/work-limits.js';
+import { meteredFetch } from './_lib/metered-fetch.js';
 import { requirePermission } from './_lib/app-access.js';
 
 export const config = {
@@ -6,15 +8,23 @@ export const config = {
 };
 
 export default async function handler(req, res) {
-  if (!(await requirePermission(req, res, 'assets.write'))) return;
+  const access=await requirePermission(req,res,'assets.write');
+  if (!access) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!(await checkWorkLimit(access,res,'transcription'))) return;
+  const fetch=meteredFetch(access);
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
 
   try {
     const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
+    let bytes=0;
+    for await (const chunk of req) {
+      bytes += chunk.length;
+      if (bytes > 24*1024*1024) return res.status(413).json({error:'Audio upload exceeds 24 MB. Use a shorter recording.'});
+      chunks.push(chunk);
+    }
     const audioBuf = Buffer.concat(chunks);
     const contentType = req.headers['content-type'] || 'audio/wav';
     const ext = contentType.includes('mp4') ? 'mp4'

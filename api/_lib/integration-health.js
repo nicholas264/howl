@@ -1,3 +1,4 @@
+import { clerkSecretKey } from './clerk-config.js';
 import { createClerkClient } from '@clerk/backend';
 
 export const CLICKUP_CREATOR_LIST_ID = process.env.CLICKUP_CREATOR_LIST_ID || '901111110302';
@@ -15,7 +16,7 @@ function safeMessage(error) {
 
 export function getIntegrationHealth() {
   const publishableMode = keyMode(process.env.VITE_CLERK_PUBLISHABLE_KEY, 'pk_live_', 'pk_test_');
-  const secretMode = keyMode(process.env.CLERK_SECRET_KEY, 'sk_live_', 'sk_test_');
+  const secretMode = keyMode(clerkSecretKey(), 'sk_live_', 'sk_test_');
   const clerkConfigured = publishableMode === secretMode && ['live', 'test'].includes(secretMode);
   const clerkReady = clerkConfigured && secretMode === 'live';
   const clickupToken = Boolean(process.env.CLICKUP_API_TOKEN);
@@ -101,9 +102,9 @@ export function getIntegrationHealth() {
 export async function testIntegrationHealth() {
   const integrations = getIntegrationHealth();
 
-  if (process.env.CLERK_SECRET_KEY) {
+  if (clerkSecretKey()) {
     try {
-      const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+      const clerk = createClerkClient({ secretKey: clerkSecretKey() });
       const result = await clerk.users.getUserList({ limit: 1 });
       integrations.clerk.checked = true;
       integrations.clerk.reachable = true;

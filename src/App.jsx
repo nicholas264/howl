@@ -1,5 +1,5 @@
 import ToolErrorBoundary from './components/ToolErrorBoundary.jsx';
-import React, { useState, useCallback, useEffect, useMemo, Suspense, lazy } from "react";
+import React, { useState, useCallback, useEffect, useMemo, useRef, Suspense, lazy } from "react";
 import { UserButton } from "@clerk/clerk-react";
 import { apiJson } from "./lib/api";
 // Always-visible shell components stay eagerly imported.
@@ -13,6 +13,7 @@ const ImageAdTool = lazy(() => import("./components/ImageAdTool"));
 const CalloutAdTool = lazy(() => import("./components/CalloutAdTool"));
 const FounderAdTool = lazy(() => import("./components/FounderAdTool"));
 const MetaPublishTool = lazy(() => import("./components/MetaPublishTool"));
+const CreativeVariantReport = lazy(() => import("./components/CreativeVariantReport.jsx"));
 const DashboardTool = lazy(() => import("./components/DashboardTool"));
 const LaunchLogTool = lazy(() => import("./components/LaunchLogTool"));
 const UgcEditorTool = lazy(() => import("./components/UgcEditorTool"));
@@ -30,7 +31,8 @@ const WorkspaceHub = lazy(() => import("./components/WorkspaceHub"));
 const MapMonitorWorkspace = lazy(() => import("./components/MapMonitorWorkspace"));
 const SkuMediaPacingTool = lazy(() => import("./components/SkuMediaPacingTool"));
 import { useDriveAuth } from "./hooks/useDriveAuth";
-import { cartGetAll, cartPut, cartDelete } from "./utils/cartDb";
+import { cartGetAll } from "./utils/cartDb";
+import { loadLaunchDrafts, persistLaunchDraft, deleteLaunchDraft } from "./lib/launchDrafts.js";
 import "./styles.css";
 
 const TabFallback = () => (
@@ -49,7 +51,11 @@ export default function HowlAdEngine({ appAccess }) {
     }
   }, []);
   const [variations, setVariations] = useState([]);
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const [activeTab, setActiveTabState] = useState(initialTab);
+  const setActiveTab = useCallback(next => {
+    if (!window.dispatchEvent(new Event('howl:before-tool-change', { cancelable:true }))) return;
+    setActiveTabState(next);
+  }, []);
   const [filterAngle, setFilterAngle] = useState("all");
   const [filterProduct, setFilterProduct] = useState("all");
   const [videoText, setVideoText] = useState(null);
@@ -66,39 +72,68 @@ export default function HowlAdEngine({ appAccess }) {
     appAccess.permissions?.includes('*') || appAccess.permissions?.includes(permission)
   ), [appAccess.permissions]);
 
-  // ── Cart state (IndexedDB-backed) ─────────────────────────────────────────
+  // Shared durable drafts; revision conflicts are surfaced instead of overwritten.
   const [cart, setCart] = useState([]);
-
+  const [draftError, setDraftError] = useState('');
+  const [draftSaving, setDraftSaving] = useState(0);
+  const cartRef = useRef([]);
+  const draftQueue = useRef(Promise.resolve());
+  const draftsReady = useRef(false);
+  const alive = useRef(true);
+  const reloadDrafts = useCallback(async () => {
+    try {
+      const items = await loadLaunchDrafts();
+      if (!alive.current) return;
+      cartRef.current = items; setCart(items); draftsReady.current = true; setDraftError('');
+    } catch (error) { if (alive.current) setDraftError(error.message); }
+  }, []);
   useEffect(() => {
-    cartGetAll().then(items => setCart(items.sort((a, b) => b.id - a.id))).catch(() => {});
+    alive.current = true;
+    reloadDrafts();
+    return () => { alive.current = false; };
+  }, [reloadDrafts]);
+  const changeDraft = useCallback(operation => {
+    setDraftSaving(count => count+1);
+    const task = draftQueue.current.catch(() => {}).then(async () => {
+      if (!alive.current) throw new Error('Account changed. Reload drafts.');
+      if (!draftsReady.current) throw new Error('Load workspace drafts before saving.');
+      await operation();
+      if (alive.current) { setCart([...cartRef.current]); setDraftError(''); }
+    }).catch(error => {
+      if (alive.current) setDraftError(error.message);
+      throw error;
+    }).finally(() => { if (alive.current) setDraftSaving(count => count-1); });
+    draftQueue.current = task;
+    return task;
   }, []);
-
-  const addToCart = useCallback(async (item) => {
+  const addToCart = useCallback(item => changeDraft(async () => {
+    const saved = await persistLaunchDraft(item);
+    cartRef.current = [saved,...cartRef.current.filter(row => row.id !== item.id)];
+  }), [changeDraft]);
+  const updateCartItem = useCallback((id,patch) => changeDraft(async () => {
+    const existing = cartRef.current.find(item => item.id === id);
+    if (!existing) throw new Error('Draft no longer exists. Reload drafts.');
+    const saved = await persistLaunchDraft({...existing,...patch});
+    cartRef.current = cartRef.current.map(item => item.id === id ? saved : item);
+  }), [changeDraft]);
+  const removeCartItem = useCallback(id => changeDraft(async () => {
+    const existing = cartRef.current.find(item => item.id === id);
+    if (!existing) return;
+    await deleteLaunchDraft(existing);
+    cartRef.current = cartRef.current.filter(item => item.id !== id);
+  }), [changeDraft]);
+  const importLegacyCart = async () => {
     try {
-      await cartPut(item);
-      setCart(prev => [item, ...prev.filter(x => x.id !== item.id)]);
-    } catch (err) {
-      console.error('Cart save failed:', err);
-    }
-  }, []);
-
-  const updateCartItem = useCallback(async (id, patch) => {
-    setCart(prev => {
-      const next = prev.map(x => x.id === id ? { ...x, ...patch } : x);
-      const updated = next.find(x => x.id === id);
-      if (updated) cartPut(updated).catch(() => {});
-      return next;
-    });
-  }, []);
-
-  const removeCartItem = useCallback(async (id) => {
-    try {
-      await cartDelete(id);
-      setCart(prev => prev.filter(x => x.id !== id));
-    } catch (err) {
-      console.error('Cart remove failed:', err);
-    }
-  }, []);
+      for (const item of await cartGetAll()) {
+        if (!cartRef.current.some(row => row.id === item.id)) await addToCart(item);
+      }
+    } catch (error) { setDraftError(error.message); }
+  };
+  useEffect(() => {
+    const protect = event => { if (draftSaving) { event.preventDefault(); event.returnValue = ''; } };
+    window.addEventListener('beforeunload',protect);
+    return () => window.removeEventListener('beforeunload',protect);
+  }, [draftSaving]);
 
   const toggleFavorite = useCallback((variation) => {
     setFavorites(prev => {
@@ -331,6 +366,12 @@ export default function HowlAdEngine({ appAccess }) {
         )
       )}
 
+      {draftError && <div role="alert" style={{padding:12,color:'#a12b20'}}>{draftError} <button disabled={draftSaving > 0} onClick={reloadDrafts}>Reload workspace drafts</button></div>}
+      {(activeTab === 'launcher' || activeTab === 'gallery') && <div style={{padding:'8px 16px',fontSize:12}}>
+        <span role="status">{draftSaving ? 'Saving workspace drafts…' : 'Drafts are shared across this workspace.'}</span>{' '}
+        <button disabled={draftSaving > 0} onClick={reloadDrafts}>Refresh drafts</button>{' '}
+        {can('assets.write') && <button disabled={draftSaving > 0} onClick={importLegacyCart}>Import this browser’s old cart into the workspace</button>}
+      </div>}
       <ToolErrorBoundary key={activeTab}><Suspense fallback={<TabFallback />}>
         {activeTab === "creators" && (
           <CreatorWorkspace
@@ -367,8 +408,8 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "gallery" && <GalleryTab cart={cart} />}
         {activeTab === "dashboard-cfo" && <DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="cfo" />}
         {activeTab === "map-monitor" && <MapMonitorWorkspace canManage={can('admin.users')} />}
-        {activeTab === "dashboard-creative" && <DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="creative" canManageCreators={can('creators.write')} />}
-        {activeTab === "creative-analytics" && <DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="creative" canManageCreators={can('creators.write')} />}
+        {activeTab === "dashboard-creative" && <><CreativeVariantReport canWrite={can('analytics.write')} /><DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="creative" canManageCreators={can('creators.write')} /></>}
+        {activeTab === "creative-analytics" && <><CreativeVariantReport canWrite={can('analytics.write')} /><DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="creative" canManageCreators={can('creators.write')} /></>}
         {activeTab === "dashboard-forecast" && <DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="forecast" />}
         {activeTab === "sku-media-pacing" && <SkuMediaPacingTool />}
         {activeTab === "log" && <LaunchLogTool />}

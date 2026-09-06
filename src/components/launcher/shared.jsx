@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../../lib/apiFetch.js';
 // Shared launcher components: Drive thumbnail proxy, profile avatar with
 // fallback, Instagram account picker, Facebook page picker.
 //

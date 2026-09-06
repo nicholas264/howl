@@ -1,4 +1,4 @@
-import { createAuthenticatedFetch } from './lib/authenticatedFetch.js'
+import { apiFetch, configureApiSession } from './lib/apiFetch.js'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { ClerkProvider, SignedIn, SignedOut, SignIn, UserButton, useAuth } from '@clerk/clerk-react'
@@ -19,18 +19,18 @@ if (!PUB_KEY && !isPublicCreatorPage && !DEV_AUTH_BYPASS) throw new Error('Missi
 // Install authenticated API access and verify workspace membership before any
 // private application component is mounted.
 function AuthenticatedApp() {
-  const { getToken, isSignedIn } = useAuth()
+  const { getToken, isSignedIn, userId } = useAuth()
   const [access, setAccess] = React.useState(null)
   const [error, setError] = React.useState('')
 
   React.useEffect(() => {
     if (!isSignedIn) return
-    const orig = window.fetch
+    setAccess(null)
+    setError('')
     let active = true
-    const authenticatedFetch = createAuthenticatedFetch(orig, getToken, window.location.origin)
-    window.fetch = authenticatedFetch
+    const clearSession = configureApiSession(getToken)
 
-    authenticatedFetch('/api/app-context')
+    apiFetch('/api/app-context')
       .then(async response => {
         const data = await response.json()
         if (!response.ok) throw new Error(data.error || 'Could not verify workspace access')
@@ -42,9 +42,9 @@ function AuthenticatedApp() {
 
     return () => {
       active = false
-      window.fetch = orig
+      clearSession()
     }
-  }, [isSignedIn, getToken])
+  }, [isSignedIn, getToken, userId])
 
   if (error) {
     return (
@@ -58,7 +58,7 @@ function AuthenticatedApp() {
     )
   }
 
-  if (!access) {
+  if (!access || access.auth_subject !== userId) {
     return <div className="access-loading">Verifying workspace access…</div>
   }
 
@@ -74,7 +74,7 @@ function AuthenticatedApp() {
     )
   }
 
-  return <App appAccess={access} />
+  return <App key={userId} appAccess={access} />
 }
 
 const appearance = {

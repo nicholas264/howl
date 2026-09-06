@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../lib/apiFetch.js';
 import React, { useEffect, useState, useCallback } from 'react';
 import { PRODUCTS } from '../data';
 

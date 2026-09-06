@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../lib/apiFetch.js';
 import { useState, useCallback } from 'react';
 
 const SCRIPT_TYPES = [

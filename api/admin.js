@@ -1,4 +1,6 @@
+import { clerkSecretKey } from './_lib/clerk-config.js';
 import { ensureOperationJournal } from './_lib/operation-journal.js';
+import { ensureWorkControls } from './_lib/work-controls.js';
 import { ensureSyncState } from './_lib/sync-state.js';
 import { createClerkClient } from '@clerk/backend';
 import { ensureAppTables, isValidRole, ROLE_LABELS, ROLE_PERMISSIONS, requirePermission } from './_lib/app-access.js';
@@ -30,6 +32,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       await Promise.all([
         ensureOperationJournal(sql),
+        ensureWorkControls(sql),
         ensureSyncState(sql),
         ensureCreatorOpsTables(sql),
         ensureCreativeAnalysisQueue(sql),
@@ -129,9 +132,16 @@ export default async function handler(req, res) {
         FROM app_operation_steps WHERE status = 'uncertain' OR (status = 'pending' AND updated_at < now()-interval '10 minutes')
         ORDER BY updated_at DESC LIMIT 30`;
       const syncs = await sql`SELECT name, state->>'phase' AS phase, last_completed_at, last_error, updated_at FROM app_sync_state ORDER BY updated_at DESC`;
+      const usage = await sql`SELECT kind,provider,model,count(*)::int AS requests,
+        count(*) FILTER(WHERE status='running')::int AS running,
+        count(*) FILTER(WHERE status IN ('unknown','failed'))::int AS failed_or_unknown,
+        SUM(input_tokens)::float AS input_tokens,SUM(output_tokens)::float AS output_tokens,
+        SUM(media_seconds)::float AS media_seconds,SUM(cost_usd)::float AS cost_usd,
+        count(*) FILTER(WHERE cost_usd IS NULL)::int AS unpriced
+        FROM app_work_runs WHERE started_at>=now()-interval '24 hours' GROUP BY kind,provider,model ORDER BY requests DESC`;
       return res.json({
         users,
-        operations, syncs,
+        operations, syncs, usage,
         invitations,
         feedback,
         audit_log: auditLog,
@@ -160,9 +170,9 @@ export default async function handler(req, res) {
       if (!email || !isValidRole(role)) return res.status(400).json({ error: 'Valid email and role required' });
 
       let clerkInvitation = null;
-      if (process.env.CLERK_SECRET_KEY) {
+      if (clerkSecretKey()) {
         try {
-          const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+          const clerk = createClerkClient({ secretKey: clerkSecretKey() });
           const appUrl = process.env.APP_URL
             || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : undefined);
           clerkInvitation = await clerk.invitations.createInvitation({
@@ -234,7 +244,7 @@ export default async function handler(req, res) {
         RETURNING clerk_invitation_id
       `;
       if (invitation?.clerk_invitation_id) {
-        const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+        const clerk = createClerkClient({ secretKey: clerkSecretKey() });
         await clerk.invitations.revokeInvitation(invitation.clerk_invitation_id).catch(() => {});
       }
       await audit(sql, access, 'invite.revoked', `invitation:${invitationId}`);

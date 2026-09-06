@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../lib/apiFetch.js';
 import { useMemo, useState } from 'react';
 
 const STEPS = [

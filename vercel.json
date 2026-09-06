@@ -18,6 +18,9 @@
     },
     "api/creative-sync-cron.js": {
       "maxDuration": 300
+    },
+    "api/render-recovery-cron.js": {
+      "maxDuration": 300
     }
   },
   "crons": [
@@ -32,6 +35,10 @@
     {
       "path": "/api/creative-sync-cron",
       "schedule": "15 */2 * * *"
+    },
+    {
+      "path": "/api/render-recovery-cron",
+      "schedule": "*/5 * * * *"
     }
   ],
   "rewrites": [

@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../lib/apiFetch.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Papa from 'papaparse';
 import { useAuth } from '@clerk/clerk-react';
@@ -539,7 +540,7 @@ export default function CreatorWorkspace({
       const response = await fetch('/api/creator-workflow', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resource: 'outreach', creator_id: selected.id, id, ...patch }),
+        body: JSON.stringify({ resource: 'outreach', creator_id: selected.id, id, expected_updated_at: workflow?.deliverables?.find(item => item.id === id)?.updated_at, ...patch }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not update outreach');
@@ -1934,6 +1935,7 @@ export default function CreatorWorkspace({
                   {workflow.deliverables.map(item => (
                     <article className="workflow-card deliverable-card" key={item.id}>
                       <header><span><strong>{item.title}</strong><small>{item.due_at ? `Due ${new Date(item.due_at).toLocaleDateString()}` : 'No due date'} · {item.expected_asset_count || 1} expected</small></span><i>{item.status}</i></header>
+                      {(item.output_url || item.source_url || item.drive_file_id) && <p><a target="_blank" rel="noreferrer" href={item.output_url || item.source_url || `https://drive.google.com/file/d/${encodeURIComponent(item.drive_file_id)}/view`}>Review output before approving</a>{item.approval_id ? ` · Approval #${item.approval_id}` : ' · Exact output approval required'}</p>}
                       <div className="deliverable-progress">
                         {[
                           ['Received', item.received_asset_count],

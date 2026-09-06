@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../lib/apiFetch.js';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 const STRATEGIES = [
@@ -154,7 +155,7 @@ export default function FromWinnersTool({ setActiveTab, setVariations, onOpenCre
       const transcriptMissing = winner.asset_kind === 'video' && winner.transcription_status !== 'complete';
       return [
         `WINNER ${index + 1}: ${winner.name || 'Untitled'}`,
-        `Performance: spend ${money(spend)}, purchase value ${money(revenue)}, ROAS ${spend ? (revenue / spend).toFixed(2) : 'n/a'}, purchases ${purchases}, CPA ${purchases ? money(spend / purchases) : 'n/a'}`,
+        `Shared-media descriptive performance (not variant-specific or causal): spend ${money(spend)}, purchase value ${money(revenue)}, ROAS ${spend ? (revenue / spend).toFixed(2) : 'n/a'}, purchases ${purchases}, CPA ${purchases ? money(spend / purchases) : 'n/a'}`,
         `DNA: format=${winner.format || 'unknown'}; hook_type=${winner.hook_type || 'unknown'}; angle=${winner.angle || 'unknown'}; proof=${structured.proof_type || 'unknown'}; confidence=${winner.confidence != null ? `${Math.round(Number(winner.confidence) * 100)}%` : 'unknown'}`,
         transcriptMissing ? 'Evidence limitation: transcript is missing. Do not invent spoken claims, dialogue, or exact verbal hooks from this winner.' : null,
         winner.operator_summary ? `Operator read: ${winner.operator_summary}` : null,
@@ -342,6 +343,7 @@ ${references}`;
         <div>
           <div className="motion-kicker">Creative strategy</div>
           <h1>Concept studio</h1>
+          <p>Performance references below are shared-media rollups and may blend different copy or placements. Use Creative Analytics → Creative variants to compare individual definitions; these references do not establish causal winners.</p>
           <p>Build creator-specific UGC from first principles, then feed performance learnings back into the next test.</p>
         </div>
         <div className="concept-window concept-mode-switch">

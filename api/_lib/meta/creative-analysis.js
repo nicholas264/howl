@@ -1,3 +1,4 @@
+import { boundedWork, workSignal, checkWork, workFetch as fetch } from '../bounded-work.js';
 // AI creative analysis for Meta ads. Extracted from api/meta.js to keep
 // that file focused on publishing + insights. Three handlers live here:
 //
@@ -45,9 +46,10 @@ async function ensureCreativeAnalysisColumns(sql) {
 
 async function runFfmpeg(args) {
   await new Promise((resolve, reject) => {
-    const child = spawn(ffmpegPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    checkWork();
+    const child = spawn(ffmpegPath, args, { stdio: ['ignore', 'ignore', 'pipe'], signal: workSignal(), killSignal: 'SIGKILL' });
     let stderr = '';
-    child.stderr.on('data', chunk => { stderr += chunk.toString(); });
+    child.stderr.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-4000); });
     child.on('error', reject);
     child.on('close', code => code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}: ${stderr.slice(-1600)}`)));
   });
@@ -65,7 +67,8 @@ async function downloadMediaToTemp({ url, driveFileId }) {
   }
   if (!response.ok || !response.body) throw new Error(`media fetch failed: HTTP ${response.status}`);
   const path = join(tmpdir(), `creative-${Date.now()}-${Math.random().toString(36).slice(2)}.bin`);
-  await pipeline(Readable.fromWeb(response.body), createWriteStream(path));
+  try { await pipeline(Readable.fromWeb(response.body), createWriteStream(path), { signal: workSignal() }); }
+  catch (error) { if (existsSync(path)) unlinkSync(path); throw error; }
   return path;
 }
 
@@ -150,12 +153,17 @@ async function prepareVideoAsset(source, { transcribe = true } = {}) {
   }
 }
 
-export async function analyzeCreativeGroup({ groupKey, assetId = null, manualTranscript = '', ctx }) {
+export async function analyzeCreativeGroup(options) {
+  return boundedWork(() => analyzeCreativeGroupWithinBudget(options), options.timeoutMs || 180000);
+}
+
+async function analyzeCreativeGroupWithinBudget({ groupKey, assetId = null, manualTranscript = '', ctx, job = null }) {
   if (!groupKey) return { status: 400, body: { error: 'groupKey required' } };
   if (!process.env.DATABASE_URL) return { status: 200, body: { error: 'DATABASE_URL not configured' } };
   if (!process.env.ANTHROPIC_API_KEY) return { status: 200, body: { error: 'ANTHROPIC_API_KEY not configured' } };
   const { BASE, accessToken, adAccountId } = ctx;
-  const sql = neon(process.env.DATABASE_URL);
+  const database = neon(process.env.DATABASE_URL);
+  const sql = (...args) => { checkWork(); return database(...args); };
   await ensureCreativeAnalysisColumns(sql);
 
   // Pick the top-spend ad in the group as the canonical asset for analysis.
@@ -513,11 +521,18 @@ Analyze this creative.`;
     ? Math.min(rawConfidence ?? 0.45, missingSignals.includes('visual') ? 0.35 : 0.55)
     : rawConfidence;
 
-  await sql`
+  checkWork();
+  const saved = await sql`
+    WITH owned AS MATERIALIZED (
+      SELECT group_key FROM creative_analysis_queue
+      WHERE group_key = ${groupKey} AND status = 'processing' AND lease_token = ${job?.lease_token || null}
+      FOR UPDATE
+    )
     INSERT INTO creative_analysis
       (group_key, asset_kind, transcript, hook_text_verbatim, hook_type, format, angle, talent_description, visual_summary, why_it_worked, performance_snapshot, model, source_asset_id, vision_frame_count, transcription_status, structured_analysis, evidence, confidence, operator_summary, recommended_next_step, generated_at)
-    VALUES
-      (${groupKey}, ${assetKind}, ${transcript || null}, ${parsed.hook_text_verbatim || null}, ${parsed.hook_type || null}, ${parsed.format || null}, ${parsed.angle || null}, ${parsed.talent_description || null}, ${parsed.visual_summary || null}, ${parsed.why_it_worked || null}, ${JSON.stringify(perf)}::jsonb, ${ANALYSIS_MODEL}, ${sourceAsset?.id || null}, ${visionFrames.length || (imageB64 ? 1 : 0)}, ${transcript ? 'complete' : (isVideo ? 'missing' : 'not-needed')}, ${JSON.stringify(structuredAnalysis)}::jsonb, ${JSON.stringify(evidence)}::jsonb, ${confidence}, ${structuredAnalysis.operator_summary}, ${structuredAnalysis.recommended_next_step}, NOW())
+    SELECT
+      ${groupKey}, ${assetKind}, ${transcript || null}, ${parsed.hook_text_verbatim || null}, ${parsed.hook_type || null}, ${parsed.format || null}, ${parsed.angle || null}, ${parsed.talent_description || null}, ${parsed.visual_summary || null}, ${parsed.why_it_worked || null}, ${JSON.stringify(perf)}::jsonb, ${ANALYSIS_MODEL}, ${sourceAsset?.id || null}, ${visionFrames.length || (imageB64 ? 1 : 0)}, ${transcript ? 'complete' : (isVideo ? 'missing' : 'not-needed')}, ${JSON.stringify(structuredAnalysis)}::jsonb, ${JSON.stringify(evidence)}::jsonb, ${confidence}, ${structuredAnalysis.operator_summary}, ${structuredAnalysis.recommended_next_step}, NOW()
+    WHERE (${!job} OR EXISTS (SELECT 1 FROM owned))
     ON CONFLICT (group_key) DO UPDATE SET
       asset_kind = EXCLUDED.asset_kind,
       transcript = EXCLUDED.transcript,
@@ -539,11 +554,13 @@ Analyze this creative.`;
       operator_summary = EXCLUDED.operator_summary,
       recommended_next_step = EXCLUDED.recommended_next_step,
       generated_at = NOW()
+    RETURNING group_key
   `;
+  if (!saved.length) throw new Error('Analysis worker lease was replaced');
   if (sourceAsset) {
     await sql`UPDATE creative_assets SET analyzed_at = now(), updated_at = now() WHERE id = ${sourceAsset.id}`;
   }
-  await completeCreativeAnalysisJob(sql, groupKey);
+  await completeCreativeAnalysisJob(sql, groupKey, job);
 
   return {
     status: 200,
@@ -585,11 +602,11 @@ export async function processCreativeAnalysisQueue({ ctx, batchSize: rawBatchSiz
 
   const deadline = Date.now() + 220000;
   for (let index = 0; index < batchSize; index++) {
-    if (Date.now() > deadline) break;
+    if (deadline - Date.now() < 10000) break;
     const job = await claimCreativeAnalysisJob(sql);
     if (!job) break;
     try {
-      const out = await analyzeCreativeGroup({ groupKey: job.group_key, ctx });
+      const out = await analyzeCreativeGroup({ groupKey: job.group_key, ctx, job, timeoutMs: Math.min(180000, deadline - Date.now()) });
       if (out.status >= 200 && out.status < 300 && out.body?.ok) {
         results.push({ groupKey: job.group_key, status: 'completed' });
       } else {

@@ -1,3 +1,5 @@
+import { apiFetch as fetch } from '../lib/apiFetch.js';
+import OperationRecovery from './OperationRecovery.jsx';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 const DEFAULT_ROLES = {
@@ -364,8 +366,17 @@ export default function AdminWorkspace({ onOpenEditor }) {
         {(data.operations || []).map(item => <div key={`${item.operation_key}:${item.step_key}`} style={{ padding: 12, overflowWrap: 'anywhere' }}>
           <strong>{item.step_key} — {item.status}</strong><br />
           <small>Operation {item.operation_key} · {new Date(item.updated_at).toLocaleString()}</small>
+          <OperationRecovery item={item} onRecovered={load} />
         </div>)}
         {!(data.operations || []).length && <p>No uncertain or stalled external operations.</p>}
+        <h2>Provider work · last 24 hours</h2>
+        <p>Usage covers instrumented routes. Unpriced requests have unknown cost; recorded costs do not represent the full provider bill.</p>
+        {(data.usage || []).map(item=><p key={`${item.kind}:${item.provider}:${item.model}`}>
+          {item.kind} · {item.model || item.provider || 'Provider not recorded'}: {item.requests} requests, {item.running} running, {item.failed_or_unknown} failed or uncertain;
+          {' '}{item.input_tokens || 0} input / {item.output_tokens || 0} output tokens, {Math.round(item.media_seconds || 0)} media seconds;
+          {' '}{item.cost_usd==null ? 'no recorded cost' : `$${item.cost_usd.toFixed(4)} recorded`}, {item.unpriced} unpriced.
+        </p>)}
+        {!(data.usage || []).length && <p>No metered work recorded in this window.</p>}
         <h2>Data ingestion</h2>
         {(data.syncs || []).map(item => <p key={item.name}>
           {item.name}: {item.phase || 'not started'} · Last complete: {item.last_completed_at ? new Date(item.last_completed_at).toLocaleString() : 'never'}

@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../lib/apiFetch.js';
 export async function uploadPublicBlob(pathname, body, {
   contentType,
   clientPayload,

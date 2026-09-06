@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../lib/apiFetch.js';
 import React, { useState, useRef, useCallback } from 'react';
 import { buildSystemPrompt } from '../prompts';
 import CopyLibrary, { useCopyLibrary } from './CopyLibrary';

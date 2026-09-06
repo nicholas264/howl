@@ -1,3 +1,4 @@
+import { meteredFetch } from './_lib/metered-fetch.js';
 import { checkWorkLimit } from './_lib/work-limits.js';
 // Hardened proxy to Anthropic. The browser cannot pass arbitrary fields:
 // only model (whitelisted), max_tokens (capped), system, messages,
@@ -18,6 +19,7 @@ export default async function handler(req, res) {
   if (!access) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!(await checkWorkLimit(access, res, 'generation'))) return;
+  const fetch=meteredFetch(access);
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
@@ -37,6 +39,8 @@ export default async function handler(req, res) {
   if (body.system && typeof body.system !== 'string') {
     return res.status(400).json({ error: 'system must be a string' });
   }
+
+  if (JSON.stringify(body.messages).length + (body.system?.length || 0) > 200000) return res.status(413).json({error:'Generation input exceeds the 200,000-character limit.'});
 
   // Server-controlled allowlist. Browser-supplied tools / tool_choice /
   // anthropic_version / metadata / etc are dropped here on purpose.

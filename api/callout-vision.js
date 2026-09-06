@@ -1,3 +1,6 @@
+import { fetchPublicResource } from './_lib/safe-fetch.js';
+import { checkWorkLimit } from './_lib/work-limits.js';
+import { meteredFetch } from './_lib/metered-fetch.js';
 // Calls Claude Sonnet (vision) to locate product features inside a callout
 // base image. When productId is supplied, the per-feature specs from the
 // callout_feature_specs table are loaded and used to ground placement so
@@ -28,8 +31,11 @@ Respond with ONLY a JSON object matching this schema, no prose:
 { "placements": [{ "feature": string, "anchorX": number, "anchorY": number, "side": "left"|"right" }] }`;
 
 export default async function handler(req, res) {
-  if (!(await requirePermission(req, res, 'assets.write'))) return;
+  const access=await requirePermission(req,res,'assets.write');
+  if (!access) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!(await checkWorkLimit(access,res,'generation'))) return;
+  const fetch=meteredFetch(access);
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
@@ -57,10 +63,9 @@ export default async function handler(req, res) {
     const specByName = new Map(specs.map(s => [s.feature_name.toLowerCase(), s]));
 
     // Pull the image and base64-encode for Claude.
-    const imgRes = await fetch(imageUrl);
-    if (!imgRes.ok) return res.status(400).json({ error: `Could not load image: ${imgRes.status}` });
-    const buf = Buffer.from(await imgRes.arrayBuffer());
-    const mediaType = imgRes.headers.get('content-type') || 'image/jpeg';
+    const image=await fetchPublicResource(imageUrl,{maxBytes:10*1024*1024,contentTypes:/^image\/(jpeg|png|webp)(;|$)/i});
+    const buf=image.bytes;
+    const mediaType=image.contentType.split(';')[0];
     const base64 = buf.toString('base64');
 
     const featureBlock = features.map(f => {

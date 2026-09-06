@@ -8,9 +8,8 @@ export default async function handler(req, res) {
   if (!auth) return;
   try {
     const access = await getAppAccess(auth, neon(process.env.DATABASE_URL));
-    return res.json(access);
+    return res.json({...access,auth_subject:auth.authSubject || auth.userId});
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
 }
-

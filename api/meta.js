@@ -1,3 +1,7 @@
+import { ensureLocalReceipts } from './_lib/local-receipts.js';
+import { mediaDigest } from './_lib/approval-evidence.js';
+import { journalMediaUpload } from './_lib/provider-media.js';
+import { fetchPublicResource } from './_lib/safe-fetch.js';
 import { checkWorkLimit } from './_lib/work-limits.js';
 import { assertLaunchReady } from './_lib/launch-preflight.js';
 import { syncCreativeAnalytics } from './_lib/meta/sync.js';
@@ -94,18 +98,21 @@ async function stampFlowLaunched(sql, { adId, groupKey, briefId, deliverableId }
 }
 
 // Report bookkeeping failure. Provider creations are journaled and never blindly repeated.
-async function logLaunch(row) {
+export async function logLaunch(row, sqlOverride = null) {
   try {
-    if (!process.env.DATABASE_URL) return;
+    if (!process.env.DATABASE_URL && !sqlOverride) return;
     const { neon } = await import('@neondatabase/serverless');
-    const sql = neon(process.env.DATABASE_URL);
+    const sql = sqlOverride || neon(process.env.DATABASE_URL);
+    await ensureCreativeAssetTables(sql);
+    await ensureLocalReceipts(sql);
     await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS source_type TEXT`;
     await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS source_label TEXT`;
     const [launch] = await sql`
       INSERT INTO launch_history
-        (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, source_type, source_label, brief_id, deliverable_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url)
+        (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, source_type, source_label, brief_id, deliverable_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url, operation_key)
       VALUES
-        (${row.ad_id}, ${row.adset_id || null}, ${row.campaign_id || null}, ${row.drive_file_id || null}, ${row.drive_file_name || null}, ${row.creator || null}, ${row.creator_id || null}, ${row.source_type || null}, ${row.source_label || null}, ${row.brief_id || null}, ${row.deliverable_id || null}, ${row.product_id || null}, ${row.angle_id || null}, ${row.ad_name || null}, ${row.headline || null}, ${row.primary_text || null}, ${row.dest_url || null}, ${row.mime_type || null}, ${row.launched_by_user_id || null}, ${row.launched_by_email || null}, ${row.source_video_url || null})
+        (${row.ad_id}, ${row.adset_id || null}, ${row.campaign_id || null}, ${row.drive_file_id || null}, ${row.drive_file_name || null}, ${row.creator || null}, ${row.creator_id || null}, ${row.source_type || null}, ${row.source_label || null}, ${row.brief_id || null}, ${row.deliverable_id || null}, ${row.product_id || null}, ${row.angle_id || null}, ${row.ad_name || null}, ${row.headline || null}, ${row.primary_text || null}, ${row.dest_url || null}, ${row.mime_type || null}, ${row.launched_by_user_id || null}, ${row.launched_by_email || null}, ${row.source_video_url || null}, ${'meta:'+row.ad_id})
+      ON CONFLICT (operation_key) DO UPDATE SET operation_key = EXCLUDED.operation_key
       RETURNING id
     `;
     const groupKey = row.group_key || row.meta_video_id || row.meta_image_hash || row.ad_id;
@@ -121,14 +128,15 @@ async function logLaunch(row) {
         INSERT INTO creative_assets
           (drive_file_name, mime_type, durable_url, ad_id, creator, creator_id,
            source_type, source_label, brief_id, deliverable_id, product_id, angle_id, placement_role, group_key,
-           transcript_status, playable_url, playback_status, playback_checked_at, updated_at)
+           transcript_status, playable_url, playback_status, playback_checked_at, updated_at, launch_receipt_key)
         VALUES
           (${row.ad_name || null}, ${row.mime_type || 'video/mp4'}, ${row.source_video_url},
            ${row.ad_id}, ${row.creator || null}, ${row.creator_id || null},
            ${row.source_type || null}, ${row.source_label || null},
            ${row.brief_id || null}, ${row.deliverable_id || null}, ${row.product_id || null},
            ${row.angle_id || null}, 'launched', ${groupKey || null}, 'pending',
-           ${row.source_video_url}, 'ready', now(), now())
+           ${row.source_video_url}, 'ready', now(), now(), ${'meta:'+row.ad_id})
+        ON CONFLICT (launch_receipt_key) DO UPDATE SET launch_receipt_key = EXCLUDED.launch_receipt_key
         RETURNING id
       `;
       await enqueueCreativeAssetAnalysis(sql, groupKey, 'launch');
@@ -216,14 +224,13 @@ async function uploadVideo(base64, name, adAccountId, accessToken, BASE) {
     BASE,
   });
   const blobUrl = await mirrorVideoToBlob(videoBuffer, 'video/mp4', name || 'howl-video');
-  return { videoId, blobUrl };
+  return { videoId, blobUrl, contentHash:mediaDigest(videoBuffer) };
 }
 
 async function uploadVideoFromUrl(videoUrl, name, adAccountId, accessToken, BASE) {
-  const sourceRes = await fetch(videoUrl);
-  if (!sourceRes.ok) throw new Error(`Could not fetch Blob video (${sourceRes.status})`);
-  const mimeType = sourceRes.headers.get('content-type') || 'video/mp4';
-  const videoBuffer = Buffer.from(await sourceRes.arrayBuffer());
+  const resource = await fetchPublicResource(videoUrl,{maxBytes:256*1024*1024,timeoutMs:45000,contentTypes:/^video\//i});
+  const mimeType = resource.contentType || 'video/mp4';
+  const videoBuffer = resource.bytes;
   const videoId = await uploadVideoBufferResumable(videoBuffer, {
     name,
     mimeType,
@@ -231,10 +238,14 @@ async function uploadVideoFromUrl(videoUrl, name, adAccountId, accessToken, BASE
     accessToken,
     BASE,
   });
-  return { videoId, blobUrl: videoUrl };
+  return { videoId, blobUrl: videoUrl, contentHash:mediaDigest(videoBuffer) };
 }
 
 async function uploadImage(base64, adAccountId, accessToken, BASE) {
+  if (/^https?:/i.test(base64)) {
+    const resource = await fetchPublicResource(base64, { maxBytes:20*1024*1024, contentTypes:/^image\/(jpeg|png|webp)(;|$)/i });
+    base64 = resource.bytes.toString('base64');
+  }
   const clean = base64.replace(/^data:image\/\w+;base64,/, '');
   const params = new URLSearchParams({
     bytes: clean,
@@ -250,7 +261,7 @@ async function uploadImage(base64, adAccountId, accessToken, BASE) {
   if (d.error) throw new Error(d.error.message);
   const hash = Object.values(d.images || {})[0]?.hash;
   if (!hash) throw new Error('Image upload returned no hash');
-  return hash;
+  return {hash,contentHash:mediaDigest(Buffer.from(clean,'base64'))};
 }
 
 const PURCHASE_ACTION_TYPES = [
@@ -427,7 +438,7 @@ export default async function handler(req, res) {
     if (launchActions.has(action)) {
       await ensureCreatorOpsTables(appAccess.sql);
       if (!['upload_image', 'upload_video', 'upload_video_url', 'create_campaign', 'create_adset'].includes(action)) {
-        await assertLaunchReady(appAccess.sql, req.body);
+        if (!req.body.items?.length) await assertLaunchReady(appAccess.sql, req.body);
         for (const item of req.body.items || []) await assertLaunchReady(appAccess.sql, { ...req.body, ...item });
       }
       const launchCopy = [
@@ -1111,8 +1122,8 @@ export default async function handler(req, res) {
         const { imageBase64 } = req.body;
         if (!imageBase64) return res.status(400).json({ error: 'No image data provided' });
         try {
-          const hash = await uploadImage(imageBase64, adAccountId, accessToken, BASE);
-          return res.json({ success: true, hash });
+          const result = await journalMediaUpload(appAccess.sql,req,appAccess.userId,adAccountId,'image',async () => uploadImage(imageBase64,adAccountId,accessToken,BASE));
+          return res.json({success:true,...result});
         } catch (err) {
           return res.status(400).json({ error: err.message, step: 'upload_image' });
         }
@@ -1122,8 +1133,11 @@ export default async function handler(req, res) {
         const { videoBase64, name } = req.body;
         if (!videoBase64) return res.status(400).json({ error: 'No video data provided' });
         try {
-          const { videoId, blobUrl } = await uploadVideo(videoBase64, name, adAccountId, accessToken, BASE);
-          return res.json({ success: true, videoId, sourceVideoUrl: blobUrl });
+          const result = await journalMediaUpload(appAccess.sql,req,appAccess.userId,adAccountId,'video',async () => {
+            const {videoId,blobUrl,contentHash} = await uploadVideo(videoBase64,name,adAccountId,accessToken,BASE);
+            return {videoId,sourceVideoUrl:blobUrl,contentHash};
+          });
+          return res.json({success:true,...result});
         } catch (err) {
           return res.status(400).json({ error: err.message, step: 'upload_video' });
         }
@@ -1137,14 +1151,11 @@ export default async function handler(req, res) {
           if (parsed.protocol !== 'https:' || !parsed.hostname.endsWith('.blob.vercel-storage.com')) {
             throw new Error('Only HOWL Vercel Blob video URLs are accepted');
           }
-          const { videoId, blobUrl } = await uploadVideoFromUrl(
-            parsed.toString(),
-            name,
-            adAccountId,
-            accessToken,
-            BASE,
-          );
-          return res.json({ success: true, videoId, sourceVideoUrl: blobUrl || videoUrl });
+          const result = await journalMediaUpload(appAccess.sql,req,appAccess.userId,adAccountId,'video',async () => {
+            const {videoId,blobUrl,contentHash} = await uploadVideoFromUrl(parsed.toString(),name,adAccountId,accessToken,BASE);
+            return {videoId,sourceVideoUrl:blobUrl || videoUrl,contentHash};
+          });
+          return res.json({success:true,...result});
         } catch (err) {
           return res.status(400).json({ error: err.message, step: 'upload_video_url' });
         }

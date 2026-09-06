@@ -1,3 +1,4 @@
+import { ensureLocalReceipts } from './_lib/local-receipts.js';
 import { ensureOperationJournal, runExternalStep, digest } from './_lib/operation-journal.js';
 import { reserveOperationBudget } from './_lib/operation-budget.js';
 import { requirePermission } from './_lib/app-access.js';
@@ -11,7 +12,12 @@ function clean(value, max = 1000) {
 
 async function shopifyGraphql(query, variables, token, operation = null) {
   if (operation) {
-    return runExternalStep(operation.sql, { operationKey: operation.key, stepKey: query.match(/mutation\s+(\w+)/)?.[1] || 'mutation', payload: { query, variables }, actorId: operation.actorId }, () => shopifyGraphql(query, variables, token));
+    return runExternalStep(operation.sql, { operationKey: operation.key, stepKey: query.match(/mutation\s+(\w+)/)?.[1] || 'mutation', payload: { query, variables }, actorId: operation.actorId }, async () => {
+      const result = await shopifyGraphql(query,variables,token);
+      const errors = Object.values(result.data || {}).flatMap(value=>value?.userErrors || []);
+      if (errors.length) throw Object.assign(new Error(errors.map(error=>error.message).join('; ')),{statusCode:400,definitelyNotApplied:true});
+      return result;
+    });
   }
   const store = process.env.SHOPIFY_STORE || 'howl-campfires.myshopify.com';
   if (!token) throw new Error('Shopify store is not connected');
@@ -69,6 +75,10 @@ export default async function handler(req, res) {
     `;
     if (existingSeed && (Number(existingSeed.creator_id) !== creatorId || existingSeed.shopify_variant_id !== variantId || Number(existingSeed.quantity) !== quantity)) return res.status(409).json({ error: 'Request key already belongs to another seed.' });
     if (existingSeed?.status === 'ordered') return res.status(200).json({ seed: existingSeed, duplicate: true });
+    if (existingSeed?.shopify_draft_order_id) {
+      await ensureOperationJournal(sql);
+      return await completeSeed({sql,seed:existingSeed,operation:{sql,key:digest(['seed',requestKey]),actorId:access.userId},seedingToken,res,actorId:access.userId});
+    }
     const dailyLimit = Math.max(1, Math.min(Number(process.env.SHOPIFY_SEEDING_DAILY_LIMIT) || 10, 100));
     const [dailyUsage] = await sql`
       SELECT count(*)::int AS orders
@@ -170,12 +180,24 @@ export default async function handler(req, res) {
       ON CONFLICT (request_key) DO UPDATE SET request_key = EXCLUDED.request_key
       RETURNING *
     `;
+    return await completeSeed({sql,seed,operation,seedingToken,res,actorId:access.userId});
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({
+      error: /access denied|scope/i.test(err.message)
+        ? 'The separate Shopify seeding token needs draft-order permission.'
+        : err.message,
+    });
+  }
+}
+
+async function completeSeed({sql,seed,operation,seedingToken,res,actorId}) {
+    await ensureLocalReceipts(sql);
     const { data: completed } = await shopifyGraphql(`mutation CompleteCreatorSeed($id: ID!) {
       draftOrderComplete(id: $id, paymentPending: false) {
         draftOrder { id name status order { id name displayFulfillmentStatus } }
         userErrors { field message }
       }
-    }`, { id: draft.id }, seedingToken, operation);
+    }`, { id: seed.shopify_draft_order_id }, seedingToken, operation);
     const completeResult = completed.draftOrderComplete;
     if (completeResult.userErrors?.length) {
       return res.status(202).json({
@@ -184,31 +206,25 @@ export default async function handler(req, res) {
       });
     }
     const completedDraft = completeResult.draftOrder;
-    const order = completedDraft.order;
+    const order = completedDraft?.order;
+    if (!order?.id) throw new Error('Shopify completion returned no order receipt. Reconcile the draft before retrying.');
     const [orderedSeed] = await sql`
       UPDATE creator_product_seeds
       SET status = 'ordered',
         shopify_order_id = ${order?.id || null},
-        shopify_order_name = ${order?.name || draft.name},
-        ordered_at = now(),
+        shopify_order_name = ${order?.name || seed.shopify_order_name},
+        ordered_at = COALESCE(ordered_at,now()),
         updated_at = now()
       WHERE id = ${seed.id}
       RETURNING *
     `;
     await sql`
-      INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+      INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id, event_key)
       VALUES (
-        ${creatorId}, 'product_seeded', ${`Product seeded: ${productTitle}`},
-        ${JSON.stringify({ seed_id: Number(orderedSeed.id), shopify_order_id: order?.id, quantity })}::jsonb,
-        ${access.userId}
-      )
+        ${seed.creator_id}, 'product_seeded', ${`Product seeded: ${seed.product_title}`},
+        ${JSON.stringify({ seed_id: Number(orderedSeed.id), shopify_order_id: order?.id, quantity:seed.quantity })}::jsonb,
+        ${actorId}, ${'seed:'+seed.request_key}
+      ) ON CONFLICT (event_key) DO NOTHING
     `;
     return res.status(201).json({ seed: orderedSeed });
-  } catch (err) {
-    return res.status(err.statusCode || 500).json({
-      error: /access denied|scope/i.test(err.message)
-        ? 'The separate Shopify seeding token needs draft-order permission.'
-        : err.message,
-    });
-  }
 }

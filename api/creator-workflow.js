@@ -1,3 +1,5 @@
+import { captureApprovalEvidence } from './_lib/approval-evidence.js';
+import { ensureApprovalSnapshots, approveDeliverable } from './_lib/approval-snapshots.js';
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import { del } from '@vercel/blob';
@@ -1210,6 +1212,18 @@ export default async function handler(req, res) {
       }
       if (body.resource === 'deliverable') {
         const status = clean(body.status, 50);
+        await ensureApprovalSnapshots(sql);
+        if (status === 'approved') {
+          if (!body.expected_updated_at || !Number.isFinite(Date.parse(body.expected_updated_at))) return res.status(428).json({error:'Reload the deliverable before approving its exact output.'});
+          const [review] = await sql`SELECT * FROM creator_deliverables WHERE id = ${Number(body.id)} AND creator_id = ${creatorId} AND updated_at = ${body.expected_updated_at}::timestamptz`;
+          if (!review) return res.status(409).json({error:'Deliverable changed. Reload before approving.'});
+          const evidence = await captureApprovalEvidence(review);
+          const approved = await approveDeliverable(sql,Number(body.id),creatorId,body.expected_updated_at,access.userId,evidence);
+          if (!approved) return res.status(409).json({error:'Deliverable changed or has no output to approve. Reload and review its output first.'});
+          await ensureDeliverableFlowCard(sql,access,creatorId,approved);
+          return res.json({deliverable:approved});
+        }
+
         const count = value => value === undefined
           ? null
           : Math.max(0, Math.min(Number(value) || 0, 10000));
@@ -1241,7 +1255,7 @@ export default async function handler(req, res) {
               ELSE COALESCE(${count(body.shipped_asset_count)}, shipped_asset_count)
             END,
             received_at = CASE WHEN ${status} IN ('received', 'editing', 'edited', 'approved', 'complete', 'launched') THEN COALESCE(received_at, now()) ELSE received_at END,
-            approved_at = CASE WHEN ${status} IN ('approved', 'complete', 'launched') THEN COALESCE(approved_at, now()) ELSE approved_at END,
+            approved_at = approved_at,
             completed_at = CASE WHEN ${status} IN ('complete', 'edited', 'launched') THEN COALESCE(completed_at, now()) ELSE completed_at END,
             shipped_at = CASE WHEN ${status} = 'launched' THEN COALESCE(shipped_at, now()) ELSE shipped_at END,
             updated_at = now()
