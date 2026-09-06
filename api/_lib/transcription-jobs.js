@@ -3,7 +3,7 @@ export async function ensureTranscriptionJobs(sql) {
   await sql`ALTER TABLE ugc_sessions ADD COLUMN IF NOT EXISTS transcription_token TEXT`;
 }
 export async function claimTranscription(sql,id,sourceUrl) {
-  await ensureTranscriptionJobs(sql);
+
   const token=randomUUID();
   const [claimed]=await sql`UPDATE ugc_sessions SET status='transcribing',transcription_token=${token},last_error=NULL,updated_at=now()
     WHERE id=${id} AND video_url=${sourceUrl}

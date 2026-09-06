@@ -1,8 +1,7 @@
 import { createHash } from 'node:crypto';
 
-let rateLimitTableReady = null;
-
-async function ensureRateLimitTable(sql) {
+// Schema setup belongs to release migrations, never a request.
+export async function ensureRateLimits(sql) {
   await sql`
     CREATE TABLE IF NOT EXISTS app_rate_limits (
       route       TEXT NOT NULL,
@@ -14,16 +13,6 @@ async function ensureRateLimitTable(sql) {
     )
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_app_rate_limits_reset ON app_rate_limits(reset_at)`;
-}
-
-export async function ensureRateLimits(sql) {
-  if (!rateLimitTableReady) rateLimitTableReady = ensureRateLimitTable(sql);
-  try {
-    await rateLimitTableReady;
-  } catch (err) {
-    rateLimitTableReady = null;
-    throw err;
-  }
 }
 
 export function clientIp(req) {
@@ -49,7 +38,6 @@ export async function checkRateLimit(sql, {
   limit,
   windowSeconds,
 }) {
-  await ensureRateLimits(sql);
   const [row] = await sql`
     INSERT INTO app_rate_limits (route, bucket_key, count, reset_at)
     VALUES (${route}, ${key}, 1, now() + (${windowSeconds} || ' seconds')::interval)

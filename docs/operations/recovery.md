@@ -125,3 +125,18 @@ Clerk secrets, Vercel OIDC tokens, and Node preload options are not inherited by
 the tests. The frontend build keeps its normal environment so public build-time
 configuration remains available. A regression fixture verifies that a failed
 test produces a failing runner exit code.
+
+### Paid-work schema prerequisite
+
+Run `npm run db:migrate` with the intended database selected before deploying to a
+new database. Paid-work requests no longer create `app_work_lanes`, `app_work_runs`,
+`app_operation_budgets`, or `app_rate_limits`. The migration and offline backup
+verification cover these tables. Production tables were verified and the missing
+preview rate-limit table was migrated on September 6, 2026. Do not restrict the
+entire runtime role yet: other application paths still contain runtime DDL.
+
+Workflow schema setup is also migration-only for provider/local receipts, operation
+journals, draft saves, transcription ownership, and approval snapshots. The existing
+`db:migrate` command and restored-backup checks cover these structures. Their
+additive migrations were verified against production and preview before the
+request-time calls were removed.

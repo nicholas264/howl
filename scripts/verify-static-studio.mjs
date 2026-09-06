@@ -9,6 +9,9 @@ import { createServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import { PGlite } from '@electric-sql/pglite';
 import { useTestDatabase } from '../tests/neon-test-adapter.mjs';
+import { ensureRateLimits } from '../api/_lib/rate-limit.js';
+import { ensureLaunchDrafts } from '../api/_lib/launch-drafts.js';
+import { ensureOperationJournal } from '../api/_lib/operation-journal.js';
 import { ensureStudioCosts } from '../api/_lib/static-studio-costs.js';
 import { ensureWorkControls } from '../api/_lib/work-controls.js';
 import { ensureOperationBudgets } from '../api/_lib/operation-budget.js';
@@ -30,6 +33,7 @@ const entry=`import React from 'react';import {createRoot} from 'react-dom/clien
 function Harness(){const [launch,setLaunch]=React.useState(false),[cart,setCart]=React.useState([]);React.useEffect(()=>{loadLaunchDrafts().then(setCart)},[]);return launch?<Launcher cart={cart}/>:<StaticStudio onOpenLauncher={()=>setLaunch(true)} onAddToCart={async item=>{const saved=await persistLaunchDraft(item);setCart(c=>[saved,...c.filter(row=>row.id!==saved.id)])}}/>}createRoot(document.getElementById('root')).render(<Harness/>);`;
 try {
  const sql=async(parts,...values)=>(await db.query(parts.reduce((q,p,i)=>q+(i?`$${i}`:'')+p,''),values)).rows;
+ await ensureRateLimits(sql);await ensureLaunchDrafts(sql);await ensureOperationJournal(sql);
  await ensureStudioCosts(sql);await ensureWorkControls(sql);await ensureOperationBudgets(sql);
  server=await createServer({configFile:false,root:process.cwd(),envDir:path.join(output,'empty-env'),define:{'import.meta.env.VITE_AUTH_DISABLED':'"true"'},plugins:[react(),{name:'isolated-studio-fixture',resolveId(id){if(id==='/fixture.jsx')return path.join(process.cwd(),'__static_qa__.jsx');},load(id){if(id===path.join(process.cwd(),'__static_qa__.jsx'))return entry;},configureServer(s){s.middlewares.use(async(req,res,next)=>{
   const url=new URL(req.url,'http://localhost');

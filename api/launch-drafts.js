@@ -1,5 +1,5 @@
 import { requireWorkspaceAccess, hasPermission } from './_lib/app-access.js';
-import { ensureLaunchDrafts, saveLaunchDraft } from './_lib/launch-drafts.js';
+import { saveLaunchDraft } from './_lib/launch-drafts.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 export default async function handler(req, res) {
@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   const write = req.method !== 'GET';
   if (!(hasPermission(access, write ? 'assets.write' : 'assets.read') || hasPermission(access, write ? 'launch.write' : 'launch.read'))) return res.status(403).json({ error: 'Draft access required' });
   try {
-    await ensureLaunchDrafts(access.sql);
+
     if (req.method === 'GET') {
       const cursor=typeof req.query?.cursor==='string'?req.query.cursor:'';
       if(cursor.length>100)return res.status(400).json({error:'Invalid draft cursor'});

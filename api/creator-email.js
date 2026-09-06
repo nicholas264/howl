@@ -1,5 +1,4 @@
-import { ensureLocalReceipts } from './_lib/local-receipts.js';
-import { ensureOperationJournal, runExternalStep, operationKey } from './_lib/operation-journal.js';
+import { runExternalStep, operationKey } from './_lib/operation-journal.js';
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import { getGoogleConnection, getUserGoogleAccessToken } from './_lib/google-user-oauth.js';
@@ -175,8 +174,7 @@ export default async function handler(req, res) {
     const followUpAt = timestamp(req.body?.next_follow_up_at);
     if (followUpAt === undefined) return res.status(400).json({ error: 'Follow-up date is invalid' });
 
-    await ensureLocalReceipts(sql);
-    await ensureOperationJournal(sql);
+
     const requestKey = operationKey(req, access.userId, 'creator-email');
     const { provider, externalId, externalThreadId, providerMessageId } = await runExternalStep(sql, {
       operationKey: requestKey, stepKey: 'send', payload: { to, subject, body, agreementId }, actorId: access.userId,

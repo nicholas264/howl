@@ -1,5 +1,5 @@
 import { captureApprovalEvidence } from './_lib/approval-evidence.js';
-import { ensureApprovalSnapshots, approveDeliverable } from './_lib/approval-snapshots.js';
+import { approveDeliverable } from './_lib/approval-snapshots.js';
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
 import { del } from '@vercel/blob';
@@ -1212,7 +1212,7 @@ export default async function handler(req, res) {
       }
       if (body.resource === 'deliverable') {
         const status = clean(body.status, 50);
-        await ensureApprovalSnapshots(sql);
+
         if (status === 'approved') {
           if (!body.expected_updated_at || !Number.isFinite(Date.parse(body.expected_updated_at))) return res.status(428).json({error:'Reload the deliverable before approving its exact output.'});
           const [review] = await sql`SELECT * FROM creator_deliverables WHERE id = ${Number(body.id)} AND creator_id = ${creatorId} AND updated_at = ${body.expected_updated_at}::timestamptz`;

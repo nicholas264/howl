@@ -1,5 +1,4 @@
-import { ensureLocalReceipts } from './_lib/local-receipts.js';
-import { ensureOperationJournal, runExternalStep, digest } from './_lib/operation-journal.js';
+import { runExternalStep, digest } from './_lib/operation-journal.js';
 import { reserveOperationBudget } from './_lib/operation-budget.js';
 import { requirePermission } from './_lib/app-access.js';
 import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
@@ -76,7 +75,7 @@ export default async function handler(req, res) {
     if (existingSeed && (Number(existingSeed.creator_id) !== creatorId || existingSeed.shopify_variant_id !== variantId || Number(existingSeed.quantity) !== quantity)) return res.status(409).json({ error: 'Request key already belongs to another seed.' });
     if (existingSeed?.status === 'ordered') return res.status(200).json({ seed: existingSeed, duplicate: true });
     if (existingSeed?.shopify_draft_order_id) {
-      await ensureOperationJournal(sql);
+
       return await completeSeed({sql,seed:existingSeed,operation:{sql,key:digest(['seed',requestKey]),actorId:access.userId},seedingToken,res,actorId:access.userId});
     }
     const dailyLimit = Math.max(1, Math.min(Number(process.env.SHOPIFY_SEEDING_DAILY_LIMIT) || 10, 100));
@@ -117,7 +116,6 @@ export default async function handler(req, res) {
     }
     const productTitle = catalogVariant.product.title;
 
-    await ensureOperationJournal(sql);
     const operation = { sql, key: digest(['seed', requestKey]), actorId: access.userId };
     if (!existingSeed) await reserveOperationBudget(sql, 'shopify.seed', operation.key, dailyLimit, Number(dailyUsage?.orders || 0));
 
@@ -191,7 +189,7 @@ export default async function handler(req, res) {
 }
 
 async function completeSeed({sql,seed,operation,seedingToken,res,actorId}) {
-    await ensureLocalReceipts(sql);
+
     const { data: completed } = await shopifyGraphql(`mutation CompleteCreatorSeed($id: ID!) {
       draftOrderComplete(id: $id, paymentPending: false) {
         draftOrder { id name status order { id name displayFulfillmentStatus } }

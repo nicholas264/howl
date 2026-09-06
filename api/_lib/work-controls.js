@@ -12,7 +12,6 @@ export async function ensureWorkControls(sql) {
 
 export async function claimWork(sql, kind, actorId, {globalLimit=8,userLimit=3,ttlSeconds=330} = {}) {
   const id=randomUUID();
-  await ensureWorkControls(sql);
   await sql`INSERT INTO app_work_lanes (kind) VALUES (${kind}) ON CONFLICT DO NOTHING`;
   const [claimed]=await sql`
     UPDATE app_work_lanes lane SET leases = COALESCE((
@@ -39,7 +38,6 @@ export async function finishWork(sql,id,kind,statusCode,{costUsd=null,provider=n
 }
 
 export async function recoverExpiredWork(sql) {
-  await ensureWorkControls(sql);
   // A lost process is not proof of provider failure or zero spend.
   return sql`UPDATE app_work_runs run SET status='unknown',finished_at=now()
     WHERE status='running' AND started_at<now()-interval '6 minutes'

@@ -1,4 +1,3 @@
-import { ensureLocalReceipts } from './_lib/local-receipts.js';
 import { mediaDigest } from './_lib/approval-evidence.js';
 import { journalMediaUpload } from './_lib/provider-media.js';
 import { fetchPublicResource } from './_lib/safe-fetch.js';
@@ -104,7 +103,7 @@ export async function logLaunch(row, sqlOverride = null) {
     const { neon } = await import('@neondatabase/serverless');
     const sql = sqlOverride || neon(process.env.DATABASE_URL);
     await ensureCreativeAssetTables(sql);
-    await ensureLocalReceipts(sql);
+
     await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS source_type TEXT`;
     await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS source_label TEXT`;
     const [launch] = await sql`
