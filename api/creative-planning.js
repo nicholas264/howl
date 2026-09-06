@@ -44,13 +44,7 @@ export default async function handler(req, res) {
   try {
     await ensureCreatorOpsTables(sql);
     const range = monthRange(req.query?.month || req.body?.month);
-    await sql`
-      CREATE TABLE IF NOT EXISTS dashboard_settings (
-        key TEXT PRIMARY KEY,
-        value JSONB NOT NULL,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      )
-    `;
+
 
     let [planningSettings] = await sql`
       SELECT value, updated_at

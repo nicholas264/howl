@@ -71,20 +71,14 @@ function toNumber(v) {
 }
 
 export default async function handler(req, res) {
-  if (!(await requirePermission(req, res, 'analytics.read'))) return;
+  if (!(await requirePermission(req, res, req.method === 'GET' ? 'analytics.read' : 'analytics.write'))) return;
   const sql = neon(process.env.DATABASE_URL);
 
   try {
     if (req.method === 'GET') {
       // Return cached forecast (if any) without hitting Sheets — fast path for dashboard mounts.
       try {
-        await sql`
-          CREATE TABLE IF NOT EXISTS forecast_cache (
-            key        TEXT PRIMARY KEY,
-            value      JSONB NOT NULL,
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-          )
-        `;
+
         const rows = await sql`SELECT value, updated_at FROM forecast_cache WHERE key = 'pnl_monthly'`;
         if (!rows[0]) return res.json({ forecast: null });
         return res.json({ forecast: rows[0].value, updatedAt: rows[0].updated_at });

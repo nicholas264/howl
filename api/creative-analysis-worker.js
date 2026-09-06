@@ -1,3 +1,4 @@
+import { claimAnalysisCronSlot, completeAnalysisCronSlot } from './_lib/analysis-cron-slot.js';
 import { processCreativeAnalysisQueue } from './_lib/meta/creative-analysis.js';
 import { neon } from '@neondatabase/serverless';
 
@@ -26,29 +27,9 @@ export default async function handler(req, res) {
     // hourly slot lock so backlog draining can run multiple times per day
     // without duplicate work for the same scheduled slot.
     const sql = neon(process.env.DATABASE_URL);
-    await sql`
-      CREATE TABLE IF NOT EXISTS creative_analysis_cron_slots (
-        run_key TEXT PRIMARY KEY,
-        run_date DATE NOT NULL DEFAULT CURRENT_DATE,
-        run_hour INTEGER,
-        started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        completed_at TIMESTAMPTZ,
-        processed INTEGER NOT NULL DEFAULT 0
-      )
-    `;
-    const [slot] = await sql`
-      SELECT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD-HH24') AS run_key,
-             EXTRACT(HOUR FROM now() AT TIME ZONE 'UTC')::int AS run_hour
-    `;
-    const claimed = await sql`
-      INSERT INTO creative_analysis_cron_slots (run_key, run_date, run_hour)
-      VALUES (${slot.run_key}, CURRENT_DATE, ${slot.run_hour})
-      ON CONFLICT (run_key) DO UPDATE SET started_at = now()
-      WHERE creative_analysis_cron_slots.completed_at IS NULL
-        AND creative_analysis_cron_slots.started_at < now()-interval '10 minutes'
-      RETURNING run_key
-    `;
-    if (!claimed.length) return res.status(200).json({ ok: true, skipped: 'already_ran_this_slot', runKey: slot.run_key });
+
+    const slot = await claimAnalysisCronSlot(sql);
+    if (!slot) return res.status(200).json({ok:true,skipped:'already_ran_this_slot'});
 
     const batchSize = Math.max(1, Math.min(8, parseInt(process.env.CREATIVE_ANALYSIS_WORKER_BATCH_SIZE || '6', 10)));
 
@@ -60,12 +41,7 @@ export default async function handler(req, res) {
         adAccountId: `act_${rawId}`,
       },
     });
-    await sql`
-      UPDATE creative_analysis_cron_slots
-      SET completed_at = now(),
-          processed = ${out.body?.processed || 0}
-      WHERE run_key = ${slot.run_key}
-    `;
+    if (out.status < 400) await completeAnalysisCronSlot(sql,slot,out.body?.processed || 0);
     return res.status(out.status).json(out.body);
   } catch (err) {
     console.error('creative analysis worker failed:', err);

@@ -5,17 +5,6 @@ import { neon } from '@neondatabase/serverless';
 const GRAPH = 'https://graph.facebook.com/v21.0';
 const TTL_SECONDS = 5 * 60;
 
-async function ensureTable(sql) {
-  await sql`
-    CREATE TABLE IF NOT EXISTS meta_cache (
-      key        TEXT PRIMARY KEY,
-      payload    JSONB NOT NULL,
-      fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      usage      JSONB
-    )
-  `;
-}
-
 function parseUsageHeader(res) {
   const out = {};
   try {
@@ -34,7 +23,7 @@ import { requirePermission } from './_lib/app-access.js';
 export default async function handler(req, res) {
   if (!(await requirePermission(req, res, 'analytics.read'))) return;
   const sql = neon(process.env.DATABASE_URL);
-  await ensureTable(sql);
+
 
   const accessToken = process.env.META_ACCESS_TOKEN;
   const rawId = (process.env.META_AD_ACCOUNT_ID || '').replace('act_', '');

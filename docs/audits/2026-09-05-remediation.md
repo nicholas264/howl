@@ -110,6 +110,13 @@ not claim that the remaining infrastructure and product roadmap is complete.
   can no longer exchange codes or render refresh/access tokens. Existing configured
   Google Ads reporting credentials remain in use; historical exposure is not ruled out.
 
+- Meta/forecast caches, shared dashboard settings, and analysis cron slots are
+  created by release migrations rather than requests. Forecast refresh requires
+  analytics.write. Cron-slot completion is fenced by a unique claim token, so an
+  expired invocation cannot complete a replacement; unsuccessful dispatches do not
+  mark the slot complete. PostgreSQL tests cover duplicate/reclaimed slot behavior
+  under a restricted role. Production, preview, and restored-backup migrations passed.
+
 ## Remaining work / external prerequisites
 
 1. Grant the narrowly scoped AWS permissions in `../operations/backup-provisioning-policy.json`,

@@ -48,23 +48,13 @@ function normalizeSettings(value = {}) {
   return next;
 }
 
-async function ensureTable(sql) {
-  await sql`
-    CREATE TABLE IF NOT EXISTS dashboard_settings (
-      key        TEXT PRIMARY KEY,
-      value      JSONB NOT NULL,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    )
-  `;
-}
-
 export default async function handler(req, res) {
   if (!(await requirePermission(req, res, req.method === 'GET' ? 'analytics.read' : 'admin.users'))) return;
   const sql = neon(process.env.DATABASE_URL);
   try {
     if (req.method === 'GET') {
       try {
-        await ensureTable(sql);
+
         const rows = await sql`SELECT value FROM dashboard_settings WHERE key = 'cfo'`;
         const value = rows[0]?.value || {};
         return res.json({ settings: normalizeSettings(value) });
@@ -74,7 +64,7 @@ export default async function handler(req, res) {
       }
     }
     if (req.method === 'POST') {
-      await ensureTable(sql);
+
       const incoming = req.body?.settings || {};
       const merged = normalizeSettings(incoming);
       await sql`
