@@ -1,3 +1,4 @@
+import { ensureStudioCosts } from '../api/_lib/static-studio-costs.js';
 import { ensureWorkControls } from '../api/_lib/work-controls.js';
 import { ensureExperiments } from '../api/_lib/experiments.js';
 import { ensureAuthIdentities } from '../api/_lib/auth-identities.js';
@@ -48,4 +49,5 @@ await ensureAuthIdentities(sql);
 await ensureTranscriptionJobs(sql);
 await ensureOperationJournal(sql);
 await sql`INSERT INTO app_schema_migrations (version) VALUES ('2026-09-05-hardening-2') ON CONFLICT DO NOTHING`;
+await ensureStudioCosts(sql);
 console.log('Schema migrations applied.');

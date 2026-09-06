@@ -76,3 +76,41 @@ Functional correctness is not proof of designer-level creative quality. Calibrat
 Live provider and Drive authorization must be verified in the intended environment. The renderer bench and fixture tests are not evidence of designer-level creative quality.
 
 Personal Drive connection uses the existing Google OAuth flow with a Static Studio purpose requesting drive.readonly and account identity. Existing grants are preserved. The server prefers a personal connection with the required scope; a failed refresh does not silently switch to the shared service account.
+
+## Costs and model routing
+
+The **Costs & models** tab shows this signed-in user's Studio usage by UTC month,
+with per-stage/model totals and the latest 100 requests. Totals include all rows,
+including paid invalid/truncated responses. Requests are persisted before calling
+providers; unknown usage is explicitly flagged and excluded from the partial dollar
+total, never treated as confirmed zero. Historical requests before this feature are
+not backfilled. Hosting, storage, other tools, tax and ad spend are not included.
+
+Defaults are `gpt-6-astra` for analysis, direction and revisions and
+`claude-fable-5-1` for visual review; `claude-opus-5` is selectable for either role.
+Settings are server-validated and scoped to the authenticated studio owner. The
+monthly target defaults to $1,000 and is **a planning target, not a hard spend cap**.
+The existing shared rate, daily operation and concurrency limits remain enforced.
+
+Uses the app's existing server-only `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`
+connections. No credential is accepted by or returned to the browser. Key presence
+is not proof of credits or model access. No automatic provider/model fallback or
+paid retries: a failed provider request is shown for deliberate retry. Models receive
+approved preview photographs for the requested stage, never redraw product pixels.
+Image generation is not part of this renderer and is not billed by this workflow.
+
+OpenAI uses Responses with high reasoning, explicit standard service, no storage,
+and an output allowance including reasoning; Anthropic uses Messages with adaptive
+thinking. Calls time out after 230 seconds within the existing 300-second route.
+Published standard token prices were verified on 2026-09-06 against:
+- https://developers.openai.com/api/docs/pricing
+- https://platform.claude.com/docs/en/about-claude/pricing
+
+Cache reads/writes and Astra long-context pricing are accounted for. Reasoning is
+already included in output tokens and is not counted twice. Each settled request
+stores its estimated cost and rate version, so rate-card changes don't rewrite
+history. Unrecognized returned models remain unpriced. Provider invoices are final.
+
+Regression coverage: `tests/static-studio-costs.test.mjs` exercises SQL isolation,
+month boundaries, provider routing/payloads, caches/reasoning/long context, invalid
+outputs, unknown usage and persistence failure before paid work.
