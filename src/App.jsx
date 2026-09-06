@@ -9,6 +9,7 @@ import FeedbackWidget from "./components/FeedbackWidget";
 // Heavy tab tools are code-split — only the active tab's bundle is downloaded.
 const ReviewAdTool = lazy(() => import("./components/ReviewAdTool"));
 const VideoAdTool = lazy(() => import("./components/VideoAdTool"));
+const StaticStudio = lazy(() => import("./components/static-studio/StaticStudio.jsx"));
 const ImageAdTool = lazy(() => import("./components/ImageAdTool"));
 const CalloutAdTool = lazy(() => import("./components/CalloutAdTool"));
 const FounderAdTool = lazy(() => import("./components/FounderAdTool"));
@@ -224,6 +225,7 @@ export default function HowlAdEngine({ appAccess }) {
         { key: 'from-winners', label: 'Concept Studio', permission: 'briefs.write' },
         { key: 'content-studio', label: 'Blog Studio', permission: 'briefs.write' },
         { key: 'ugc-editor', label: 'UGC Editor', permission: 'assets.write' },
+        { key: 'static-studio', label: 'Static Studio', permission: 'assets.write' },
         { key: 'image', label: 'Image Ads', permission: 'assets.write' },
         { key: 'callout', label: 'Callout Ads', permission: 'assets.write' },
         { key: 'review', label: 'Review Ads', permission: 'assets.write' },
@@ -401,6 +403,7 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "from-winners" && <FromWinnersTool setActiveTab={navigate} setVariations={setVariations} onOpenCreator={openPlannedCreator} />}
         {activeTab === "content-studio" && <ContentStudio canPublish={can('content.publish')} />}
         {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} driveAuth={driveAuth} onAddToCart={addToCart} />}
+        {activeTab === "static-studio" && <StaticStudio onAddToCart={addToCart} onOpenLauncher={() => setActiveTab("launcher")} />}
         {activeTab === "callout" && <CalloutAdTool onAddToCart={addToCart} />}
         {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} onAddToCart={addToCart} />}
         {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} onAddToCart={addToCart} />}

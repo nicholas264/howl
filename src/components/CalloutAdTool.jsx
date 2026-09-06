@@ -837,10 +837,10 @@ export default function CalloutAdTool({ onAddToCart }) {
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'vision failed');
     const placements = data.placements || [];
-    if (!placements.length) return callouts;
+    if (!placements.length) throw new Error('No features could be confidently located in this photograph. Choose another image or place the anchors manually.');
     const merged = callouts.map(c => {
       const p = placements.find(pl => pl.feature.toLowerCase() === (c.heading || '').toLowerCase());
-      if (!p) return c;
+      if (!p) return null;
       return {
         ...c,
         anchorX: p.anchorX,
@@ -850,7 +850,7 @@ export default function CalloutAdTool({ onAddToCart }) {
         textY: p.anchorY,
       };
     });
-    const solved = applyLayoutSolver(merged);
+    const solved = applyLayoutSolver(merged.filter(Boolean));
     // Cache the result so subsequent renders are deterministic and free.
     if (imageId) {
       savePlacements(calloutsToPlacementRows(solved, imageId, 'vision'));
@@ -890,7 +890,7 @@ export default function CalloutAdTool({ onAddToCart }) {
         const img = savedImages[i];
         try {
           const calloutsForImg = withVision
-            ? await placeCalloutsWithVision(img.url, img.id).catch(() => callouts)
+            ? await placeCalloutsWithVision(img.url, img.id)
             : callouts;
           const canvas = await renderCalloutCanvas({
             imgUrl: img.url, format, title, subtitle, callouts: calloutsForImg, titlePos,
