@@ -9,6 +9,13 @@ import { createServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import { PGlite } from '@electric-sql/pglite';
 import { useTestDatabase } from '../tests/neon-test-adapter.mjs';
+import { ensureRateLimits } from '../api/_lib/rate-limit.js';
+import { ensureLaunchDrafts } from '../api/_lib/launch-drafts.js';
+import { ensureOperationJournal } from '../api/_lib/operation-journal.js';
+import { ensureStudioTables } from '../api/_lib/static-studio-store.js';
+import { ensureStudioCosts } from '../api/_lib/static-studio-costs.js';
+import { ensureWorkControls } from '../api/_lib/work-controls.js';
+import { ensureOperationBudgets } from '../api/_lib/operation-budget.js';
 import studioHandler from '../api/static-studio.js';
 import { applyArtDirectionRepair, COPY } from '../src/lib/static-studio/model.js';
 import draftsHandler from '../api/launch-drafts.js';
@@ -26,6 +33,9 @@ let server,browser;
 const entry=`import React from 'react';import {createRoot} from 'react-dom/client';import StaticStudio from '/src/components/static-studio/StaticStudio.jsx';import Launcher from '/src/components/LauncherTool.jsx';import {loadLaunchDrafts,persistLaunchDraft} from '/src/lib/launchDrafts.js';import '/src/styles.css';
 function Harness(){const [launch,setLaunch]=React.useState(false),[cart,setCart]=React.useState([]);React.useEffect(()=>{loadLaunchDrafts().then(setCart)},[]);return launch?<Launcher cart={cart}/>:<StaticStudio onOpenLauncher={()=>setLaunch(true)} onAddToCart={async item=>{const saved=await persistLaunchDraft(item);setCart(c=>[saved,...c.filter(row=>row.id!==saved.id)])}}/>}createRoot(document.getElementById('root')).render(<Harness/>);`;
 try {
+ const sql=async(parts,...values)=>(await db.query(parts.reduce((q,p,i)=>q+(i?`$${i}`:'')+p,''),values)).rows;
+ await ensureRateLimits(sql);await ensureLaunchDrafts(sql);await ensureOperationJournal(sql);
+ await ensureStudioTables(sql);await ensureStudioCosts(sql);await ensureWorkControls(sql);await ensureOperationBudgets(sql);
  server=await createServer({configFile:false,root:process.cwd(),envDir:path.join(output,'empty-env'),define:{'import.meta.env.VITE_AUTH_DISABLED':'"true"'},plugins:[react(),{name:'isolated-studio-fixture',resolveId(id){if(id==='/fixture.jsx')return path.join(process.cwd(),'__static_qa__.jsx');},load(id){if(id===path.join(process.cwd(),'__static_qa__.jsx'))return entry;},configureServer(s){s.middlewares.use(async(req,res,next)=>{
   const url=new URL(req.url,'http://localhost');
   if(url.pathname==='/'){res.setHeader('Content-Type','text/html');return res.end(await s.transformIndexHtml('/', '<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="margin:0"><div id="root"></div><script type="module" src="/@vite/client"></script><script type="module" src="/fixture.jsx"></script></body></html>'));}
@@ -62,6 +72,33 @@ try {
  await page.goto('http://127.0.0.1:5189/');
  await page.getByRole('heading',{name:'Your source material'}).waitFor();
  await page.screenshot({path:path.join(output,'01-empty-studio.png'),fullPage:true});
+ await page.getByRole('button',{name:'Costs & models',exact:true}).click();
+ await page.getByRole('heading',{name:'Know what every idea costs.'}).waitFor();
+ await page.getByText('No recorded model calls this month.').waitFor();
+ await page.getByLabel('Creative direction & photo analysis').selectOption('claude-opus-5');
+ await page.getByLabel('Monthly planning target ($)').fill('750');
+ await page.getByRole('button',{name:'Save models & target'}).click();
+ await page.getByText('Model choices saved.',{exact:false}).waitFor();
+ await page.reload();
+ await page.getByRole('button',{name:'Costs & models',exact:true}).click();
+ await page.getByLabel('Creative direction & photo analysis').waitFor();
+ assert.equal(await page.getByLabel('Creative direction & photo analysis').inputValue(),'claude-opus-5');
+ assert.equal(await page.getByLabel('Monthly planning target ($)').inputValue(),'750');
+ const actor=(await db.query('SELECT user_id FROM static_studio_settings')).rows[0].user_id;
+ await db.query("INSERT INTO static_studio_usage(id,user_id,stage,model,provider,status,cost_usd,input_tokens,output_tokens,rate_version) VALUES('cost-fixture',$1,'direct','gpt-6-astra','openai','completed',12.3456,200000,206912,'2026-09-06'),('unknown-fixture',$1,'review','claude-fable-5-1','anthropic','unknown',NULL,NULL,NULL,'2026-09-06')",[actor]);
+ await page.getByRole('button',{name:'Refresh usage'}).click();
+ await page.getByText('$12.35',{exact:true}).waitFor();
+ assert.equal(await page.getByText('12/31/1969',{exact:false}).count(),0);
+ await page.getByText('1 request(s) have unconfirmed costs',{exact:false}).waitFor();
+ await page.screenshot({path:path.join(output,'05-costs-desktop.png'),fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ await page.screenshot({path:path.join(output,'06-costs-mobile.png'),fullPage:true});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth),false);
+ await page.setViewportSize({width:1500,height:1100});
+ await page.getByLabel('Usage month (UTC)').fill('2020-01');
+ await page.getByText('No recorded model calls this month.').waitFor();
+ await page.getByRole('button',{name:'Assets',exact:false}).first().click();
+
  for(const id of ['r1','r3','r4mkii']) {
    const bytes=await fs.readFile(path.join(output,`${id}.jpg`));const metadata=await sharp(bytes).metadata();
    await page.locator('input[type=file]').setInputFiles({name:`${id}.png`,mimeType:'image/png',buffer:bytes});
