@@ -19,6 +19,7 @@ import ffmpegPath from 'ffmpeg-static';
 import { backfillCreativeAssetsFromLaunchHistory, ensureCreativeAssetTables } from '../creative-assets.js';
 import {
   claimCreativeAnalysisJob,
+  claimManualCreativeAnalysis,
   completeCreativeAnalysisJob,
   enqueueCreativeAnalyses,
   failCreativeAnalysisJob,
@@ -154,7 +155,21 @@ async function prepareVideoAsset(source, { transcribe = true } = {}) {
 }
 
 export async function analyzeCreativeGroup(options) {
-  return boundedWork(() => analyzeCreativeGroupWithinBudget(options), options.timeoutMs || 180000);
+  if (options.job) return boundedWork(() => analyzeCreativeGroupWithinBudget(options), options.timeoutMs || 180000);
+  if (!options.groupKey) return {status:400,body:{error:'groupKey required'}};
+  if (!process.env.DATABASE_URL || !process.env.ANTHROPIC_API_KEY) return {status:503,body:{error:'Analysis provider is not configured'}};
+  const sql = neon(process.env.DATABASE_URL);
+  const job = await claimManualCreativeAnalysis(sql, options.groupKey);
+  if (!job) return {status:409,body:{error:'This creative is already being analyzed. Wait for the active analysis to finish.'}};
+  try {
+    const result = await boundedWork(() => analyzeCreativeGroupWithinBudget({...options,job}), options.timeoutMs || 180000);
+    if (!result.body?.ok) await failCreativeAnalysisJob(sql,{...job,max_attempts:1},result.body?.error || 'Manual analysis failed');
+    return result;
+  } catch (error) {
+    // A manual transcript is request-local, so do not retry without that input.
+    await failCreativeAnalysisJob(sql,{...job,max_attempts:1},error.message);
+    throw error;
+  }
 }
 
 async function analyzeCreativeGroupWithinBudget({ groupKey, assetId = null, manualTranscript = '', ctx, job = null }) {
@@ -322,12 +337,17 @@ async function analyzeCreativeGroupWithinBudget({ groupKey, assetId = null, manu
       if (prepared.visionError) debug.image = `frame extraction exception: ${prepared.visionError}`;
       if (sourceAsset) {
         await sql`
+          WITH owned AS MATERIALIZED (
+            SELECT group_key FROM creative_analysis_queue
+            WHERE group_key=${groupKey} AND status='processing' AND lease_token=${job.lease_token}
+            FOR UPDATE
+          )
           UPDATE creative_assets SET
             transcript = COALESCE(${transcript || null}, transcript),
             transcript_status = ${transcript ? 'complete' : (prepared.transcriptError ? 'error' : 'missing')},
             transcript_error = ${prepared.transcriptError},
             updated_at = now()
-          WHERE id = ${sourceAsset.id}
+          WHERE id = ${sourceAsset.id} AND EXISTS(SELECT 1 FROM owned)
         `;
       }
     } catch (err) {
@@ -335,11 +355,16 @@ async function analyzeCreativeGroupWithinBudget({ groupKey, assetId = null, manu
       debug.image = `video preparation exception: ${err.message}`;
       if (sourceAsset) {
         await sql`
+          WITH owned AS MATERIALIZED (
+            SELECT group_key FROM creative_analysis_queue
+            WHERE group_key=${groupKey} AND status='processing' AND lease_token=${job.lease_token}
+            FOR UPDATE
+          )
           UPDATE creative_assets SET
             transcript_status = ${transcript ? 'complete' : 'error'},
             transcript_error = ${transcript ? null : err.message},
             updated_at = now()
-          WHERE id = ${sourceAsset.id}
+          WHERE id = ${sourceAsset.id} AND EXISTS(SELECT 1 FROM owned)
         `;
       }
     }
@@ -348,7 +373,12 @@ async function analyzeCreativeGroupWithinBudget({ groupKey, assetId = null, manu
   }
   if (sourceAsset && isVideo) {
     await sql`
-      UPDATE creative_assets SET
+      WITH owned AS MATERIALIZED (
+            SELECT group_key FROM creative_analysis_queue
+            WHERE group_key=${groupKey} AND status='processing' AND lease_token=${job.lease_token}
+            FOR UPDATE
+          )
+          UPDATE creative_assets SET
         playable_url = COALESCE(${videoSource || null}, playable_url, durable_url),
         preview_url = COALESCE(${imageUrl || null}, preview_url, drive_thumbnail_url),
         playback_status = CASE
@@ -362,17 +392,22 @@ async function analyzeCreativeGroupWithinBudget({ groupKey, assetId = null, manu
         END,
         playback_checked_at = now(),
         updated_at = now()
-      WHERE id = ${sourceAsset.id}
+      WHERE id = ${sourceAsset.id} AND EXISTS(SELECT 1 FROM owned)
     `;
   } else if (sourceAsset && !isVideo) {
     await sql`
-      UPDATE creative_assets SET
+      WITH owned AS MATERIALIZED (
+            SELECT group_key FROM creative_analysis_queue
+            WHERE group_key=${groupKey} AND status='processing' AND lease_token=${job.lease_token}
+            FOR UPDATE
+          )
+          UPDATE creative_assets SET
         preview_url = COALESCE(${imageUrl || null}, preview_url, drive_thumbnail_url),
         playback_status = 'not-needed',
         playback_error = NULL,
         playback_checked_at = now(),
         updated_at = now()
-      WHERE id = ${sourceAsset.id}
+      WHERE id = ${sourceAsset.id} AND EXISTS(SELECT 1 FROM owned)
     `;
   }
 
@@ -532,7 +567,7 @@ Analyze this creative.`;
       (group_key, asset_kind, transcript, hook_text_verbatim, hook_type, format, angle, talent_description, visual_summary, why_it_worked, performance_snapshot, model, source_asset_id, vision_frame_count, transcription_status, structured_analysis, evidence, confidence, operator_summary, recommended_next_step, generated_at)
     SELECT
       ${groupKey}, ${assetKind}, ${transcript || null}, ${parsed.hook_text_verbatim || null}, ${parsed.hook_type || null}, ${parsed.format || null}, ${parsed.angle || null}, ${parsed.talent_description || null}, ${parsed.visual_summary || null}, ${parsed.why_it_worked || null}, ${JSON.stringify(perf)}::jsonb, ${ANALYSIS_MODEL}, ${sourceAsset?.id || null}, ${visionFrames.length || (imageB64 ? 1 : 0)}, ${transcript ? 'complete' : (isVideo ? 'missing' : 'not-needed')}, ${JSON.stringify(structuredAnalysis)}::jsonb, ${JSON.stringify(evidence)}::jsonb, ${confidence}, ${structuredAnalysis.operator_summary}, ${structuredAnalysis.recommended_next_step}, NOW()
-    WHERE (${!job} OR EXISTS (SELECT 1 FROM owned))
+    WHERE EXISTS (SELECT 1 FROM owned)
     ON CONFLICT (group_key) DO UPDATE SET
       asset_kind = EXCLUDED.asset_kind,
       transcript = EXCLUDED.transcript,
@@ -558,7 +593,12 @@ Analyze this creative.`;
   `;
   if (!saved.length) throw new Error('Analysis worker lease was replaced');
   if (sourceAsset) {
-    await sql`UPDATE creative_assets SET analyzed_at = now(), updated_at = now() WHERE id = ${sourceAsset.id}`;
+    await sql`WITH owned AS MATERIALIZED (
+            SELECT group_key FROM creative_analysis_queue
+            WHERE group_key=${groupKey} AND status='processing' AND lease_token=${job.lease_token}
+            FOR UPDATE
+          )
+          UPDATE creative_assets SET analyzed_at = now(), updated_at = now() WHERE id = ${sourceAsset.id} AND EXISTS(SELECT 1 FROM owned)`;
   }
   await completeCreativeAnalysisJob(sql, groupKey, job);
 

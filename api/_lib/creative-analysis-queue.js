@@ -69,7 +69,7 @@ export async function enqueueCreativeAnalyses(sql, source = 'meta_sync') {
        OR (purchases >= 2 AND spend > 0 AND purchase_value / spend >= 2)
     ON CONFLICT (group_key) DO UPDATE SET
       priority = GREATEST(creative_analysis_queue.priority, EXCLUDED.priority),
-      source = EXCLUDED.source,
+      source = CASE WHEN creative_analysis_queue.status = 'processing' THEN creative_analysis_queue.source ELSE EXCLUDED.source END,
       status = CASE
         WHEN creative_analysis_queue.status = 'completed' THEN 'pending'
         ELSE creative_analysis_queue.status
@@ -92,7 +92,7 @@ export async function enqueueCreativeAssetAnalysis(sql, groupKey, source = 'laun
     VALUES (${groupKey}, 1000000, ${source}, 'pending', now(), now())
     ON CONFLICT (group_key) DO UPDATE SET
       priority = GREATEST(creative_analysis_queue.priority, EXCLUDED.priority),
-      source = EXCLUDED.source,
+      source = CASE WHEN creative_analysis_queue.status = 'processing' THEN creative_analysis_queue.source ELSE EXCLUDED.source END,
       status = CASE
         WHEN creative_analysis_queue.status IN ('completed', 'failed') THEN 'pending'
         ELSE creative_analysis_queue.status
@@ -112,11 +112,28 @@ export async function enqueueCreativeAssetAnalysis(sql, groupKey, source = 'laun
   return rows.length;
 }
 
+// Manual requests share the worker lease instead of bypassing queue ownership.
+export async function claimManualCreativeAnalysis(sql, groupKey) {
+  await ensureCreativeAnalysisQueue(sql);
+  const [job] = await sql`
+    INSERT INTO creative_analysis_queue
+      (group_key,status,source,attempts,lease_token,started_at,available_at,updated_at)
+    VALUES (${groupKey},'processing','manual',1,${randomUUID()},now(),now(),now())
+    ON CONFLICT (group_key) DO UPDATE SET
+      status='processing',source='manual',attempts=1,lease_token=EXCLUDED.lease_token,
+      started_at=now(),available_at=now(),updated_at=now(),last_error=NULL
+    WHERE creative_analysis_queue.status <> 'processing'
+      OR creative_analysis_queue.started_at < now()-interval '15 minutes'
+    RETURNING *
+  `;
+  return job || null;
+}
+
 export async function claimCreativeAnalysisJob(sql) {
   await ensureCreativeAnalysisQueue(sql);
   await sql`
     UPDATE creative_analysis_queue
-    SET status = CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'pending' END,
+    SET status = CASE WHEN source = 'manual' OR attempts >= max_attempts THEN 'failed' ELSE 'pending' END,
         available_at = now(),
         started_at = NULL,
         lease_token = NULL,

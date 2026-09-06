@@ -13,7 +13,7 @@ import { useTestDatabase } from './neon-test-adapter.mjs';
 import { resolveEmail, verifiedUserEmail } from '../api/_lib/auth.js';
 import { claimWork, finishWork, recordProviderUsage } from '../api/_lib/work-controls.js';
 import { initializeSchema } from '../api/db/schema.js';
-import { enqueueCreativeAssetAnalysis, enqueueCreativeAnalyses, claimCreativeAnalysisJob, completeCreativeAnalysisJob, failCreativeAnalysisJob } from '../api/_lib/creative-analysis-queue.js';
+import { enqueueCreativeAssetAnalysis, enqueueCreativeAnalyses, claimCreativeAnalysisJob, claimManualCreativeAnalysis, completeCreativeAnalysisJob, failCreativeAnalysisJob } from '../api/_lib/creative-analysis-queue.js';
 import { saveSessionEdits } from '../api/_lib/session-edits.js';
 import { reserveOperationBudget } from '../api/_lib/operation-budget.js';
 import { completeRender } from '../api/_lib/render-completion.js';
@@ -444,4 +444,28 @@ test('transcription cannot run twice or replace edits made while processing',asy
   assert.equal(await saveTranscription(sql,session.id,source,job,{words:[{word:'stale'}],duration:1,audioUrl:'https://example.test/audio.mp3'}),false);
   const [saved]=await sql`SELECT words FROM ugc_sessions WHERE id=${session.id}`;
   assert.equal(saved.words[0].word,'edited');
+});
+
+
+test('manual analysis shares queue ownership and cannot replace an active worker', async () => {
+  const group='manual-lease-fixture';
+  const first=await claimManualCreativeAnalysis(sql,group);
+  assert.ok(first?.lease_token);
+  assert.equal(await claimManualCreativeAnalysis(sql,group),null);
+  await sql`UPDATE creative_analysis_queue SET started_at=now()-interval '16 minutes' WHERE group_key=${group}`;
+  const second=await claimManualCreativeAnalysis(sql,group);
+  assert.notEqual(first.lease_token,second.lease_token);
+  assert.equal(await completeCreativeAnalysisJob(sql,group,first),false);
+  assert.equal(await completeCreativeAnalysisJob(sql,group,second),true);
+});
+
+
+test('expired manual analysis is not retried without its request-local transcript', async () => {
+  const group='expired-manual-fixture';
+  await claimManualCreativeAnalysis(sql,group);
+  await enqueueCreativeAssetAnalysis(sql,group,'launch');
+  await sql`UPDATE creative_analysis_queue SET started_at=now()-interval '16 minutes' WHERE group_key=${group}`;
+  await claimCreativeAnalysisJob(sql);
+  const [row]=await sql`SELECT status,source FROM creative_analysis_queue WHERE group_key=${group}`;
+  assert.deepEqual(row,{status:'failed',source:'manual'});
 });
