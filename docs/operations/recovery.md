@@ -110,3 +110,18 @@ in the restricted recovery system for retained backups; removing it from live
 authentication configuration does not make old encrypted backups recoverable
 without that key. This migration is prepared in code but has not been activated
 in production while preview isolation remains outstanding.
+
+
+### Deployment verification gate
+
+Vercel runs `npm run check && npm audit --audit-level=high` before publishing.
+Backend syntax, regression tests, the frontend build, and the dependency audit
+must all succeed. GitHub checks run independently as a second check; deployment
+does not rely on GitHub finishing first.
+
+`npm test` runs regression files in a child process with a minimal environment
+and temporary home directory. Production database credentials, provider keys,
+Clerk secrets, Vercel OIDC tokens, and Node preload options are not inherited by
+the tests. The frontend build keeps its normal environment so public build-time
+configuration remains available. A regression fixture verifies that a failed
+test produces a failing runner exit code.

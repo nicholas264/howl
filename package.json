@@ -14,7 +14,7 @@
     "remotion:policy:validate": "remotion lambda policies validate",
     "remotion:lambda:deploy": "remotion lambda functions deploy",
     "remotion:site:deploy": "remotion lambda sites create src/remotion/index.jsx --site-name=howl-ugc",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node scripts/test-isolated.mjs",
     "check:api": "node scripts/check-api.mjs",
     "check": "npm run check:api && npm test && npm run build",
     "db:migrate": "node scripts/migrate.mjs"

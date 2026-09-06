@@ -100,5 +100,6 @@
         }
       ]
     }
-  ]
+  ],
+  "buildCommand": "npm run check && npm audit --audit-level=high"
 }
