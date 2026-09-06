@@ -1,3 +1,4 @@
+import { googleCallbackUrl } from '../_lib/google-oauth-routing.js';
 import { requirePermission } from '../_lib/app-access.js';
 import { createGoogleOAuthState, getGoogleConnection } from '../_lib/google-user-oauth.js';
 
@@ -14,10 +15,12 @@ export default async function handler(req, res) {
   }
   if (req.method !== 'POST') return res.status(405).end();
 
+  let redirect;
+  try {redirect=googleCallbackUrl(process.env,req.headers?.origin);} catch(error) {return res.status(503).json({error:error.message});}
   const state = await createGoogleOAuthState(sql, access.userId, purpose);
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
-    redirect_uri: process.env.GOOGLE_REDIRECT_URI,
+    redirect_uri: redirect,
     response_type: 'code',
     include_granted_scopes: 'true',
     scope: (purpose==='static_studio' ? ['openid','email','https://www.googleapis.com/auth/drive.readonly'] : [
