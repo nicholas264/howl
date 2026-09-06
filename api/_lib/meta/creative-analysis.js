@@ -1,4 +1,7 @@
-import { boundedWork, workSignal, checkWork, workFetch as fetch } from '../bounded-work.js';
+import { withProviderMetering, scopedMeteredFetch } from '../metered-fetch.js';
+import { reservePaidWork } from '../paid-work.js';
+import { finishWork } from '../work-controls.js';
+import { boundedWork, workSignal, checkWork, workFetch as boundedFetch } from '../bounded-work.js';
 // AI creative analysis for Meta ads. Extracted from api/meta.js to keep
 // that file focused on publishing + insights. Three handlers live here:
 //
@@ -20,6 +23,7 @@ import { backfillCreativeAssetsFromLaunchHistory, ensureCreativeAssetTables } fr
 import {
   claimCreativeAnalysisJob,
   claimManualCreativeAnalysis,
+  deferCreativeAnalysisJob,
   completeCreativeAnalysisJob,
   enqueueCreativeAnalyses,
   failCreativeAnalysisJob,
@@ -28,6 +32,7 @@ import {
 } from '../creative-analysis-queue.js';
 import { getGoogleAccessToken } from '../gcp-auth.js';
 
+const fetch=scopedMeteredFetch(boundedFetch);
 const DRIVE = 'https://www.googleapis.com/drive/v3';
 const WHISPER_MAX_BYTES = 24 * 1024 * 1024;
 const ANALYSIS_MODEL = process.env.CREATIVE_ANALYSIS_MODEL || 'claude-sonnet-4-6';
@@ -155,6 +160,10 @@ async function prepareVideoAsset(source, { transcribe = true } = {}) {
 }
 
 export async function analyzeCreativeGroup(options) {
+  return withProviderMetering(options.workAccess,()=>runCreativeAnalysis(options));
+}
+
+async function runCreativeAnalysis(options) {
   if (options.job) return boundedWork(() => analyzeCreativeGroupWithinBudget(options), options.timeoutMs || 180000);
   if (!options.groupKey) return {status:400,body:{error:'groupKey required'}};
   if (!process.env.DATABASE_URL || !process.env.ANTHROPIC_API_KEY) return {status:503,body:{error:'Analysis provider is not configured'}};
@@ -632,7 +641,7 @@ Analyze this creative.`;
   };
 }
 
-export async function processCreativeAnalysisQueue({ ctx, batchSize: rawBatchSize = 2 }) {
+export async function processCreativeAnalysisQueue({ ctx, batchSize: rawBatchSize = 2, actorId = 'system:creative-analysis' }) {
   if (!process.env.DATABASE_URL) return { status: 200, body: { error: 'DATABASE_URL not configured' } };
   const batchSize = Math.max(1, Math.min(8, parseInt(rawBatchSize || 2, 10)));
   const sql = neon(process.env.DATABASE_URL);
@@ -645,8 +654,19 @@ export async function processCreativeAnalysisQueue({ ctx, batchSize: rawBatchSiz
     if (deadline - Date.now() < 10000) break;
     const job = await claimCreativeAnalysisJob(sql);
     if (!job) break;
+    let workId;
     try {
-      const out = await analyzeCreativeGroup({ groupKey: job.group_key, ctx, job, timeoutMs: Math.min(180000, deadline - Date.now()) });
+      workId=await reservePaidWork(sql,'analysis',actorId,{hourlyLimit:30});
+      if(!workId)throw Object.assign(new Error('Analysis concurrency limit reached'),{statusCode:429});
+    } catch(error){
+      await deferCreativeAnalysisJob(sql,job,error.message);
+      results.push({groupKey:job.group_key,status:'deferred',error:error.message});
+      break;
+    }
+    let workStatus=500;
+    try {
+      const out = await analyzeCreativeGroup({ groupKey: job.group_key, ctx, job, workAccess:{sql,workId}, timeoutMs: Math.min(180000, deadline - Date.now()) });
+      workStatus=out.body?.ok?out.status:Math.max(out.status,400);
       if (out.status >= 200 && out.status < 300 && out.body?.ok) {
         results.push({ groupKey: job.group_key, status: 'completed' });
       } else {
@@ -657,6 +677,8 @@ export async function processCreativeAnalysisQueue({ ctx, batchSize: rawBatchSiz
     } catch (err) {
       const status = await failCreativeAnalysisJob(sql, job, err.message);
       results.push({ groupKey: job.group_key, status, error: err.message });
+    } finally {
+      await finishWork(sql,workId,'analysis',workStatus);
     }
   }
 

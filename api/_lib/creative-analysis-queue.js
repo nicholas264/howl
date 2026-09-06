@@ -283,3 +283,11 @@ export async function getCreativeAnalysisQueueStatus(sql) {
     },
   };
 }
+
+
+export async function deferCreativeAnalysisJob(sql,job,reason) {
+  return sql`UPDATE creative_analysis_queue SET status='pending',lease_token=NULL,started_at=NULL,
+    attempts=GREATEST(attempts-1,0),available_at=now()+interval '5 minutes',last_error=${reason},updated_at=now()
+    WHERE group_key=${job.group_key} AND status='processing' AND lease_token=${job.lease_token}
+    RETURNING group_key`;
+}

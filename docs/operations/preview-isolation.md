@@ -25,9 +25,14 @@ feature pass a smoke test.
 
 ## Remaining boundaries
 
-- Existing deployments retain their previous environment snapshots. Inventory and
-  retire or rebuild legacy previews before claiming all deployed previews are
-  isolated. Changing project variables does not revoke old credentials.
+- The six legacy previews were retired after checking their project, aliases,
+  and retained source commits. A complete Vercel preview inventory now lists only
+  the isolated preview. Changing project variables alone would not have removed
+  credentials from those old builds.
+- Superseded production deployments retain their own environment snapshots. A
+  separate inventory found 770 older ready builds with retained source commits,
+  plus one build without verified source metadata. Bulk retirement is awaiting
+  approval; both current-release builds are excluded from that plan.
 - Production and preview databases currently share a Neon branch and compute.
   Database privileges separate data access; they do not isolate capacity or
   branch-level operations. A dedicated branch or project remains preferable for

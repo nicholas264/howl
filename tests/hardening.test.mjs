@@ -1,3 +1,5 @@
+import { reservePaidWork } from '../api/_lib/paid-work.js';
+import { scopedMeteredFetch, withProviderMetering } from '../api/_lib/metered-fetch.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -13,7 +15,7 @@ import { useTestDatabase } from './neon-test-adapter.mjs';
 import { resolveEmail, verifiedUserEmail } from '../api/_lib/auth.js';
 import { claimWork, finishWork, recordProviderUsage } from '../api/_lib/work-controls.js';
 import { initializeSchema } from '../api/db/schema.js';
-import { enqueueCreativeAssetAnalysis, enqueueCreativeAnalyses, claimCreativeAnalysisJob, claimManualCreativeAnalysis, completeCreativeAnalysisJob, failCreativeAnalysisJob } from '../api/_lib/creative-analysis-queue.js';
+import { enqueueCreativeAssetAnalysis, enqueueCreativeAnalyses, claimCreativeAnalysisJob, claimManualCreativeAnalysis, deferCreativeAnalysisJob, completeCreativeAnalysisJob, failCreativeAnalysisJob } from '../api/_lib/creative-analysis-queue.js';
 import { saveSessionEdits } from '../api/_lib/session-edits.js';
 import { reserveOperationBudget } from '../api/_lib/operation-budget.js';
 import { completeRender } from '../api/_lib/render-completion.js';
@@ -468,4 +470,39 @@ test('expired manual analysis is not retried without its request-local transcrip
   await claimCreativeAnalysisJob(sql);
   const [row]=await sql`SELECT status,source FROM creative_analysis_queue WHERE group_key=${group}`;
   assert.deepEqual(row,{status:'failed',source:'manual'});
+});
+
+
+test('manual and system work share daily budgets and provider usage stays with its async job', async () => {
+  const old=process.env.HOWL_DAILY_GENERATION_LIMIT;
+  process.env.HOWL_DAILY_GENERATION_LIMIT='2';
+  let first,second;
+  try {
+    first=await reservePaidWork(sql,'generation','budget-user-fixture');
+    second=await reservePaidWork(sql,'generation','system:budget-fixture');
+    assert.ok(first&&second);
+    await assert.rejects(reservePaidWork(sql,'generation','third-budget-fixture'),/Daily operation limit/);
+    const fetch=scopedMeteredFetch(async()=>new Response(JSON.stringify({model:'fixture-model',usage:{input_tokens:11,output_tokens:7}}),{headers:{'content-type':'application/json'}}));
+    await Promise.all([
+      withProviderMetering({sql,workId:first},async()=>{await fetch('https://api.anthropic.com/v1/messages');await fetch('https://api.anthropic.com/v1/messages');}),
+      withProviderMetering({sql,workId:second},()=>fetch('https://api.anthropic.com/v1/messages')),
+    ]);
+    const rows=await sql`SELECT id,input_tokens,output_tokens,cost_usd FROM app_work_runs WHERE id IN (${first},${second})`;
+    assert.equal(Number(rows.find(row=>row.id===first).input_tokens),22);
+    assert.equal(Number(rows.find(row=>row.id===second).input_tokens),11);
+    assert.ok(rows.every(row=>row.cost_usd===null));
+  } finally {
+    if(first)await finishWork(sql,first,'generation',200);
+    if(second)await finishWork(sql,second,'generation',200);
+    if(old===undefined)delete process.env.HOWL_DAILY_GENERATION_LIMIT;else process.env.HOWL_DAILY_GENERATION_LIMIT=old;
+  }
+});
+
+test('work-budget deferral preserves retries and refuses a replaced lease', async () => {
+  const group='budget-defer-fixture';
+  const job=await claimManualCreativeAnalysis(sql,group);
+  assert.equal((await deferCreativeAnalysisJob(sql,{...job,lease_token:'stale'},'limit')).length,0);
+  assert.equal((await deferCreativeAnalysisJob(sql,job,'limit')).length,1);
+  const [row]=await sql`SELECT status,attempts,lease_token FROM creative_analysis_queue WHERE group_key=${group}`;
+  assert.deepEqual(row,{status:'pending',attempts:0,lease_token:null});
 });

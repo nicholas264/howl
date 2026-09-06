@@ -430,7 +430,7 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Forbidden - action permission required' });
   }
 
-  if (['analyze_creative_group', 'process_creative_analysis_queue', 'normalize_creative_asset', 'normalize_creative_asset_batch'].includes(action)
+  if (['analyze_creative_group', 'normalize_creative_asset', 'normalize_creative_asset_batch'].includes(action)
       && !(await checkWorkLimit(appAccess, res, 'analysis'))) return;
   const fetch = launchActions.has(action)
     ? await createMetaOperationFetch(appAccess.sql, req, appAccess.userId) : globalThis.fetch;
@@ -2051,6 +2051,7 @@ export default async function handler(req, res) {
           groupKey: req.body.groupKey,
           assetId: req.body.assetId || null,
           manualTranscript,
+          workAccess: appAccess,
           ctx: { BASE, accessToken, adAccountId },
         });
         if (manualTranscript && out.status >= 200 && out.status < 300 && !out.body?.error) {
@@ -2093,6 +2094,7 @@ export default async function handler(req, res) {
 
       case 'process_creative_analysis_queue': {
         const out = await processCreativeAnalysisQueue({
+          actorId: appAccess.userId,
           ctx: { BASE, accessToken, adAccountId },
           batchSize: req.body.batchSize,
         });

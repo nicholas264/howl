@@ -63,6 +63,17 @@ not claim that the remaining infrastructure and product roadmap is complete.
   changes after assignment capture, including changes that later reverse. This is
   observation history, not reconstructed provider effective dates.
 
+- Manual analysis now claims the worker queue lease, and intermediate asset
+  metadata writes require that same lease. Expired manual requests fail rather
+  than being retried without their request-local transcript.
+- Scheduled analysis jobs reserve the same daily budget and concurrency lanes as
+  manual jobs. Budget-limited jobs are deferred without consuming a processing
+  retry; provider token usage is associated with the individual async job.
+- New previews use an empty, separate database and a restricted login with no
+  privileges on production tables. Production provider secrets were removed from
+  Preview targets, and six legacy preview builds were retired. Development and
+  superseded production deployment snapshots still require isolation/retirement.
+
 ## Remaining work / external prerequisites
 
 1. Grant the narrowly scoped AWS permissions in `../operations/backup-provisioning-policy.json`,
