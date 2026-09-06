@@ -13,9 +13,9 @@ function DownloadIcon(){return <svg width="18" height="18" viewBox="0 0 24 24" f
 function ImageIcon(){return <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><rect x="6" y="8" width="36" height="32" rx="2"/><circle cx="17" cy="19" r="4"/><path d="m7 34 12-10 9 8 7-5 7 6"/></svg>;}
 function saveFile(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 
-export default function StaticStudio({onAddToCart,onOpenLauncher}) {
+export default function StaticStudio({onAddToCart,onOpenLauncher,driveAuth}) {
   const {workspace:w,update,flush,reload,loaded,saving,dirty,error:saveError}=useStudio();
-  const [view,setView]=useState('library'),[assetId,setAssetId]=useState(''),[conceptId,setConceptId]=useState(''),[busy,setBusy]=useState(''),[message,setMessage]=useState(''),[error,setError]=useState('');
+  const [view,setView]=useState('library'),[assetId,setAssetId]=useState(''),[conceptId,setConceptId]=useState(''),[busy,setBusy]=useState(''),[message,setMessage]=useState(driveAuth?.connectionSucceeded?'Google connection saved. Browse your Drive folder to import photographs.':''),[error,setError]=useState(driveAuth?.connectionError || '');
   const [driveFiles,setDriveFiles]=useState(null),[driveSelected,setDriveSelected]=useState(new Set()),[pageToken,setPageToken]=useState(''),[breadcrumbs,setBreadcrumbs]=useState([]);
   const [protecting,setProtecting]=useState(false),[regionStart,setRegionStart]=useState(null);
   const [anchorName,setAnchorName]=useState(''),[productFilter,setProductFilter]=useState('all'),[safeAreas,setSafeAreas]=useState(false);

@@ -1,9 +1,11 @@
+import { readGoogleConnectionResult, cleanGoogleConnectionUrl } from '../lib/google-connection-result.js';
 import { apiFetch as fetch } from '../lib/apiFetch.js';
 import { useState, useEffect, useCallback } from 'react';
 
 const LEGACY_LS_KEY = 'howl_drive_token';
 
 export function useDriveAuth() {
+  const [connectionResult]=useState(()=>readGoogleConnectionResult(window.location.search));
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
 
@@ -11,7 +13,7 @@ export function useDriveAuth() {
     // Clean up post-OAuth URL params (still set by callback for UX, plus legacy errors)
     const params = new URLSearchParams(window.location.search);
     if (params.get('drive_connected') || params.get('gmail_connected') || params.get('drive_error') || params.get('drive_token')) {
-      window.history.replaceState({}, '', window.location.pathname);
+      window.history.replaceState({}, '', cleanGoogleConnectionUrl(window.location.href));
     }
     // One-time cleanup: legacy token used to live in localStorage. Drop it.
     try { localStorage.removeItem(LEGACY_LS_KEY); } catch {}
@@ -56,5 +58,5 @@ export function useDriveAuth() {
     return data;
   };
 
-  return { connected, connecting, connect, disconnect, uploadFile };
+  return { connected, connecting, connect, disconnect, uploadFile, ...connectionResult };
 }
