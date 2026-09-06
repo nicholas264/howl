@@ -403,7 +403,7 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "from-winners" && <FromWinnersTool setActiveTab={navigate} setVariations={setVariations} onOpenCreator={openPlannedCreator} />}
         {activeTab === "content-studio" && <ContentStudio canPublish={can('content.publish')} />}
         {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} driveAuth={driveAuth} onAddToCart={addToCart} />}
-        {activeTab === "static-studio" && <StaticStudio onAddToCart={addToCart} onOpenLauncher={() => setActiveTab("launcher")} />}
+        {activeTab === "static-studio" && <StaticStudio driveAuth={driveAuth} onAddToCart={addToCart} onOpenLauncher={() => setActiveTab("launcher")} />}
         {activeTab === "callout" && <CalloutAdTool onAddToCart={addToCart} />}
         {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} onAddToCart={addToCart} />}
         {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} onAddToCart={addToCart} />}
