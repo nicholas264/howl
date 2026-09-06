@@ -1,4 +1,5 @@
 import { ensureGoogleOAuthTables } from '../api/_lib/google-user-oauth.js';
+import { ensureStudioCosts } from '../api/_lib/static-studio-costs.js';
 import { ensureStudioTables } from '../api/_lib/static-studio-store.js';
 import { ensureRateLimits } from '../api/_lib/rate-limit.js';
 import { ensureWorkControls } from '../api/_lib/work-controls.js';
@@ -55,4 +56,5 @@ await ensureAuthIdentities(sql);
 await ensureTranscriptionJobs(sql);
 await ensureOperationJournal(sql);
 await sql`INSERT INTO app_schema_migrations (version) VALUES ('2026-09-05-hardening-2') ON CONFLICT DO NOTHING`;
+await ensureStudioCosts(sql);
 console.log('Schema migrations applied.');
