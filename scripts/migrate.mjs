@@ -6,7 +6,7 @@ import { ensureAppTables } from '../api/_lib/app-access.js';
 import { ensureLocalReceipts } from '../api/_lib/local-receipts.js';
 import { ensureProviderMedia } from '../api/_lib/provider-media.js';
 import { ensureApprovalSnapshots } from '../api/_lib/approval-snapshots.js';
-import { ensureCreativeVariants } from '../api/_lib/creative-variants.js';
+import { ensureCreativeVariants, ensureVariantObservations } from '../api/_lib/creative-variants.js';
 import { ensureLaunchDrafts } from '../api/_lib/launch-drafts.js';
 import { ensureCreativeAnalysisQueue } from '../api/_lib/creative-analysis-queue.js';
 import { ensureSyncState } from '../api/_lib/sync-state.js';
@@ -37,6 +37,7 @@ if (!applied) {
 await ensureCreativeAnalysisQueue(sql);
 await ensureLaunchDrafts(sql);
 await ensureCreativeVariants(sql);
+await ensureVariantObservations(sql);
 await ensureApprovalSnapshots(sql);
 await ensureProviderMedia(sql);
 await ensureLocalReceipts(sql);

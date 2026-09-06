@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { ensureLocalReceipts } from '../api/_lib/local-receipts.js';
 import { ensureProviderMedia } from '../api/_lib/provider-media.js';
 import { ensureApprovalSnapshots } from '../api/_lib/approval-snapshots.js';
-import { ensureCreativeVariants } from '../api/_lib/creative-variants.js';
+import { ensureCreativeVariants, ensureVariantObservations } from '../api/_lib/creative-variants.js';
 import { ensureLaunchDrafts } from '../api/_lib/launch-drafts.js';
 import { ensureCreativeAnalysisQueue } from '../api/_lib/creative-analysis-queue.js';
 import { ensureOperationJournal } from '../api/_lib/operation-journal.js';
@@ -29,7 +29,7 @@ try {
   for (const {tablename} of tables) counts[tablename] = Number((await db.query(`SELECT count(*) AS count FROM public."${tablename.replaceAll('"','""')}"`)).rows[0].count);
   const restoredAt = Date.now();
   // Exercise additive migrations on the real restored schema, without providers.
-  for (const migrate of [ensureTranscriptionJobs,ensureAuthIdentities,ensureExperiments,ensureWorkControls,ensureCreativeAnalysisQueue,ensureLaunchDrafts,ensureCreativeVariants,ensureApprovalSnapshots,ensureProviderMedia,ensureLocalReceipts,ensureOperationJournal]) await migrate(sql);
+  for (const migrate of [ensureTranscriptionJobs,ensureAuthIdentities,ensureExperiments,ensureWorkControls,ensureCreativeAnalysisQueue,ensureLaunchDrafts,ensureCreativeVariants,ensureVariantObservations,ensureApprovalSnapshots,ensureProviderMedia,ensureLocalReceipts,ensureOperationJournal]) await migrate(sql);
   const report = {backupSha256:createHash('sha256').update(raw).digest('hex'),tables:tables.length,
     rows:Object.values(counts).reduce((a,b)=>a+b,0),restoreMilliseconds:restoredAt-start,migrationMilliseconds:Date.now()-restoredAt,counts};
   await writeFile(`${file}.verification.json`,JSON.stringify(report,null,2),{mode:0o600});

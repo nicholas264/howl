@@ -24,7 +24,7 @@ import { recoverRenders } from '../api/_lib/render-recovery.js';
 import { boundedWork, workSignal, checkWork } from '../api/_lib/bounded-work.js';
 import { approveDeliverable, ensureApprovalSnapshots } from '../api/_lib/approval-snapshots.js';
 import { journalMediaUpload } from '../api/_lib/provider-media.js';
-import { creativeVariant, readCreativeVariants } from '../api/_lib/creative-variants.js';
+import { creativeVariant, readCreativeVariants, ensureCreativeVariants, ensureVariantObservations } from '../api/_lib/creative-variants.js';
 import { ensureExperiments, validateProtocol, bindExperimentAds, experimentEvidence } from '../api/_lib/experiments.js';
 import { ensureAuthIdentities, resolveWorkspaceIdentity } from '../api/_lib/auth-identities.js';
 import { claimTranscription, saveTranscription } from '../api/_lib/transcription-jobs.js';
@@ -400,6 +400,8 @@ test('identity migration is explicit, issuer-bound, single-use, and preserves su
 
 test('comparison protocols freeze assignments and withhold conclusions for changed creative or insufficient evidence', async () => {
   await ensureExperiments(sql);
+  await ensureCreativeVariants(sql);
+  await ensureVariantObservations(sql);
   assert.throws(()=>validateProtocol({variants:'not-an-array'}));
   const input={variants:['variant:experiment-a','variant:experiment-b'],metric:'roas',days:7,minPurchases:20,minImpressions:1000};
   const protocol=validateProtocol(input);
@@ -411,11 +413,16 @@ test('comparison protocols freeze assignments and withhold conclusions for chang
       VALUES (${`experiment-ad-${index}`},${protocol.since},10,1000,20,100)`;
   }
   const bound=await bindExperimentAds(sql,protocol);
-  assert.equal((await experimentEvidence(sql,{protocol:bound})).sufficient,false);
+  const [{registered_at:registeredAt}]=await sql`SELECT clock_timestamp()::text AS registered_at`;
+  assert.equal((await experimentEvidence(sql,{protocol:bound,created_at:registeredAt})).sufficient,false);
   const after=new Date(protocol.until+'T01:00:00Z');
-  assert.equal((await experimentEvidence(sql,{protocol:bound},after)).sufficient,true);
+  assert.equal((await experimentEvidence(sql,{protocol:bound,created_at:registeredAt},after)).sufficient,true);
   await sql`UPDATE creative_performance SET variant_key='variant:changed' WHERE ad_id='experiment-ad-0'`;
-  assert.equal((await experimentEvidence(sql,{protocol:bound},after)).sufficient,false);
+  assert.equal((await experimentEvidence(sql,{protocol:bound,created_at:registeredAt},after)).sufficient,false);
+  await sql`UPDATE creative_performance SET variant_key='variant:experiment-a' WHERE ad_id='experiment-ad-0'`;
+  assert.equal((await experimentEvidence(sql,{protocol:bound,created_at:registeredAt},after)).sufficient,false, 'changing back cannot erase observed contamination');
+  const observations=await sql`SELECT variant_key FROM creative_variant_observations WHERE ad_id='experiment-ad-0' ORDER BY id`;
+  assert.deepEqual(observations.map(row=>row.variant_key), ['variant:experiment-a','variant:changed','variant:experiment-a']);
 });
 
 test('provider receipt recovery rejects an unrelated ad or account',()=>{

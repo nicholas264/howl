@@ -47,6 +47,22 @@ not claim that the remaining infrastructure and product roadmap is complete.
   then passed additive migrations. The approved offsite bucket remains blocked by
   AWS IAM permissions; no production backup was uploaded to S3.
 
+## Follow-up releases
+
+- Production authentication now uses the complete live Clerk secret. A malformed
+  masked credential caused the initial member verification failure and was
+  corrected and redeployed; real member refresh verification remains pending.
+- Source playback validates byte ranges, propagates stream backpressure, stops
+  disconnected requests, and bounds upstream work. Credential format checks reject
+  truncated or masked keys before a provider request.
+- Versioned Google token encryption and a compare-and-swap migration are tested
+  and deployed. Activation waits for preview isolation and compatible readers;
+  legacy credentials and encryption material are preserved.
+- An additive database trigger records creative-variant changes atomically with
+  metadata updates. Experiment comparisons require an observed baseline and reject
+  changes after assignment capture, including changes that later reverse. This is
+  observation history, not reconstructed provider effective dates.
+
 ## Remaining work / external prerequisites
 
 1. Grant the narrowly scoped AWS permissions in `../operations/backup-provisioning-policy.json`,

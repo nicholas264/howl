@@ -20,10 +20,10 @@ export function validateProtocol(input) {
 }
 
 export async function bindExperimentAds(sql, protocol) {
-  const assignments=await sql`SELECT ad_id,variant_key FROM creative_performance WHERE variant_key IN
+  const assignments=await sql`SELECT ad_id,variant_key,statement_timestamp()::text AS bound_at FROM creative_performance WHERE variant_key IN
     (SELECT jsonb_array_elements_text(${JSON.stringify(protocol.variants)}::jsonb)) ORDER BY ad_id`;
   if (new Set(assignments.map(row=>row.variant_key)).size!==protocol.variants.length) throw new Error('Every selected variant must have an ingested ad');
-  return {...protocol,assignments};
+  return {...protocol,bound_at:assignments[0].bound_at,assignments:assignments.map(({ad_id,variant_key})=>({ad_id,variant_key}))};
 }
 
 export async function experimentEvidence(sql,experiment,now=new Date()) {
@@ -31,7 +31,19 @@ export async function experimentEvidence(sql,experiment,now=new Date()) {
   if (!protocol.assignments?.length) return {sufficient:false,ended:false,rows:[],conclusion:'Inconclusive: protocol has no frozen ad assignments'};
   const rows=await sql`
     SELECT assignment.variant_key,
-      bool_and(cp.variant_key IS NOT DISTINCT FROM assignment.variant_key) AS definitions_unchanged,
+      bool_and(cp.variant_key IS NOT DISTINCT FROM assignment.variant_key
+        AND EXISTS (
+          SELECT 1 FROM creative_variant_observations baseline
+          WHERE baseline.ad_id=assignment.ad_id
+            AND baseline.observed_at <= ${protocol.bound_at || experiment.created_at || protocol.since}::timestamptz
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM creative_variant_observations o
+          WHERE o.ad_id=assignment.ad_id
+            AND o.observed_at >= ${protocol.bound_at || experiment.created_at || protocol.since}::timestamptz
+            AND o.observed_at < ${protocol.until}::date
+            AND o.variant_key IS DISTINCT FROM assignment.variant_key
+        )) AS definitions_unchanged,
       COALESCE(SUM(i.spend),0)::float AS spend,COALESCE(SUM(i.purchases),0)::float AS purchases,
       COALESCE(SUM(i.impressions),0)::float AS impressions,COALESCE(SUM(i.purchase_value),0)::float AS purchase_value
     FROM jsonb_to_recordset(${JSON.stringify(protocol.assignments)}::jsonb) AS assignment(ad_id text,variant_key text)
@@ -41,5 +53,5 @@ export async function experimentEvidence(sql,experiment,now=new Date()) {
   `;
   const ended=now.getTime() >= Date.parse(protocol.until+'T00:00:00Z');
   const sufficient=ended && rows.length===protocol.variants.length && rows.every(row=>row.definitions_unchanged && row.purchases>=protocol.minPurchases && row.impressions>=protocol.minImpressions);
-  return {sufficient,ended,rows,conclusion:sufficient?'Eligible for a descriptive decision; causal lift remains unproven':'Inconclusive: observation window or minimum evidence is incomplete'};
+  return {sufficient,ended,rows,conclusion:sufficient?'Eligible for a descriptive decision; causal lift remains unproven':'Inconclusive: observation window, identity history, unchanged definitions, or minimum evidence is incomplete'};
 }
