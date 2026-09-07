@@ -1,3 +1,4 @@
+import { startPlaybackRenewal, restorePlaybackPosition, restorePreviewPosition } from '../lib/playbackRenewal.js';
 import { apiFetch as fetch } from '../lib/apiFetch.js';
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-react';
@@ -155,7 +156,15 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   const [words, setWords] = useState([]);
   const [duration, setDuration] = useState(0);
   const [outputUrl, setOutputUrl] = useState(null);
-  const [playbackToken, setPlaybackToken] = useState('');
+  const [playbackGrant, setPlaybackGrant] = useState(null);
+  const [playbackError,setPlaybackError]=useState('');
+  const playbackResumeRef=useRef(null);
+  const previewPlayerRef=useRef(null);
+  const previewResumeRef=useRef(null);
+  const attachPreviewPlayer=useCallback(player=>{
+    previewPlayerRef.current=player;
+    if(player){restorePreviewPosition(player,previewResumeRef.current,activeSession?.id,videoUrl);previewResumeRef.current=null;}
+  },[activeSession?.id,videoUrl]);
   const [logTail, setLogTail] = useState('');
   const [aiCleaning, setAiCleaning] = useState(false);
   const [autoEditing, setAutoEditing] = useState(false);
@@ -320,33 +329,37 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   ].filter(Boolean).join(' · ');
   const playbackUrl = useMemo(() => {
     if (videoUrl?.startsWith('blob:')) return videoUrl;
-    if (activeSession?.id && playbackToken) return `/api/ugc-source?id=${activeSession.id}&token=${encodeURIComponent(playbackToken)}`;
-    if (activeSession?.id && playbackToken === '') return `/api/ugc-source?id=${activeSession.id}`;
+    if(activeSession?.id && playbackGrant?.sessionId===activeSession.id && playbackGrant.sourceUrl===videoUrl)
+      return `/api/ugc-source?id=${activeSession.id}&token=${encodeURIComponent(playbackGrant.token)}`;
     if (activeSession?.id) return '';
     return videoUrl;
-  }, [activeSession?.id, playbackToken, videoUrl]);
+  }, [activeSession?.id, playbackGrant, videoUrl]);
 
   useEffect(() => {
-    if (!activeSession?.id || videoUrl?.startsWith('blob:')) {
-      setPlaybackToken('');
-      return;
-    }
-    let active = true;
-    setPlaybackToken(null);
-    fetch(`/api/ugc-source-token?id=${activeSession.id}`)
-      .then(async response => {
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Could not prepare source playback');
-        if (active) setPlaybackToken(data.token || '');
-      })
-      .catch(err => {
-        console.error('playback token failed', err);
-        if (active) {
-          setPlaybackToken('');
-          setError(err.message || 'Could not prepare source playback');
-        }
-      });
-    return () => { active = false; };
+    setPlaybackGrant(null);
+    playbackResumeRef.current=null;
+    previewResumeRef.current=null;
+    setPlaybackError('');
+    if (!videoUrl || !activeSession?.id || videoUrl?.startsWith('blob:')) return;
+    const sessionId=activeSession.id,sourceUrl=videoUrl;
+    let installed=false;
+    const rememberPosition=()=>{
+      const video=videoRef.current;
+      if(installed && video?.readyState>0)playbackResumeRef.current={sessionId,sourceUrl,time:video.currentTime,paused:video.paused};
+    };
+    const renewal=startPlaybackRenewal({
+      sessionId,sourceUrl,
+      fetchGrant:signal=>fetch(`/api/ugc-source-token?id=${sessionId}`,{signal}),
+      onGrant:grant=>{rememberPosition();installed=true;if(previewPlayerRef.current)previewResumeRef.current=null;setPlaybackGrant(grant);setPlaybackError('');},
+      onExpired:()=>{
+        rememberPosition();
+        const player=previewPlayerRef.current;
+        if(installed && player)previewResumeRef.current={sessionId,sourceUrl,frame:player.getCurrentFrame(),playing:player.isPlaying()};
+        setPlaybackGrant(null);
+      },
+      onError:err=>setPlaybackError(err.message || 'Could not renew source playback'),
+    });
+    return ()=>renewal.dispose();
   }, [activeSession?.id, videoUrl]);
 
   useEffect(() => {
@@ -1443,16 +1456,19 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
               </div>
               <video
                 ref={videoRef}
-                src={playbackUrl}
+                src={playbackUrl || undefined}
                 controls
                 playsInline
                 preload="metadata"
                 style={videoStyle}
                 onLoadedMetadata={(event) => {
+                  const snapshot=playbackResumeRef.current;
+                  playbackResumeRef.current=null;
+                  restorePlaybackPosition(event.currentTarget,snapshot,activeSession?.id,videoUrl);
                   const nextDuration = event.currentTarget.duration;
                   if (Number.isFinite(nextDuration) && nextDuration > 0 && !duration) setDuration(nextDuration);
                 }}
-                onError={() => setError(PLAYBACK_ERROR)}
+                onError={() => setPlaybackError(PLAYBACK_ERROR)}
               />
               <div style={sourceMeta}>
                 <strong>{activeSession?.deliverable_title || activeSession?.file_name || file?.name}</strong>
@@ -1468,6 +1484,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                   <small>{activeSession.deliverable_status || activeSession.status}{dueStatus(activeSession) ? ` · ${dueStatus(activeSession).label}` : ''}</small>
                 </div>
               )}
+              {playbackError && <div style={errorBox}>{playbackError}</div>}
               {error && <div style={errorBox}>{error}</div>}
             </section>
 
@@ -1823,6 +1840,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
                 </div>
                 <div style={playerShell}>
                   <Player
+                    ref={attachPreviewPlayer}
                     component={UgcVideo}
                     inputProps={remotionInput}
                     durationInFrames={remotionDuration}

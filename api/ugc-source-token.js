@@ -68,6 +68,7 @@ export default async function handler(req, res) {
 
   return res.json({
     token,
+    source_url:session.video_url,
     expires_in: TOKEN_TTL_SECONDS,
   });
 }

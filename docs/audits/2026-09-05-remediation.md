@@ -485,3 +485,28 @@ provider fetch. Unicode video filenames are encoded safely in Content-Dispositio
 instead of producing invalid response headers. All 98 tests passed. This is a playback-access prerequisite; the one
 existing source video and eleven callout images remain public, and private processing,
 long-edit-session playback renewal and migration still need completion.
+
+## Playback renewal during editing — September 7
+
+The editor renews playback grants before expiry and when a suspended tab returns.
+A temporary renewal failure retains the current grant until its expiry; expired or
+access-denied grants are cleared rather than retried as unauthenticated media URLs.
+Requests have a twenty-second deadline, deduplicate concurrent refreshes, and ignore
+late responses after timeout or disposal. A returned source URL must match the
+editor's selected source. Changed sources and 401/403 responses stop automatic
+renewal until the session is reloaded. Playback errors clear on successful recovery
+without clearing unrelated editing errors.
+
+The source video preserves its seek position and paused/playing state when the URL
+changes. Remotion retains its frame during normal renewal and saves/restores the
+frame and playing state if an outage expires the grant and unmounts the preview.
+Restoration is scoped to the same session/source and cannot carry an old video's
+position into a newly selected session. The token endpoint includes its source URL
+for the client's consistency check; signed access remains limited to ten minutes.
+
+All 102 tests passed, including deterministic expiry/outage/focus simulations,
+permission denial, source mismatch, a late response that ignores abort, and scoped
+source/preview position restoration. Real member browser verification remains
+pending: the Mac was rechecked and is locked. This release does not migrate the
+remaining public source video or images, or retire the four public contract copies
+that still require explicit approval.
