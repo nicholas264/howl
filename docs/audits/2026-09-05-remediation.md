@@ -342,3 +342,12 @@ Resend delivery/bounce ingestion requires provisioning if that provider is chose
 creator email currently uses each member's Gmail connection. Shopify recovery code
 is deployed behind the disabled seeding switch. Neither service was enabled.
 Browser verification is additionally unavailable while the Mac is locked.
+
+## Integration setup guidance
+
+The admin Gmail health panel now directs operators to the V2 migration runbook
+and warns against replacing the legacy key in place. Configuring V2 is explicitly
+distinguished from proving existing-token migration. Shopify health distinguishes
+a disabled switch, missing seeding token, missing catalog credentials, and fully
+configured credentials whose permissions still require verification. Regression
+coverage verifies those configurations without calling external services.

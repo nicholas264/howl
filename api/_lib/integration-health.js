@@ -55,18 +55,18 @@ export function getIntegrationHealth() {
     gmail: {
       ready: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
       state: process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
-        ? process.env.GOOGLE_TOKEN_ENCRYPTION_KEY ? 'ready' : 'warning'
+        ? process.env.GOOGLE_TOKEN_ENCRYPTION_KEY_V2 ? 'ready' : 'warning'
         : 'setup',
       label: 'Gmail outreach',
       detail: process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
-        ? process.env.GOOGLE_TOKEN_ENCRYPTION_KEY
-          ? 'Per-user Google credentials are encrypted with a dedicated key.'
-          : 'Per-user credentials are encrypted using existing application secrets. Add a dedicated encryption key before rotating Clerk or Google secrets.'
+        ? process.env.GOOGLE_TOKEN_ENCRYPTION_KEY_V2
+          ? 'V2 encryption is configured for new Google credentials. Existing credentials still need verified migration before legacy keys are retired.'
+          : 'Google credentials use legacy encryption. Preserve the current encryption secrets until the V2 migration is verified.'
         : 'Google OAuth credentials are missing.',
-      action: process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && !process.env.GOOGLE_TOKEN_ENCRYPTION_KEY
-        ? 'Add GOOGLE_TOKEN_ENCRYPTION_KEY to Vercel Production, then have connected users reconnect once.'
+      action: process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+        ? 'Follow the dedicated Google token migration in docs/operations/recovery.md. Deploy compatible readers and isolate old deployments before enabling GOOGLE_TOKEN_ENCRYPTION_KEY_V2; do not replace the legacy key in place.'
         : null,
-      env: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_TOKEN_ENCRYPTION_KEY'],
+      env: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_TOKEN_ENCRYPTION_KEY_V2'],
     },
     instagram: {
       ready: Boolean(process.env.META_ACCESS_TOKEN && process.env.META_PAGE_ID),
@@ -87,9 +87,13 @@ export function getIntegrationHealth() {
         && process.env.SHOPIFY_SEEDING_ACCESS_TOKEN
         && process.env.SHOPIFY_SEEDING_ENABLED === 'true' ? 'ready' : 'setup',
       label: 'Shopify creator seeding',
-      detail: process.env.SHOPIFY_SEEDING_ENABLED === 'true'
-        ? 'Creator seeding is enabled with a separate least-privilege Shopify token.'
-        : 'Catalog sync is read-only. Creator order creation is disabled by the Shopify safety switch.',
+      detail: process.env.SHOPIFY_SEEDING_ENABLED !== 'true'
+        ? 'Creator order creation is disabled by the Shopify safety switch.'
+        : !process.env.SHOPIFY_SEEDING_ACCESS_TOKEN
+          ? 'The safety switch is enabled, but the required separate seeding token is missing. Order creation is unavailable.'
+          : !(process.env.SHOPIFY_ACCESS_TOKEN || (process.env.SHOPIFY_CLIENT_ID && process.env.SHOPIFY_CLIENT_SECRET))
+            ? 'The seeding token is configured, but catalog credentials are missing.'
+            : 'Creator seeding credentials and safety switch are configured. Token permissions still require verification.',
       action: 'Use a separate token limited to draft orders, then enable the seeding safety switch only when ready.',
       env: [
         'SHOPIFY_STORE', 'SHOPIFY_CLIENT_ID', 'SHOPIFY_CLIENT_SECRET', 'SHOPIFY_ACCESS_TOKEN', 'SHOPIFY_SEEDING_ACCESS_TOKEN',
