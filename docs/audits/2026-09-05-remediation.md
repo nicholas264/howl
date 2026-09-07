@@ -256,3 +256,18 @@ and journaled request account to agree. Invalid attempt timestamps fail closed.
 A real PostgreSQL regression verifies successful receipt/audit persistence and
 that a concurrent journal update preserves the winning result without recording
 a false recovery audit. Rejected provider evidence leaves the attempt uncertain.
+
+## Shopify seed completion preflight
+
+Immediately before sending a new completion mutation, the server reads the saved
+draft and checks its store, ID, open status, single variant/quantity, and strict
+zero total. A read or validation failure sends no completion mutation and can be
+retried safely. Journaled successful completions still replay without new calls.
+The endpoint regression uses PostgreSQL and a mocked Shopify boundary to prove
+nonzero drafts are rejected, corrected drafts retry, and completed retries do not
+repeat the order or activity event. Shopify calls now have a 20-second deadline.
+
+This read is not an atomic Shopify lock: concurrent merchant edits between the
+read and completion remain possible. The 2026-04 completion mutation exposes no
+expected-version or expected-total argument. Unknown completion receipts still
+require reconciliation; this change does not reset those attempts.

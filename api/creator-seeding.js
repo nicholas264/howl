@@ -1,3 +1,4 @@
+import { verifySeedDraft } from './_lib/seed-draft.js';
 import { runExternalStep, digest } from './_lib/operation-journal.js';
 import { reserveOperationBudget } from './_lib/operation-budget.js';
 import { requirePermission } from './_lib/app-access.js';
@@ -12,6 +13,7 @@ function clean(value, max = 1000) {
 async function shopifyGraphql(query, variables, token, operation = null) {
   if (operation) {
     return runExternalStep(operation.sql, { operationKey: operation.key, stepKey: query.match(/mutation\s+(\w+)/)?.[1] || 'mutation', payload: { query, variables }, actorId: operation.actorId }, async () => {
+      if (operation.beforePerform) await operation.beforePerform();
       const result = await shopifyGraphql(query,variables,token);
       const errors = Object.values(result.data || {}).flatMap(value=>value?.userErrors || []);
       if (errors.length) throw Object.assign(new Error(errors.map(error=>error.message).join('; ')),{statusCode:400,definitelyNotApplied:true});
@@ -24,6 +26,7 @@ async function shopifyGraphql(query, variables, token, operation = null) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': token },
     body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(20000),
   });
   const payload = await response.json();
   if (!response.ok || payload.errors?.length) {
@@ -189,6 +192,20 @@ export default async function handler(req, res) {
 }
 
 async function completeSeed({sql,seed,operation,seedingToken,res,actorId}) {
+    operation={...operation,beforePerform:async()=>{
+      try {
+        const {data,store}=await shopifyGraphql(`query VerifyCreatorSeedDraft($id: ID!) {
+          draftOrder(id:$id) { id status order { id }
+            totalPriceSet { shopMoney { amount currencyCode } }
+            lineItems(first:2) { nodes { quantity variant { id } } pageInfo { hasNextPage } }
+          }
+        }`,{id:seed.shopify_draft_order_id},seedingToken);
+        verifySeedDraft(seed,data?.draftOrder,store);
+      } catch(error) {
+        // Only a read has occurred; no completion mutation was sent.
+        error.definitelyNotApplied=true;throw error;
+      }
+    }};
 
     const { data: completed } = await shopifyGraphql(`mutation CompleteCreatorSeed($id: ID!) {
       draftOrderComplete(id: $id, paymentPending: false) {
