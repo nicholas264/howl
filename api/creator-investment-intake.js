@@ -1,3 +1,4 @@
+import { requireRegisteredContract } from './_lib/private-contracts.js';
 import { requirePermission } from './_lib/app-access.js';
 
 import { mirrorImageUrlToBlob } from './_lib/blob/mirror.js';
@@ -224,6 +225,13 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
     const body = req.body || {};
+    // Verify ownership before intake creates or updates any business records.
+    const contractPdfUrl = body.contract_pdf_url ? safeUrl(body.contract_pdf_url) : null;
+    if(body.contract_pdf_url) {
+      if(!contractPdfUrl)return res.status(400).json({error:'Invalid contract URL'});
+      try{await requireRegisteredContract(sql,contractPdfUrl,userId);}
+      catch(error){return res.status(error.statusCode || 400).json({error:error.message});}
+    }
     const items = seedItems(body);
     const productSummary = items.map(item => item.product_label || item.unit_type).filter(Boolean).join(' + ');
     if (!body.product_type && productSummary) body.product_type = productSummary;
@@ -364,7 +372,6 @@ export default async function handler(req, res) {
       `;
     }
 
-    const contractPdfUrl = safeUrl(body.contract_pdf_url);
     let contractAgreement = null;
     if (contractPdfUrl) {
       const [versionRow] = await sql`

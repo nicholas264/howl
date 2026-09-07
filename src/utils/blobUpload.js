@@ -42,18 +42,19 @@ export async function uploadPublicBlob(pathname, body, {
     pathname,
     body,
     clientToken: tokenData.clientToken,
+    access: tokenData.access || 'public',
     contentType,
     onUploadProgress,
   });
 }
 
-function putBlobWithProgress({ pathname, body, clientToken, contentType, onUploadProgress }) {
+function putBlobWithProgress({ pathname, body, clientToken, access, contentType, onUploadProgress }) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', `https://blob.vercel-storage.com/?pathname=${encodeURIComponent(pathname)}`);
     xhr.setRequestHeader('Authorization', `Bearer ${clientToken}`);
     xhr.setRequestHeader('x-api-version', '12');
-    xhr.setRequestHeader('x-vercel-blob-access', 'public');
+    xhr.setRequestHeader('x-vercel-blob-access', access);
     if (contentType) xhr.setRequestHeader('x-content-type', contentType);
 
     xhr.upload.onprogress = event => {

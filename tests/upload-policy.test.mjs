@@ -20,10 +20,10 @@ test('the real Blob token encodes the selected upload constraints without sessio
  const sql=async(parts,...values)=>(await db.query(parts.reduce((s,p,i)=>s+(i?`$${i}`:'')+p,''),values)).rows;
  const response=()=>({statusCode:200,setHeader(){},status(code){this.statusCode=code;return this;},json(body){this.body=body;return this;}});
  try{
-  Object.assign(process.env,{DATABASE_URL:'postgresql://test:test@fixture.local/test',NODE_ENV:'development',AUTH_DISABLED:'true',BLOB_READ_WRITE_TOKEN:'vercel_blob_rw_fixture_test',VERCEL_BLOB_CALLBACK_URL:'https://fixture.example.test'});
+  Object.assign(process.env,{DATABASE_URL:'postgresql://test:test@fixture.local/test',NODE_ENV:'development',AUTH_DISABLED:'true',BLOB_READ_WRITE_TOKEN:'vercel_blob_rw_fixture_test',HOWL_PRIVATE_READ_WRITE_TOKEN:'vercel_blob_rw_privatefixture_test',VERCEL_BLOB_CALLBACK_URL:'https://fixture.example.test'});
   await ensureRateLimits(sql);
   const req={method:'POST',url:'/api/blob/upload-token',headers:{},body:{type:'blob.generate-client-token',payload:{pathname:'creator-contracts/fixture.pdf',clientPayload:'private-session-fixture'}}};
-  const res=response();await uploadToken(req,res);assert.equal(res.statusCode,200);
+  const res=response();await uploadToken(req,res);assert.equal(res.statusCode,200);assert.equal(res.body.access,'private');
   const envelope=Buffer.from(res.body.clientToken.split('_').slice(4).join('_'),'base64').toString();
   const payload=JSON.parse(Buffer.from(envelope.slice(envelope.indexOf('.')+1),'base64').toString());
   assert.equal(payload.maximumSizeInBytes,20*1024*1024);assert.deepEqual(payload.allowedContentTypes,['application/pdf']);assert.equal(payload.pathname,'creator-contracts/fixture.pdf');assert.deepEqual(JSON.parse(payload.onUploadCompleted.tokenPayload),{v:1,ownerId:'local-dev',scope:'creators'});

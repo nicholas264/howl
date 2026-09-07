@@ -409,3 +409,32 @@ owner-only local backup restored 79 tables and 17,700 rows in 6.94 seconds and
 passed the expanded migrations. Production and isolated preview migrations passed.
 This does not prove offsite recovery or register old/server-side media; private
 access, existing-object attribution, downstream consumers and cleanup remain open.
+
+## Private contract storage — September 7
+
+Created the separate `howl-private-media` Blob store in `iad1`, connected only to
+Howl production as `HOWL_PRIVATE_READ_WRITE_TOKEN`. The existing public store
+credential was preserved. A live synthetic PDF upload returned 403 anonymously,
+was read successfully with the private credential, and was deleted after checking.
+
+New `creator-contracts/` browser uploads now receive a private-store token and
+server-selected access mode. Missing private configuration fails closed. The SDK
+verifies callbacks against the selected store credential before recording immutable
+ownership; intake requires that verified PDF to belong to the current member before
+making business-record writes. If the provider callback has not arrived, intake
+returns a retryable verification error without creating records.
+
+The existing permission-gated contract endpoint reads registered private contracts
+through the Blob SDK. Reads are streamed, capped at 20 MB and bounded by a deadline;
+credentials are never sent to a caller-controlled host. Legacy public contract reads
+now use pinned public DNS and checked redirects with PDF-type, byte and time limits.
+Unicode filenames use an encoded Content-Disposition parameter. Responses disable
+caching and content sniffing. Regression checks cover forged and replayed callbacks,
+cross-member attachment, missing-registration/no-write behavior, real SDK private
+reads against a mock provider, authenticated streaming, unauthenticated denial,
+byte limits and browser access headers. All 95 tests and the build passed locally.
+
+This release does not migrate or retire existing public contracts. Other source,
+rendered and published media still need coordinated private access and migration.
+Real member browser verification, old deployment retirement, runtime database roles,
+Google encryption cutover and offsite backup permissions remain external prerequisites.

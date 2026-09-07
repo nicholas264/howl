@@ -24,11 +24,15 @@ export const config = {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // Server-side sanity check so any silent prod misconfiguration shows up in
-  // the response instead of looking like a generic "Access denied" from Blob.
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return res.status(500).json({ error: 'BLOB_READ_WRITE_TOKEN is not set in this function environment' });
-  }
+  // Callback URLs only select a configured credential; the SDK must still verify
+  // that credential's signature before any callback data is trusted.
+  const callbackUrl=req.body?.type==='blob.upload-completed' ? req.body?.payload?.blob?.url : null;
+  const privateUpload=callbackUrl
+    ? (()=>{try{return new URL(callbackUrl).hostname.endsWith('.private.blob.vercel-storage.com');}catch{return false;}})()
+    : String(req.body?.payload?.pathname || '').startsWith('creator-contracts/');
+  const blobAccess=privateUpload?'private':'public';
+  const blobToken=privateUpload?process.env.HOWL_PRIVATE_READ_WRITE_TOKEN:process.env.BLOB_READ_WRITE_TOKEN;
+  if(!blobToken)return res.status(503).json({error:'Upload storage is not configured for this destination'});
 
   try {
     const sql = neon(process.env.DATABASE_URL);
@@ -44,6 +48,7 @@ export default async function handler(req, res) {
 
     let uploadLimits;
     const jsonResponse = await handleUpload({
+      token: blobToken,
       body: req.body,
       request: req,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
@@ -83,11 +88,11 @@ export default async function handler(req, res) {
         };
       },
       onUploadCompleted: async payload=>{
-        try {await recordBlobUpload(sql,payload);}
+        try {await recordBlobUpload(sql,payload,blobToken,blobAccess);}
         catch(error){error.statusCode=503;throw error;}
       },
     });
-    return res.status(200).json({...jsonResponse,...(uploadLimits?{uploadLimits}:{})});
+    return res.status(200).json({...jsonResponse,...(uploadLimits?{uploadLimits,access:blobAccess}:{})});
   } catch (err) {
     console.error('blob upload token error', err);
     return res.status(err.statusCode || 400).json({ error: err.message || 'Upload token failed' });

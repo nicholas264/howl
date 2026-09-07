@@ -11,14 +11,14 @@ export async function ensureMediaObjects(sql) {
 }
 
 // Call only after the Blob SDK has verified the completion callback signature.
-export async function recordBlobUpload(sql,{blob,tokenPayload},token=process.env.BLOB_READ_WRITE_TOKEN) {
+export async function recordBlobUpload(sql,{blob,tokenPayload},token=process.env.BLOB_READ_WRITE_TOKEN,access='public') {
   let identity;
   try{identity=JSON.parse(tokenPayload);}catch{return {legacy:true};}
   if(identity?.v!==1)return {legacy:true};
   if(typeof identity.ownerId!=='string' || !identity.ownerId || identity.ownerId.length>256
     || !['assets','creators','submission'].includes(identity.scope))throw new Error('Invalid upload ownership metadata');
   const url=new URL(blob.url),store=token?.split('_')[3]?.toLowerCase();
-  if(!store || url.protocol!=='https:' || url.hostname!==`${store}.public.blob.vercel-storage.com`
+  if(!store || url.protocol!=='https:' || url.hostname!==`${store}.${access}.blob.vercel-storage.com`
     || url.username || url.password || url.port || url.search || url.hash
     || decodeURIComponent(url.pathname).slice(1)!==blob.pathname)throw new Error('Upload callback does not match the configured store');
   const contentType=String(blob.contentType || '').split(';')[0].trim().toLowerCase();
