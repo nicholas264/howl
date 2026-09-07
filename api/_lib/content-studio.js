@@ -5,7 +5,6 @@ const MAX_SOURCE_BODY = 120000;
 const MAX_CHUNK_CHARS = 2800;
 const MAX_SCRAPE_BYTES = 2_000_000;
 
-let contentTablesReady = null;
 
 export function cleanText(value, max = 20000) {
   return (value ?? '').toString().replace(/\r\n/g, '\n').trim().slice(0, max);
@@ -52,13 +51,7 @@ export function sourcePayload(body = {}) {
 }
 
 export async function ensureContentStudioTables(sql) {
-  if (!contentTablesReady) contentTablesReady = createContentStudioTables(sql);
-  try {
-    await contentTablesReady;
-  } catch (err) {
-    contentTablesReady = null;
-    throw err;
-  }
+  return createContentStudioTables(sql);
 }
 
 async function createContentStudioTables(sql) {

@@ -1,16 +1,5 @@
 import { hasPermission, requirePermission } from './_lib/app-access.js';
-import {
-  cleanText,
-  classifySiteUrl,
-  ensureContentStudioTables,
-  markdownToHtml,
-  parseSitemapEntries,
-  parseSitemapIndex,
-  rebuildSourceChunks,
-  resolveInternalLinks,
-  scrapeUrlToSource,
-  stripEmDashes,
-} from './_lib/content-studio.js';
+import { cleanText, classifySiteUrl, markdownToHtml, parseSitemapEntries, parseSitemapIndex, rebuildSourceChunks, resolveInternalLinks, scrapeUrlToSource, stripEmDashes } from './_lib/content-studio.js';
 import {
   createShopifyArticle,
   fetchShopifyArticles,
@@ -28,7 +17,7 @@ export default async function handler(req, res) {
   const access = await requirePermission(req, res, req.method === 'GET' ? 'briefs.read' : 'briefs.write');
   if (!access) return;
   const { sql } = access;
-  await ensureContentStudioTables(sql);
+
 
   try {
     if (req.method === 'GET') {

@@ -1,5 +1,5 @@
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 
 function normalizeHandle(value) {
   return (value || '').toString().trim().replace(/^@/, '').toLowerCase();
@@ -353,7 +353,7 @@ export default async function handler(req, res) {
   const { sql } = access;
 
   try {
-    await ensureCreatorOpsTables(sql);
+
     if (req.method === 'GET') return res.json(await loadHealth(sql));
     if (req.method !== 'POST') return res.status(405).end();
 

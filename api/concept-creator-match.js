@@ -1,5 +1,5 @@
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 import { loadEvidence, creatorFitSignals } from './_lib/creator-matching.js';
 
 function clean(value, max = 600) {
@@ -33,7 +33,7 @@ export default async function handler(req, res) {
   const { sql } = access;
 
   try {
-    await ensureCreatorOpsTables(sql);
+
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
     const body = req.body || {};

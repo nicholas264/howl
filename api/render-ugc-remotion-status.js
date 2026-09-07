@@ -2,7 +2,7 @@ import { finishWork } from './_lib/work-controls.js';
 import { completeRender } from './_lib/render-completion.js';
 import { getRenderProgress } from '@remotion/lambda/client';
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 import { remotionConfig } from './_lib/ugc-remotion.js';
 
 export const config = {
@@ -28,7 +28,7 @@ export default async function handler(req, res) {
   }
 
   const { sql } = access;
-  await ensureCreatorOpsTables(sql);
+
   const [session] = await sql`
     SELECT id, settings, creator_id, deliverable_id
     FROM ugc_sessions

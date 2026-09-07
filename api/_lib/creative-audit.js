@@ -1,4 +1,3 @@
-let creativeAuditReady = null;
 
 export async function createCreativeAuditTables(sql) {
   await sql`
@@ -23,13 +22,7 @@ export async function createCreativeAuditTables(sql) {
 }
 
 export async function ensureCreativeAuditTables(sql) {
-  if (!creativeAuditReady) creativeAuditReady = createCreativeAuditTables(sql);
-  try {
-    await creativeAuditReady;
-  } catch (err) {
-    creativeAuditReady = null;
-    throw err;
-  }
+  return createCreativeAuditTables(sql);
 }
 
 export async function resolveCreativeGroupName(sql, groupKey) {
@@ -46,7 +39,7 @@ export async function resolveCreativeGroupName(sql, groupKey) {
 }
 
 export async function logCreativeOperatorEvent(sql, event) {
-  await ensureCreativeAuditTables(sql);
+
   const groupName = event.groupName || await resolveCreativeGroupName(sql, event.groupKey);
   const [row] = await sql`
     INSERT INTO creative_operator_events

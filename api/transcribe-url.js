@@ -21,7 +21,7 @@ import { pipeline } from 'node:stream/promises';
 import { put } from '@vercel/blob';
 
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 
 // ffmpeg-static exports the absolute path to a prebuilt static binary
 import ffmpegPath from 'ffmpeg-static';
@@ -46,7 +46,7 @@ export default async function handler(req, res) {
   const sessionId = Number(req.body?.sessionId);
   if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
   const { sql } = access;
-  await ensureCreatorOpsTables(sql);
+
   const [session] = await sql`
     SELECT id, video_url
     FROM ugc_sessions

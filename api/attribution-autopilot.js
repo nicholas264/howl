@@ -1,5 +1,5 @@
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 
 // Tokens that appear in ad names but are not creator-identifying.
 const STOP = new Set([
@@ -169,7 +169,7 @@ export default async function handler(req, res) {
   const { sql, userId } = access;
 
   try {
-    await ensureCreatorOpsTables(sql);
+
     const roster = await loadRoster(sql);
 
     if (req.method === 'GET') {

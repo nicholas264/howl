@@ -1,5 +1,5 @@
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 import { mirrorImageUrlToBlob } from './_lib/blob/mirror.js';
 import { discoverInstagramProfile } from './_lib/instagram-discovery.js';
 
@@ -48,7 +48,7 @@ export default async function handler(req, res) {
   const { sql } = access;
 
   try {
-    await ensureCreatorOpsTables(sql);
+
     if (req.body?.action === 'batch_missing_avatars') {
       const limit = Math.min(Math.max(Number(req.body.limit) || 25, 1), 50);
       const rows = await sql`

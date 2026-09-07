@@ -1,6 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { del } from '@vercel/blob';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 import { getActiveSubmission, submissionTokenHash } from './_lib/creator-submissions.js';
 import { checkRateLimit, rateLimitKey, sendRateLimited } from './_lib/rate-limit.js';
 
@@ -40,7 +40,6 @@ export default async function handler(req, res) {
     });
     if (!rate.allowed) return sendRateLimited(res, rate);
 
-    await ensureCreatorOpsTables(sql);
     const submission = await getActiveSubmission(sql, token);
     if (!submission) return res.status(404).json({ error: 'Upload link not found' });
     if (req.method === 'GET') return res.json({ submission: publicSubmission(submission) });

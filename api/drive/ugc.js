@@ -12,7 +12,7 @@ import { getGoogleAccessToken } from '../_lib/gcp-auth.js';
 import { mirrorAssetToBlob } from '../_lib/blob/mirror.js';
 import { enqueueCreativeAssetAnalysis } from '../_lib/creative-analysis-queue.js';
 import { ensureCreativeAssetTables, markCreativeAssetLaunched, upsertDriveAsset } from '../_lib/creative-assets.js';
-import { ensureCreatorOpsTables } from '../_lib/creator-ops.js';
+
 
 const DRIVE = 'https://www.googleapis.com/drive/v3';
 const DEFAULT_META_URL_TAGS = 'tw_source={{site_source_name}}&tw_adid={{ad.id}}';
@@ -53,7 +53,7 @@ async function driveFetch(token, path, init = {}) {
 async function stampFlowLaunched(sql, { adId, groupKey, briefId, deliverableId }) {
   if (!briefId && !deliverableId) return;
   try {
-    await ensureCreatorOpsTables(sql);
+
     await sql`
       UPDATE flow_cards
       SET stage = 'analyze',
@@ -468,7 +468,7 @@ export default async function handler(req, res) {
       if (process.env.DATABASE_URL) {
         try {
           const sql = neon(process.env.DATABASE_URL);
-          await ensureCreatorOpsTables(sql);
+
 
           await ensureCreativeAssetTables(sql);
           for (let i = 0; i < enriched.length; i += 20) {
@@ -540,7 +540,7 @@ export default async function handler(req, res) {
     }
 
     if (action === 'launch_meta_ad') {
-      await ensureCreatorOpsTables(appAccess.sql);
+
 
       const launchApproval=await assertLaunchReady(appAccess.sql, req.body);
       // End-to-end launch: streams NDJSON progress events so the client can render a live timeline.
@@ -1036,7 +1036,7 @@ export default async function handler(req, res) {
       if (process.env.DATABASE_URL) {
         try {
           const sql = neon(process.env.DATABASE_URL);
-          await ensureCreatorOpsTables(sql);
+
 
           await ensureCreativeAssetTables(sql);
           await upsertDriveAsset(sql, current, current.drive_folder_path || '', false);

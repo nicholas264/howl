@@ -3,7 +3,7 @@ import { checkWorkLimit } from './_lib/work-limits.js';
 import { randomUUID } from 'node:crypto';
 import { renderMediaOnLambda } from '@remotion/lambda/client';
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 import {
   REMOTION_COMPOSITION_ID,
   REMOTION_FPS,
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
   if (!sessionId) return res.status(400).json({ error: 'session_id required' });
 
   const { sql } = access;
-  await ensureCreatorOpsTables(sql);
+
   const [session] = await sql`
     SELECT *
     FROM ugc_sessions

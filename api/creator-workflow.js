@@ -1,7 +1,7 @@
 import { captureApprovalEvidence } from './_lib/approval-evidence.js';
 import { approveDeliverable } from './_lib/approval-snapshots.js';
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 import { del } from '@vercel/blob';
 import { randomBytes } from 'node:crypto';
 import { submissionTokenHash } from './_lib/creator-submissions.js';
@@ -672,7 +672,7 @@ export default async function handler(req, res) {
   const { sql } = access;
 
   try {
-    await ensureCreatorOpsTables(sql);
+
     const creatorId = Number(req.query?.creator_id || req.body?.creator_id);
     if (!creatorId) return res.status(400).json({ error: 'creator_id required' });
 

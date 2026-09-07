@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 import { agreementTokenHash, getAgreementByToken } from './_lib/creator-agreements.js';
 import { checkRateLimit, rateLimitKey, sendRateLimited } from './_lib/rate-limit.js';
 
@@ -49,7 +49,6 @@ export default async function handler(req, res) {
     });
     if (!rate.allowed) return sendRateLimited(res, rate);
 
-    await ensureCreatorOpsTables(sql);
     const agreement = await getAgreementByToken(sql, token);
     if (!agreement) return res.status(404).json({ error: 'Agreement link not found' });
 

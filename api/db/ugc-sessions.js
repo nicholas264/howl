@@ -2,7 +2,7 @@ import { saveSessionEdits } from '../_lib/session-edits.js';
 import { neon } from '@neondatabase/serverless';
 import { del } from '@vercel/blob';
 import { requirePermission } from '../_lib/app-access.js';
-import { ensureCreatorOpsTables } from '../_lib/creator-ops.js';
+
 
 export const config = { api: { bodyParser: { sizeLimit: '5mb' } } };
 
@@ -33,7 +33,7 @@ export default async function handler(req, res) {
   };
 
   try {
-    await ensureCreatorOpsTables(sql);
+
     if (req.method === 'GET') {
       const id = req.query.id;
       if (id) {

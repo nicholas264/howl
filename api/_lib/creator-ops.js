@@ -1,4 +1,3 @@
-let creatorOpsTablesReady = null;
 
 async function createCreatorOpsTables(sql) {
   await sql`
@@ -443,17 +442,6 @@ async function createCreatorOpsTables(sql) {
     )
   `;
   await sql`ALTER TABLE creator_seeding_log ADD COLUMN IF NOT EXISTS seeding_status TEXT NOT NULL DEFAULT 'planned'`;
-  await sql`
-    UPDATE creator_seeding_log
-    SET seeding_status = CASE
-      WHEN notes ILIKE '%delivered%' THEN 'delivered'
-      WHEN notes ILIKE '%transit%' THEN 'in_transit'
-      WHEN notes ILIKE '%blocked%' OR notes ILIKE '%waiting%' THEN 'blocked'
-      WHEN notes ILIKE '%progress%' THEN 'ordered'
-      ELSE seeding_status
-    END
-    WHERE seeding_status = 'planned'
-  `;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_seeding_log_creator ON creator_seeding_log(creator_id, seeded_on DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_seeding_log_seeded ON creator_seeding_log(seeded_on DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_seeding_log_status ON creator_seeding_log(seeding_status, seeded_on DESC)`;
@@ -611,11 +599,5 @@ async function createCreatorOpsTables(sql) {
 }
 
 export async function ensureCreatorOpsTables(sql) {
-  if (!creatorOpsTablesReady) creatorOpsTablesReady = createCreatorOpsTables(sql);
-  try {
-    await creatorOpsTablesReady;
-  } catch (err) {
-    creatorOpsTablesReady = null;
-    throw err;
-  }
+  return createCreatorOpsTables(sql);
 }

@@ -1,7 +1,7 @@
 import { runExternalStep, digest } from './_lib/operation-journal.js';
 import { reserveOperationBudget } from './_lib/operation-budget.js';
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 import { getShopifyAccessToken } from './_lib/shopify-content.js';
 
 function clean(value, max = 1000) {
@@ -37,7 +37,7 @@ export default async function handler(req, res) {
   if (!access) return;
   const { sql } = access;
   try {
-    await ensureCreatorOpsTables(sql);
+
     const creatorId = Number(req.query?.creator_id || req.body?.creator_id);
     if (!creatorId) return res.status(400).json({ error: 'creator_id required' });
 

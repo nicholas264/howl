@@ -1,5 +1,5 @@
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 
 const DEFAULTS = {
   brand_name: 'HOWL Campfires',
@@ -29,7 +29,7 @@ export default async function handler(req, res) {
   if (!access) return;
   const { sql } = access;
   try {
-    await ensureCreatorOpsTables(sql);
+
     if (req.method === 'GET') return res.json({ guidelines: await getGuidelines(sql) });
     if (req.method !== 'PUT') return res.status(405).end();
 

@@ -1,5 +1,5 @@
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 
 // Creator-fee notes parsed from the bottom of the UGC Seeding Tracker. They were
 // never structured; converting them creates real engagements that flow into the
@@ -43,7 +43,7 @@ export default async function handler(req, res) {
   const { sql, userId } = access;
 
   try {
-    await ensureCreatorOpsTables(sql);
+
     const creators = await sql`SELECT id, name FROM creators WHERE name IS NOT NULL`;
 
     if (req.method === 'GET') {

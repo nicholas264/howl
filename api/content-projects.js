@@ -1,17 +1,11 @@
 import { requirePermission } from './_lib/app-access.js';
-import {
-  cleanText,
-  ensureContentStudioTables,
-  markdownToHtml,
-  projectPayload,
-  selectedSourceIds,
-} from './_lib/content-studio.js';
+import { cleanText, markdownToHtml, projectPayload, selectedSourceIds } from './_lib/content-studio.js';
 
 export default async function handler(req, res) {
   const access = await requirePermission(req, res, req.method === 'GET' ? 'briefs.read' : 'briefs.write');
   if (!access) return;
   const { sql } = access;
-  await ensureContentStudioTables(sql);
+
 
   try {
     if (req.method === 'GET') {

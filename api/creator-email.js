@@ -1,6 +1,6 @@
 import { runExternalStep, operationKey } from './_lib/operation-journal.js';
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 import { getGoogleConnection, getUserGoogleAccessToken } from './_lib/google-user-oauth.js';
 import { resendConfigured, sendResendEmail, validEmail } from './_lib/resend-email.js';
 
@@ -141,7 +141,7 @@ export default async function handler(req, res) {
   const { sql } = access;
 
   try {
-    await ensureCreatorOpsTables(sql);
+
     const creatorId = Number(req.body?.creator_id);
     if (!creatorId) return res.status(400).json({ error: 'creator_id is required' });
     const [creator] = await sql`SELECT id, name, email FROM creators WHERE id = ${creatorId}`;

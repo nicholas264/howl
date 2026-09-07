@@ -1,5 +1,5 @@
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 
 function clean(value, max) {
   const result = (value || '').toString().trim();
@@ -22,7 +22,7 @@ export default async function handler(req, res) {
   const { sql } = access;
 
   try {
-    await ensureCreatorOpsTables(sql);
+
 
     if (req.method === 'GET') {
       const includeInactive = req.query?.include_inactive === 'true';

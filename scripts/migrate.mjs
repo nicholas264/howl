@@ -1,3 +1,7 @@
+import { ensureCreatorOpsTables } from '../api/_lib/creator-ops.js';
+import { ensureContentStudioTables } from '../api/_lib/content-studio.js';
+import { ensureCreativeAuditTables } from '../api/_lib/creative-audit.js';
+import { ensureCreativeEvidenceTaskTables } from '../api/_lib/creative-evidence-tasks.js';
 import { ensureOperationalTables } from '../api/_lib/operational-schema.js';
 import { ensureMonthlyMetrics } from '../api/_lib/monthly-metrics.js';
 import { ensureGoogleOAuthTables } from '../api/_lib/google-user-oauth.js';
@@ -40,6 +44,10 @@ if (!applied) {
   await ensureOperationJournal(sql);
   await sql`INSERT INTO app_schema_migrations (version) VALUES (${version}) ON CONFLICT DO NOTHING`;
 }
+await ensureCreatorOpsTables(sql);
+await ensureContentStudioTables(sql);
+await ensureCreativeAuditTables(sql);
+await ensureCreativeEvidenceTaskTables(sql);
 await ensureCreativeAnalysisQueue(sql);
 await ensureLaunchDrafts(sql);
 await ensureCreativeVariants(sql);

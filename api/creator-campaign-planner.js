@@ -1,6 +1,6 @@
 import { requirePermission } from './_lib/app-access.js';
 import { loadBrandGuidelines, validateBrandCopy } from './_lib/brand-guardrails.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 import { creatorFitSignals, creatorSnapshot, loadEvidence } from './_lib/creator-matching.js';
 
 const FORMATS = new Set([
@@ -450,7 +450,7 @@ export default async function handler(req, res) {
   if (!access) return;
   const { sql } = access;
   try {
-    await ensureCreatorOpsTables(sql);
+
     if (req.method === 'GET') {
       const [plans, assignmentOutcomes, creators, coverage, unlinkedLabels] = await Promise.all([
         sql`

@@ -1,5 +1,5 @@
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 import { mirrorImageUrlToBlob } from './_lib/blob/mirror.js';
 import { discoverInstagramProfile } from './_lib/instagram-discovery.js';
 
@@ -205,7 +205,7 @@ export default async function handler(req, res) {
   const { sql, userId } = access;
 
   try {
-    await ensureCreatorOpsTables(sql);
+
 
     if (req.method === 'GET') {
       const [creators, units] = await Promise.all([

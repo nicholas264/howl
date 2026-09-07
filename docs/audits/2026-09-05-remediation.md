@@ -117,6 +117,13 @@ not claim that the remaining infrastructure and product roadmap is complete.
   mark the slot complete. PostgreSQL tests cover duplicate/reclaimed slot behavior
   under a restricted role. Production, preview, and restored-backup migrations passed.
 
+- Creator operations, content storage, creative audit events, and evidence tasks
+  now use release-owned schema setup across their request paths. Removed repeated
+  note-based rewriting of planned seeding statuses; migrations preserve explicit
+  status and edited unit costs. Production and preview migrations passed with
+  unchanged seeding-record fingerprints. Restricted-role tests cover audit/evidence
+  writes, and restored-data migration checks cover the expanded schema setup.
+
 ## Remaining work / external prerequisites
 
 1. Grant the narrowly scoped AWS permissions in `../operations/backup-provisioning-policy.json`,

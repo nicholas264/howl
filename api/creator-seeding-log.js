@@ -1,5 +1,5 @@
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 
 function text(value, max = 1000) {
   const result = (value ?? '').toString().trim();
@@ -37,7 +37,7 @@ export default async function handler(req, res) {
   const { sql, userId } = access;
 
   try {
-    await ensureCreatorOpsTables(sql);
+
 
     if (req.method === 'GET') {
       const units = await sql`SELECT unit_type, cogs::float AS cogs, active FROM seeding_units ORDER BY cogs DESC`;

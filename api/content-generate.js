@@ -2,17 +2,8 @@ import { meteredFetch } from './_lib/metered-fetch.js';
 import { checkWorkLimit } from './_lib/work-limits.js';
 import { requirePermission } from './_lib/app-access.js';
 import { loadBrandGuidelines, validateBrandCopy } from './_lib/brand-guardrails.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
-import {
-  cleanText,
-  ensureContentStudioTables,
-  markdownToHtml,
-  parseModelJson,
-  rankSiteLinks,
-  resolveInternalLinks,
-  selectedSourceIds,
-  stripEmDashes,
-} from './_lib/content-studio.js';
+
+import { cleanText, markdownToHtml, parseModelJson, rankSiteLinks, resolveInternalLinks, selectedSourceIds, stripEmDashes } from './_lib/content-studio.js';
 import { loadSiteLinks, siteLinkStatus, syncSiteLinks } from './_lib/shopify-content.js';
 import { BLOG_CONTEXT_PACKET } from './_lib/blog-context-packet.js';
 
@@ -61,8 +52,7 @@ export default async function handler(req, res) {
   if (!apiKey && !openaiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY or OPENAI_API_KEY required' });
 
   const { sql } = access;
-  await ensureCreatorOpsTables(sql);
-  await ensureContentStudioTables(sql);
+
 
   try {
     const action = cleanText(req.body?.action || 'outline', 40);

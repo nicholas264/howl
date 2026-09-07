@@ -1,5 +1,5 @@
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 
 export const config = {
   api: { bodyParser: { sizeLimit: '1mb' } },
@@ -55,7 +55,7 @@ export default async function handler(req, res) {
   const { sql } = access;
 
   try {
-    await ensureCreatorOpsTables(sql);
+
     const [session] = await sql`
       SELECT id, words
       FROM ugc_sessions

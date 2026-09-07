@@ -3,7 +3,7 @@ import { pipeline } from 'node:stream/promises';
 import { parseMediaRange } from './_lib/media-range.js';
 import { neon } from '@neondatabase/serverless';
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 import { verifyUgcSourceToken } from './ugc-source-token.js';
 
 export const config = {
@@ -27,7 +27,7 @@ export default async function handler(req, res) {
   }
 
   const sql = access?.sql || neon(process.env.DATABASE_URL);
-  await ensureCreatorOpsTables(sql);
+
   const [session] = await sql`
     SELECT id, video_url, file_name
     FROM ugc_sessions

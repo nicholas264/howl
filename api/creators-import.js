@@ -1,5 +1,5 @@
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 import { mapClickupCreator } from './_lib/clickup-creators.js';
 import {
   CLICKUP_CREATOR_LIST_ID,
@@ -102,7 +102,7 @@ export default async function handler(req, res) {
   const { sql } = access;
 
   try {
-    await ensureCreatorOpsTables(sql);
+
     let rows = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 2000) : [];
     if (req.body?.action === 'clickup_sync') {
       const token = process.env.CLICKUP_API_TOKEN?.trim();

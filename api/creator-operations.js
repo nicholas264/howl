@@ -1,5 +1,5 @@
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 import { mapClickupStatus } from './_lib/clickup-creators.js';
 
 async function loadSetup(sql) {
@@ -278,7 +278,7 @@ export default async function handler(req, res) {
   const { sql } = access;
 
   try {
-    await ensureCreatorOpsTables(sql);
+
     if (req.method === 'POST') {
       if (req.body?.action !== 'apply_clickup_status_mapping') return res.status(405).end();
       const statuses = await sql`

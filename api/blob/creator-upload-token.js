@@ -1,6 +1,6 @@
 import { handleUpload } from '@vercel/blob/client';
 import { neon } from '@neondatabase/serverless';
-import { ensureCreatorOpsTables } from '../_lib/creator-ops.js';
+
 import { getActiveSubmission } from '../_lib/creator-submissions.js';
 import { checkRateLimit, rateLimitKey, sendRateLimited } from '../_lib/rate-limit.js';
 
@@ -24,7 +24,6 @@ export default async function handler(req, res) {
     });
     if (!rate.allowed) return sendRateLimited(res, rate);
 
-    await ensureCreatorOpsTables(sql);
     const jsonResponse = await handleUpload({
       body: req.body,
       request: req,

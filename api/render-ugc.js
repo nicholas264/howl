@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { put } from '@vercel/blob';
 import ffmpegPath from 'ffmpeg-static';
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 
 export const config = {
   api: { bodyParser: { sizeLimit: '2mb' } },
@@ -67,7 +67,7 @@ export default async function handler(req, res) {
 
   const sessionId = Number(req.body?.session_id);
   if (!sessionId) return res.status(400).json({ error: 'session_id required' });
-  await ensureCreatorOpsTables(sql);
+
   const [session] = await sql`
     SELECT *
     FROM ugc_sessions

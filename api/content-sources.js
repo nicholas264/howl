@@ -1,16 +1,6 @@
 import { fetchPublicText } from './_lib/safe-fetch.js';
 import { requirePermission } from './_lib/app-access.js';
-import {
-  ensureContentStudioTables,
-  extractSitemapUrls,
-  parseImportItems,
-  rebuildSourceChunks,
-  scrapeUrlToSource,
-  classifySiteUrl,
-  sourceTypeForUrl,
-  sourcePayload,
-  stripHtml,
-} from './_lib/content-studio.js';
+import { extractSitemapUrls, parseImportItems, rebuildSourceChunks, scrapeUrlToSource, classifySiteUrl, sourceTypeForUrl, sourcePayload, stripHtml } from './_lib/content-studio.js';
 
 const KLAVIYO_API_ROOT = 'https://a.klaviyo.com/api';
 const KLAVIYO_REVISION = '2026-04-15';
@@ -19,7 +9,7 @@ export default async function handler(req, res) {
   const access = await requirePermission(req, res, req.method === 'GET' ? 'briefs.read' : 'briefs.write');
   if (!access) return;
   const { sql } = access;
-  await ensureContentStudioTables(sql);
+
 
   try {
     if (req.method === 'GET') {

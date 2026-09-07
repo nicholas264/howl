@@ -1,5 +1,5 @@
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 
 const STAGES = new Set(['sourced', 'contacted', 'interested', 'briefing', 'producing', 'active', 'alumni']);
 const ROSTER_FILTERS = new Set(['active', 'past', 'legacy_clickup', 'rejected_applicants']);
@@ -193,7 +193,7 @@ export default async function handler(req, res) {
   const { sql } = access;
 
   try {
-    await ensureCreatorOpsTables(sql);
+
 
     if (req.method === 'GET') {
       const id = req.query.id ? Number(req.query.id) : null;

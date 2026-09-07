@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 
 export const config = {
   api: { bodyParser: { sizeLimit: '1mb' } },
@@ -53,7 +53,7 @@ export default async function handler(req, res) {
   if (!sessionId) return res.status(400).json({ error: 'id required' });
 
   const { sql } = access;
-  await ensureCreatorOpsTables(sql);
+
   const [session] = await sql`
     SELECT id
     FROM ugc_sessions

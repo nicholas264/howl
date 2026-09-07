@@ -1,5 +1,5 @@
 import { requirePermission } from './_lib/app-access.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 import { listAnalyzedWinners } from './_lib/meta/creative-analysis.js';
 
 export const STAGES = ['ideate', 'match', 'brief', 'produce', 'launch', 'analyze', 'iterate'];
@@ -100,7 +100,7 @@ export default async function handler(req, res) {
   const { sql, userId } = access;
 
   try {
-    await ensureCreatorOpsTables(sql);
+
 
     if (req.method === 'GET') {
       const cards = await loadCards(sql);

@@ -1,4 +1,3 @@
-let creativeEvidenceTasksReady = null;
 
 export async function createCreativeEvidenceTaskTables(sql) {
   await sql`
@@ -23,13 +22,7 @@ export async function createCreativeEvidenceTaskTables(sql) {
 }
 
 export async function ensureCreativeEvidenceTaskTables(sql) {
-  if (!creativeEvidenceTasksReady) creativeEvidenceTasksReady = createCreativeEvidenceTaskTables(sql);
-  try {
-    await creativeEvidenceTasksReady;
-  } catch (err) {
-    creativeEvidenceTasksReady = null;
-    throw err;
-  }
+  return createCreativeEvidenceTaskTables(sql);
 }
 
 export function normalizeEvidenceTaskType(value) {
@@ -54,7 +47,7 @@ export async function upsertCreativeEvidenceTask(sql, {
   userId,
   userEmail,
 }) {
-  await ensureCreativeEvidenceTaskTables(sql);
+
   const normalizedTaskType = normalizeEvidenceTaskType(taskType);
   if (!groupKey || !normalizedTaskType) throw new Error('groupKey and valid taskType are required');
   const normalizedStatus = normalizeEvidenceTaskStatus(status);

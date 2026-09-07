@@ -1,6 +1,6 @@
 import { requirePermission } from './_lib/app-access.js';
 import { mirrorImageUrlToBlob } from './_lib/blob/mirror.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
+
 import { discoverInstagramProfile, normalizeInstagramHandle } from './_lib/instagram-discovery.js';
 import { getUserGoogleAccessToken } from './_lib/google-user-oauth.js';
 import { resendConfigured, sendResendEmail, validEmail } from './_lib/resend-email.js';
@@ -253,7 +253,7 @@ export default async function handler(req, res) {
   if (!access) return;
   const { sql } = access;
   try {
-    await ensureCreatorOpsTables(sql);
+
     if (req.method === 'GET') {
       const [applications, candidates, counts] = await Promise.all([
         sql`SELECT * FROM creator_applications ORDER BY

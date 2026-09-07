@@ -77,7 +77,7 @@ function classifySkuSpend(row, launchProductId = null) {
 async function stampFlowLaunched(sql, { adId, groupKey, briefId, deliverableId }) {
   if (!briefId && !deliverableId) return;
   try {
-    await ensureCreatorOpsTables(sql);
+
     await sql`
       UPDATE flow_cards
       SET stage = 'analyze',
@@ -289,9 +289,9 @@ export const config = {
 
 import { hasPermission, requireWorkspaceAccess } from './_lib/app-access.js';
 import { assertBrandSafe } from './_lib/brand-guardrails.js';
-import { ensureCreatorOpsTables } from './_lib/creator-ops.js';
-import { ensureCreativeAuditTables, logCreativeOperatorEvent } from './_lib/creative-audit.js';
-import { ensureCreativeEvidenceTaskTables, normalizeEvidenceTaskType, upsertCreativeEvidenceTask } from './_lib/creative-evidence-tasks.js';
+
+import { logCreativeOperatorEvent } from './_lib/creative-audit.js';
+import { normalizeEvidenceTaskType, upsertCreativeEvidenceTask } from './_lib/creative-evidence-tasks.js';
 import {
   analyzeCreativeGroup,
   dismissAnalyzedWinner,
@@ -435,7 +435,7 @@ export default async function handler(req, res) {
     ? await createMetaOperationFetch(appAccess.sql, req, appAccess.userId) : globalThis.fetch;
   try {
     if (launchActions.has(action)) {
-      await ensureCreatorOpsTables(appAccess.sql);
+
       if (!['upload_image', 'upload_video', 'upload_video_url', 'create_campaign', 'create_adset'].includes(action)) {
         if (!req.body.items?.length) await assertLaunchReady(appAccess.sql, req.body);
         for (const item of req.body.items || []) await assertLaunchReady(appAccess.sql, { ...req.body, ...item });
@@ -1518,8 +1518,7 @@ export default async function handler(req, res) {
         const sql = neon(process.env.DATABASE_URL);
         await ensureCreativeAssetTables(sql);
         await ensureCreativeAnalysisQueue(sql);
-        await ensureCreatorOpsTables(sql);
-        await ensureCreativeEvidenceTaskTables(sql);
+
 
         const sinceDays = Math.max(1, Math.min(365, parseInt(req.body.sinceDays || 14, 10)));
         const fmtYmd = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -1784,8 +1783,7 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: 'sourceLabel required for founder or internal source tags' });
         }
         const sql = appAccess.sql;
-        await ensureCreatorOpsTables(sql);
-        await ensureCreativeAuditTables(sql);
+
         let creator = null;
         const [previousAssignment] = await sql`
           SELECT creator_id, source_type, source_label
@@ -1886,8 +1884,7 @@ export default async function handler(req, res) {
           : [];
         if (!assignments.length) return res.status(400).json({ error: 'assignments required' });
         const sql = appAccess.sql;
-        await ensureCreatorOpsTables(sql);
-        await ensureCreativeAuditTables(sql);
+
         const creatorIds = [...new Set(assignments.map(item => item.creatorId))];
         const creatorRows = await sql`
           SELECT id, name FROM creators WHERE id = ANY(${creatorIds}::bigint[])
@@ -1967,7 +1964,7 @@ export default async function handler(req, res) {
 
       case 'get_creative_operator_audit': {
         const sql = appAccess.sql;
-        await ensureCreativeAuditTables(sql);
+
         const limit = Math.max(1, Math.min(50, parseInt(req.body.limit || 12, 10)));
         const events = await sql`
           SELECT id, event_type, group_key, group_name, creator_id, creator_name,
