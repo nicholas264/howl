@@ -573,3 +573,15 @@ no longer returns the raw provider progress object on a fatal error, because nes
 provider diagnostics can contain signed source capabilities. Recovery regressions
 exercise both fatal render errors and thrown polling errors and verify that neither
 the returned result nor the stored session error retains the signed URL.
+
+## Existing source migration preparation — September 7
+
+A fresh production inventory confirms one remaining public editor source (session 1,
+51,370,969 bytes), with an owner and no references outside its session. Private-video
+migration tooling now verifies a recovery copy, source hashes, exact destination,
+anonymous denial, unchanged row state and registry ownership. A single database
+statement updates the session and registration or rolls back both; tests cover
+concurrent edits, registration failure and replay. The tooling never deletes the
+public original. Execution was rejected before starting by automatic approval review
+pending explicit approval of this production video and private destination. See
+`../operations/private-video-migration.md`; no source video was migrated in this step.
