@@ -1,3 +1,4 @@
+import {redactPrivateMediaError} from './_lib/private-video.js';
 import { finishWork } from './_lib/work-controls.js';
 import { completeRender } from './_lib/render-completion.js';
 import { getRenderProgress } from '@remotion/lambda/client';
@@ -59,14 +60,14 @@ export default async function handler(req, res) {
       region,
     });
     if (progress.fatalErrorEncountered) {
-      const message = (progress.errors?.[0]?.message || 'Remotion render failed').slice(0, 2000);
+      const message = redactPrivateMediaError(progress.errors?.[0],'Remotion render failed');
       await sql`
         UPDATE ugc_sessions
         SET status = 'render_error', last_error = ${message}, updated_at = now()
         WHERE id = ${sessionId} AND settings->'remotion_render'->>'render_id' = ${renderId}
       `.catch(() => {});
       if (renderState.work_id) await finishWork(sql,renderState.work_id,'render',500);
-      return res.status(500).json({ error: message, progress });
+      return res.status(500).json({ error: message });
     }
     if (progress.done && progress.outputFile) {
       const saved = await completeRender(sql, sessionId, renderState, progress.outputFile, progress.costs);
@@ -85,6 +86,6 @@ export default async function handler(req, res) {
       render_key: renderState.render_key || null,
     });
   } catch (err) {
-    return res.status(500).json({ error: err.message || 'Could not fetch Remotion render progress' });
+    return res.status(500).json({ error: redactPrivateMediaError(err,'Could not fetch Remotion render progress') });
   }
 }

@@ -516,3 +516,16 @@ test('work-budget deferral preserves retries and refuses a replaced lease', asyn
   const [row]=await sql`SELECT status,attempts,lease_token FROM creative_analysis_queue WHERE group_key=${group}`;
   assert.deepEqual(row,{status:'pending',attempts:0,lease_token:null});
 });
+
+test('render recovery never persists or returns private signed URLs from provider failures',async()=>{
+ const signed='https://fixture.private.blob.vercel-storage.com/ugc-source/video.mp4?signature=private-capability';
+ for(const fatal of [true,false]){
+  const [session]=await sql`INSERT INTO ugc_sessions(video_url,status,settings) VALUES ('source','rendering',${JSON.stringify({remotion_render:{render_id:'privacy-'+fatal,bucket_name:'bucket',region:'us-east-1',function_name:'function'}})}::jsonb) RETURNING id`;
+  const results=await recoverRenders(sql,async()=>{if(!fatal)throw new Error('Fetch failed '+signed);return {fatalErrorEncountered:true,errors:[{message:'Could not decode '+signed}]};});
+  const result=results.find(row=>row.id===session.id);
+  assert.equal(result.status,fatal?'failed':'poll_error');
+  const [saved]=await sql`SELECT last_error FROM ugc_sessions WHERE id=${session.id}`;
+  const output=JSON.stringify({result,saved});assert.ok(!output.includes('private-capability'));assert.ok(!output.includes(signed));assert.ok(output.includes('[private media]'));
+  await sql`DELETE FROM ugc_sessions WHERE id=${session.id}`;
+ }
+});

@@ -564,3 +564,12 @@ and auto-edit transcription, so the next edit uses the correct optimistic-lock
 version. The handler regression now follows real FFmpeg extraction and a mocked
 speech response with a session edit using the returned revision, proving the next
 save succeeds. This does not substitute for real member browser verification.
+
+## Render failure privacy — September 7
+
+Lambda status polling and background render recovery redact private media URLs
+from provider errors before returning or persisting them. The browser status route
+no longer returns the raw provider progress object on a fatal error, because nested
+provider diagnostics can contain signed source capabilities. Recovery regressions
+exercise both fatal render errors and thrown polling errors and verify that neither
+the returned result nor the stored session error retains the signed URL.

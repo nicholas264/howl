@@ -1,3 +1,4 @@
+import {redactPrivateMediaError} from './private-video.js';
 import { finishWork } from './work-controls.js';
 import { completeRender } from './render-completion.js';
 
@@ -28,7 +29,7 @@ export async function recoverRenders(sql, getProgress) {
       const progress = await getProgress({ renderId: state.render_id, bucketName: state.bucket_name,
         functionName: state.function_name, region: state.region });
       if (progress.fatalErrorEncountered) {
-        await sql`UPDATE ugc_sessions SET status = 'render_error', last_error = ${(progress.errors?.[0]?.message || 'Render failed').slice(0, 2000)}, updated_at = now()
+        await sql`UPDATE ugc_sessions SET status = 'render_error', last_error = ${redactPrivateMediaError(progress.errors?.[0],'Render failed')}, updated_at = now()
           WHERE id = ${session.id} AND settings->'remotion_render'->>'render_id' = ${state.render_id}`;
         if (state.work_id) await finishWork(sql,state.work_id,'render',500);
         results.push({ id: session.id, status: 'failed' });
@@ -45,7 +46,7 @@ export async function recoverRenders(sql, getProgress) {
       // batch cannot permanently starve later sessions.
       await sql`UPDATE ugc_sessions SET updated_at = now() WHERE id = ${session.id} AND status = 'rendering'
         AND settings->'remotion_render'->>'render_id' = ${state.render_id}`;
-      results.push({ id: session.id, status: 'poll_error', error: error.message });
+      results.push({ id: session.id, status: 'poll_error', error: redactPrivateMediaError(error) });
     }
   }
   return results;
