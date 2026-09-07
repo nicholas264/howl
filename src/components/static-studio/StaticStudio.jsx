@@ -128,7 +128,7 @@ export default function StaticStudio({onAddToCart,onOpenLauncher,driveAuth}) {
     const products=snapshot.selectedProducts.filter(id=>snapshot.assets.some(a=>a.approved && a.role==='product' && a.productId===id));
     const total=products.length*snapshot.count;
     if(!total)throw new Error('Confirm a product photograph first.');
-    if(snapshot.concepts.length+total>120)throw new Error('This batch exceeds the active studio limit. Archive older concepts first.');
+    if(snapshot.concepts.length+total>120)throw new Error('This batch exceeds the active studio limit. Download completed pairs and remove unneeded concepts to make space.');
     const created=[];
     for(const productId of products)for(let index=0;index<snapshot.count;index++) {
       if(cancelRef.current)break;

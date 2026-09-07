@@ -225,7 +225,7 @@ export function scenePhotoRect(asset,box) {
   return {x,y,w,h,scale,protectedBox};
 }
 export function verifiedFacts(asset) {
-  return [{id:'identity',text:productFor(asset.productId)?.name || ''},...asset.features.filter(f=>f.approved).map((f,i)=>({id:`feature-${i}`,text:f.name}))];
+  return [{id:'identity',text:productFor(asset.productId)?.name || ''},{id:'category',text:'Propane campfire'},...asset.features.filter(f=>f.approved).map((f,i)=>({id:`feature-${i}`,text:f.name}))];
 }
 export function validateCreativeCopy(choice,asset) {
   for(const [key,max] of [['headline',120],['body',220],['cta',60],['angle',100],['premise',500],['visualIdea',500]]) {
