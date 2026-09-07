@@ -1,6 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { requirePermission } from '../_lib/app-access.js';
-import { ensureLooxReviewTables, toReviewAdRow } from '../_lib/loox-reviews.js';
+import { toReviewAdRow } from '../_lib/loox-reviews.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
@@ -16,7 +16,7 @@ export default async function handler(req, res) {
   const sql = neon(process.env.DATABASE_URL);
 
   try {
-    await ensureLooxReviewTables(sql);
+
 
     if (req.method === 'GET') {
       const limit = Math.min(Math.max(parseInt(req.query.limit || '300', 10) || 300, 1), 1000);

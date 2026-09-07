@@ -1,9 +1,9 @@
 import { clerkSecretKey } from './_lib/clerk-config.js';
-import { ensureSyncState } from './_lib/sync-state.js';
+
 import { createClerkClient } from '@clerk/backend';
 import { isValidRole, ROLE_LABELS, ROLE_PERMISSIONS, requirePermission } from './_lib/app-access.js';
 
-import { ensureCreativeAnalysisQueue } from './_lib/creative-analysis-queue.js';
+
 import { getIntegrationHealth, testIntegrationHealth } from './_lib/integration-health.js';
 
 function cleanEmail(value) {
@@ -26,12 +26,6 @@ export default async function handler(req, res) {
   try {
 
     if (req.method === 'GET') {
-      await Promise.all([
-
-        ensureSyncState(sql),
-
-        ensureCreativeAnalysisQueue(sql),
-      ]);
       const users = await sql`
         SELECT user_id, email, display_name, role, status, last_seen_at, created_at, updated_at
         FROM app_users

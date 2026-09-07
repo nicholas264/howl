@@ -53,7 +53,7 @@ export async function ensureCreativeAssetTables(sql) {
 }
 
 export async function backfillCreativeAssetsFromLaunchHistory(sql) {
-  await ensureCreativeAssetTables(sql);
+
   await sql`
     INSERT INTO creative_assets
       (drive_file_id, drive_file_name, mime_type, durable_url, ad_id,
@@ -99,8 +99,8 @@ export async function backfillCreativeAssetsFromLaunchHistory(sql) {
   `;
 }
 
-export async function upsertDriveAsset(sql, file, folderPath = '', ensureTable = true) {
-  if (ensureTable) await ensureCreativeAssetTables(sql);
+export async function upsertDriveAsset(sql, file, folderPath = '') {
+
   const video = file.videoMediaMetadata || {};
   const image = file.imageMediaMetadata || {};
   const width = parseInt(video.width || image.width || 0, 10) || null;
@@ -149,7 +149,7 @@ export async function markCreativeAssetLaunched(sql, {
   productId,
   angleId,
 }) {
-  await ensureCreativeAssetTables(sql);
+
   const [row] = await sql`
     UPDATE creative_assets SET
       durable_url = COALESCE(${durableUrl || null}, durable_url),

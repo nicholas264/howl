@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-import { ensureLooxReviewTables, normalizeLooxReviewPayload } from './_lib/loox-reviews.js';
+import { normalizeLooxReviewPayload } from './_lib/loox-reviews.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
@@ -19,7 +19,7 @@ export default async function handler(req, res) {
 
   const sql = neon(process.env.DATABASE_URL);
   try {
-    await ensureLooxReviewTables(sql);
+
     const review = normalizeLooxReviewPayload(req.body || {});
     const [row] = await sql`
       INSERT INTO loox_reviews (

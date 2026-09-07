@@ -124,6 +124,13 @@ not claim that the remaining infrastructure and product roadmap is complete.
   unchanged seeding-record fingerprints. Restricted-role tests cover audit/evidence
   writes, and restored-data migration checks cover the expanded schema setup.
 
+- Creative assets, analysis queue/columns/dismissals, variant and experiment
+  schemas, sync state, reviews, and MAP monitoring no longer initialize schema in
+  their normal request paths. Release and restored-backup migrations cover these
+  structures; asset backfills remain data operations. Restricted-role tests cover
+  asset deduplication, queue ownership, sync checkpoints, and MAP settings/dealer
+  registry writes. Production and preview migrations passed.
+
 ## Remaining work / external prerequisites
 
 1. Grant the narrowly scoped AWS permissions in `../operations/backup-provisioning-policy.json`,

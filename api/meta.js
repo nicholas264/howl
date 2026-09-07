@@ -7,8 +7,8 @@ import { syncCreativeAnalytics } from './_lib/meta/sync.js';
 import { createMetaOperationFetch } from './_lib/operation-journal.js';
 import { canRunMetaAction } from './_lib/meta-permissions.js';
 import { mirrorVideoToBlob } from './_lib/blob/mirror.js';
-import { backfillCreativeAssetsFromLaunchHistory, ensureCreativeAssetTables } from './_lib/creative-assets.js';
-import { enqueueCreativeAnalyses, enqueueCreativeAssetAnalysis, ensureCreativeAnalysisQueue } from './_lib/creative-analysis-queue.js';
+import { backfillCreativeAssetsFromLaunchHistory } from './_lib/creative-assets.js';
+import { enqueueCreativeAnalyses, enqueueCreativeAssetAnalysis } from './_lib/creative-analysis-queue.js';
 import { normalizeCreativeAsset, normalizeCreativeAssetBatch } from './_lib/creative-asset-normalizer.js';
 
 const DEFAULT_META_URL_TAGS = 'tw_source={{site_source_name}}&tw_adid={{ad.id}}';
@@ -102,7 +102,7 @@ export async function logLaunch(row, sqlOverride = null) {
     if (!process.env.DATABASE_URL && !sqlOverride) return;
     const { neon } = await import('@neondatabase/serverless');
     const sql = sqlOverride || neon(process.env.DATABASE_URL);
-    await ensureCreativeAssetTables(sql);
+
 
     await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS source_type TEXT`;
     await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS source_label TEXT`;
@@ -122,7 +122,7 @@ export async function logLaunch(row, sqlOverride = null) {
       deliverableId: row.deliverable_id,
     });
     if (row.source_video_url) {
-      await ensureCreativeAssetTables(sql);
+
       const [asset] = await sql`
         INSERT INTO creative_assets
           (drive_file_name, mime_type, durable_url, ad_id, creator, creator_id,
@@ -1516,8 +1516,8 @@ export default async function handler(req, res) {
         if (!process.env.DATABASE_URL) return res.json({ error: 'DATABASE_URL not configured' });
         const { neon } = await import('@neondatabase/serverless');
         const sql = neon(process.env.DATABASE_URL);
-        await ensureCreativeAssetTables(sql);
-        await ensureCreativeAnalysisQueue(sql);
+
+
 
 
         const sinceDays = Math.max(1, Math.min(365, parseInt(req.body.sinceDays || 14, 10)));

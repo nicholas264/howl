@@ -8,7 +8,7 @@ export async function ensureSyncState(sql) {
   )`;
 }
 export async function claimSync(sql, name, initial, force = false) {
-  await ensureSyncState(sql);
+
   await sql`INSERT INTO app_sync_state (name) VALUES (${name}) ON CONFLICT DO NOTHING`;
   const token = randomUUID();
   const [row] = await sql`

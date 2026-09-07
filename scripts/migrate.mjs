@@ -1,3 +1,7 @@
+import { ensureCreativeAssetTables } from '../api/_lib/creative-assets.js';
+import { ensureMapMonitorTables } from '../api/_lib/map-monitor.js';
+import { ensureLooxReviewTables } from '../api/_lib/loox-reviews.js';
+import { ensureAnalysisSchema } from '../api/_lib/analysis-schema.js';
 import { ensureCreatorOpsTables } from '../api/_lib/creator-ops.js';
 import { ensureContentStudioTables } from '../api/_lib/content-studio.js';
 import { ensureCreativeAuditTables } from '../api/_lib/creative-audit.js';
@@ -44,6 +48,11 @@ if (!applied) {
   await ensureOperationJournal(sql);
   await sql`INSERT INTO app_schema_migrations (version) VALUES (${version}) ON CONFLICT DO NOTHING`;
 }
+await ensureCreativeAssetTables(sql);
+await ensureAnalysisSchema(sql);
+await ensureMapMonitorTables(sql);
+await ensureLooxReviewTables(sql);
+await ensureSyncState(sql);
 await ensureCreatorOpsTables(sql);
 await ensureContentStudioTables(sql);
 await ensureCreativeAuditTables(sql);

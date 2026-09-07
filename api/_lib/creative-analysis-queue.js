@@ -31,7 +31,7 @@ export async function ensureCreativeAnalysisQueue(sql) {
 }
 
 export async function enqueueCreativeAnalyses(sql, source = 'meta_sync') {
-  await ensureCreativeAnalysisQueue(sql);
+
   // Additive reconciliation: launches may not yet exist in performance ingestion.
   const rows = await sql`
     WITH latest AS (
@@ -86,7 +86,7 @@ export async function enqueueCreativeAnalyses(sql, source = 'meta_sync') {
 
 export async function enqueueCreativeAssetAnalysis(sql, groupKey, source = 'launch') {
   if (!groupKey) return 0;
-  await ensureCreativeAnalysisQueue(sql);
+
   const rows = await sql`
     INSERT INTO creative_analysis_queue (group_key, priority, source, status, available_at, updated_at)
     VALUES (${groupKey}, 1000000, ${source}, 'pending', now(), now())
@@ -114,7 +114,7 @@ export async function enqueueCreativeAssetAnalysis(sql, groupKey, source = 'laun
 
 // Manual requests share the worker lease instead of bypassing queue ownership.
 export async function claimManualCreativeAnalysis(sql, groupKey) {
-  await ensureCreativeAnalysisQueue(sql);
+
   const [job] = await sql`
     INSERT INTO creative_analysis_queue
       (group_key,status,source,attempts,lease_token,started_at,available_at,updated_at)
@@ -130,7 +130,7 @@ export async function claimManualCreativeAnalysis(sql, groupKey) {
 }
 
 export async function claimCreativeAnalysisJob(sql) {
-  await ensureCreativeAnalysisQueue(sql);
+
   await sql`
     UPDATE creative_analysis_queue
     SET status = CASE WHEN source = 'manual' OR attempts >= max_attempts THEN 'failed' ELSE 'pending' END,
@@ -174,7 +174,7 @@ export async function completeCreativeAnalysisJob(sql, groupKey, job = null) {
     `;
     return rows.length === 1;
   }
-  await ensureCreativeAnalysisQueue(sql);
+
   await sql`
     INSERT INTO creative_analysis_queue
       (group_key, status, source, attempts, completed_at, updated_at)
@@ -205,7 +205,7 @@ export async function failCreativeAnalysisJob(sql, job, error) {
 }
 
 export async function retryFailedCreativeAnalysisJobs(sql) {
-  await ensureCreativeAnalysisQueue(sql);
+
   const rows = await sql`
     UPDATE creative_analysis_queue
     SET status = 'pending',
@@ -223,7 +223,7 @@ export async function retryFailedCreativeAnalysisJobs(sql) {
 }
 
 export async function getCreativeAnalysisQueueStatus(sql) {
-  await ensureCreativeAnalysisQueue(sql);
+
   const counts = await sql`
     SELECT status, COUNT(*)::int AS count
     FROM creative_analysis_queue

@@ -1,3 +1,5 @@
+import { ensureAnalysisSchema } from '../_lib/analysis-schema.js';
+import { ensureCreativeVariants } from '../_lib/creative-variants.js';
 import { ensureSyncState } from '../_lib/sync-state.js';
 import { ensureOperationJournal } from '../_lib/operation-journal.js';
 import { ensureOperationBudgets } from '../_lib/operation-budget.js';
@@ -292,6 +294,8 @@ export async function initializeSchema(sql) {
     await ensureCreatorOpsTables(sql);
     await ensureContentStudioTables(sql);
     await ensureMapMonitorTables(sql);
+    await ensureAnalysisSchema(sql);
+    await ensureCreativeVariants(sql);
 
 }
 

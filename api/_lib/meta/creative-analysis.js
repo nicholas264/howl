@@ -19,7 +19,7 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import ffmpegPath from 'ffmpeg-static';
-import { backfillCreativeAssetsFromLaunchHistory, ensureCreativeAssetTables } from '../creative-assets.js';
+import { backfillCreativeAssetsFromLaunchHistory } from '../creative-assets.js';
 import {
   claimCreativeAnalysisJob,
   claimManualCreativeAnalysis,
@@ -37,18 +37,6 @@ const DRIVE = 'https://www.googleapis.com/drive/v3';
 const WHISPER_MAX_BYTES = 24 * 1024 * 1024;
 const ANALYSIS_MODEL = process.env.CREATIVE_ANALYSIS_MODEL || 'claude-sonnet-4-6';
 
-async function ensureCreativeAnalysisColumns(sql) {
-  await ensureCreativeAssetTables(sql);
-  await backfillCreativeAssetsFromLaunchHistory(sql);
-  await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS source_asset_id BIGINT`;
-  await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS vision_frame_count INTEGER`;
-  await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS transcription_status TEXT`;
-  await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS structured_analysis JSONB`;
-  await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS evidence JSONB`;
-  await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS confidence NUMERIC(5,4)`;
-  await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS operator_summary TEXT`;
-  await sql`ALTER TABLE creative_analysis ADD COLUMN IF NOT EXISTS recommended_next_step TEXT`;
-}
 
 async function runFfmpeg(args) {
   await new Promise((resolve, reject) => {
@@ -188,7 +176,7 @@ async function analyzeCreativeGroupWithinBudget({ groupKey, assetId = null, manu
   const { BASE, accessToken, adAccountId } = ctx;
   const database = neon(process.env.DATABASE_URL);
   const sql = (...args) => { checkWork(); return database(...args); };
-  await ensureCreativeAnalysisColumns(sql);
+  await backfillCreativeAssetsFromLaunchHistory(sql);
 
   // Pick the top-spend ad in the group as the canonical asset for analysis.
   let [topAd] = await sql`
@@ -645,7 +633,7 @@ export async function processCreativeAnalysisQueue({ ctx, batchSize: rawBatchSiz
   if (!process.env.DATABASE_URL) return { status: 200, body: { error: 'DATABASE_URL not configured' } };
   const batchSize = Math.max(1, Math.min(8, parseInt(rawBatchSize || 2, 10)));
   const sql = neon(process.env.DATABASE_URL);
-  await ensureCreativeAnalysisColumns(sql);
+  await backfillCreativeAssetsFromLaunchHistory(sql);
   await enqueueCreativeAnalyses(sql, 'worker');
   const results = [];
 
@@ -689,7 +677,7 @@ export async function processCreativeAnalysisQueue({ ctx, batchSize: rawBatchSiz
 export async function getCreativeAnalysisQueue({ enqueue = false } = {}) {
   if (!process.env.DATABASE_URL) return { status: 200, body: { error: 'DATABASE_URL not configured' } };
   const sql = neon(process.env.DATABASE_URL);
-  await ensureCreativeAnalysisColumns(sql);
+  await backfillCreativeAssetsFromLaunchHistory(sql);
   const enqueued = enqueue ? await enqueueCreativeAnalyses(sql, 'dashboard') : 0;
   const queue = await getCreativeAnalysisQueueStatus(sql);
   return { status: 200, body: { queue, enqueued } };
@@ -698,7 +686,7 @@ export async function getCreativeAnalysisQueue({ enqueue = false } = {}) {
 export async function retryCreativeAnalysisQueue() {
   if (!process.env.DATABASE_URL) return { status: 200, body: { error: 'DATABASE_URL not configured' } };
   const sql = neon(process.env.DATABASE_URL);
-  await ensureCreativeAnalysisColumns(sql);
+  await backfillCreativeAssetsFromLaunchHistory(sql);
   const retried = await retryFailedCreativeAnalysisJobs(sql);
   const queue = await getCreativeAnalysisQueueStatus(sql);
   return { status: 200, body: { ok: true, retried, queue } };
@@ -708,7 +696,7 @@ export async function getCreativeAnalysis({ groupKey }) {
   if (!process.env.DATABASE_URL) return { status: 200, body: { error: 'DATABASE_URL not configured' } };
   if (!groupKey) return { status: 400, body: { error: 'groupKey required' } };
   const sql = neon(process.env.DATABASE_URL);
-  await ensureCreativeAnalysisColumns(sql);
+  await backfillCreativeAssetsFromLaunchHistory(sql);
   const [row] = await sql`SELECT * FROM creative_analysis WHERE group_key = ${groupKey}`;
   const [asset] = await sql`
     SELECT
@@ -744,13 +732,8 @@ export async function listAnalyzedWinners({ sinceDays: rawSince }) {
   if (!process.env.DATABASE_URL) return { status: 200, body: { error: 'DATABASE_URL not configured' } };
   const sinceDays = Math.max(1, Math.min(365, parseInt(rawSince || 30, 10)));
   const sql = neon(process.env.DATABASE_URL);
-  await ensureCreativeAnalysisColumns(sql);
-  await sql`
-    CREATE TABLE IF NOT EXISTS creative_analysis_dismissals (
-      group_key TEXT PRIMARY KEY,
-      dismissed_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    )
-  `;
+  await backfillCreativeAssetsFromLaunchHistory(sql);
+
   const fmtYmd = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const tsNow = new Date();
   const tsSince = new Date(tsNow.getTime() - sinceDays * 24 * 60 * 60 * 1000);
@@ -798,12 +781,7 @@ export async function dismissAnalyzedWinner({ groupKey }) {
   if (!process.env.DATABASE_URL) return { status: 200, body: { error: 'DATABASE_URL not configured' } };
   if (!groupKey) return { status: 400, body: { error: 'groupKey required' } };
   const sql = neon(process.env.DATABASE_URL);
-  await sql`
-    CREATE TABLE IF NOT EXISTS creative_analysis_dismissals (
-      group_key TEXT PRIMARY KEY,
-      dismissed_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    )
-  `;
+
   await sql`
     INSERT INTO creative_analysis_dismissals (group_key)
     VALUES (${groupKey})

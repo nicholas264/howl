@@ -1,13 +1,13 @@
 import { requirePermission } from './_lib/app-access.js';
-import { ensureExperiments,validateProtocol,experimentEvidence,bindExperimentAds } from './_lib/experiments.js';
-import { ensureCreativeVariants } from './_lib/creative-variants.js';
+import { validateProtocol, experimentEvidence, bindExperimentAds } from './_lib/experiments.js';
+
 
 export default async function handler(req,res) {
   const access=await requirePermission(req,res,req.method==='GET'?'analytics.read':'analytics.write');
   if (!access) return;
   const {sql}=access;
   try {
-    await ensureExperiments(sql); await ensureCreativeVariants(sql);
+
     if (req.method==='GET') {
       const experiments=await sql`SELECT * FROM creative_experiments ORDER BY created_at DESC LIMIT 100`;
       const items=[];

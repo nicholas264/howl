@@ -7,7 +7,7 @@ import { basename, extname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import ffmpegPath from 'ffmpeg-static';
-import { ensureCreativeAssetTables } from './creative-assets.js';
+
 import { getGoogleAccessToken } from './gcp-auth.js';
 import { fetchPublicResource } from './safe-fetch.js';
 import { boundedWork, workSignal, checkWork, workFetch as fetch } from './bounded-work.js';
@@ -185,7 +185,7 @@ async function normalizeCreativeAssetWork({ groupKey, assetId = null, ctx = {} }
   if (!groupKey && !assetId) return statusBody(400, { error: 'groupKey or assetId required' });
   const database = neon(process.env.DATABASE_URL);
   const sql=(...args)=>{checkWork();return database(...args);};
-  await ensureCreativeAssetTables(sql);
+
 
   const asset = await pickAsset(sql, { groupKey, assetId });
   if (!asset) return statusBody(404, { error: 'No creative asset found to normalize' });
@@ -289,7 +289,7 @@ export async function normalizeCreativeAssetBatch({ ctx = {}, limit: rawLimit = 
   if (!process.env.DATABASE_URL) return statusBody(200, { error: 'DATABASE_URL not configured' });
   const limit = Math.max(1, Math.min(8, parseInt(rawLimit || 3, 10)));
   const sql = neon(process.env.DATABASE_URL);
-  await ensureCreativeAssetTables(sql);
+
   const rows = await sql`
     WITH asset_candidates AS (
       SELECT DISTINCT ON (COALESCE(group_key, ad_id, meta_video_id, meta_image_hash))

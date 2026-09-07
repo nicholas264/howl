@@ -1212,7 +1212,7 @@ async function applyKnownNonWebDealerClassifications(sql, dealers) {
 }
 
 export async function getMapSettings(sql) {
-  await ensureMapMonitorTables(sql);
+
   const [row] = await sql`SELECT value FROM map_monitor_settings WHERE key = 'config'`;
   const saved = row?.value || {};
   const configuredDealerRecords = [
@@ -1238,7 +1238,7 @@ export async function getMapSettings(sql) {
 }
 
 export async function saveMapSettings(sql, settings) {
-  await ensureMapMonitorTables(sql);
+
   const payload = {
     mapPrice: Number(settings.mapPrice || DEFAULT_MAP_PRICE),
     alertEmails: (settings.alertEmails || []).map(email => cleanText(email, 320)).filter(Boolean),
@@ -1260,7 +1260,7 @@ export async function saveMapSettings(sql, settings) {
 }
 
 export async function getMapMonitorSummary(sql) {
-  await ensureMapMonitorTables(sql);
+
   const runs = await sql`
     SELECT id, status, started_at, finished_at, scanned_count, violation_count, error
     FROM map_monitor_runs
@@ -1465,7 +1465,7 @@ export async function sendMapMonitorTestAlert({ sql = neon(process.env.DATABASE_
 }
 
 export async function runMapMonitor({ sql = neon(process.env.DATABASE_URL), force = false } = {}) {
-  await ensureMapMonitorTables(sql);
+
   await sql`
     UPDATE map_monitor_runs
     SET status = 'failed',
@@ -1492,7 +1492,7 @@ export async function runMapMonitor({ sql = neon(process.env.DATABASE_URL), forc
 }
 
 export async function resolveDealerWebsites({ sql = neon(process.env.DATABASE_URL), limit = 50 } = {}) {
-  await ensureMapMonitorTables(sql);
+
   const settings = await getMapSettings(sql);
   await applyCuratedDealerTargets(sql, settings.dealers).catch(() => []);
   await applyKnownNonWebDealerClassifications(sql, settings.dealers).catch(() => 0);
@@ -1519,7 +1519,7 @@ export async function resolveDealerWebsites({ sql = neon(process.env.DATABASE_UR
 }
 
 export async function auditDealerWebsites({ sql = neon(process.env.DATABASE_URL), limit = 120 } = {}) {
-  await ensureMapMonitorTables(sql);
+
   const settings = await getMapSettings(sql);
   const dealers = settings.dealers.filter(dealer => dealer.url).slice(0, Math.max(1, Number(limit || 120)));
   const invalid = [];

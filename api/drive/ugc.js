@@ -11,7 +11,7 @@ import { assertBrandSafe } from '../_lib/brand-guardrails.js';
 import { getGoogleAccessToken } from '../_lib/gcp-auth.js';
 import { mirrorAssetToBlob } from '../_lib/blob/mirror.js';
 import { enqueueCreativeAssetAnalysis } from '../_lib/creative-analysis-queue.js';
-import { ensureCreativeAssetTables, markCreativeAssetLaunched, upsertDriveAsset } from '../_lib/creative-assets.js';
+import { markCreativeAssetLaunched, upsertDriveAsset } from '../_lib/creative-assets.js';
 
 
 const DRIVE = 'https://www.googleapis.com/drive/v3';
@@ -470,7 +470,7 @@ export default async function handler(req, res) {
           const sql = neon(process.env.DATABASE_URL);
 
 
-          await ensureCreativeAssetTables(sql);
+
           for (let i = 0; i < enriched.length; i += 20) {
             await Promise.all(
               enriched.slice(i, i + 20).map(file => upsertDriveAsset(sql, file, file.folderPath, false)),
@@ -1038,7 +1038,7 @@ export default async function handler(req, res) {
           const sql = neon(process.env.DATABASE_URL);
 
 
-          await ensureCreativeAssetTables(sql);
+
           await upsertDriveAsset(sql, current, current.drive_folder_path || '', false);
           const asset = await markCreativeAssetLaunched(sql, {
             driveFileId: fileId,

@@ -1,5 +1,5 @@
-import { creativeVariant, ensureCreativeVariants } from '../creative-variants.js';
-import { ensureCreativeAssetTables, backfillCreativeAssetsFromLaunchHistory } from '../creative-assets.js';
+import { creativeVariant } from '../creative-variants.js';
+import { backfillCreativeAssetsFromLaunchHistory } from '../creative-assets.js';
 import { enqueueCreativeAnalyses } from '../creative-analysis-queue.js';
 import { claimSync, checkpointSync, releaseSync, withoutAccessToken, withAccessToken } from '../sync-state.js';
 
@@ -16,8 +16,8 @@ export async function syncCreativeAnalytics({ sql, accessToken, adAccountId, sin
   let state = job.state;
   const deadline = Date.now() + 180000;
   try {
-    await ensureCreativeVariants(sql);
-    await ensureCreativeAssetTables(sql);
+
+
     await backfillCreativeAssetsFromLaunchHistory(sql);
         // 1) Walk /act_X/ads pages, upserting ad + creative metadata
         // Tight subfield expansion to stay under Meta's per-page byte budget.
