@@ -85,7 +85,8 @@ export default async function handler(req, res) {
       UPDATE ugc_sessions
       SET status = 'rendering', last_error = NULL,
           settings = COALESCE(settings, '{}'::jsonb) || ${JSON.stringify({ remotion_attempt: attemptId, remotion_render: { work_id:access.workId, attempt_id: attemptId, provider: 'starting', started_at: new Date().toISOString() } })}::jsonb, updated_at = now()
-      WHERE id = ${sessionId} AND status NOT IN ('rendering', 'render_unknown')
+      WHERE id = ${sessionId} AND video_url=${session.video_url} AND revision=${session.revision}
+        AND status NOT IN ('rendering', 'render_unknown', 'transcribing')
       RETURNING id
     `;
     if (!claimed) {

@@ -535,3 +535,23 @@ in the production private store rejected anonymous access and pathname/operation
 tampering, supported signed range reads and HEAD, and decoded through FFmpeg. Only
 that newly created canary was deleted. No member data or paid render/transcription
 request was used for the canary. Real member browser verification remains pending.
+
+## Legacy FFmpeg render ownership and deadline — September 7
+
+The local renderer validates input before changing session state and reserves the
+shared render work budget. It claims the exact source/revision with a unique attempt;
+rendering, uncertain-render and transcription states exclude a competing claim.
+Successful publication checks the attempt, revision, source and active state, then
+updates the session, eligible deliverable and activity atomically. Late failures
+cannot mark another attempt as failed. Session edits cannot change active job state
+or replace protected FFmpeg metadata. Lambda claims now also check source/revision
+and exclude active transcription.
+
+A four-minute processing deadline kills FFmpeg and cancels Blob upload; network
+reads have a thirty-second timeout. The recovery cron marks local jobs interrupted
+after six minutes, beyond the function's five-minute maximum runtime, making them
+retryable without duplicating a still-running local process. Provider-start
+uncertainty remains quarantined separately. Regression checks cover competing and
+stale claims, guarded edits/publication/failure, interruption recovery, actual
+subprocess termination, and invalid requests leaving session state unchanged.
+Rendered output privacy and reference-aware orphan cleanup remain outstanding.

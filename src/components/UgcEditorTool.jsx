@@ -878,6 +878,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
       }
       setLogTail('Rendering and saving footage on the server...');
       const data = await renderSession(activeSession.id, segments, captionsSrt, settings);
+      if(Number.isInteger(data.revision))savedRevisions.current.set(activeSession.id,data.revision);
       const url = data.url;
       setOutputUrl(url);
       setActiveSession(prev => prev ? {
@@ -1121,6 +1122,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         ? buildSrtFromWords(remapWordsToOutput(nextKeptWords, nextSegments))
         : null;
       const data = await renderSession(activeSession.id, nextSegments, captionsSrt, settings);
+      if(Number.isInteger(data.revision))savedRevisions.current.set(activeSession.id,data.revision);
       setOutputUrl(data.url);
       setActiveSession(prev => prev ? { ...prev, rendered_url: data.url, status: 'rendered' } : prev);
       setSessions(prev => prev.map(session => session.id === activeSession.id ? { ...session, rendered_url: data.url, status: 'rendered' } : session));

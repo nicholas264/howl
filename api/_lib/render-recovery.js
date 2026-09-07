@@ -4,6 +4,11 @@ import { completeRender } from './render-completion.js';
 export async function recoverRenders(sql, getProgress) {
   // Unknown starts cannot safely be retried: a provider might have accepted the
   // request before its response was lost. Make that state visible to operators.
+  const interrupted = await sql`UPDATE ugc_sessions SET status='render_error',
+    last_error='Local render was interrupted. Retry the render.',updated_at=now()
+    WHERE status='rendering' AND settings->>'ffmpeg_attempt' IS NOT NULL
+      AND settings->'remotion_render'='null'::jsonb
+      AND (settings->>'ffmpeg_started_at')::timestamptz < now()-interval '6 minutes' RETURNING id`;
   const unknown = await sql`
     UPDATE ugc_sessions SET status = 'render_unknown',
       last_error = 'Render start receipt was lost. Provider reconciliation is required before retrying.', updated_at = now()
@@ -16,7 +21,7 @@ export async function recoverRenders(sql, getProgress) {
     WHERE status = 'rendering' AND settings->'remotion_render'->>'render_id' IS NOT NULL
     ORDER BY updated_at ASC LIMIT 20
   `;
-  const results = unknown.map(row => ({ id: row.id, status: 'unknown' }));
+  const results = [...interrupted.map(row=>({id:row.id,status:'interrupted'})),...unknown.map(row => ({ id: row.id, status: 'unknown' }))];
   for (const session of sessions) {
     const state = session.settings.remotion_render;
     try {

@@ -1,10 +1,10 @@
 import {videoReadUrl,redactPrivateMediaError} from './_lib/private-video.js';
-import { spawn } from 'node:child_process';
+import {claimFfmpegRender,saveFfmpegRender,failFfmpegRender,runFfmpeg} from './_lib/ffmpeg-render-job.js';
+import {checkWorkLimit} from './_lib/work-limits.js';
 import { createReadStream, existsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { put } from '@vercel/blob';
-import ffmpegPath from 'ffmpeg-static';
 import { requirePermission } from './_lib/app-access.js';
 
 
@@ -24,21 +24,6 @@ function validSegments(input, duration) {
     result.push({ start: Number(start.toFixed(3)), end: Number(end.toFixed(3)) });
   }
   return result;
-}
-
-function runFfmpeg(args) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(ffmpegPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
-    let stderr = '';
-    child.stderr.on('data', chunk => {
-      stderr = `${stderr}${chunk}`.slice(-12000);
-    });
-    child.on('error', reject);
-    child.on('close', code => {
-      if (code === 0) resolve();
-      else reject(new Error(`FFmpeg exited ${code}: ${stderr.slice(-2500)}`));
-    });
-  });
 }
 
 function subtitleStyle(settings = {}) {
@@ -67,7 +52,7 @@ export default async function handler(req, res) {
   const { sql } = access;
 
   const sessionId = Number(req.body?.session_id);
-  if (!sessionId) return res.status(400).json({ error: 'session_id required' });
+  if (!Number.isSafeInteger(sessionId) || sessionId<1) return res.status(400).json({ error: 'session_id required' });
 
   const [session] = await sql`
     SELECT *
@@ -78,11 +63,6 @@ export default async function handler(req, res) {
   if (!session) return res.status(404).json({ error: 'Session not found' });
   let sourceUrl;
   try {
-    await sql`
-      UPDATE ugc_sessions
-      SET status = 'rendering', last_error = NULL, updated_at = now()
-      WHERE id = ${sessionId}
-    `;
     sourceUrl = new URL(session.video_url);
   } catch {
     return res.status(400).json({ error: 'Session source URL is invalid' });
@@ -99,6 +79,10 @@ export default async function handler(req, res) {
   const captionSettings = req.body?.caption_settings && typeof req.body.caption_settings === 'object'
     ? req.body.caption_settings
     : {};
+  if (!(await checkWorkLimit(access,res,'render'))) return;
+  const attempt=await claimFfmpegRender(sql,session);
+  if(!attempt)return res.status(409).json({error:'Session changed or a job is active. Reload before rendering.'});
+  const signal=AbortSignal.timeout(240000);
   const token = `${sessionId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const outputPath = join(tmpdir(), `howl-render-${token}.mp4`);
   const subtitlePath = join(tmpdir(), `howl-render-${token}.srt`);
@@ -122,6 +106,7 @@ export default async function handler(req, res) {
 
     await runFfmpeg([
       '-y',
+      '-rw_timeout', '30000000',
       '-i', readableSource,
       '-filter_complex', filterParts.join(';'),
       '-map', videoMap,
@@ -133,46 +118,22 @@ export default async function handler(req, res) {
       '-b:a', '128k',
       '-movflags', '+faststart',
       outputPath,
-    ]);
+    ],signal);
+    signal.throwIfAborted();
 
     const blob = await put(`ugc-renders/session-${sessionId}-${Date.now()}.mp4`, createReadStream(outputPath), {
       access: 'public',
       contentType: 'video/mp4',
       addRandomSuffix: true,
+      abortSignal: signal,
     });
-    await sql`
-      UPDATE ugc_sessions
-      SET rendered_url = ${blob.url}, status = 'rendered', last_error = NULL, updated_at = now()
-      WHERE id = ${sessionId}
-    `;
-    if (session.deliverable_id) {
-      await sql`
-        UPDATE creator_deliverables
-        SET output_url = ${blob.url}, status = 'edited',
-            completed_asset_count = GREATEST(completed_asset_count, 1),
-            completed_at = COALESCE(completed_at, now()), updated_at = now()
-        WHERE id = ${session.deliverable_id}
-          AND creator_id = ${session.creator_id}
-      `;
-    }
-    if (session.creator_id) {
-      await sql`
-        INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
-        VALUES (
-          ${session.creator_id}, 'edit_rendered', 'Creator footage rendered',
-          ${JSON.stringify({ session_id: sessionId, deliverable_id: session.deliverable_id, output_url: blob.url })}::jsonb,
-          ${access.userId}
-        )
-      `;
-    }
-    return res.json({ ok: true, url: blob.url, session_id: sessionId });
+    signal.throwIfAborted();
+    if(!await saveFfmpegRender(sql,session,attempt,blob.url,access.userId))
+      return res.status(409).json({error:'Render was superseded. Reload the current session.'});
+    return res.json({ ok: true, url: blob.url, session_id: sessionId, revision: Number(session.revision)+1 });
   } catch (err) {
     const message=redactPrivateMediaError(err,'Render failed');
-    await sql`
-      UPDATE ugc_sessions
-      SET status = 'render_error', last_error = ${message}, updated_at = now()
-      WHERE id = ${sessionId}
-    `.catch(() => {});
+    await failFfmpegRender(sql,sessionId,attempt,message).catch(()=>{});
     return res.status(500).json({ error: message });
   } finally {
     if (existsSync(outputPath)) try { unlinkSync(outputPath); } catch {}

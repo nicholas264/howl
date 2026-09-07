@@ -1,6 +1,6 @@
 export async function saveSessionEdits(sql, id, set, expectedRevision) {
   const settings = set.settings && typeof set.settings === 'object' && !Array.isArray(set.settings)
-    ? Object.fromEntries(Object.entries(set.settings).filter(([key]) => !key.startsWith('remotion_'))) : {};
+    ? Object.fromEntries(Object.entries(set.settings).filter(([key]) => !key.startsWith('remotion_') && !key.startsWith('ffmpeg_'))) : {};
       const [saved] = await sql`
         UPDATE ugc_sessions SET
           title = CASE WHEN ${Object.hasOwn(set, 'title')} THEN ${set.title ?? null} ELSE title END,
@@ -17,7 +17,7 @@ export async function saveSessionEdits(sql, id, set, expectedRevision) {
           settings = CASE WHEN ${Object.hasOwn(set, 'settings')}
             THEN COALESCE(settings, '{}'::jsonb) || ${JSON.stringify(settings)}::jsonb ELSE settings END,
           revision = revision + 1, updated_at = now()
-        WHERE id = ${id} AND revision = ${expectedRevision}
+        WHERE id = ${id} AND revision = ${expectedRevision} AND status NOT IN ('rendering','render_unknown','transcribing')
         RETURNING id
       `;
   return saved || null;
