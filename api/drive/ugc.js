@@ -1,3 +1,4 @@
+import { associateDrivePair } from '../_lib/drive-pairs.js';
 import { assertLaunchReady } from '../_lib/launch-preflight.js';
 import { createHash } from 'node:crypto';
 import { boundedResponseBytes } from '../_lib/response-bytes.js';
@@ -478,18 +479,7 @@ export default async function handler(req, res) {
       if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'DATABASE_URL not configured' });
       const sql = neon(process.env.DATABASE_URL);
 
-      await sql`
-        DELETE FROM ugc_asset_pairs
-        WHERE feed_file_id IN (${feedFileId}, ${storyFileId})
-           OR story_file_id IN (${feedFileId}, ${storyFileId})
-      `;
-      const [row] = await sql`
-        INSERT INTO ugc_asset_pairs
-          (feed_file_id, story_file_id, created_by_user_id, created_by_email, updated_at)
-        VALUES
-          (${feedFileId}, ${storyFileId}, ${appAccess.userId}, ${appAccess.email || null}, NOW())
-        RETURNING *
-      `;
+      const row = await associateDrivePair(sql,{feedFileId,storyFileId,userId:appAccess.userId,email:appAccess.email || null});
       return res.json({ ok: true, pair: row });
     }
 
@@ -1069,7 +1059,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: `Unknown action: ${action}` });
   } catch (err) {
     console.error('UGC Drive error:', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(err.statusCode || 500).json({ error: err.message });
   }
 }
 

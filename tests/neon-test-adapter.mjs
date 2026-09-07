@@ -7,8 +7,7 @@ export function useTestDatabase(db, beforeQuery = () => {}) {
   neonConfig.fetchFunction = async (_url,init) => {
     const request = JSON.parse(init.body);
     try {
-      await beforeQuery(request.query,request.params);
-      const result = await db.query(request.query,request.params);
+      const serialize = result => {
       const fields = result.fields || [];
       const encode = (value,field) => {
         if (value == null) return null;
@@ -20,7 +19,19 @@ export function useTestDatabase(db, beforeQuery = () => {}) {
         if (Array.isArray(value)) return `{${value.map(item=>item == null ? 'NULL' : '"'+String(item).replaceAll('\\','\\\\').replaceAll('"','\\"')+'"').join(',')}}`;
         return String(value);
       };
-      return Response.json({fields,rows:result.rows.map(row=>fields.map(field=>encode(row[field.name],field))),rowCount:result.affectedRows || result.rows.length});
+      return {fields,rows:result.rows.map(row=>fields.map(field=>encode(row[field.name],field))),rowCount:result.affectedRows || result.rows.length};
+      };
+      const execute=async(connection,query)=>{await beforeQuery(query.query,query.params);return serialize(await connection.query(query.query,query.params));};
+      if(Array.isArray(request.queries)) {
+        const isolation=new Headers(init.headers).get('Neon-Batch-Isolation-Level');
+        const modes={ReadUncommitted:'READ UNCOMMITTED',ReadCommitted:'READ COMMITTED',RepeatableRead:'REPEATABLE READ',Serializable:'SERIALIZABLE'};
+        const results=await db.transaction(async tx=>{
+          if(isolation){if(!modes[isolation])throw new Error('Unsupported isolation');await tx.exec('SET TRANSACTION ISOLATION LEVEL '+modes[isolation]);}
+          const rows=[];for(const query of request.queries)rows.push(await execute(tx,query));return rows;
+        });
+        return Response.json({results});
+      }
+      return Response.json(await execute(db,request));
     } catch(error) {return Response.json({message:error.message,code:error.code || 'XX000'},{status:400});}
   };
   return () => {neonConfig.fetchFunction=previous;};

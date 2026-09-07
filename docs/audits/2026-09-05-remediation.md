@@ -145,6 +145,13 @@ not claim that the remaining infrastructure and product roadmap is complete.
   production nor preview has switched credentials. See runtime-database-role.md
   in the operations directory for the cutover and rollback procedure.
 
+- Drive pair replacement now commits deletion/insertion in one serializable
+  transaction. A failed insert preserves the previous pair; overlapping changes
+  return a conflict rather than assigning one file to two pairs across columns.
+  The regression uses the real Neon batch encoding against PostgreSQL rollback;
+  three overlapping trials in the isolated preview database each retained exactly
+  one pair and rejected the competing transaction. Synthetic records were removed.
+
 ## Remaining work / external prerequisites
 
 1. Grant the narrowly scoped AWS permissions in `../operations/backup-provisioning-policy.json`,
