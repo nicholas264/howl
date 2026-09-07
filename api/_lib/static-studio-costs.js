@@ -20,15 +20,15 @@ export async function saveModelSettings(sql,userId,value) {
     ON CONFLICT(user_id) DO UPDATE SET settings=EXCLUDED.settings,updated_at=now()`;
   return settings;
 }
-export async function askStudioModel(access,action,system,content,maxTokens=2000,{fetchImpl=globalThis.fetch,env=process.env}={}) {
+export async function askStudioModel(access,action,system,content,maxTokens=2000,{fetchImpl=globalThis.fetch,env=process.env,timeoutMs=230000}={}) {
   const settings=await loadModelSettings(access.sql,access.userId),model=modelForAction(settings,action);
-  const {url,init}=modelRequest(model,system,content,maxTokens,env),id=randomUUID(),spec=STUDIO_MODELS[model];
+  const {url,init}=modelRequest(model,system,content,maxTokens,env,{reasoningEffort:action==='review'?'high':'medium'}),id=randomUUID(),spec=STUDIO_MODELS[model];
   // Persist intent BEFORE any paid request. A lost response must not look like $0.
   await access.sql`INSERT INTO static_studio_usage(id,user_id,work_id,stage,model,provider,rate_version)
     VALUES(${id},${access.userId},${access.workId || null},${action},${model},${spec.provider},${RATE_VERSION})`;
   let response,data,priced=null;
   try {
-    response=await fetchImpl(url,{...init,signal:AbortSignal.timeout(230000)});
+    response=await fetchImpl(url,{...init,signal:AbortSignal.timeout(Math.max(1000,Math.min(230000,timeoutMs)))});
     data=await response.json();
     // Unknown fallback models must never be priced as the requested model.
     const reported=data.model || model;

@@ -2,23 +2,25 @@
 // Cross-Origin-Embedder-Policy: require-corp, which blocks lh3.googleusercontent.com
 // thumbnails (no CORP / unreliable CORS). Returns the thumbnail bytes inline.
 import { requirePermission } from '../_lib/app-access.js';
+import { studioDriveToken } from '../_lib/static-studio-auth.js';
 import { getGoogleAccessToken } from '../_lib/gcp-auth.js';
 
 const DRIVE = 'https://www.googleapis.com/drive/v3';
 
 export default async function handler(req, res) {
-  const auth = await requirePermission(req, res, 'assets.read');
+  const studio=req.query.purpose==='static_studio';
+  const auth = await requirePermission(req, res, studio?'assets.write':'assets.read');
   if (!auth) return;
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   const fileId = (req.query.fileId || '').trim();
-  if (!fileId) return res.status(400).json({ error: 'fileId required' });
+  if (!/^[\w-]{10,150}$/.test(fileId)) return res.status(400).json({ error: 'fileId required' });
 
   const sizeParam = parseInt(req.query.size || '320');
   const size = Math.max(64, Math.min(800, isNaN(sizeParam) ? 320 : sizeParam));
 
   try {
-    const token = await getGoogleAccessToken(['https://www.googleapis.com/auth/drive']);
+    const token = studio ? await studioDriveToken(auth) : await getGoogleAccessToken(['https://www.googleapis.com/auth/drive']);
     const meta = await fetch(`${DRIVE}/files/${fileId}?fields=thumbnailLink,mimeType&supportsAllDrives=true`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -31,6 +33,8 @@ export default async function handler(req, res) {
     // Drive returns links sized at =sNN; replace with requested size.
     const url = m.thumbnailLink.replace(/=s\d+(-c)?$/, `=s${size}`);
 
+    const target=new URL(url);
+    if(target.protocol!=='https:' || !target.hostname.endsWith('.googleusercontent.com'))throw new Error('Unexpected Drive thumbnail destination.');
     const t = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!t.ok) {
       const txt = await t.text();

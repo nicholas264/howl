@@ -1,3 +1,4 @@
+import { DriveThumb } from '../launcher/shared.jsx';
 import { useEffect, useRef, useState } from 'react';
 import JSZip from 'jszip';
 import { apiFetch } from '../../lib/apiFetch.js';
@@ -118,13 +119,31 @@ export default function StaticStudio({onAddToCart,onOpenLauncher,driveAuth}) {
     setMessage('Assessment saved. Review the identity suggestion and photograph before confirming.');
   }
   async function generate(ai,finish=false) {
-    const snapshot=await flush();let choices=[];
-    if(ai) {setBusy('Art director is developing original concepts');choices=(await studioRequest({action:'direct'})).choices;}
-    const concepts=generateConcepts(snapshot,choices);
-    if(!concepts.length)throw new Error('Approve a photograph for a selected product first.');
-    update(current=>({...current,concepts:[...concepts,...current.concepts]}));await flush();
-    setConceptId(concepts[0].id);setView('review');setMessage(`${concepts.length} concepts created. Each has an independently composed feed and story placement.`);
-    if(finish)await finishBatch(concepts);
+    const snapshot=await flush();
+    if(!ai) {
+      const concepts=generateConcepts(snapshot);
+      update(current=>({...current,concepts:[...concepts,...current.concepts]}));await flush();
+      setConceptId(concepts[0]?.id || '');setView('review');setMessage(`${concepts.length} manual layout samples created.`);return;
+    }
+    const products=snapshot.selectedProducts.filter(id=>snapshot.assets.some(a=>a.approved && a.role==='product' && a.productId===id));
+    const total=products.length*snapshot.count;
+    if(!total)throw new Error('Confirm a product photograph first.');
+    if(snapshot.concepts.length+total>120)throw new Error('This batch exceeds the active studio limit. Archive older concepts first.');
+    const created=[];
+    for(const productId of products)for(let index=0;index<snapshot.count;index++) {
+      if(cancelRef.current)break;
+      setBusy(`Developing concept ${created.length+1} of ${total}`);
+      const latest=await flush();
+      let choices;
+      try {choices=(await studioRequest({action:'direct',singleProduct:productId})).choices;}
+      catch(err){throw new Error(`Stopped while developing concept ${created.length+1}. ${created.length} earlier concepts are saved. ${err.message}`);}
+      const concepts=generateConcepts({...latest,count:1,selectedProducts:[productId]},choices);
+      update(current=>({...current,concepts:[...concepts,...current.concepts]}));await flush();
+      created.push(...concepts);setConceptId(concepts[0].id);setView('review');
+      if(finish)await finishBatch(concepts);
+    }
+    const current=await flush(),round=current.concepts.filter(c=>created.some(row=>row.id===c.id));
+    setMessage(`${round.length} concepts saved / ${round.filter(c=>c.render).length*2} exports. ${round.filter(c=>c.review?.verdict==='pass').length} pairs passed review. Inspect each pair before approval.`);
   }
   async function persistRender(c) {
     const a=w.assets.find(a=>a.id===c.assetId);
@@ -213,7 +232,7 @@ export default function StaticStudio({onAddToCart,onOpenLauncher,driveAuth}) {
         <div className="ss-drive"><label htmlFor="ss-drive-folder">Google Drive folder</label><div><input id="ss-drive-folder" type="text" placeholder="Paste a Drive folder link" value={w.folder} onChange={e=>update({...w,folder:e.target.value})}/><button className="ss-button ss-dark" onClick={()=>run('Opening Drive folder',async()=>{await browse(w.folder);setBreadcrumbs([{folder:w.folder,name:'Asset folder'}]);})} disabled={!w.folder.trim()}>Browse folder</button><button className="ss-button" disabled={!w.folder.trim()} onClick={()=>run('Importing folder tree',importFolderTree)}>Import folder + subfolders</button></div><p>{driveConnected?'Drive is responding. Browse subfolders or select images to import.':'Uses your personal or workspace Drive connection. Browse a folder to check access.'}</p><button className="ss-button" onClick={()=>run('Opening Google sign-in',connectDrive)}>{driveConnected?'Change Drive connection':'Connect my Drive'}</button>
           {driveFiles && <div className="ss-drive-browser"><div className="ss-breadcrumbs">{breadcrumbs.map((b,i)=><button key={i} onClick={()=>run('Opening folder',async()=>{await browse(b.folder);setBreadcrumbs(breadcrumbs.slice(0,i+1));})}>{b.name}</button>)}</div>
             {!driveFiles.length && <p>No supported images or subfolders here.</p>}
-            <div className="ss-drive-files">{driveFiles.map(f=>f.mimeType==='application/vnd.google-apps.folder'?<button key={f.id} className="ss-folder" onClick={()=>run('Opening subfolder',async()=>{await browse(f.id);setBreadcrumbs([...breadcrumbs,{folder:f.id,name:f.name}]);})}>▸ {f.name}</button>:<label key={f.id}><input type="checkbox" disabled={w.assets.some(a=>a.driveId===f.id && a.driveModified===f.modifiedTime)} checked={driveSelected.has(f.id)} onChange={e=>setDriveSelected(prev=>{const next=new Set(prev);e.target.checked?next.add(f.id):next.delete(f.id);return next;})}/><span>{f.name}{w.assets.some(a=>a.driveId===f.id && a.driveModified===f.modifiedTime) && <b className="ss-imported">Already imported</b>}</span><small>{f.imageMediaMetadata?.width?`${f.imageMediaMetadata.width} × ${f.imageMediaMetadata.height}`:''}</small></label>)}</div>
+            <div className="ss-drive-files">{driveFiles.map(f=>f.mimeType==='application/vnd.google-apps.folder'?<button key={f.id} className="ss-folder" onClick={()=>run('Opening subfolder',async()=>{await browse(f.id);setBreadcrumbs([...breadcrumbs,{folder:f.id,name:f.name}]);})}>▸ {f.name}</button>:<label key={f.id}><input type="checkbox" disabled={w.assets.some(a=>a.driveId===f.id && a.driveModified===f.modifiedTime)} checked={driveSelected.has(f.id)} onChange={e=>setDriveSelected(prev=>{const next=new Set(prev);e.target.checked?next.add(f.id):next.delete(f.id);return next;})}/><DriveThumb studio fileId={f.id} alt="" style={{width:72,height:54,objectFit:"contain",flexShrink:0}} fallback={<span className="ss-thumb-pending">Photo</span>}/><span>{f.name}{w.assets.some(a=>a.driveId===f.id && a.driveModified===f.modifiedTime) && <b className="ss-imported">Already imported</b>}</span><small>{f.imageMediaMetadata?.width?`${f.imageMediaMetadata.width} × ${f.imageMediaMetadata.height}`:''}</small></label>)}</div>
             <div className="ss-actions"><button className="ss-button" onClick={()=>setDriveSelected(new Set(driveFiles.filter(f=>f.mimeType!=='application/vnd.google-apps.folder' && !w.assets.some(a=>a.driveId===f.id && a.driveModified===f.modifiedTime)).map(f=>f.id)))}>Select images</button>{pageToken && <button className="ss-button" onClick={()=>run('Loading more files',()=>browse(breadcrumbs.at(-1).folder,true))}>Load more</button>}<button className="ss-button ss-primary" disabled={!driveSelected.size} onClick={()=>run('Importing Drive originals',importDrive)}>Import {driveSelected.size || ''} selected</button></div>
           </div>}
         </div>
