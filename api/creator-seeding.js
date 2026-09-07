@@ -1,4 +1,4 @@
-import { verifySeedDraft } from './_lib/seed-draft.js';
+import { verifySeedDraft, recoverSeedCompletion } from './_lib/seed-draft.js';
 import { runExternalStep, digest } from './_lib/operation-journal.js';
 import { reserveOperationBudget } from './_lib/operation-budget.js';
 import { requirePermission } from './_lib/app-access.js';
@@ -192,14 +192,16 @@ export default async function handler(req, res) {
 }
 
 async function completeSeed({sql,seed,operation,seedingToken,res,actorId}) {
+    const readDraft=()=>shopifyGraphql(`query VerifyCreatorSeedDraft($id: ID!) {
+      draftOrder(id:$id) { id name status completedAt order { id name displayFulfillmentStatus }
+        totalPriceSet { shopMoney { amount currencyCode } }
+        lineItems(first:2) { nodes { quantity variant { id } } pageInfo { hasNextPage } }
+      }
+    }`,{id:seed.shopify_draft_order_id},seedingToken);
+    await recoverSeedCompletion(sql,{seed,operationKey:operation.key,actorId},readDraft);
     operation={...operation,beforePerform:async()=>{
       try {
-        const {data,store}=await shopifyGraphql(`query VerifyCreatorSeedDraft($id: ID!) {
-          draftOrder(id:$id) { id status order { id }
-            totalPriceSet { shopMoney { amount currencyCode } }
-            lineItems(first:2) { nodes { quantity variant { id } } pageInfo { hasNextPage } }
-          }
-        }`,{id:seed.shopify_draft_order_id},seedingToken);
+        const {data,store}=await readDraft();
         verifySeedDraft(seed,data?.draftOrder,store);
       } catch(error) {
         // Only a read has occurred; no completion mutation was sent.
@@ -224,22 +226,22 @@ async function completeSeed({sql,seed,operation,seedingToken,res,actorId}) {
     const order = completedDraft?.order;
     if (!order?.id) throw new Error('Shopify completion returned no order receipt. Reconcile the draft before retrying.');
     const [orderedSeed] = await sql`
-      UPDATE creator_product_seeds
-      SET status = 'ordered',
-        shopify_order_id = ${order?.id || null},
-        shopify_order_name = ${order?.name || seed.shopify_order_name},
-        ordered_at = COALESCE(ordered_at,now()),
-        updated_at = now()
-      WHERE id = ${seed.id}
-      RETURNING *
+      WITH ordered AS (
+        UPDATE creator_product_seeds
+        SET status = 'ordered', shopify_order_id = ${order.id},
+          shopify_order_name = ${order.name || seed.shopify_order_name},
+          ordered_at = COALESCE(ordered_at,now()), updated_at = now()
+        WHERE id = ${seed.id}
+        RETURNING *
+      ), activity AS (
+        INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id, event_key)
+        SELECT creator_id, 'product_seeded', 'Product seeded: ' || product_title,
+          jsonb_build_object('seed_id',id,'shopify_order_id',shopify_order_id,'quantity',quantity),
+          ${actorId}, 'seed:' || request_key FROM ordered
+        ON CONFLICT (event_key) DO NOTHING
+        RETURNING id
+      ) SELECT * FROM ordered
     `;
-    await sql`
-      INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id, event_key)
-      VALUES (
-        ${seed.creator_id}, 'product_seeded', ${`Product seeded: ${seed.product_title}`},
-        ${JSON.stringify({ seed_id: Number(orderedSeed.id), shopify_order_id: order?.id, quantity:seed.quantity })}::jsonb,
-        ${actorId}, ${'seed:'+seed.request_key}
-      ) ON CONFLICT (event_key) DO NOTHING
-    `;
+    if (!orderedSeed) throw new Error('The seed record disappeared before its order could be recorded.');
     return res.status(201).json({ seed: orderedSeed });
 }

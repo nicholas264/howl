@@ -28,17 +28,35 @@ test('a saved seed rechecks Shopify before mutation and safely retries a failed 
   await initializeSchema(sql);await ensureOperationJournal(sql);await ensureLocalReceipts(sql);
   const [creator]=await sql`INSERT INTO creators(name) VALUES ('Seed fixture') RETURNING id`;
   await sql`INSERT INTO creator_product_seeds(creator_id,shop_domain,shopify_variant_id,quantity,status,shopify_draft_order_id,request_key,product_title) VALUES (${creator.id},'fixture.myshopify.com','gid://shopify/ProductVariant/2',1,'draft_created','gid://shopify/DraftOrder/1','fixture-key','Fixture')`;
-  let amount='2.00',reads=0,mutations=0;
+  let amount='2.00',reads=0,mutations=0,draftId='gid://shopify/DraftOrder/1',orderId='gid://shopify/Order/3',loseResponse=false,providerCompleted=false;
   globalThis.fetch=async(url,init)=>{
    assert.equal(new URL(url).hostname,'fixture.myshopify.com');const {query}=JSON.parse(init.body);
-   if(query.includes('query VerifyCreatorSeedDraft')){reads++;return Response.json({data:{draftOrder:{id:'gid://shopify/DraftOrder/1',status:'OPEN',order:null,totalPriceSet:{shopMoney:{amount}},lineItems:{nodes:[{quantity:1,variant:{id:'gid://shopify/ProductVariant/2'}}],pageInfo:{hasNextPage:false}}}}});}
+   if(query.includes('query VerifyCreatorSeedDraft')){reads++;return Response.json({data:{draftOrder:{id:draftId,status:providerCompleted?'COMPLETED':'OPEN',completedAt:providerCompleted?new Date().toISOString():null,order:providerCompleted?{id:orderId,name:'#recovered'}:null,totalPriceSet:{shopMoney:{amount}},lineItems:{nodes:[{quantity:1,variant:{id:'gid://shopify/ProductVariant/2'}}],pageInfo:{hasNextPage:false}}}}});}
    assert.match(query,/mutation CompleteCreatorSeed/);mutations++;
+   if(loseResponse){providerCompleted=true;throw new Error('Injected lost Shopify response');}
    return Response.json({data:{draftOrderComplete:{draftOrder:{id:'gid://shopify/DraftOrder/1',order:{id:'gid://shopify/Order/3',name:'#3'}},userErrors:[]}}});
   };
   const req={method:'POST',headers:{},body:{creator_id:creator.id,variant_id:'gid://shopify/ProductVariant/2',quantity:1,request_key:'fixture-key'}};
   const rejected=response();await handler(req,rejected);assert.equal(rejected.statusCode,409);assert.equal(mutations,0);
-  amount='0.00';const completed=response();await handler(req,completed);assert.equal(completed.statusCode,201);assert.equal(mutations,1);assert.equal(reads,2);
+  amount='0.00';
+  await db.exec(`CREATE FUNCTION fail_seed_activity() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Injected activity failure'; END $$; CREATE TRIGGER fail_seed_activity BEFORE INSERT ON creator_activity FOR EACH ROW EXECUTE FUNCTION fail_seed_activity()`);
+  const failed=response();await handler(req,failed);assert.equal(failed.statusCode,500);assert.equal(mutations,1);
+  assert.equal((await sql`SELECT status FROM creator_product_seeds WHERE request_key='fixture-key'`)[0].status,'draft_created');
+  await db.exec('DROP TRIGGER fail_seed_activity ON creator_activity');
+  const completed=response();await handler(req,completed);assert.equal(completed.statusCode,201);assert.equal(mutations,1);assert.equal(reads,2);
   const replay=response();await handler(req,replay);assert.equal(replay.statusCode,200);assert.equal(mutations,1);assert.equal(reads,2);
   assert.equal((await sql`SELECT count(*) AS n FROM creator_activity WHERE event_key='seed:fixture-key'`)[0].n,1);
+  draftId='gid://shopify/DraftOrder/4';orderId='gid://shopify/Order/5';loseResponse=true;
+  await sql`INSERT INTO creator_product_seeds(creator_id,shop_domain,shopify_variant_id,quantity,status,shopify_draft_order_id,request_key,product_title) VALUES (${creator.id},'fixture.myshopify.com','gid://shopify/ProductVariant/2',1,'draft_created',${draftId},'uncertain-key','Fixture')`;
+  const uncertainReq={...req,body:{...req.body,request_key:'uncertain-key'}};
+  const uncertain=response();await handler(uncertainReq,uncertain);assert.equal(uncertain.statusCode,500);assert.equal(mutations,2);
+  const fresh=response();await handler(uncertainReq,fresh);assert.equal(fresh.statusCode,409);assert.equal(mutations,2);
+  await sql`UPDATE app_operation_steps SET created_at=now()-interval '12 minutes',updated_at=now()-interval '11 minutes' WHERE status='uncertain'`;
+  amount='1.00';const badEvidence=response();await handler(uncertainReq,badEvidence);assert.equal(badEvidence.statusCode,409);assert.equal(mutations,2);
+  assert.equal((await sql`SELECT count(*) AS n FROM app_admin_audit WHERE action='operation.reconciled'`)[0].n,0);
+  amount='0.00';const recovered=response();await handler(uncertainReq,recovered);assert.equal(recovered.statusCode,201);assert.equal(recovered.body.seed.shopify_order_id,orderId);assert.equal(mutations,2);
+  assert.equal((await sql`SELECT count(*) AS n FROM app_admin_audit WHERE action='operation.reconciled'`)[0].n,1);
+  assert.equal((await sql`SELECT count(*) AS n FROM creator_activity WHERE event_key='seed:uncertain-key'`)[0].n,1);
+
  }finally{restore();globalThis.fetch=previousFetch;for(const key of Object.keys(process.env))if(!(key in previous))delete process.env[key];Object.assign(process.env,previous);await db.close();}
 });

@@ -51,8 +51,13 @@ the UI does not offer an unsafe generic reset.
 Resend sends include provider idempotency keys. A provider's idempotency window is
 finite; the permanent local journal remains the replay authority. Shopify retries
 resume a known draft, even if catalog/address inputs later change. Fulfillment and
-uncertain draft-creation recovery are separate work that must be verified before
-an operation is treated as complete.
+uncertain draft-creation recovery remain separate work. For a known saved draft,
+a completion attempt older than ten minutes can recover on the original retry.
+The server reads Shopify and requires a completed order on that exact draft, the
+same store, variant and quantity, zero total, and a compatible completion time.
+It atomically records the recovered receipt and audit before replaying local
+bookkeeping. A fresh attempt or unverified outcome remains blocked; no second
+completion is sent. Local seed status and activity now commit together.
 
 ## Renders and transcription
 

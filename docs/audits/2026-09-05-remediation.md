@@ -271,3 +271,18 @@ This read is not an atomic Shopify lock: concurrent merchant edits between the
 read and completion remain possible. The 2026-04 completion mutation exposes no
 expected-version or expected-total argument. Unknown completion receipts still
 require reconciliation; this change does not reset those attempts.
+
+## Known Shopify draft completion recovery
+
+A saved draft with a pending/uncertain completion older than ten minutes can now
+recover its receipt through a read of that exact Shopify draft. Recovery requires
+a completed order, matching store, variant/quantity, zero total, and compatible
+completion time. A compare-and-swap journal update and its audit commit together.
+No new completion mutation is sent to resolve uncertainty. Unknown draft creation
+and fulfillment synchronization are still open.
+
+Seed status and activity now commit in one SQL statement. The endpoint regression
+injects an activity-write failure after Shopify success, verifies local rollback,
+and retries without another provider mutation. It also simulates a lost Shopify
+response, refuses a fresh retry and conflicting provider evidence, then recovers
+the verified order after the uncertainty window without duplicating it.
