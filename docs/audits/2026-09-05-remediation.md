@@ -634,3 +634,13 @@ changed fees/duration/party details, changed consent text, a racing preparation,
 legacy rejection and launch rejection until a matching accepted agreement exists.
 Tests use isolated records and do not send agreements or create production consent.
 The full launch-packet approval workflow remains outstanding.
+
+## Acceptance response recovery — September 7
+
+An identical agreement acceptance retry returns the saved confirmation, including
+its original acceptance time, without updating consent or emitting another activity.
+The retry must match the accepted name/email and viewed-content digest. The same
+check handles a concurrent request that loses the guarded acceptance update. Changed
+consent or identity is not treated as a successful replay. Handler tests issue
+concurrent acceptance requests, replay the result, compare the entire stored record
+and assert a single acceptance activity; a different signer is rejected.

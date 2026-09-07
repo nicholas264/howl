@@ -21,8 +21,14 @@ test('agreements retain prepared terms through viewing and acceptance and reject
   await sql`UPDATE creator_agreements SET agreement_body='Changed text' WHERE id=${id}`;
   const changed=response();await accept({method:'POST',headers:{},body:{token,consent_digest:viewed.body.agreement.consent_digest,accepted_name:'Fixture Person',accepted_email:'fixture@example.test',confirmed:true}},changed);assert.equal(changed.statusCode,409);
   await sql`UPDATE creator_agreements SET agreement_body='Fixture prepared text' WHERE id=${id}`;
-  const signed=response();await accept({method:'POST',headers:{},body:{token,consent_digest:viewed.body.agreement.consent_digest,accepted_name:'Fixture Person',accepted_email:'fixture@example.test',confirmed:true}},signed);assert.equal(signed.statusCode,201,JSON.stringify(signed.body));assert.equal(signed.body.agreement.engagement.usage_term_months,3);
+  const signed=response(),concurrent=response(),acceptRequest={method:'POST',headers:{},body:{token,consent_digest:viewed.body.agreement.consent_digest,accepted_name:'Fixture Person',accepted_email:'fixture@example.test',confirmed:true}};await Promise.all([accept(acceptRequest,signed),accept(acceptRequest,concurrent)]);assert.equal(signed.statusCode,201,JSON.stringify(signed.body));assert.equal(concurrent.statusCode,201,JSON.stringify(concurrent.body));assert.equal(signed.body.agreement.engagement.usage_term_months,3);
   const [record]=await sql`SELECT status,source_metadata FROM creator_agreements WHERE id=${id}`;assert.equal(record.status,'accepted');assert.equal(record.source_metadata.engagement_snapshot.usage_term_months,3);
+  const [beforeReplay]=await sql`SELECT to_jsonb(a) AS value FROM creator_agreements a WHERE id=${id}`;
+  const retry=response();await accept({method:'POST',headers:{},body:{token,consent_digest:viewed.body.agreement.consent_digest,accepted_name:'Fixture Person',accepted_email:'fixture@example.test',confirmed:true}},retry);
+  assert.equal(retry.statusCode,201);assert.equal(new Date(retry.body.agreement.accepted_at).getTime(),new Date(signed.body.agreement.accepted_at).getTime());
+  assert.deepEqual((await sql`SELECT to_jsonb(a) AS value FROM creator_agreements a WHERE id=${id}`)[0],beforeReplay);
+  assert.equal((await sql`SELECT count(*)::int AS n FROM creator_activity WHERE kind='agreement_accepted' AND creator_id=${creator.id}`)[0].n,1);
+  const different=response();await accept({method:'POST',headers:{},body:{token,consent_digest:viewed.body.agreement.consent_digest,accepted_name:'Different Person',accepted_email:'fixture@example.test',confirmed:true}},different);assert.equal(different.statusCode,409);
   race=true;const conflict=response();await workflow(request,conflict);assert.equal(conflict.statusCode,409,JSON.stringify(conflict.body));assert.equal((await sql`SELECT count(*)::int AS n FROM creator_agreements`)[0].n,1);
   await sql`UPDATE creator_agreements SET source_metadata='{}'::jsonb WHERE id=${id}`;
   const legacy=response();await accept({method:'GET',headers:{},query:{token}},legacy);assert.equal(legacy.statusCode,409);
