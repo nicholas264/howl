@@ -438,3 +438,28 @@ This release does not migrate or retire existing public contracts. Other source,
 rendered and published media still need coordinated private access and migration.
 Real member browser verification, old deployment retirement, runtime database roles,
 Google encryption cutover and offsite backup permissions remain external prerequisites.
+
+## Existing contract migration — September 7
+
+The four pre-existing uploaded contract PDFs (agreement IDs 14–17) were copied to
+private storage and their agreement/upload-activity references moved atomically.
+The migration registered each original owner and recorded one audit event per
+agreement. Source and destination hashes matched; private anonymous reads returned
+403. Independent production reads through `getPrivateContract` verified the four
+PDF hashes and preserved all agreement fields other than the URL, the URL embedded
+in the intake record's description, and its update timestamp. Contract status,
+version, owners and PDF contents were preserved. Owner-only manifests, original
+record snapshots and PDF recovery copies are stored outside the repository.
+
+`scripts/migrate-contract-media.mjs` provides plan, apply and separate public-copy
+retirement stages. It snapshots references, compares complete records before an
+atomic update, validates private copies and checks all public-table references before
+retirement. The regression test injects registration failures and concurrent activity
+and agreement edits, proving rollback and preventing duplicate migration events.
+All 96 regression tests passed.
+
+**Public-copy retirement is not complete.** Automatic approval review rejected
+removing the four existing public objects because the user must explicitly authorize
+their retirement. No deletion ran; all four original public URLs still returned 200
+after migration. The private copies and recovery copies remain intact. This requires
+approval before the `--retire-public` stage, not another copy or database migration.
