@@ -366,3 +366,14 @@ The endpoint regression exercises encrypted Google connection lookup, OAuth toke
 refresh, generated MIME, lost send response, delayed search, verified receipt
 recovery and local replay with mocked provider responses. It makes one simulated
 send and records one outreach/audit. No live message was sent.
+
+## Meta campaign receipt recovery
+
+Admin Operations now supports the paused campaign requests emitted by Howl, using
+an existing provider ID and review note. It verifies the original account, name,
+objective, paused status, special-ad categories, budget sharing and attempt time;
+unsupported payload fields fail closed. Receipt/audit persistence uses the same
+conditional atomic recovery path as ads. A read-only production query returned
+all required fields through the configured Meta API. PostgreSQL tests verify
+recovery and rejection of mismatched evidence. No campaign was created, modified
+or activated. Ad-set and creative creation recovery remain open.

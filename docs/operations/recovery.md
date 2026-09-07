@@ -42,9 +42,13 @@ Do not delete journal rows, fabricate a new request key, or mark an attempt reje
 merely because its response was lost. Retry the original request after recovering
 a receipt; local launch/outreach bookkeeping is idempotent.
 
-Admin → Operations can recover Meta ad creation receipts. The operator supplies
+Admin → Operations can recover Meta ad and supported paused-campaign creation receipts. The operator supplies
 an existing Meta ad ID and review note. The server checks account, creative, ad set,
 name, tracking configuration, and creation time, then saves an audit record.
+For campaigns, the server verifies the original account, name, objective, paused
+status, special-ad categories, budget-sharing setting and creation time. Unknown
+request fields or changed settings are rejected. Recovery records a receipt and
+audit without creating or modifying the campaign.
 Other provider steps currently require their specific reconciliation procedure;
 the UI does not offer an unsafe generic reset.
 
