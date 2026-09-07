@@ -30,6 +30,14 @@ export async function uploadPublicBlob(pathname, body, {
     throw new Error(`Upload token response did not include a client token.`);
   }
 
+  const maximum=tokenData.uploadLimits?.maximumSizeInBytes;
+  if(Number.isFinite(maximum) && Number(body?.size)>maximum) {
+    throw new Error(`This upload is limited to ${Math.round(maximum/1024/1024)} MB.`);
+  }
+  const type=contentType || body?.type;
+  if(type && tokenData.uploadLimits?.allowedContentTypes && !tokenData.uploadLimits.allowedContentTypes.includes(type)) {
+    throw new Error('This file type is not allowed for this upload.');
+  }
   return putBlobWithProgress({
     pathname,
     body,

@@ -377,3 +377,18 @@ conditional atomic recovery path as ads. A read-only production query returned
 all required fields through the configured Meta API. PostgreSQL tests verify
 recovery and rejection of mismatched evidence. No campaign was created, modified
 or activated. Ad-set and creative creation recovery remain open.
+
+## Upload purpose and size boundaries
+
+Browser upload tokens now enforce known pathname purposes: creator footage and
+contracts require creators.write; editor, callout, studio and draft media require
+assets.write. Contract/image tokens allow 20 MB with purpose-specific MIME types;
+video and public creator-submission tokens allow 2 GB, matching transcription's
+source limit. Unknown and traversal-like destinations are rejected. The browser
+checks returned limits before sending file bytes; signed Blob tokens enforce them
+independently. Tests decode a real SDK-generated token to verify path, MIME and
+size constraints and confirm session credentials are excluded.
+
+This is not private media storage. Existing direct URLs, server-side mirrors,
+render outputs, authenticated download gateways, ownership registration and safe
+reference-aware cleanup still require the coordinated storage migration.

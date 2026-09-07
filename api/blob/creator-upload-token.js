@@ -57,14 +57,14 @@ export default async function handler(req, res) {
             'video/x-matroska',
             'video/mpeg',
           ],
-          maximumSizeInBytes: 10 * 1024 * 1024 * 1024,
+          maximumSizeInBytes: 2 * 1024 * 1024 * 1024,
           addRandomSuffix: true,
           tokenPayload: String(submission.id),
         };
       },
       onUploadCompleted: async () => {},
     });
-    return res.status(200).json(jsonResponse);
+    return res.status(200).json({...jsonResponse,uploadLimits:{maximumSizeInBytes:2*1024*1024*1024}});
   } catch (err) {
     return res.status(400).json({ error: err.message || 'Upload token failed' });
   }

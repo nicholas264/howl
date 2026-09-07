@@ -1,3 +1,4 @@
+import { uploadPolicy } from '../_lib/upload-policy.js';
 import { clerkSecretKey } from '../_lib/clerk-config.js';
 import { resolveEmail } from '../_lib/auth.js';
 import { resolveWorkspaceIdentity } from '../_lib/auth-identities.js';
@@ -38,10 +39,13 @@ export default async function handler(req, res) {
     });
     if (!rate.allowed) return sendRateLimited(res, rate);
 
+    let uploadLimits;
     const jsonResponse = await handleUpload({
       body: req.body,
       request: req,
-      onBeforeGenerateToken: async (_pathname, clientPayload) => {
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
+        const policy=uploadPolicy(pathname);
+        uploadLimits={maximumSizeInBytes:policy.maximumSizeInBytes,allowedContentTypes:policy.allowedContentTypes};
         // Local-dev escape hatch — matches requireAuth's behavior.
         const isLocalBypass = process.env.NODE_ENV !== 'production' && process.env.AUTH_DISABLED === 'true';
         if (!isLocalBypass) {
@@ -56,27 +60,16 @@ export default async function handler(req, res) {
               userId, email,
             });
             if (!access.user || access.user.status !== 'active') throw new Error('Active workspace membership required');
-            if (!hasPermission(access, 'assets.write') && !hasPermission(access, 'creators.write')) {
-              throw new Error('assets.write or creators.write required');
+            if (!hasPermission(access, policy.permission)) {
+              throw new Error(`${policy.permission} required for this upload`);
             }
           } catch (err) {
             throw new Error(`Unauthorized — ${err.message}`);
           }
         }
         return {
-          allowedContentTypes: [
-            'video/mp4',
-            'video/quicktime',
-            'video/webm',
-            'video/x-matroska',
-            'video/mpeg',
-            'image/jpeg',
-            'image/png',
-            'image/webp',
-            'audio/mpeg',
-            'application/pdf',
-          ],
-          maximumSizeInBytes: 10 * 1024 * 1024 * 1024, // 10 GB
+          allowedContentTypes: policy.allowedContentTypes,
+          maximumSizeInBytes: policy.maximumSizeInBytes,
           addRandomSuffix: true,
           // Don't let the Clerk JWT (clientPayload) become the tokenPayload —
           // it inflates the signed clientToken past header limits and Blob
@@ -89,7 +82,7 @@ export default async function handler(req, res) {
         // immediately after upload completes via /api/db/ugc-sessions.
       },
     });
-    return res.status(200).json(jsonResponse);
+    return res.status(200).json({...jsonResponse,...(uploadLimits?{uploadLimits}:{})});
   } catch (err) {
     console.error('blob upload token error', err);
     return res.status(400).json({ error: err.message || 'Upload token failed' });
