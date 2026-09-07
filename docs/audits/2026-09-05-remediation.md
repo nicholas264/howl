@@ -614,3 +614,23 @@ destination, placement, paired outputs and explicit rights exceptions still need
 complete packet workflow. It also does not establish that changing engagement terms
 changes any previously accepted agreement; acceptance evidence remains a separate
 rights concern.
+
+## Agreement terms and consent binding — September 7
+
+New generated agreements persist the engagement terms and creator details used to
+prepare their text. Creation compares the engagement row with that reviewed snapshot
+before inserting, returning a conflict if it changed. The public agreement view uses
+the stored terms and party details rather than later engagement/profile edits.
+Acceptance requires the content digest returned by the viewed agreement and guards
+its database write against changed text, metadata, recipient and version. Agreement
+responses are private/no-store. A legacy link without verified terms requires a new
+agreement; a fresh production inventory found four uploaded PDFs and no token links,
+so this release does not reinterpret an existing live acceptance link.
+
+Paid-media preflight additionally requires an accepted agreement whose stored terms
+match the current engagement. Reapproving a deliverable alone does not make changed
+terms accepted. Tests exercise the actual preparation/view/acceptance handlers,
+changed fees/duration/party details, changed consent text, a racing preparation,
+legacy rejection and launch rejection until a matching accepted agreement exists.
+Tests use isolated records and do not send agreements or create production consent.
+The full launch-packet approval workflow remains outstanding.

@@ -45,6 +45,9 @@ export async function assertLaunchReady(sql, input) {
         WHERE a.engagement_id = d.engagement_id AND a.creator_id = d.creator_id AND a.status = 'accepted') AS accepted_at,
       EXISTS (SELECT 1 FROM creator_agreements a
         WHERE a.engagement_id = d.engagement_id AND a.creator_id = d.creator_id AND a.status = 'accepted'
+          AND a.source_metadata->>'terms_version'='1'
+          AND (a.source_metadata->'engagement_snapshot')-ARRAY['status','approval_date','created_at','updated_at','created_by']::text[]
+            = to_jsonb(e)-ARRAY['status','approval_date','created_at','updated_at','created_by']::text[]
           AND (e.usage_term_months IS NULL OR a.accepted_at + make_interval(months => e.usage_term_months) > now())) AS rights_current
     FROM creator_deliverables d LEFT JOIN creator_engagements e ON e.id = d.engagement_id
     LEFT JOIN deliverable_approvals approval ON approval.id = d.approval_id

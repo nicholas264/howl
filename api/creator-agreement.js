@@ -1,12 +1,13 @@
 import { neon } from '@neondatabase/serverless';
 
-import { agreementTokenHash, getAgreementByToken } from './_lib/creator-agreements.js';
+import { agreementTokenHash, getAgreementByToken, agreementConsentDigest } from './_lib/creator-agreements.js';
 import { checkRateLimit, rateLimitKey, sendRateLimited } from './_lib/rate-limit.js';
 
 function publicAgreement(agreement) {
   const expired = agreement.expires_at && new Date(agreement.expires_at).getTime() <= Date.now();
   return {
     id: Number(agreement.id),
+    consent_digest: agreementConsentDigest(agreement),
     title: agreement.title,
     agreement_body: agreement.agreement_body,
     version: agreement.version,
@@ -36,6 +37,7 @@ function publicAgreement(agreement) {
 }
 
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control','private, no-store');
   if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'Method not allowed' });
   const token = (req.method === 'GET' ? req.query?.token : req.body?.token || '').toString();
   const sql = neon(process.env.DATABASE_URL);
@@ -51,6 +53,7 @@ export default async function handler(req, res) {
 
     const agreement = await getAgreementByToken(sql, token);
     if (!agreement) return res.status(404).json({ error: 'Agreement link not found' });
+    if(!agreement.terms_snapshot_valid)return res.status(409).json({error:'This agreement needs a verified terms snapshot. Ask the sender to prepare a new agreement.'});
 
     if (req.method === 'GET') {
       if (agreement.status === 'sent' && !agreement.viewed_at) {
@@ -66,6 +69,8 @@ export default async function handler(req, res) {
       || (agreement.expires_at && new Date(agreement.expires_at).getTime() <= Date.now())) {
       return res.status(409).json({ error: 'This agreement is no longer available for acceptance' });
     }
+
+    if(req.body?.consent_digest!==agreementConsentDigest(agreement))return res.status(409).json({error:'Agreement content changed or needs to be refreshed. Reload and review it before accepting.'});
 
     const acceptedName = (req.body?.accepted_name || '').toString().trim().slice(0, 200);
     const acceptedEmail = (req.body?.accepted_email || '').toString().trim().toLowerCase().slice(0, 320);
@@ -91,6 +96,9 @@ export default async function handler(req, res) {
         WHERE id = ${agreement.id}
           AND token_hash = ${tokenHash}
           AND status = 'sent'
+          AND agreement_body=${agreement.agreement_body} AND title=${agreement.title} AND version=${agreement.version}
+          AND source_metadata=${JSON.stringify(agreement.source_metadata)}::jsonb
+          AND sent_to IS NOT DISTINCT FROM ${agreement.sent_to}
           AND (expires_at IS NULL OR expires_at > now())
         RETURNING creator_id, engagement_id, title, accepted_at
       ),

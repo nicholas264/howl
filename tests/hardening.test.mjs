@@ -291,7 +291,7 @@ test('external creator launches require approval and current accepted paid-media
   const [review] = await sql`UPDATE creator_deliverables SET output_url = ${input.sourceVideoUrl} WHERE id = ${deliverable.id} RETURNING *`;
   assert.ok(await approveDeliverable(sql,deliverable.id,creator.id,review.updated_at,'reviewer',{sha256:'approved-digest'}));
   await assert.rejects(assertLaunchReady(sql, input), /agreement/);
-  await sql`INSERT INTO creator_agreements (creator_id,engagement_id,title,agreement_body,status,accepted_at) VALUES (${creator.id},${engagement.id},'Test','Terms','accepted',now())`;
+  await sql`INSERT INTO creator_agreements (creator_id,engagement_id,title,agreement_body,status,accepted_at,source_metadata) SELECT ${creator.id},${engagement.id},'Test','Terms','accepted',now(),jsonb_build_object('terms_version',1,'engagement_snapshot',to_jsonb(e)) FROM creator_engagements e WHERE id=${engagement.id}`;
   await assertLaunchReady(sql, input);
   await sql`UPDATE creator_briefs SET script='Unreviewed script' WHERE id=${brief.id}`;
   await assert.rejects(assertLaunchReady(sql,input),/terms changed/);
@@ -299,9 +299,11 @@ test('external creator launches require approval and current accepted paid-media
   assert.ok(await approveDeliverable(sql,deliverable.id,creator.id,briefReview.updated_at,'reviewer',{sha256:'approved-digest'}));
   await assertLaunchReady(sql,input);
   await sql`UPDATE creator_engagements SET exclusivity_notes='Changed restriction' WHERE id=${engagement.id}`;
-  await assert.rejects(assertLaunchReady(sql,input),/terms changed/);
+  await assert.rejects(assertLaunchReady(sql,input),/agreement/);
   const [termsReview]=await sql`SELECT updated_at FROM creator_deliverables WHERE id=${deliverable.id}`;
   assert.ok(await approveDeliverable(sql,deliverable.id,creator.id,termsReview.updated_at,'reviewer',{sha256:'approved-digest'}));
+  await assert.rejects(assertLaunchReady(sql,input),/agreement/);
+  await sql`INSERT INTO creator_agreements (creator_id,engagement_id,title,agreement_body,status,accepted_at,source_metadata) SELECT ${creator.id},${engagement.id},'Test','Terms','accepted',now(),jsonb_build_object('terms_version',1,'engagement_snapshot',to_jsonb(e)) FROM creator_engagements e WHERE id=${engagement.id}`;
   await assertLaunchReady(sql,input);
   await sql`UPDATE creator_briefs SET status='sent',updated_at=now() WHERE id=${brief.id}`;
   await assertLaunchReady(sql,input);
