@@ -1,3 +1,4 @@
+import { gmailRequestMessageId, recoverGmailSend } from './_lib/gmail-send-recovery.js';
 import { runExternalStep, operationKey, digest } from './_lib/operation-journal.js';
 import { requirePermission } from './_lib/app-access.js';
 
@@ -175,8 +176,11 @@ export default async function handler(req, res) {
 
 
     const requestKey = operationKey(req, access.userId, 'creator-email');
+    const sendPayload={creatorId,to,subject,body,agreementId,followUpAt,provider:resendConfigured()?'resend':'gmail'};
+    if(sendPayload.provider==='gmail')sendPayload.gmailMessageId=gmailRequestMessageId(requestKey);
+    await recoverGmailSend(sql,{operationKey:requestKey,actorId:access.userId,payload:sendPayload},()=>getUserGoogleAccessToken(sql,access.userId));
     const { provider, externalId, externalThreadId, providerMessageId } = await runExternalStep(sql, {
-      operationKey: requestKey, stepKey: 'send', payload: { creatorId, to, subject, body, agreementId, followUpAt }, actorId: access.userId,
+      operationKey: requestKey, stepKey: 'send', payload: sendPayload, actorId: access.userId,
     }, async () => {
     if (agreementId) {
       try {
@@ -212,6 +216,7 @@ export default async function handler(req, res) {
     } else {
       const accessToken = await getUserGoogleAccessToken(sql, access.userId);
       const raw = [
+        `Message-ID: ${sendPayload.gmailMessageId}`,
         `To: ${to}`,
         `Subject: ${encodeHeader(subject)}`,
         'MIME-Version: 1.0',

@@ -145,3 +145,18 @@ journals, draft saves, transcription ownership, and approval snapshots. The exis
 `db:migrate` command and restored-backup checks cover these structures. Their
 additive migrations were verified against production and preview before the
 request-time calls were removed.
+
+### Uncertain Gmail sends
+
+New Gmail sends include a stable RFC Message-ID derived from the original request
+key, and the journal binds the provider and message ID. Retry the unchanged request
+after ten minutes: the server searches the current member's Sent folder and
+requires exactly one matching message. It verifies the sent label, exact recipient,
+subject, plain-text body and attempt time. Recovery atomically saves the receipt
+and audit, then replays local bookkeeping without sending another email.
+
+No match, multiple matches, changed content, a missing Gmail read scope, or a
+concurrently changed journal leaves the send unresolved. Older attempts without
+the new provider/message-ID bindings require manual receipt review; do not change
+request keys to bypass the conflict. This verifies a sent message, not recipient
+delivery, bounce status or a reply.

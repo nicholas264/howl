@@ -351,3 +351,18 @@ distinguished from proving existing-token migration. Shopify health distinguishe
 a disabled switch, missing seeding token, missing catalog credentials, and fully
 configured credentials whose permissions still require verification. Regression
 coverage verifies those configurations without calling external services.
+
+## Uncertain Gmail send recovery
+
+New Gmail sends carry a stable RFC Message-ID and journaled provider binding.
+After ten minutes, an unchanged retry can recover one matching Sent-folder message
+only after checking its original ID, recipient, subject, plain-text body and
+attempt time. A conditional journal update and audit commit together; local
+bookkeeping then replays without another send. Missing/conflicting evidence
+remains uncertain. Legacy unbound sends and non-plain-text transformations still
+require review; recipient delivery and bounce ingestion are not claimed here.
+
+The endpoint regression exercises encrypted Google connection lookup, OAuth token
+refresh, generated MIME, lost send response, delayed search, verified receipt
+recovery and local replay with mocked provider responses. It makes one simulated
+send and records one outreach/audit. No live message was sent.
