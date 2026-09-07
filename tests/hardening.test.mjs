@@ -305,6 +305,8 @@ test('external creator launches require approval and current accepted paid-media
   await assert.rejects(assertLaunchReady(sql,input),/agreement/);
   await sql`INSERT INTO creator_agreements (creator_id,engagement_id,title,agreement_body,status,accepted_at,source_metadata) SELECT ${creator.id},${engagement.id},'Test','Terms','accepted',now(),jsonb_build_object('terms_version',1,'engagement_snapshot',to_jsonb(e)) FROM creator_engagements e WHERE id=${engagement.id}`;
   await assertLaunchReady(sql,input);
+  await sql`UPDATE creator_engagements SET notes='Internal scheduling note',updated_at=now() WHERE id=${engagement.id}`;
+  await assertLaunchReady(sql,input);
   await sql`UPDATE creator_briefs SET status='sent',updated_at=now() WHERE id=${brief.id}`;
   await assertLaunchReady(sql,input);
   await sql`UPDATE creator_agreements SET accepted_at = now()-interval '2 years' WHERE engagement_id = ${engagement.id}`;

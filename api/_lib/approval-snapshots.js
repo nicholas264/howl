@@ -13,7 +13,7 @@ export async function approveDeliverable(sql, id, creatorId, expectedUpdatedAt, 
     WITH current AS MATERIALIZED (
       SELECT d.*,
         (SELECT to_jsonb(b)-ARRAY['status','created_at','updated_at','generation_source','created_by']::text[] FROM creator_briefs b WHERE b.id=d.brief_id) AS brief_snapshot,
-        (SELECT to_jsonb(e)-ARRAY['status','approval_date','created_at','updated_at','created_by']::text[] FROM creator_engagements e WHERE e.id=d.engagement_id) AS engagement_snapshot
+        (SELECT to_jsonb(e)-ARRAY['status','approval_date','created_at','updated_at','created_by','notes']::text[] FROM creator_engagements e WHERE e.id=d.engagement_id) AS engagement_snapshot
       FROM creator_deliverables d
       WHERE d.id = ${id} AND d.creator_id = ${creatorId} AND d.updated_at = ${expectedUpdatedAt}::timestamptz
         AND (d.output_url IS NOT NULL OR d.source_url IS NOT NULL OR d.drive_file_id IS NOT NULL)

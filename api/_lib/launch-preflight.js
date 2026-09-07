@@ -38,7 +38,7 @@ export async function assertLaunchReady(sql, input) {
     SELECT d.*, approval.snapshot AS approval_snapshot,
       (approval.snapshot->>'context_version'='1'
         AND approval.snapshot->'brief_snapshot' IS NOT DISTINCT FROM COALESCE((SELECT to_jsonb(b)-ARRAY['status','created_at','updated_at','generation_source','created_by']::text[] FROM creator_briefs b WHERE b.id=d.brief_id),'null'::jsonb)
-        AND approval.snapshot->'engagement_snapshot' IS NOT DISTINCT FROM COALESCE(to_jsonb(e)-ARRAY['status','approval_date','created_at','updated_at','created_by']::text[],'null'::jsonb)) AS approval_context_current,
+        AND (approval.snapshot->'engagement_snapshot')-'notes' IS NOT DISTINCT FROM COALESCE(to_jsonb(e)-ARRAY['status','approval_date','created_at','updated_at','created_by','notes']::text[],'null'::jsonb)) AS approval_context_current,
       e.paid_media_included, e.starts_on, e.ends_on, e.usage_term_months,
       e.status AS engagement_status,
       (SELECT MAX(a.accepted_at) FROM creator_agreements a
@@ -46,8 +46,8 @@ export async function assertLaunchReady(sql, input) {
       EXISTS (SELECT 1 FROM creator_agreements a
         WHERE a.engagement_id = d.engagement_id AND a.creator_id = d.creator_id AND a.status = 'accepted'
           AND a.source_metadata->>'terms_version'='1'
-          AND (a.source_metadata->'engagement_snapshot')-ARRAY['status','approval_date','created_at','updated_at','created_by']::text[]
-            = to_jsonb(e)-ARRAY['status','approval_date','created_at','updated_at','created_by']::text[]
+          AND (a.source_metadata->'engagement_snapshot')-ARRAY['status','approval_date','created_at','updated_at','created_by','notes']::text[]
+            = to_jsonb(e)-ARRAY['status','approval_date','created_at','updated_at','created_by','notes']::text[]
           AND (e.usage_term_months IS NULL OR a.accepted_at + make_interval(months => e.usage_term_months) > now())) AS rights_current
     FROM creator_deliverables d LEFT JOIN creator_engagements e ON e.id = d.engagement_id
     LEFT JOIN deliverable_approvals approval ON approval.id = d.approval_id
