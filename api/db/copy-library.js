@@ -1,7 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { requirePermission } from '../_lib/app-access.js';
 
-let schemaReady = null;
 
 function normalizeProductIds(value) {
   if (!Array.isArray(value)) return [];
@@ -23,45 +22,11 @@ export function inferProductIds(value) {
   return matches.length === 1 ? matches : [];
 }
 
-function ensureSchema(sql) {
-  if (!schemaReady) {
-    schemaReady = (async () => {
-      await sql`ALTER TABLE copy_library ADD COLUMN IF NOT EXISTS product_ids JSONB NOT NULL DEFAULT '[]'::jsonb`;
-      await sql`
-        UPDATE copy_library
-        SET product_ids = '["r1"]'::jsonb
-        WHERE product_ids = '[]'::jsonb
-          AND concat_ws(' ', label, headline, primary_text) ~* '(^|[^a-z0-9])r1([^a-z0-9]|$)|the-howl-r1'
-          AND concat_ws(' ', label, headline, primary_text) !~* '(^|[^a-z0-9])r3([^a-z0-9]|$)|the-howl-r3|(^|[^a-z0-9])r4([^a-z0-9]|$)|the-howl-r4'
-      `;
-      await sql`
-        UPDATE copy_library
-        SET product_ids = '["r3"]'::jsonb
-        WHERE product_ids = '[]'::jsonb
-          AND concat_ws(' ', label, headline, primary_text) ~* '(^|[^a-z0-9])r3([^a-z0-9]|$)|the-howl-r3'
-          AND concat_ws(' ', label, headline, primary_text) !~* '(^|[^a-z0-9])r1([^a-z0-9]|$)|the-howl-r1|(^|[^a-z0-9])r4([^a-z0-9]|$)|the-howl-r4'
-      `;
-      await sql`
-        UPDATE copy_library
-        SET product_ids = '["r4mkii"]'::jsonb
-        WHERE product_ids = '[]'::jsonb
-          AND concat_ws(' ', label, headline, primary_text) ~* '(^|[^a-z0-9])r4([^a-z0-9]|$)|the-howl-r4'
-          AND concat_ws(' ', label, headline, primary_text) !~* '(^|[^a-z0-9])r1([^a-z0-9]|$)|the-howl-r1|(^|[^a-z0-9])r3([^a-z0-9]|$)|the-howl-r3'
-      `;
-    })().catch(err => {
-        schemaReady = null;
-        throw err;
-      });
-  }
-  return schemaReady;
-}
-
 export default async function handler(req, res) {
   if (!(await requirePermission(req, res, req.method === 'GET' ? 'briefs.read' : 'briefs.write'))) return;
   const sql = neon(process.env.DATABASE_URL);
 
   try {
-    await ensureSchema(sql);
     if (req.method === 'GET') {
       const rows = await sql`SELECT id, label, headline, primary_text, product_ids, created_at FROM copy_library ORDER BY created_at DESC LIMIT 500`;
       return res.json({ rows });

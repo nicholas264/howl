@@ -3,9 +3,7 @@ import { ensureCreativeVariants } from '../_lib/creative-variants.js';
 import { ensureSyncState } from '../_lib/sync-state.js';
 import { ensureOperationJournal } from '../_lib/operation-journal.js';
 import { ensureOperationBudgets } from '../_lib/operation-budget.js';
-// One-shot endpoint to ensure schema exists. Idempotent — safe to call repeatedly.
-import { neon } from '@neondatabase/serverless';
-import { requireAdmin } from '../_lib/auth.js';
+// Bootstrap schema for trusted release migrations. HTTP setup is retired.
 import { backfillCreativeAssetsFromLaunchHistory, ensureCreativeAssetTables } from '../_lib/creative-assets.js';
 import { ensureCreativeAnalysisQueue } from '../_lib/creative-analysis-queue.js';
 import { ensureAppTables } from '../_lib/app-access.js';
@@ -300,12 +298,6 @@ export async function initializeSchema(sql) {
 }
 
 export default async function handler(req, res) {
-  if (!(await requireAdmin(req, res))) return;
-  if (req.method !== 'POST') return res.status(405).end();
-  try {
-    await initializeSchema(neon(process.env.DATABASE_URL));
-    return res.json({ ok: true });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
+  res.setHeader('Cache-Control','no-store');
+  return res.status(410).json({error:'HTTP schema setup is retired. Run the release migration from an authorized deployment environment.'});
 }

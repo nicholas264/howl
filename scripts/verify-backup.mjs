@@ -1,3 +1,4 @@
+import { ensureLibrarySchema, ensureDriveLibrarySchema } from '../api/_lib/library-schema.js';
 import { ensureCreativeAssetTables } from '../api/_lib/creative-assets.js';
 import { ensureMapMonitorTables } from '../api/_lib/map-monitor.js';
 import { ensureLooxReviewTables } from '../api/_lib/loox-reviews.js';
@@ -44,7 +45,7 @@ try {
   for (const {tablename} of tables) counts[tablename] = Number((await db.query(`SELECT count(*) AS count FROM public."${tablename.replaceAll('"','""')}"`)).rows[0].count);
   const restoredAt = Date.now();
   // Exercise additive migrations on the real restored schema, without providers.
-  for (const migrate of [ensureCreativeAssetTables,ensureAnalysisSchema,ensureMapMonitorTables,ensureLooxReviewTables,ensureCreatorOpsTables,ensureContentStudioTables,ensureCreativeAuditTables,ensureCreativeEvidenceTaskTables,ensureOperationalTables,ensureMonthlyMetrics,ensureStudioCosts,ensureGoogleOAuthTables,ensureStudioTables,ensureRateLimits,ensureOperationBudgets,ensureTranscriptionJobs,ensureAuthIdentities,ensureExperiments,ensureWorkControls,ensureCreativeAnalysisQueue,ensureLaunchDrafts,ensureCreativeVariants,ensureVariantObservations,ensureApprovalSnapshots,ensureProviderMedia,ensureLocalReceipts,ensureOperationJournal]) await migrate(sql);
+  for (const migrate of [ensureLibrarySchema,ensureDriveLibrarySchema,ensureCreativeAssetTables,ensureAnalysisSchema,ensureMapMonitorTables,ensureLooxReviewTables,ensureCreatorOpsTables,ensureContentStudioTables,ensureCreativeAuditTables,ensureCreativeEvidenceTaskTables,ensureOperationalTables,ensureMonthlyMetrics,ensureStudioCosts,ensureGoogleOAuthTables,ensureStudioTables,ensureRateLimits,ensureOperationBudgets,ensureTranscriptionJobs,ensureAuthIdentities,ensureExperiments,ensureWorkControls,ensureCreativeAnalysisQueue,ensureLaunchDrafts,ensureCreativeVariants,ensureVariantObservations,ensureApprovalSnapshots,ensureProviderMedia,ensureLocalReceipts,ensureOperationJournal]) await migrate(sql);
   const report = {backupSha256:createHash('sha256').update(raw).digest('hex'),tables:tables.length,
     rows:Object.values(counts).reduce((a,b)=>a+b,0),restoreMilliseconds:restoredAt-start,migrationMilliseconds:Date.now()-restoredAt,counts};
   await writeFile(`${file}.verification.json`,JSON.stringify(report,null,2),{mode:0o600});

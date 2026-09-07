@@ -131,6 +131,13 @@ not claim that the remaining infrastructure and product roadmap is complete.
   asset deduplication, queue ownership, sync checkpoints, and MAP settings/dealer
   registry writes. Production and preview migrations passed.
 
+- Image/copy libraries, hidden Drive assets, asset pairs, and launch metadata now
+  rely on release migrations. HTTP schema initialization returns 410 and its UI
+  buttons are removed. Library reads preserve explicitly cleared product tags.
+  Deleting an image-library entry no longer deletes a caller-supplied/shared Blob
+  URL; reference-aware physical cleanup remains outstanding. Restricted-role
+  endpoint tests cover library writes, cleared tags, and shared-object preservation.
+
 ## Remaining work / external prerequisites
 
 1. Grant the narrowly scoped AWS permissions in `../operations/backup-provisioning-policy.json`,

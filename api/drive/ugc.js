@@ -93,7 +93,7 @@ async function loadHiddenUgcIds() {
   if (!process.env.DATABASE_URL) return new Set();
   try {
     const sql = neon(process.env.DATABASE_URL);
-    await sql`CREATE TABLE IF NOT EXISTS ugc_hidden (file_id TEXT PRIMARY KEY, hidden_at TIMESTAMPTZ DEFAULT NOW())`;
+
     const rows = await sql`SELECT file_id FROM ugc_hidden`;
     return new Set(rows.map(r => r.file_id));
   } catch {
@@ -101,28 +101,12 @@ async function loadHiddenUgcIds() {
   }
 }
 
-async function ensureUgcAssetPairTable(sql) {
-  await sql`
-    CREATE TABLE IF NOT EXISTS ugc_asset_pairs (
-      id BIGSERIAL PRIMARY KEY,
-      feed_file_id TEXT NOT NULL,
-      story_file_id TEXT NOT NULL,
-      created_by_user_id TEXT,
-      created_by_email TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      CONSTRAINT ugc_asset_pairs_distinct_files CHECK (feed_file_id <> story_file_id)
-    )
-  `;
-  await sql`CREATE UNIQUE INDEX IF NOT EXISTS ugc_asset_pairs_feed_idx ON ugc_asset_pairs(feed_file_id)`;
-  await sql`CREATE UNIQUE INDEX IF NOT EXISTS ugc_asset_pairs_story_idx ON ugc_asset_pairs(story_file_id)`;
-}
 
 async function loadManualUgcPairs() {
   if (!process.env.DATABASE_URL) return [];
   try {
     const sql = neon(process.env.DATABASE_URL);
-    await ensureUgcAssetPairTable(sql);
+
     return await sql`SELECT feed_file_id, story_file_id FROM ugc_asset_pairs ORDER BY updated_at DESC`;
   } catch (err) {
     console.error('ugc pair load failed:', err.message);
@@ -438,7 +422,7 @@ export default async function handler(req, res) {
       if (!fileId) return res.status(400).json({ error: 'fileId required' });
       if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'DATABASE_URL not configured' });
       const sql = neon(process.env.DATABASE_URL);
-      await sql`CREATE TABLE IF NOT EXISTS ugc_hidden (file_id TEXT PRIMARY KEY, hidden_at TIMESTAMPTZ DEFAULT NOW())`;
+
       await sql`INSERT INTO ugc_hidden (file_id) VALUES (${fileId}) ON CONFLICT (file_id) DO NOTHING`;
       return res.json({ ok: true });
     }
@@ -493,7 +477,7 @@ export default async function handler(req, res) {
       if (feedFileId === storyFileId) return res.status(400).json({ error: 'Pick two different files' });
       if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'DATABASE_URL not configured' });
       const sql = neon(process.env.DATABASE_URL);
-      await ensureUgcAssetPairTable(sql);
+
       await sql`
         DELETE FROM ugc_asset_pairs
         WHERE feed_file_id IN (${feedFileId}, ${storyFileId})
@@ -514,7 +498,7 @@ export default async function handler(req, res) {
       if (!feedFileId && !storyFileId && !fileId) return res.status(400).json({ error: 'fileId or pair file ids required' });
       if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'DATABASE_URL not configured' });
       const sql = neon(process.env.DATABASE_URL);
-      await ensureUgcAssetPairTable(sql);
+
       await sql`
         DELETE FROM ugc_asset_pairs
         WHERE (${feedFileId || fileId || null}::text IS NOT NULL AND (feed_file_id = ${feedFileId || fileId || null} OR story_file_id = ${feedFileId || fileId || null}))

@@ -394,21 +394,6 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
     loadAnalysisQueue();
   }, [view, loadAnalysisQueue]);
 
-  const [creativeInitMsg, setCreativeInitMsg] = useState('');
-  const [creativeIniting, setCreativeIniting] = useState(false);
-  const initCreativeTables = useCallback(async () => {
-    setCreativeIniting(true); setCreativeInitMsg('');
-    try {
-      const d = await apiJson('/api/db/schema', { method: 'POST' }, 'Schema init failed');
-      if (!d.ok) throw new Error(d.error || 'Schema init failed');
-      setCreativeInitMsg('Tables ready. Click Sync from Meta to pull data.');
-      setCreativeTableError('');
-      await loadCreativeTable(creativeWindowDays);
-    } catch (err) {
-      setCreativeInitMsg(`Init failed: ${err.message}`);
-    } finally { setCreativeIniting(false); }
-  }, [creativeWindowDays, loadCreativeTable]);
-
   const syncCreativeAnalytics = useCallback(async () => {
     setCreativeSyncing(true); setCreativeSyncMsg('');
     try {
@@ -1298,18 +1283,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
             {creativeTableError && (
               <div style={{ ...S.err, marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <span>{creativeTableError}</span>
-                {/relation .* does not exist/i.test(creativeTableError) && (
-                  <button onClick={initCreativeTables} disabled={creativeIniting} style={S.ghostBtn}>
-                    {creativeIniting ? 'Initializing…' : 'Initialize tables'}
-                  </button>
-                )}
+
               </div>
             )}
-            {creativeInitMsg && (
-              <div style={{ fontSize: 10, color: creativeInitMsg.startsWith('Init failed') ? '#b42318' : '#256b35', marginBottom: 10 }}>
-                {creativeInitMsg}
-              </div>
-            )}
+
 
             {groups.length > 0 && (
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>

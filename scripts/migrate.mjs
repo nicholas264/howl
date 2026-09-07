@@ -1,3 +1,4 @@
+import { ensureLibrarySchema, ensureDriveLibrarySchema } from '../api/_lib/library-schema.js';
 import { ensureCreativeAssetTables } from '../api/_lib/creative-assets.js';
 import { ensureMapMonitorTables } from '../api/_lib/map-monitor.js';
 import { ensureLooxReviewTables } from '../api/_lib/loox-reviews.js';
@@ -66,6 +67,8 @@ await ensureProviderMedia(sql);
 await ensureLocalReceipts(sql);
 await ensureWorkControls(sql);
 await ensureStudioTables(sql);
+await ensureLibrarySchema(sql);
+await ensureDriveLibrarySchema(sql);
 await ensureOperationalTables(sql);
 await ensureMonthlyMetrics(sql);
 await ensureGoogleOAuthTables(sql);

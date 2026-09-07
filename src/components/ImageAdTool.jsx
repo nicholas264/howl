@@ -621,17 +621,7 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
           <div className="eyebrow" style={{ marginBottom: 4 }}>Create</div>
           <div className="display-md" style={{ color: '#171717' }}>Image Ads</div>
         </div>
-        <button
-          onClick={async () => {
-            try {
-              const r = await fetch('/api/db/schema', { method: 'POST' });
-              const d = await r.json();
-              alert(r.ok ? 'Schema synced — image_library table is ready.' : `Schema failed: ${d.error || r.status}`);
-            } catch (err) { alert(`Schema failed: ${err.message}`); }
-          }}
-          style={{ fontSize: 9, padding: '6px 12px', borderRadius: 4, border: '1px solid #dedbd3', background: '#f4f1ea', color: '#77746f', fontFamily: 'inherit', letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer' }}
-          title="Run /api/db/schema — idempotent, safe to click."
-        >Init DB Schema</button>
+
       </div>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 

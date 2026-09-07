@@ -1,22 +1,7 @@
 import { neon } from '@neondatabase/serverless';
-import { del } from '@vercel/blob';
 import { requirePermission } from '../_lib/app-access.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
-
-async function ensureImageLibraryTable(sql) {
-  await sql`
-    CREATE TABLE IF NOT EXISTS image_library (
-      id         BIGSERIAL PRIMARY KEY,
-      user_id    TEXT,
-      url        TEXT NOT NULL,
-      file_name  TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    )
-  `;
-  await sql`CREATE INDEX IF NOT EXISTS idx_image_library_user ON image_library(user_id)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_image_library_created_at ON image_library(created_at DESC)`;
-}
 
 export default async function handler(req, res) {
   const auth = await requirePermission(req, res, req.method === 'GET' ? 'assets.read' : 'assets.write');
@@ -25,7 +10,6 @@ export default async function handler(req, res) {
   const userId = auth.userId;
 
   try {
-    await ensureImageLibraryTable(sql);
 
     if (req.method === 'GET') {
       const limit = Math.min(parseInt(req.query.limit || '200'), 500);
@@ -55,9 +39,8 @@ export default async function handler(req, res) {
       if (!id) return res.status(400).json({ error: 'id required' });
       const rows = await sql`SELECT url FROM image_library WHERE id = ${id} AND user_id = ${userId} LIMIT 1`;
       if (!rows.length) return res.status(404).json({ error: 'Not found' });
-      if (rows[0].url) {
-        try { await del(rows[0].url); } catch (err) { console.error('blob del failed', err); }
-      }
+      // Library URLs may be shared or supplied by another user. Removing this
+      // user's entry does not authorize deleting the underlying Blob object.
       await sql`DELETE FROM image_library WHERE id = ${id} AND user_id = ${userId}`;
       return res.json({ ok: true });
     }

@@ -104,8 +104,6 @@ export async function logLaunch(row, sqlOverride = null) {
     const sql = sqlOverride || neon(process.env.DATABASE_URL);
 
 
-    await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS source_type TEXT`;
-    await sql`ALTER TABLE launch_history ADD COLUMN IF NOT EXISTS source_label TEXT`;
     const [launch] = await sql`
       INSERT INTO launch_history
         (ad_id, adset_id, campaign_id, drive_file_id, drive_file_name, creator, creator_id, source_type, source_label, brief_id, deliverable_id, product_id, angle_id, ad_name, headline, primary_text, dest_url, mime_type, launched_by_user_id, launched_by_email, source_video_url, operation_key)
