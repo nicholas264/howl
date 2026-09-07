@@ -286,3 +286,17 @@ injects an activity-write failure after Shopify success, verifies local rollback
 and retries without another provider mutation. It also simulates a lost Shopify
 response, refuses a fresh retry and conflicting provider evidence, then recovers
 the verified order after the uncertainty window without duplicating it.
+
+## Creator email receipt integrity
+
+New email request hashes bind creator identity and follow-up date as well as the
+recipient, subject, body and agreement. A provider success without a message ID
+remains uncertain instead of recording a sent email. Gmail sends have a 30-second
+deadline. Outreach, agreement status and activity records commit atomically.
+The endpoint regression proves rollback after activity failure, receipt replay
+without another send, cross-creator rejection, and missing-receipt quarantine.
+
+Old email journal payloads lack the new bindings, so retrying those exact request
+keys returns a conflict and needs receipt review; the server never silently
+rekeys or resends them. Email delivery/bounce ingestion and provider-specific
+uncertain-send reconciliation remain open.

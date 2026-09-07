@@ -177,7 +177,7 @@ export default async function handler(req, res) {
 
     const requestKey = operationKey(req, access.userId, 'creator-email');
     const { provider, externalId, externalThreadId, providerMessageId } = await runExternalStep(sql, {
-      operationKey: requestKey, stepKey: 'send', payload: { to, subject, body, agreementId }, actorId: access.userId,
+      operationKey: requestKey, stepKey: 'send', payload: { creatorId, to, subject, body, agreementId, followUpAt }, actorId: access.userId,
     }, async () => {
     let provider = 'gmail';
     let externalId = null;
@@ -216,6 +216,7 @@ export default async function handler(req, res) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ raw: base64Url(raw) }),
+        signal: AbortSignal.timeout(30000),
       });
       const gmailData = await gmailResponse.json();
       if (!gmailResponse.ok) {
@@ -228,43 +229,42 @@ export default async function handler(req, res) {
       providerMessageId = externalId;
     }
 
+      if (typeof providerMessageId !== 'string' || !providerMessageId.trim()) {
+        throw new Error('Email provider returned no message receipt. Reconcile this attempt before retrying.');
+      }
       return { provider, externalId, externalThreadId, providerMessageId };
     });
 
     const [message] = await sql`
-      INSERT INTO creator_outreach (
-        creator_id, channel, direction, subject, body, status,
-        external_id, external_thread_id, recipient, sent_at, next_follow_up_at, created_by, request_key
-      ) VALUES (
-        ${creatorId}, 'email', 'outbound', ${subject}, ${body}, 'sent',
-        ${externalId}, ${externalThreadId}, ${to}, now(), ${followUpAt}, ${access.userId}, ${requestKey}
-      )
-      ON CONFLICT (request_key) DO UPDATE SET request_key = EXCLUDED.request_key
-      RETURNING *
-    `;
-    await sql`
-      INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id, event_key)
-      VALUES (
-        ${creatorId}, 'outreach', 'Email sent',
-        ${JSON.stringify({ outreach_id: message.id, provider, external_id: providerMessageId, to })}::jsonb,
-        ${access.userId}, ${requestKey+':outreach'}
-      ) ON CONFLICT (event_key) DO NOTHING
-    `;
-    if (agreementId) {
-      await sql`
-        UPDATE creator_agreements
-        SET status = 'sent', sent_to = ${to}, sent_at = now(), updated_at = now()
-        WHERE id = ${agreementId} AND creator_id = ${creatorId} AND status = 'draft'
-      `;
-      await sql`
+      WITH outreach AS (
+        INSERT INTO creator_outreach (
+          creator_id, channel, direction, subject, body, status,
+          external_id, external_thread_id, recipient, sent_at, next_follow_up_at, created_by, request_key
+        ) VALUES (
+          ${creatorId}, 'email', 'outbound', ${subject}, ${body}, 'sent',
+          ${externalId}, ${externalThreadId}, ${to}, now(), ${followUpAt}, ${access.userId}, ${requestKey}
+        )
+        ON CONFLICT (request_key) DO UPDATE SET request_key = EXCLUDED.request_key
+        RETURNING *
+      ), outreach_activity AS (
         INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id, event_key)
-        VALUES (
-          ${creatorId}, 'agreement_sent', 'Usage agreement sent',
-          ${JSON.stringify({ agreement_id: agreementId, provider, external_id: providerMessageId, to })}::jsonb,
-          ${access.userId}, ${requestKey+':agreement'}
-        ) ON CONFLICT (event_key) DO NOTHING
-      `;
-    }
+        SELECT creator_id, 'outreach', 'Email sent',
+          jsonb_build_object('outreach_id',id,'provider',${provider}::text,'external_id',${providerMessageId}::text,'to',${to}::text),
+          ${access.userId}, ${requestKey+':outreach'} FROM outreach
+        ON CONFLICT (event_key) DO NOTHING RETURNING id
+      ), agreement AS (
+        UPDATE creator_agreements SET status='sent',sent_to=${to},sent_at=now(),updated_at=now()
+        WHERE id=${agreementId} AND creator_id=${creatorId} AND status='draft'
+          AND EXISTS (SELECT 1 FROM outreach)
+        RETURNING id
+      ), agreement_activity AS (
+        INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id, event_key)
+        SELECT creator_id, 'agreement_sent', 'Usage agreement sent',
+          ${JSON.stringify({agreement_id:agreementId,provider,external_id:providerMessageId,to})}::jsonb,
+          ${access.userId}, ${requestKey+':agreement'} FROM outreach WHERE ${agreementId}::int IS NOT NULL
+        ON CONFLICT (event_key) DO NOTHING RETURNING id
+      ) SELECT * FROM outreach
+    `;
     return res.status(201).json({ message });
   } catch (err) {
     if (err.reconnectRequired) {
