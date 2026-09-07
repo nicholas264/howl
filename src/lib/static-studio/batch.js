@@ -13,7 +13,7 @@ export async function finishStudioBatch({ids,latest,finish,onProgress,cancelled}
     } catch(error) {
       result.failed.push({id,message:error.message || 'Could not finish this concept.'});
       // Do not hammer an unavailable provider or keep spending after a limit.
-      if(/credit|quota|budget|rate.limit|daily.limit|unauthorized|forbidden|conflict/i.test(error.message))break;
+      if(/credit|quota|budget|rate.limit|daily.limit|unauthorized|forbidden|conflict/i.test(error.message)){result.stopReason=error.message;break;}
     }
   }
   return result;

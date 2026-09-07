@@ -23,7 +23,7 @@ test('resume skips passed pairs, continues after isolated failures and stops on 
   const result=await finishStudioBatch({ids:rows.map(c=>c.id),latest:async id=>rows.find(c=>c.id===id),cancelled:()=>false,onProgress:()=>{},finish:async c=>{
     calls.push(c.id);if(c.id==='bad')throw new Error('Photo could not load');if(c.id==='quota')throw new Error('Insufficient credits');return {...c,review:{verdict:'pass'}};
   }});
-  assert.deepEqual(calls,['bad','good','quota']);assert.equal(result.passed,2);assert.equal(result.failed.length,2);
+  assert.deepEqual(calls,['bad','good','quota']);assert.equal(result.passed,2);assert.equal(result.failed.length,2);assert.equal(result.stopReason,'Insufficient credits');
 });
 test('product suggestions never become approval and warnings survive normalization',()=>{
   const assessment=normalizeAssessment({suggestedProductId:'r3',approved:true,productCount:'multiple',completeProduct:false,uncertainties:['Two units visible.']});

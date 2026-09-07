@@ -140,7 +140,7 @@ export default function StaticStudio({onAddToCart,onOpenLauncher,driveAuth}) {
       const concepts=generateConcepts({...latest,count:1,selectedProducts:[productId]},choices);
       update(current=>({...current,concepts:[...concepts,...current.concepts]}));await flush();
       created.push(...concepts);setConceptId(concepts[0].id);setView('review');
-      if(finish)await finishBatch(concepts);
+      if(finish){const result=await finishBatch(concepts);if(result.stopReason)throw new Error(result.stopReason);}
     }
     const current=await flush(),round=current.concepts.filter(c=>created.some(row=>row.id===c.id));
     setMessage(`${round.length} concepts saved / ${round.filter(c=>c.render).length*2} exports. ${round.filter(c=>c.review?.verdict==='pass').length} pairs passed review. Inspect each pair before approval.`);
@@ -185,6 +185,7 @@ export default function StaticStudio({onAddToCart,onOpenLauncher,driveAuth}) {
       }});
     setMessage(`${result.passed} pairs passed review. ${result.held} need design changes. ${result.failed.length} could not finish. Completed work is saved; resume skips passed pairs. Inspect both placements before approval.`);
     if(result.failed.length)setError(result.failed.map(f=>f.message).join(' · '));
+    return result;
   }
   async function approveConcept() {
     const current=concept.render?concept:await persistRender(concept);
