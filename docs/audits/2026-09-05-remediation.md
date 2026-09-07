@@ -324,3 +324,21 @@ status. Pre-send validation failures are known not to have sent email and remain
 safely retryable. The endpoint regression simulates activity failure, subsequent
 acceptance, and successful replay with one provider call; a new send for the
 accepted agreement is still denied.
+
+## Gmail reply ownership and replay
+
+Reply sync now selects outbound messages created by the current workspace member
+before using that member's Google token. Sender matching compares the exact email
+address, including display-name forms, rather than accepting address substrings.
+New replies use a mailbox/creator/message request key and commit their activity
+atomically; concurrent syncs cannot insert duplicates. Legacy unkeyed replies
+from the same member are not re-imported. Network calls share a 45-second deadline.
+A PostgreSQL regression verifies concurrent deduplication, exact sender matching,
+replay and preservation of another member's outbound message.
+
+Production environment inspection on September 7 found Google OAuth configured,
+no RESEND_API_KEY, and no Shopify seeding enable switch or separate seeding token.
+Resend delivery/bounce ingestion requires provisioning if that provider is chosen;
+creator email currently uses each member's Gmail connection. Shopify recovery code
+is deployed behind the disabled seeding switch. Neither service was enabled.
+Browser verification is additionally unavailable while the Mac is locked.

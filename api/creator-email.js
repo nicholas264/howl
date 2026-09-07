@@ -1,4 +1,4 @@
-import { runExternalStep, operationKey } from './_lib/operation-journal.js';
+import { runExternalStep, operationKey, digest } from './_lib/operation-journal.js';
 import { requirePermission } from './_lib/app-access.js';
 
 import { getGoogleConnection, getUserGoogleAccessToken } from './_lib/google-user-oauth.js';
@@ -26,12 +26,21 @@ function header(message, name) {
   return message.payload?.headers?.find(item => item.name?.toLowerCase() === name.toLowerCase())?.value || '';
 }
 
-async function syncReplies({ sql, access, accessToken, creator }) {
+export function senderMatches(value,email) {
+  const text=String(value || '').trim();
+  const bracket=text.match(/^[^<>]*<([^<>]+)>$/);
+  const address=validEmail(bracket ? bracket[1] : text);
+  return Boolean(address && address.toLowerCase()===String(email || '').trim().toLowerCase());
+}
+
+export async function syncReplies({ sql, access, accessToken, creator }) {
+  const signal=AbortSignal.timeout(45000);
   const sent = await sql`
     SELECT *
     FROM creator_outreach
     WHERE creator_id = ${creator.id}
       AND channel = 'email'
+      AND created_by = ${access.userId}
       AND direction = 'outbound'
       AND external_id IS NOT NULL
       AND status IN ('sent', 'follow_up', 'replied')
@@ -45,7 +54,7 @@ async function syncReplies({ sql, access, accessToken, creator }) {
     if (!threadId) {
       const messageResponse = await fetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(outreach.external_id)}?format=minimal`,
-        { headers: { Authorization: `Bearer ${accessToken}` } },
+        { headers: { Authorization: `Bearer ${accessToken}` }, signal },
       );
       const messageData = await messageResponse.json();
       if (!messageResponse.ok) {
@@ -59,7 +68,7 @@ async function syncReplies({ sql, access, accessToken, creator }) {
     threads += 1;
     const threadResponse = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/threads/${encodeURIComponent(threadId)}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`,
-      { headers: { Authorization: `Bearer ${accessToken}` } },
+      { headers: { Authorization: `Bearer ${accessToken}` }, signal },
     );
     const thread = await threadResponse.json();
     if (!threadResponse.ok) {
@@ -70,39 +79,38 @@ async function syncReplies({ sql, access, accessToken, creator }) {
     const creatorEmail = creator.email.toLowerCase();
     const inbound = (thread.messages || []).filter(message => (
       message.id !== outreach.external_id
-      && header(message, 'From').toLowerCase().includes(creatorEmail)
+      && senderMatches(header(message, 'From'),creatorEmail)
       && Number(message.internalDate || 0) > new Date(outreach.sent_at || outreach.created_at).getTime()
     ));
     for (const message of inbound) {
-      const existing = await sql`
-        SELECT id FROM creator_outreach
-        WHERE creator_id = ${creator.id} AND external_id = ${message.id}
-        LIMIT 1
-      `;
-      if (existing.length) continue;
+      // Preserve pre-journal replies without importing them a second time.
+      const [legacy]=await sql`SELECT id FROM creator_outreach
+        WHERE creator_id=${creator.id} AND created_by=${access.userId}
+          AND direction='inbound' AND external_id=${message.id} AND request_key IS NULL LIMIT 1`;
+      if(legacy)continue;
       const receivedAt = message.internalDate
         ? new Date(Number(message.internalDate)).toISOString()
         : new Date().toISOString();
+      const replyKey=digest(['gmail-reply',access.userId,creator.id,message.id]);
       const [reply] = await sql`
-        INSERT INTO creator_outreach (
-          creator_id, channel, direction, subject, body, status, external_id,
-          external_thread_id, recipient, sent_at, replied_at, last_synced_at, created_by
-        ) VALUES (
-          ${creator.id}, 'email', 'inbound', ${header(message, 'Subject') || outreach.subject},
-          ${message.snippet || 'Reply received in Gmail'}, 'received', ${message.id},
-          ${threadId}, ${header(message, 'To') || null}, ${receivedAt}, ${receivedAt}, now(), ${access.userId}
-        )
-        RETURNING id
+        WITH reply AS (
+          INSERT INTO creator_outreach (
+            creator_id, channel, direction, subject, body, status, external_id,
+            external_thread_id, recipient, sent_at, replied_at, last_synced_at, created_by, request_key
+          ) VALUES (
+            ${creator.id}, 'email', 'inbound', ${header(message, 'Subject') || outreach.subject},
+            ${message.snippet || 'Reply received in Gmail'}, 'received', ${message.id},
+            ${threadId}, ${header(message, 'To') || null}, ${receivedAt}, ${receivedAt}, now(), ${access.userId},${replyKey}
+          ) ON CONFLICT (request_key) DO NOTHING RETURNING id
+        ), activity AS (
+          INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id, event_key)
+          SELECT ${creator.id},'outreach_reply','Creator replied by email',
+            jsonb_build_object('outreach_id',id,'gmail_message_id',${message.id}::text,'gmail_thread_id',${threadId}::text),
+            ${access.userId},${replyKey+':activity'} FROM reply
+          ON CONFLICT (event_key) DO NOTHING RETURNING id
+        ) SELECT id FROM reply
       `;
-      await sql`
-        INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
-        VALUES (
-          ${creator.id}, 'outreach_reply', 'Creator replied by email',
-          ${JSON.stringify({ outreach_id: reply.id, gmail_message_id: message.id, gmail_thread_id: threadId })}::jsonb,
-          ${access.userId}
-        )
-      `;
-      replies += 1;
+      if(reply)replies += 1;
     }
     if (inbound.length) {
       await sql`
