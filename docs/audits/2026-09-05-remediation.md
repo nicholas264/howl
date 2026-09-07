@@ -234,3 +234,17 @@ runbooks; isolated preview credentials and authenticated browser workflow tests.
 `npm run check` passes locally, including 13 PostgreSQL/security regression tests.
 The versioned Remotion 4.0.521 function/site passed a 105-frame synthetic render with no fatal errors. Database migration and deployment results are recorded in the
 task's final release report; passing local tests is not a substitute for those steps.
+
+## Shared media retention and submission retries
+
+Record deletion for callout images/layouts and UGC sessions now retains physical
+media. Creator upload validation and database failures also preserve source files:
+a lost acknowledgement can follow a committed submission. An exact retry using
+the completed submission token and its stored video URL returns success without
+creating another session. A different video remains rejected.
+
+A PostgreSQL regression injects a failure after the submission commits, verifies
+the source is retained, and retries the same request. The Blob SDK deletion mock
+is checked with a canary and blocks real network access. Reference-aware garbage
+collection and private media access remain unfinished; retention can accumulate
+unreferenced files until that lifecycle is implemented.

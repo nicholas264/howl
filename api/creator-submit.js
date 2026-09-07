@@ -1,5 +1,4 @@
 import { neon } from '@neondatabase/serverless';
-import { del } from '@vercel/blob';
 
 import { getActiveSubmission, submissionTokenHash } from './_lib/creator-submissions.js';
 import { checkRateLimit, rateLimitKey, sendRateLimited } from './_lib/rate-limit.js';
@@ -29,7 +28,6 @@ export default async function handler(req, res) {
   if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'Method not allowed' });
   const token = (req.method === 'GET' ? req.query?.token : req.body?.token || '').toString();
   const sql = neon(process.env.DATABASE_URL);
-  let uploadedUrl = null;
 
   try {
     const rate = await checkRateLimit(sql, {
@@ -43,6 +41,12 @@ export default async function handler(req, res) {
     const submission = await getActiveSubmission(sql, token);
     if (!submission) return res.status(404).json({ error: 'Upload link not found' });
     if (req.method === 'GET') return res.json({ submission: publicSubmission(submission) });
+
+    if (submission.status === 'completed' && submission.upload_count > 0 && req.body?.video_url) {
+      const [received] = await sql`SELECT id FROM ugc_sessions
+        WHERE user_id=${`creator-submit:${submission.id}`} AND video_url=${String(req.body.video_url)} LIMIT 1`;
+      if (received) return res.status(201).json({ok:true,submission:publicSubmission(submission)});
+    }
 
     if (submission.status !== 'active'
       || submission.upload_count > 0
@@ -65,12 +69,10 @@ export default async function handler(req, res) {
       || !parsedUrl.pathname.replace(/^\/+/, '').startsWith(`creator-submissions/${submission.id}/`)) {
       return res.status(400).json({ error: 'Uploaded video is outside this submission' });
     }
-    uploadedUrl = parsedUrl.toString();
 
     const head = await fetch(parsedUrl, { method: 'HEAD' });
     const contentType = head.headers.get('content-type') || '';
     if (!head.ok || !contentType.startsWith('video/')) {
-      await del(parsedUrl.toString()).catch(() => {});
       return res.status(400).json({ error: 'Submission must be a valid video file' });
     }
 
@@ -158,12 +160,6 @@ export default async function handler(req, res) {
       FROM deliverable_upsert
     `;
     if (!result) {
-      const [existingSession] = await sql`
-        SELECT id FROM ugc_sessions
-        WHERE video_url = ${parsedUrl.toString()}
-        LIMIT 1
-      `;
-      if (!existingSession) await del(parsedUrl.toString()).catch(() => {});
       return res.status(409).json({ error: 'This upload link was already used' });
     }
     return res.status(201).json({
@@ -171,7 +167,6 @@ export default async function handler(req, res) {
       submission: { ...publicSubmission(submission), status: 'completed' },
     });
   } catch (err) {
-    if (uploadedUrl) await del(uploadedUrl).catch(() => {});
     return res.status(500).json({ error: err.message || 'Could not receive creator footage' });
   }
 }

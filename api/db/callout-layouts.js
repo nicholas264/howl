@@ -1,5 +1,4 @@
 import { neon } from '@neondatabase/serverless';
-import { del } from '@vercel/blob';
 import { requirePermission } from '../_lib/app-access.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '5mb' } } };
@@ -80,13 +79,7 @@ export default async function handler(req, res) {
       if (!id) return res.status(400).json({ error: 'id required' });
       const owned = await ownRow(id);
       if (!owned) return res.status(404).json({ error: 'Not found' });
-      if (owned.image_url) {
-        // Only orphan-delete the blob if no callout_images library record holds it.
-        const refs = await sql`SELECT 1 FROM callout_images WHERE url = ${owned.image_url} LIMIT 1`;
-        if (!refs.length) {
-          try { await del(owned.image_url); } catch (err) { console.error('blob del failed', err); }
-        }
-      }
+      // A layout reference does not establish exclusive ownership of its media.
       await sql`DELETE FROM callout_layouts WHERE id = ${id} AND user_id = ${userId}`;
       return res.json({ ok: true });
     }

@@ -1,5 +1,4 @@
 import { neon } from '@neondatabase/serverless';
-import { del } from '@vercel/blob';
 import { requirePermission } from '../_lib/app-access.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
@@ -48,9 +47,7 @@ export default async function handler(req, res) {
       if (!id) return res.status(400).json({ error: 'id required' });
       const rows = await sql`SELECT url FROM callout_images WHERE id = ${id} AND user_id = ${userId} LIMIT 1`;
       if (!rows.length) return res.status(404).json({ error: 'Not found' });
-      if (rows[0].url) {
-        try { await del(rows[0].url); } catch (err) { console.error('blob del failed', err); }
-      }
+      // Remove the library entry; shared Blob cleanup requires a reference audit.
       await sql`DELETE FROM callout_images WHERE id = ${id} AND user_id = ${userId}`;
       return res.json({ ok: true });
     }

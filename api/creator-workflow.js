@@ -2,7 +2,6 @@ import { captureApprovalEvidence } from './_lib/approval-evidence.js';
 import { approveDeliverable } from './_lib/approval-snapshots.js';
 import { requirePermission } from './_lib/app-access.js';
 
-import { del } from '@vercel/blob';
 import { randomBytes } from 'node:crypto';
 import { submissionTokenHash } from './_lib/creator-submissions.js';
 import { agreementTokenHash, renderAgreementTemplate } from './_lib/creator-agreements.js';
@@ -984,7 +983,6 @@ export default async function handler(req, res) {
             WHERE id = ${briefId} AND creator_id = ${creatorId}
           `;
           if (!brief) {
-            await del(parsedUrl.toString()).catch(() => {});
             return res.status(400).json({ error: 'Selected brief does not belong to this creator' });
           }
         }
@@ -1026,7 +1024,8 @@ export default async function handler(req, res) {
             `,
           ]);
         } catch (err) {
-          await del(parsedUrl.toString()).catch(() => {});
+          // A lost database acknowledgement may follow a committed upload.
+          // Keep the source intact for recovery instead of deleting its URL.
           throw err;
         }
         const [linked] = await sql`

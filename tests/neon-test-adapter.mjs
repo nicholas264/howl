@@ -2,7 +2,7 @@ import { neonConfig } from '@neondatabase/serverless';
 
 // Exercise unchanged Neon-backed handlers against isolated PostgreSQL, including
 // the HTTP driver's real parameter encoding and result decoding.
-export function useTestDatabase(db, beforeQuery = () => {}) {
+export function useTestDatabase(db, beforeQuery = () => {}, afterQuery = () => {}) {
   const previous = neonConfig.fetchFunction;
   neonConfig.fetchFunction = async (_url,init) => {
     const request = JSON.parse(init.body);
@@ -21,7 +21,7 @@ export function useTestDatabase(db, beforeQuery = () => {}) {
       };
       return {fields,rows:result.rows.map(row=>fields.map(field=>encode(row[field.name],field))),rowCount:result.affectedRows || result.rows.length};
       };
-      const execute=async(connection,query)=>{await beforeQuery(query.query,query.params);return serialize(await connection.query(query.query,query.params));};
+      const execute=async(connection,query)=>{await beforeQuery(query.query,query.params);const result=await connection.query(query.query,query.params);await afterQuery(query.query,query.params);return serialize(result);};
       if(Array.isArray(request.queries)) {
         const isolation=new Headers(init.headers).get('Neon-Batch-Isolation-Level');
         const modes={ReadUncommitted:'READ UNCOMMITTED',ReadCommitted:'READ COMMITTED',RepeatableRead:'REPEATABLE READ',Serializable:'SERIALIZABLE'};

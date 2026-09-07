@@ -1,6 +1,5 @@
 import { saveSessionEdits } from '../_lib/session-edits.js';
 import { neon } from '@neondatabase/serverless';
-import { del } from '@vercel/blob';
 import { requirePermission } from '../_lib/app-access.js';
 
 
@@ -147,10 +146,8 @@ export default async function handler(req, res) {
       if (!id) return res.status(400).json({ error: 'id required' });
       const owned = await ownRow(id);
       if (!owned) return res.status(404).json({ error: 'Not found' });
-      const urls = [owned.video_url, owned.audio_url, owned.rendered_url].filter(Boolean);
-      for (const url of urls) {
-        try { await del(url); } catch (err) { console.error('blob del failed', url, err); }
-      }
+      // Sources and renders can remain referenced by deliverables and launches.
+      // Physical cleanup must evaluate those references independently.
       await sql`DELETE FROM ugc_sessions WHERE id = ${id}`;
       return res.json({ ok: true });
     }
