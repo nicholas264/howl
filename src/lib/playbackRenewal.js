@@ -26,7 +26,11 @@ export function startPlaybackRenewal({sessionId,sourceUrl,fetchGrant,onGrant,onE
         if(typeof data.token!=='string' || !data.token || !Number.isFinite(data.expires_in) || data.expires_in<60 || data.expires_in>600)throw new Error('Invalid playback grant');
         expiresAt=startedAt+data.expires_in*1000;
         if(expiresAt<=now())throw new Error('Playback grant expired before arrival');
-        onGrant({sessionId,sourceUrl,token:data.token});
+        if(data.playback_url){
+          const original=new URL(sourceUrl),signed=new URL(data.playback_url);
+          if(signed.origin!==original.origin || signed.pathname!==original.pathname || !signed.hostname.endsWith('.private.blob.vercel-storage.com') || signed.username || signed.password || signed.hash)throw new Error('Invalid signed playback destination');
+        }
+        onGrant({sessionId,sourceUrl,token:data.token,...(data.playback_url?{url:data.playback_url}:{})});
         clearTimer(expiryTimer);
         expiryTimer=setTimer(()=>{if(stopped)return;onExpired();refresh();},Math.max(0,expiresAt-now()));
         renewTimer=setTimer(refresh,Math.max(1000,expiresAt-now()-Math.min(120000,data.expires_in*200)));

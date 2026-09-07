@@ -1,3 +1,4 @@
+import {videoReadUrl} from './_lib/private-video.js';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { parseMediaRange } from './_lib/media-range.js';
@@ -52,7 +53,8 @@ export default async function handler(req, res) {
   const disconnect = () => controller.abort();
   res.once('close', disconnect);
   try {
-    const head = await fetch(sourceUrl, { method: 'HEAD', redirect: 'error', signal: controller.signal });
+    const headUrl=await videoReadUrl(sql,sourceUrl.href,{method:'head'});
+    const head = await fetch(headUrl, { method: 'HEAD', redirect: 'error', signal: controller.signal });
     if (!head.ok) return res.status(head.status).json({ error: 'Source video is not available' });
 
     const size = Number(head.headers.get('content-length') || 0);
@@ -82,7 +84,8 @@ export default async function handler(req, res) {
       return res.end();
     }
 
-    const upstream = await fetch(sourceUrl, { headers: upstreamHeaders, redirect: 'error', signal: controller.signal });
+    const readUrl=await videoReadUrl(sql,sourceUrl.href);
+    const upstream = await fetch(readUrl, { headers: upstreamHeaders, redirect: 'error', signal: controller.signal });
     if (!upstream.ok && upstream.status !== 206) {
       return res.status(upstream.status).json({ error: 'Source video is not available' });
     }

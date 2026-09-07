@@ -29,7 +29,7 @@ export default async function handler(req, res) {
   const callbackUrl=req.body?.type==='blob.upload-completed' ? req.body?.payload?.blob?.url : null;
   const privateUpload=callbackUrl
     ? (()=>{try{return new URL(callbackUrl).hostname.endsWith('.private.blob.vercel-storage.com');}catch{return false;}})()
-    : String(req.body?.payload?.pathname || '').startsWith('creator-contracts/');
+    : /^(creator-contracts|ugc-source)\//.test(String(req.body?.payload?.pathname || ''));
   const blobAccess=privateUpload?'private':'public';
   const blobToken=privateUpload?process.env.HOWL_PRIVATE_READ_WRITE_TOKEN:process.env.BLOB_READ_WRITE_TOKEN;
   if(!blobToken)return res.status(503).json({error:'Upload storage is not configured for this destination'});

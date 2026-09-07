@@ -56,3 +56,11 @@ test('a timed-out request cannot overwrite a later renewed grant even if it igno
   late(grant('stale'));await flush();assert.deepEqual(grants,['current']);
  }finally{renewal.dispose();}
 });
+
+test('native private playback accepts only the exact source destination',async()=>{
+ for(const [url,accepted] of [[sourceUrl+'?signature=fixture',true],['https://other.private.blob.vercel-storage.com/source.mp4?signature=fixture',false],[sourceUrl+'-other?signature=fixture',false]]){
+  const timer=clock(),grants=[],errors=[];
+  const renewal=startPlaybackRenewal({...timer,sessionId:1,sourceUrl,fetchGrant:async()=>Response.json({token:'fixture',source_url:sourceUrl,expires_in:600,playback_url:url}),onGrant:g=>grants.push(g),onExpired:()=>{},onError:e=>errors.push(e)});
+  try{await flush();assert.equal(grants.length,accepted?1:0);assert.equal(errors.length,accepted?0:1);if(accepted)assert.equal(grants[0].url,url);}finally{renewal.dispose();}
+ }
+});

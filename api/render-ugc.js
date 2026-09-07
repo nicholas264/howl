@@ -1,3 +1,4 @@
+import {videoReadUrl,redactPrivateMediaError} from './_lib/private-video.js';
 import { spawn } from 'node:child_process';
 import { createReadStream, existsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -103,6 +104,7 @@ export default async function handler(req, res) {
   const subtitlePath = join(tmpdir(), `howl-render-${token}.srt`);
 
   try {
+    const readableSource=await videoReadUrl(sql,sourceUrl.href);
     const filterParts = [];
     segments.forEach((segment, index) => {
       filterParts.push(`[0:v]trim=start=${segment.start}:end=${segment.end},setpts=PTS-STARTPTS[v${index}]`);
@@ -120,7 +122,7 @@ export default async function handler(req, res) {
 
     await runFfmpeg([
       '-y',
-      '-i', sourceUrl.toString(),
+      '-i', readableSource,
       '-filter_complex', filterParts.join(';'),
       '-map', videoMap,
       '-map', '[acut]',
@@ -165,12 +167,13 @@ export default async function handler(req, res) {
     }
     return res.json({ ok: true, url: blob.url, session_id: sessionId });
   } catch (err) {
+    const message=redactPrivateMediaError(err,'Render failed');
     await sql`
       UPDATE ugc_sessions
-      SET status = 'render_error', last_error = ${(err.message || 'Render failed').slice(0, 2000)}, updated_at = now()
+      SET status = 'render_error', last_error = ${message}, updated_at = now()
       WHERE id = ${sessionId}
     `.catch(() => {});
-    return res.status(500).json({ error: err.message || 'Render failed' });
+    return res.status(500).json({ error: message });
   } finally {
     if (existsSync(outputPath)) try { unlinkSync(outputPath); } catch {}
     if (existsSync(subtitlePath)) try { unlinkSync(subtitlePath); } catch {}

@@ -1,3 +1,4 @@
+import {videoReadUrl,videoSource,recordPrivateAudio,redactPrivateMediaError} from './_lib/private-video.js';
 import { checkWorkLimit } from './_lib/work-limits.js';
 import { claimTranscription, saveTranscription } from './_lib/transcription-jobs.js';
 import { recordProviderUsage } from './_lib/work-controls.js';
@@ -71,7 +72,8 @@ export default async function handler(req, res) {
 
   try {
     // 1. Stream the source video into ffmpeg via stdin, write audio to /tmp
-    const videoRes = await fetch(sourceUrl,{signal,redirect:'error'});
+    const readableSource=await videoReadUrl(sql,sourceUrl.href);
+    const videoRes = await fetch(readableSource,{signal,redirect:'error'});
     if (!videoRes.ok || !videoRes.body) {
       throw new Error(`Failed to fetch source video: ${videoRes.status}`);
     }
@@ -110,12 +112,16 @@ export default async function handler(req, res) {
     signal.throwIfAborted();
     // 2. Upload audio to Blob (so re-transcribe is fast and the audio is shareable with future render jobs)
     const audioStream = createReadStream(audioPath);
+    const privateAudio=videoSource(sourceUrl.href).private;
     const audioBlob = await put(`ugc-audio/session-${sessionId || 'tmp'}-${Date.now()}.mp3`, audioStream, {
-      access: 'public',
+      access: privateAudio?'private':'public',
+      token: privateAudio?process.env.HOWL_PRIVATE_READ_WRITE_TOKEN:process.env.BLOB_READ_WRITE_TOKEN,
       contentType: 'audio/mpeg',
       addRandomSuffix: true,
       abortSignal:signal,
     });
+
+    if(privateAudio)await recordPrivateAudio(sql,audioBlob,sessionId,access.userId);
 
     // 3. Hand the audio to Whisper. Whisper has a 25 MB cap; if we exceed it,
     //    surface a clear error rather than silently truncating.
@@ -171,8 +177,8 @@ export default async function handler(req, res) {
 
     return res.json({ words, duration, audioUrl: audioBlob.url });
   } catch (err) {
-    console.error('transcribe-url error', err);
-    const message = (err.message || 'Transcription failed').slice(0, 2000);
+    const message = redactPrivateMediaError(err,'Transcription failed');
+    console.error('transcribe-url error', message);
     await sql`
       UPDATE ugc_sessions
       SET status = 'transcription_error', transcription_token=NULL,last_error = ${message}, updated_at = now()

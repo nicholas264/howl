@@ -510,3 +510,28 @@ source/preview position restoration. Real member browser verification remains
 pending: the Mac was rechecked and is locked. This release does not migrate the
 remaining public source video or images, or retire the four public contract copies
 that still require explicit approval.
+
+## Private editor source uploads and processing — September 7
+
+New `ugc-source/` uploads use the configured private Blob store. The verified Blob
+callback records ownership before a member can attach a private upload to a session;
+a delayed callback returns a recoverable 409. Playback issues native Blob grants
+restricted to the exact registered pathname, operation and expiry. The browser
+checks the returned destination and renews ten-minute grants. Proxy compatibility
+uses separate GET and HEAD grants. FFmpeg transcription/rendering and Remotion
+receive scoped read URLs; delegation signing material and store credentials stay
+server-side. Remotion's render grant lasts thirty minutes. Errors redact private
+media URLs so signatures are not stored in session error messages.
+
+Extracted audio from private sources stays private and is registered to the member.
+Whisper receives audio bytes. Legacy public sources retain their current behavior;
+this change does not migrate the existing public source, callout images, creator
+footage or render outputs. Public contract retirement remains pending approval.
+
+Verification includes actual SDK delegation/callback checks, upload ownership and
+registration gates, destination validation, and real FFmpeg decoding through the
+transcription handler with a mocked speech provider. A temporary synthetic object
+in the production private store rejected anonymous access and pathname/operation
+tampering, supported signed range reads and HEAD, and decoded through FFmpeg. Only
+that newly created canary was deleted. No member data or paid render/transcription
+request was used for the canary. Real member browser verification remains pending.

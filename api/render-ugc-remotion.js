@@ -1,3 +1,4 @@
+import {videoReadUrl,redactPrivateMediaError} from './_lib/private-video.js';
 import { finishWork } from './_lib/work-controls.js';
 import { checkWorkLimit } from './_lib/work-limits.js';
 import { randomUUID } from 'node:crypto';
@@ -74,6 +75,9 @@ export default async function handler(req, res) {
     showOutro: inputProps.showOutro,
   });
 
+  try{inputProps.videoSrc=await videoReadUrl(sql,session.video_url,{ttlSeconds:1800});}
+  catch(error){return res.status(error.statusCode || 503).json({error:redactPrivateMediaError(error)});}
+
   if (!(await checkWorkLimit(access,res,'render',{holdUntilCompletion:true}))) return;
   const attemptId = randomUUID();
   try {
@@ -141,7 +145,7 @@ export default async function handler(req, res) {
       duration_in_frames: durationInFrames,
     });
   } catch (err) {
-    const message = (err.message || 'Remotion render failed to start').slice(0, 2000);
+    const message = redactPrivateMediaError(err,'Remotion render failed to start');
     await sql`
       UPDATE ugc_sessions
       SET status = 'render_unknown', last_error = ${message}, updated_at = now()

@@ -1,3 +1,4 @@
+import {videoReadUrl,videoSource} from './_lib/private-video.js';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { requirePermission } from './_lib/app-access.js';
 
@@ -61,13 +62,17 @@ export default async function handler(req, res) {
     LIMIT 1
   `;
   if (!session?.video_url) return res.status(404).json({ error: 'Session source not found' });
-  let token;
-  try{token=signUgcSourceToken(sessionId,session.video_url);}
+  let token,playbackUrl;
+  try{
+    token=signUgcSourceToken(sessionId,session.video_url);
+    if(videoSource(session.video_url).private)playbackUrl=await videoReadUrl(sql,session.video_url);
+  }
   catch{return res.status(503).json({error:'Playback signing is unavailable'});}
   res.setHeader('Cache-Control','private, no-store');
 
   return res.json({
     token,
+    ...(playbackUrl?{playback_url:playbackUrl}:{}),
     source_url:session.video_url,
     expires_in: TOKEN_TTL_SECONDS,
   });

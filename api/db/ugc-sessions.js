@@ -1,3 +1,4 @@
+import {videoSource,requirePrivateVideo} from '../_lib/private-video.js';
 import { saveSessionEdits } from '../_lib/session-edits.js';
 import { neon } from '@neondatabase/serverless';
 import { requirePermission } from '../_lib/app-access.js';
@@ -83,6 +84,8 @@ export default async function handler(req, res) {
         deliverable_id,
       } = req.body || {};
       if (!video_url) return res.status(400).json({ error: 'video_url required' });
+      try{if(videoSource(video_url).private)await requirePrivateVideo(sql,video_url,auth.userId);}
+      catch(error){return res.status(error.statusCode || 400).json({error:error.message});}
       const rows = await sql`
         INSERT INTO ugc_sessions (user_id, title, file_name, file_size, duration, video_url, words, settings, thumbnail_url, status, creator_id, source_type, source_label, brief_id, deliverable_id)
         VALUES (

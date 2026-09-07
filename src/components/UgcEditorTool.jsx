@@ -330,7 +330,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
   const playbackUrl = useMemo(() => {
     if (videoUrl?.startsWith('blob:')) return videoUrl;
     if(activeSession?.id && playbackGrant?.sessionId===activeSession.id && playbackGrant.sourceUrl===videoUrl)
-      return `/api/ugc-source?id=${activeSession.id}&token=${encodeURIComponent(playbackGrant.token)}`;
+      return playbackGrant.url || `/api/ugc-source?id=${activeSession.id}&token=${encodeURIComponent(playbackGrant.token)}`;
     if (activeSession?.id) return '';
     return videoUrl;
   }, [activeSession?.id, playbackGrant, videoUrl]);
