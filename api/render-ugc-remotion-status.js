@@ -1,6 +1,6 @@
 import {redactPrivateMediaError} from './_lib/private-video.js';
 import { finishWork } from './_lib/work-controls.js';
-import { completeRender } from './_lib/render-completion.js';
+import { completeRender, failRender } from './_lib/render-completion.js';
 import { getRenderProgress } from '@remotion/lambda/client';
 import { requirePermission } from './_lib/app-access.js';
 
@@ -61,11 +61,8 @@ export default async function handler(req, res) {
     });
     if (progress.fatalErrorEncountered) {
       const message = redactPrivateMediaError(progress.errors?.[0],'Remotion render failed');
-      await sql`
-        UPDATE ugc_sessions
-        SET status = 'render_error', last_error = ${message}, updated_at = now()
-        WHERE id = ${sessionId} AND settings->'remotion_render'->>'render_id' = ${renderId}
-      `.catch(() => {});
+      const failed=await failRender(sql,sessionId,renderId,message);
+      if(!failed)return res.status(409).json({error:'Render state changed while polling. Reload its current status.'});
       if (renderState.work_id) await finishWork(sql,renderState.work_id,'render',500);
       return res.status(500).json({ error: message });
     }

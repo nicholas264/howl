@@ -585,3 +585,14 @@ concurrent edits, registration failure and replay. The tooling never deletes the
 public original. Execution was rejected before starting by automatic approval review
 pending explicit approval of this production video and private destination. See
 `../operations/private-video-migration.md`; no source video was migrated in this step.
+
+## Terminal render state protection — September 7
+
+Lambda completion only publishes while the matching render is active. Replaying
+the same completed render/output returns its existing receipt without rewriting
+session history, timestamps or deliverables; a contradictory output is rejected.
+Provider failure updates likewise require the matching active render, so a late
+failure response cannot regress completed output. Browser polling reports a conflict
+when its response is superseded, and cron recovery does not fail/release another
+attempt's work. Regression coverage compares the full saved session before/after
+completion replay and rejects contradictory completion and late failure writes.

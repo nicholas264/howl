@@ -1,6 +1,6 @@
 import {redactPrivateMediaError} from './private-video.js';
 import { finishWork } from './work-controls.js';
-import { completeRender } from './render-completion.js';
+import { completeRender, failRender } from './render-completion.js';
 
 export async function recoverRenders(sql, getProgress) {
   // Unknown starts cannot safely be retried: a provider might have accepted the
@@ -29,10 +29,9 @@ export async function recoverRenders(sql, getProgress) {
       const progress = await getProgress({ renderId: state.render_id, bucketName: state.bucket_name,
         functionName: state.function_name, region: state.region });
       if (progress.fatalErrorEncountered) {
-        await sql`UPDATE ugc_sessions SET status = 'render_error', last_error = ${redactPrivateMediaError(progress.errors?.[0],'Render failed')}, updated_at = now()
-          WHERE id = ${session.id} AND settings->'remotion_render'->>'render_id' = ${state.render_id}`;
-        if (state.work_id) await finishWork(sql,state.work_id,'render',500);
-        results.push({ id: session.id, status: 'failed' });
+        const failed=await failRender(sql,session.id,state.render_id,redactPrivateMediaError(progress.errors?.[0],'Render failed'));
+        if (failed && state.work_id) await finishWork(sql,state.work_id,'render',500);
+        results.push({ id: session.id, status: failed?'failed':'superseded' });
       } else if (progress.done && progress.outputFile) {
         const saved = await completeRender(sql, session.id, state, progress.outputFile, progress.costs);
         results.push({ id: session.id, status: saved ? 'completed' : 'superseded' });

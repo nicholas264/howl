@@ -20,7 +20,7 @@ import { initializeSchema } from '../api/db/schema.js';
 import { enqueueCreativeAssetAnalysis, enqueueCreativeAnalyses, claimCreativeAnalysisJob, claimManualCreativeAnalysis, deferCreativeAnalysisJob, completeCreativeAnalysisJob, failCreativeAnalysisJob } from '../api/_lib/creative-analysis-queue.js';
 import { saveSessionEdits } from '../api/_lib/session-edits.js';
 import { reserveOperationBudget } from '../api/_lib/operation-budget.js';
-import { completeRender } from '../api/_lib/render-completion.js';
+import { completeRender, failRender } from '../api/_lib/render-completion.js';
 import { syncCreativeAnalytics } from '../api/_lib/meta/sync.js';
 import { assertLaunchReady } from '../api/_lib/launch-preflight.js';
 import { ensureLaunchDrafts, saveLaunchDraft } from '../api/_lib/launch-drafts.js';
@@ -227,12 +227,18 @@ test('daily seeding reservations are atomic and retries reuse their reservation'
 test('stale render completion cannot replace a current render or regress a launched deliverable', async () => {
   const [creator] = await sql`INSERT INTO creators (name) VALUES ('Render test') RETURNING id`;
   const [deliverable] = await sql`INSERT INTO creator_deliverables (creator_id,title,status,output_url) VALUES (${creator.id},'Approved output','launched','approved.mp4') RETURNING id`;
-  const [session] = await sql`INSERT INTO ugc_sessions (video_url,creator_id,deliverable_id,settings)
-    VALUES ('source.mp4',${creator.id},${deliverable.id},'{"captionScale":2,"remotion_render":{"render_id":"B"}}'::jsonb) RETURNING id`;
+  const [session] = await sql`INSERT INTO ugc_sessions (video_url,status,creator_id,deliverable_id,settings)
+    VALUES ('source.mp4','rendering',${creator.id},${deliverable.id},'{"captionScale":2,"remotion_render":{"render_id":"B"}}'::jsonb) RETURNING id`;
   assert.equal(await completeRender(sql, session.id, { render_id: 'A' }, 'old.mp4'), null);
   assert.ok(await completeRender(sql, session.id, { render_id: 'B' }, 'new.mp4'));
+  const [first]=await sql`SELECT to_jsonb(u) AS snapshot FROM ugc_sessions u WHERE id=${session.id}`;
+
   assert.ok(await completeRender(sql, session.id, { render_id: 'B' }, 'new.mp4'));
   const [saved] = await sql`SELECT * FROM ugc_sessions WHERE id = ${session.id}`;
+  const [replayed]=await sql`SELECT to_jsonb(u) AS snapshot FROM ugc_sessions u WHERE id=${session.id}`;
+  assert.deepEqual(replayed,first);
+  assert.equal(await completeRender(sql,session.id,{render_id:'B'},'contradictory.mp4'),null);
+  assert.equal(await failRender(sql,session.id,'B','Late provider error'),false);
   assert.equal(saved.settings.captionScale, 2);
   assert.equal(saved.settings.remotion_renders.length, 1);
   assert.equal(saved.rendered_url, 'new.mp4');
