@@ -1,3 +1,4 @@
+import SeedingBudgetDashboard from './SeedingBudgetDashboard.jsx';
 import { apiFetch as fetch } from '../lib/apiFetch.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
@@ -80,7 +81,7 @@ function inferStatus(row) {
 function rowToForm(row) {
   return {
     id: row.id,
-    seeded_on: row.seeded_on || '',
+    seeded_on: row.seeded_on ? String(row.seeded_on).slice(0, 10) : '',
     product_label: row.product_label || '',
     unit_type: row.unit_type || '',
     quantity: String(row.quantity || 1),
@@ -89,20 +90,10 @@ function rowToForm(row) {
     creator_fee: row.creator_fee ? String(row.creator_fee) : '',
     seeding_status: inferStatus(row),
     agreed_deliverables: row.agreed_deliverables ? String(row.agreed_deliverables) : '',
-    deliverable_due: row.deliverable_due || '',
+    deliverable_due: row.deliverable_due ? String(row.deliverable_due).slice(0, 10) : '',
     usage_rights: row.usage_rights || '',
     notes: row.notes || '',
   };
-}
-
-function Score({ label, value, detail, tone = '' }) {
-  return (
-    <div className={`seed-score ${tone}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      {detail && <small>{detail}</small>}
-    </div>
-  );
 }
 
 function IntakeField({ label, className = '', children }) {
@@ -134,7 +125,7 @@ function IntakeSelect({ label, className = '', children, ...props }) {
   return (
     <IntakeField label={label} className={`intake-select-field ${className}`}>
       <span className="intake-select">
-        <select {...props}>{children}</select>
+        <select aria-label={label} {...props}>{children}</select>
       </span>
     </IntakeField>
   );
@@ -157,7 +148,7 @@ export default function SeedingLedger({ canManage = false }) {
   const [contractUploadProgress, setContractUploadProgress] = useState(0);
   const [fees, setFees] = useState(null);
   const [feeBusy, setFeeBusy] = useState(null);
-  const [filters, setFilters] = useState({ month: 'all', status: 'all', search: '' });
+  const [filters, setFilters] = useState({ month: new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit' }).format(new Date()), status: 'all', search: '' });
 
   const loadFees = useCallback(async () => {
     try {
@@ -219,9 +210,9 @@ export default function SeedingLedger({ canManage = false }) {
   const openFeeIntents = fees?.intents?.filter(i => !i.converted) || [];
 
   const months = useMemo(() => {
-    const set = new Set(rows.map(r => monthKey(r.seeded_on)).filter(Boolean));
+    const set = new Set([filters.month, ...rows.map(r => monthKey(r.seeded_on))].filter(m => m && m !== 'all'));
     return [...set].sort((a, b) => b.localeCompare(a));
-  }, [rows]);
+  }, [rows, filters.month]);
 
   const filteredRows = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
@@ -246,7 +237,7 @@ export default function SeedingLedger({ canManage = false }) {
   }, [rows, filters]);
 
   const totals = useMemo(() => {
-    return rows.reduce((a, r) => {
+    return filteredRows.reduce((a, r) => {
       const status = inferStatus(r);
       const total = Number(r.total_cost) || 0;
       a.units += Number(r.quantity) || 0;
@@ -258,7 +249,7 @@ export default function SeedingLedger({ canManage = false }) {
       if (r.agreed_deliverables && !r.deliverable_due) a.needsDue += 1;
       return a;
     }, { units: 0, cogs: 0, shipping: 0, fees: 0, total: 0, openShipments: 0, needsDue: 0 });
-  }, [rows]);
+  }, [filteredRows]);
 
   const catalogCost = ut => units.find(u => u.unit_type === ut)?.cogs || 0;
   const catalogCostForLabel = label => {
@@ -333,6 +324,7 @@ export default function SeedingLedger({ canManage = false }) {
       ...current,
       product_type: current.product_type || option?.label || '',
       seed_items: current.seed_items.map((item, itemIndex) => itemIndex === index ? (option ? {
+        ...item,
         product_key: key,
         product_label: option.label,
         unit_type: option.unit_type,
@@ -434,6 +426,7 @@ export default function SeedingLedger({ canManage = false }) {
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Could not save intake');
+      setFilters({ month: form.seeded_on ? monthKey(form.seeded_on) : 'undated', status: 'all', search: '' });
       setForm(emptyAdd());
       setContractFile(null);
       setContractUploadProgress(0);
@@ -484,44 +477,19 @@ export default function SeedingLedger({ canManage = false }) {
       <div className="forge-head">
         <div>
           <div className="forge-eyebrow">Product Seeding</div>
-          <h1>Creator Investment Ledger</h1>
+          <h1>Seeding & creator budgets</h1>
           <p className="forge-sub">
-            One place for seeded product, COGS, creator fees, deliverable promises, usage terms, and what still needs a follow-up.
+            Track monthly investment, see what’s left, and connect creator costs to ad returns.
           </p>
         </div>
         {canManage && (
           <button type="button" className="primary-action" onClick={() => setAdding(v => !v)}>
-            {adding ? 'Close' : 'Add creator investment'}
+            {adding ? 'Close intake' : 'Add creator or investment'}
           </button>
         )}
       </div>
 
       {error && <div className="app-error">{error}</div>}
-
-      <div className="seed-scoreboard">
-        <Score label="Total invested" value={fmt$(totals.total)} detail={`${totals.units.toLocaleString()} units seeded`} tone="hero" />
-        <Score label="Product COGS" value={fmt$(totals.cogs)} detail="Catalog-driven" />
-        <Score label="Creator fees" value={fmt$(totals.fees)} detail={`${openFeeIntents.length} fee notes open`} />
-        <Score label="Open shipments" value={totals.openShipments.toLocaleString()} detail="Not marked delivered" tone={totals.openShipments ? 'warn' : ''} />
-        <Score label="Need due date" value={totals.needsDue.toLocaleString()} detail="Deliverables promised" tone={totals.needsDue ? 'warn' : ''} />
-      </div>
-
-      <div className="seed-toolbar">
-        <input
-          value={filters.search}
-          onChange={event => setFilters({ ...filters, search: event.target.value })}
-          placeholder="Search creator, product, notes..."
-        />
-        <select value={filters.month} onChange={event => setFilters({ ...filters, month: event.target.value })}>
-          <option value="all">All months</option>
-          {months.map(month => <option key={month} value={month}>{month === 'undated' ? 'Undated' : fmtMo(month)}</option>)}
-        </select>
-        <select value={filters.status} onChange={event => setFilters({ ...filters, status: event.target.value })}>
-          <option value="all">All statuses</option>
-          {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          <option value="needs_deliverable">Needs due date</option>
-        </select>
-      </div>
 
       {adding && canManage && (
         <form className="seed-intake seed-card-panel" onSubmit={addRow}>
@@ -646,32 +614,28 @@ export default function SeedingLedger({ canManage = false }) {
         </form>
       )}
 
-      <div className="seed-grid">
-        <section className="seed-section">
-          <div className="seed-section-label">Monthly spend</div>
-          <table className="seed-rollup">
-            <thead>
-              <tr><th>Month</th><th>Creators</th><th>Units</th><th>COGS</th><th>Shipping</th><th>Fees</th><th>Total</th></tr>
-            </thead>
-            <tbody>
-              {data.rollup.map(r => (
-                <tr key={r.month}>
-                  <td>{fmtMo(r.month)}</td>
-                  <td>{r.creators}</td>
-                  <td>{r.units}</td>
-                  <td>{fmt$(r.cogs)}</td>
-                  <td>{fmt$(r.shipping)}</td>
-                  <td>{fmt$(r.fees)}</td>
-                  <td className="seed-total">{fmt$(r.total)}</td>
-                </tr>
-              ))}
-              {!data.rollup.length && <tr><td colSpan={7} className="seed-empty-cell">No dated rows yet.</td></tr>}
-            </tbody>
-          </table>
-        </section>
 
-        <section className="seed-section">
-          <div className="seed-section-label">Unit cost catalog</div>
+      {data?.report && <SeedingBudgetDashboard report={data.report} month={filters.month} onMonth={month => setFilters(current => ({ ...current, month }))} canManage={canManage} onSaved={load} />}
+
+      <div className="seed-toolbar">
+        <input
+          value={filters.search}
+          onChange={event => setFilters({ ...filters, search: event.target.value })}
+          aria-label="Search ledger" placeholder="Search creator, product, notes..."
+        />
+        <select aria-label="Ledger month" value={filters.month} onChange={event => setFilters({ ...filters, month: event.target.value })}>
+          <option value="all">All months</option>
+          {months.map(month => <option key={month} value={month}>{month === 'undated' ? 'Undated' : fmtMo(month)}</option>)}
+        </select>
+        <select aria-label="Ledger status" value={filters.status} onChange={event => setFilters({ ...filters, status: event.target.value })}>
+          <option value="all">All statuses</option>
+          {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          <option value="needs_deliverable">Needs due date</option>
+        </select>
+      </div>
+
+      <details className="seed-section">
+        <summary className="seed-section-label">Unit cost catalog</summary>
           <div className="seed-catalog">
             {units.map(u => (
               <div className="seed-unit" key={u.unit_type}>
@@ -683,11 +647,10 @@ export default function SeedingLedger({ canManage = false }) {
               </div>
             ))}
           </div>
-        </section>
-      </div>
+      </details>
 
       <section className="seed-section">
-        <div className="seed-section-label">Ledger - {filteredRows.length} rows</div>
+        <div className="seed-section-label">Ledger · {filters.month === 'all' ? 'All months' : filters.month === 'undated' ? 'Undated' : fmtMo(filters.month)} · {filteredRows.length} rows · {fmt$(totals.total)} recorded</div>
         <div className="seed-table-wrap">
           <table className="seed-table">
             <thead>
@@ -708,7 +671,7 @@ export default function SeedingLedger({ canManage = false }) {
                         <select value={editForm.seeding_status} onChange={e => setEditForm({ ...editForm, seeding_status: e.target.value })}>
                           {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                         </select>
-                        <input type="date" value={editForm.seeded_on} onChange={e => setEditForm({ ...editForm, seeded_on: e.target.value })} />
+                        <input aria-label="Seeded date" type="date" value={editForm.seeded_on} onChange={e => setEditForm({ ...editForm, seeded_on: e.target.value })} />
                         <input placeholder="Product seeded" value={editForm.product_label} onChange={e => setEditForm({ ...editForm, product_label: e.target.value })} />
                         <select value={editForm.unit_type} onChange={e => setEditForm({ ...editForm, unit_type: e.target.value, unit_cogs: String(catalogCost(e.target.value)) })}>
                           {units.map(u => <option key={u.unit_type} value={u.unit_type}>{u.unit_type}</option>)}
@@ -718,7 +681,7 @@ export default function SeedingLedger({ canManage = false }) {
                         <input type="number" step="0.01" placeholder="Shipping" value={editForm.shipping_cost} onChange={e => setEditForm({ ...editForm, shipping_cost: e.target.value })} />
                         <input type="number" step="0.01" placeholder="Fee" value={editForm.creator_fee} onChange={e => setEditForm({ ...editForm, creator_fee: e.target.value })} />
                         <input type="number" min="0" placeholder="Deliverables" value={editForm.agreed_deliverables} onChange={e => setEditForm({ ...editForm, agreed_deliverables: e.target.value })} />
-                        <input type="date" value={editForm.deliverable_due} onChange={e => setEditForm({ ...editForm, deliverable_due: e.target.value })} />
+                        <input aria-label="Deliverable due date" type="date" value={editForm.deliverable_due} onChange={e => setEditForm({ ...editForm, deliverable_due: e.target.value })} />
                         <input placeholder="Usage rights" value={editForm.usage_rights} onChange={e => setEditForm({ ...editForm, usage_rights: e.target.value })} />
                         <input className="wide" placeholder="Notes" value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} />
                         <div className="seed-edit-actions">
@@ -731,7 +694,7 @@ export default function SeedingLedger({ canManage = false }) {
                 ) : (
                   <tr key={r.id}>
                     <td><span className={`seed-status ${status}`}>{labelForStatus(status)}</span></td>
-                    <td>{r.seeded_on || '-'}</td>
+                    <td>{r.seeded_on ? String(r.seeded_on).slice(0, 10) : '-'}</td>
                     <td className="seed-creator">{r.creator_name}</td>
                     <td>{r.product_label || '-'}</td>
                     <td>{r.unit_type ? <span className="seed-unit-pill">{r.unit_type}</span> : '-'}</td>
@@ -741,7 +704,7 @@ export default function SeedingLedger({ canManage = false }) {
                     <td className="num">{r.creator_fee ? fmt$(r.creator_fee) : '-'}</td>
                     <td className="num seed-money">{fmt$(r.total_cost)}</td>
                     <td>{r.agreed_deliverables || '-'}</td>
-                    <td className={r.agreed_deliverables && !r.deliverable_due ? 'seed-risk' : ''}>{r.deliverable_due || '-'}</td>
+                    <td className={r.agreed_deliverables && !r.deliverable_due ? 'seed-risk' : ''}>{r.deliverable_due ? String(r.deliverable_due).slice(0, 10) : '-'}</td>
                     <td>{r.usage_rights || '-'}</td>
                     <td className="seed-note-cell">{r.notes || ''}</td>
                     {canManage && (
