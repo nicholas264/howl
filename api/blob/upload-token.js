@@ -1,3 +1,4 @@
+import { recordBlobUpload } from '../_lib/media-objects.js';
 import { uploadPolicy } from '../_lib/upload-policy.js';
 import { clerkSecretKey } from '../_lib/clerk-config.js';
 import { resolveEmail } from '../_lib/auth.js';
@@ -31,6 +32,7 @@ export default async function handler(req, res) {
 
   try {
     const sql = neon(process.env.DATABASE_URL);
+    if(req.body?.type==='blob.generate-client-token') {
     const rate = await checkRateLimit(sql, {
       route: 'blob-upload-token:post',
       key: rateLimitKey(req),
@@ -38,6 +40,7 @@ export default async function handler(req, res) {
       windowSeconds: 10 * 60,
     });
     if (!rate.allowed) return sendRateLimited(res, rate);
+    }
 
     let uploadLimits;
     const jsonResponse = await handleUpload({
@@ -45,6 +48,7 @@ export default async function handler(req, res) {
       request: req,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
         const policy=uploadPolicy(pathname);
+        let ownerId='local-dev';
         uploadLimits={maximumSizeInBytes:policy.maximumSizeInBytes,allowedContentTypes:policy.allowedContentTypes};
         // Local-dev escape hatch — matches requireAuth's behavior.
         const isLocalBypass = process.env.NODE_ENV !== 'production' && process.env.AUTH_DISABLED === 'true';
@@ -59,6 +63,7 @@ export default async function handler(req, res) {
             const access = await getAppAccess({
               userId, email,
             });
+            ownerId=userId;
             if (!access.user || access.user.status !== 'active') throw new Error('Active workspace membership required');
             if (!hasPermission(access, policy.permission)) {
               throw new Error(`${policy.permission} required for this upload`);
@@ -74,17 +79,17 @@ export default async function handler(req, res) {
           // Don't let the Clerk JWT (clientPayload) become the tokenPayload —
           // it inflates the signed clientToken past header limits and Blob
           // backend then rejects the PUT with a generic "Access denied".
-          tokenPayload: '',
+          tokenPayload: JSON.stringify({v:1,ownerId,scope:policy.permission.split('.')[0]}),
         };
       },
-      onUploadCompleted: async () => {
-        // Hook for future side effects. The session row is created by the client
-        // immediately after upload completes via /api/db/ugc-sessions.
+      onUploadCompleted: async payload=>{
+        try {await recordBlobUpload(sql,payload);}
+        catch(error){error.statusCode=503;throw error;}
       },
     });
     return res.status(200).json({...jsonResponse,...(uploadLimits?{uploadLimits}:{})});
   } catch (err) {
     console.error('blob upload token error', err);
-    return res.status(400).json({ error: err.message || 'Upload token failed' });
+    return res.status(err.statusCode || 400).json({ error: err.message || 'Upload token failed' });
   }
 }

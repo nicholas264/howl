@@ -1,3 +1,4 @@
+import { recordBlobUpload } from '../_lib/media-objects.js';
 import { handleUpload } from '@vercel/blob/client';
 import { neon } from '@neondatabase/serverless';
 
@@ -16,6 +17,7 @@ export default async function handler(req, res) {
 
   try {
     const sql = neon(process.env.DATABASE_URL);
+    if(req.body?.type==='blob.generate-client-token') {
     const rate = await checkRateLimit(sql, {
       route: 'blob-creator-upload-token:post',
       key: rateLimitKey(req),
@@ -23,6 +25,7 @@ export default async function handler(req, res) {
       windowSeconds: 10 * 60,
     });
     if (!rate.allowed) return sendRateLimited(res, rate);
+    }
 
     const jsonResponse = await handleUpload({
       body: req.body,
@@ -59,13 +62,16 @@ export default async function handler(req, res) {
           ],
           maximumSizeInBytes: 2 * 1024 * 1024 * 1024,
           addRandomSuffix: true,
-          tokenPayload: String(submission.id),
+          tokenPayload: JSON.stringify({v:1,ownerId:`creator-submit:${submission.id}`,scope:'submission'}),
         };
       },
-      onUploadCompleted: async () => {},
+      onUploadCompleted: async payload=>{
+        try {await recordBlobUpload(sql,payload);}
+        catch(error){error.statusCode=503;throw error;}
+      },
     });
     return res.status(200).json({...jsonResponse,uploadLimits:{maximumSizeInBytes:2*1024*1024*1024}});
   } catch (err) {
-    return res.status(400).json({ error: err.message || 'Upload token failed' });
+    return res.status(err.statusCode || 400).json({ error: err.message || 'Upload token failed' });
   }
 }

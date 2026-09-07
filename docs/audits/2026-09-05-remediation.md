@@ -392,3 +392,20 @@ size constraints and confirm session credentials are excluded.
 This is not private media storage. Existing direct URLs, server-side mirrors,
 render outputs, authenticated download gateways, ownership registration and safe
 reference-aware cleanup still require the coordinated storage migration.
+
+## Trusted browser-upload ownership
+
+New browser upload tokens carry compact server-issued owner/scope metadata, never
+Clerk session credentials. Signature-verified Blob completion callbacks record
+URL, path, owner, purpose and content type in app_media_objects. The configured
+store and purpose must match. Replays update last-seen time; an existing URL cannot
+change owners. Signed callback processing is independent of token-request rate
+limits, and registration failures return 503 for retry. Legacy tokens without
+ownership metadata are ignored rather than assigning an invented owner.
+
+All 93 regressions passed, including real SDK callback signature verification,
+forged callbacks, replay, ownership conflicts and database failure/retry. A fresh
+owner-only local backup restored 79 tables and 17,700 rows in 6.94 seconds and
+passed the expanded migrations. Production and isolated preview migrations passed.
+This does not prove offsite recovery or register old/server-side media; private
+access, existing-object attribution, downstream consumers and cleanup remain open.

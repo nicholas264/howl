@@ -164,3 +164,16 @@ concurrently changed journal leaves the send unresolved. Older attempts without
 the new provider/message-ID bindings require manual receipt review; do not change
 request keys to bypass the conflict. This verifies a sent message, not recipient
 delivery, bounce status or a reply.
+
+### Browser media ownership registry
+
+The media ownership release requires app_media_objects before deployment. The
+normal migration and offline backup verifier cover it. New direct browser uploads
+register ownership through signed Blob callbacks; no callback body supplied by
+a client can establish ownership without the provider signature. Legacy tokens
+with no ownership metadata do not backfill existing files. Callback failures
+return 503 and must remain observable during private-storage rollout.
+
+The September 7 pre-media-ownership local dump restored 79 tables and 17,700 rows
+and passed additive migrations. It is still local-only; the approved S3 destination
+remains unavailable under the current AWS permissions.

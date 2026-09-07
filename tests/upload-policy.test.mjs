@@ -26,7 +26,7 @@ test('the real Blob token encodes the selected upload constraints without sessio
   const res=response();await uploadToken(req,res);assert.equal(res.statusCode,200);
   const envelope=Buffer.from(res.body.clientToken.split('_').slice(4).join('_'),'base64').toString();
   const payload=JSON.parse(Buffer.from(envelope.slice(envelope.indexOf('.')+1),'base64').toString());
-  assert.equal(payload.maximumSizeInBytes,20*1024*1024);assert.deepEqual(payload.allowedContentTypes,['application/pdf']);assert.equal(payload.pathname,'creator-contracts/fixture.pdf');assert.equal(payload.onUploadCompleted.tokenPayload,'');
+  assert.equal(payload.maximumSizeInBytes,20*1024*1024);assert.deepEqual(payload.allowedContentTypes,['application/pdf']);assert.equal(payload.pathname,'creator-contracts/fixture.pdf');assert.deepEqual(JSON.parse(payload.onUploadCompleted.tokenPayload),{v:1,ownerId:'local-dev',scope:'creators'});
   assert.equal(res.body.uploadLimits.maximumSizeInBytes,payload.maximumSizeInBytes);assert.ok(!JSON.stringify(payload).includes('private-session-fixture'));
   const invalid=response();await uploadToken({...req,body:{...req.body,payload:{...req.body.payload,pathname:'other/file'}}},invalid);assert.equal(invalid.statusCode,400);assert.equal(invalid.body.clientToken,undefined);
  }finally{restore();for(const key of Object.keys(process.env))if(!(key in previous))delete process.env[key];Object.assign(process.env,previous);await db.close();}

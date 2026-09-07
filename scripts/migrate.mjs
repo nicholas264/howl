@@ -1,3 +1,4 @@
+import { ensureMediaObjects } from '../api/_lib/media-objects.js';
 import { grantRuntimeAccess } from './lib/runtime-grants.mjs';
 import { ensureLibrarySchema, ensureDriveLibrarySchema } from '../api/_lib/library-schema.js';
 import { ensureCreativeAssetTables } from '../api/_lib/creative-assets.js';
@@ -69,6 +70,7 @@ await ensureLocalReceipts(sql);
 await ensureWorkControls(sql);
 await ensureStudioTables(sql);
 await ensureLibrarySchema(sql);
+await ensureMediaObjects(sql);
 await ensureDriveLibrarySchema(sql);
 await ensureOperationalTables(sql);
 await ensureMonthlyMetrics(sql);
