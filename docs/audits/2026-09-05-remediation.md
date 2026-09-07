@@ -248,3 +248,11 @@ the source is retained, and retries the same request. The Blob SDK deletion mock
 is checked with a canary and blocks real network access. Reference-aware garbage
 collection and private media access remain unfinished; retention can accumulate
 unreferenced files until that lifecycle is implemented.
+
+## Recovery account binding
+
+Meta ad receipt recovery now requires the provider account, configured account,
+and journaled request account to agree. Invalid attempt timestamps fail closed.
+A real PostgreSQL regression verifies successful receipt/audit persistence and
+that a concurrent journal update preserves the winning result without recording
+a false recovery audit. Rejected provider evidence leaves the attempt uncertain.

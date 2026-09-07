@@ -3,15 +3,16 @@ import { stableJson } from './operation-journal.js';
 export function verifyRecoveredMetaAd(step,ad,accountId) {
   const payload=step.request_payload;
   if (!/^\d+:\/v[\d.]+\/act_[\w]+\/ads$/.test(step.step_key) || !payload) throw new Error('Only journaled Meta ad creation can use this recovery path');
-  if(String(ad.account_id)!==String(accountId).replace(/^act_/,''))throw new Error('The ad belongs to a different account');
+  const recordedAccount=step.step_key.match(/\/act_([^/]+)\/ads$/)?.[1];
+  if(recordedAccount!==String(accountId).replace(/^act_/,'') || String(ad.account_id)!==recordedAccount)throw new Error('The ad or original request belongs to a different account');
   const allowed=new Set(['name','adset_id','creative','status','tracking_specs']);
   if(Object.keys(payload).some(key=>!allowed.has(key)))throw new Error('This ad uses fields that cannot yet be verified automatically');
   const creative=typeof payload.creative==='string'?JSON.parse(payload.creative):payload.creative;
   if(!creative?.creative_id || String(ad.creative?.id)!==String(creative.creative_id)
     || String(ad.adset_id)!==String(payload.adset_id) || ad.name!==payload.name) throw new Error('The ad does not match the original creative, ad set, and name');
   if(payload.tracking_specs && stableJson(typeof payload.tracking_specs==='string'?JSON.parse(payload.tracking_specs):payload.tracking_specs)!==stableJson(ad.tracking_specs))throw new Error('Tracking configuration does not match');
-  const created=Date.parse(ad.created_time);
-  if(!Number.isFinite(created) || created<Date.parse(step.created_at)-120000 || created>Date.parse(step.updated_at)+300000)
+  const created=Date.parse(ad.created_time),started=Date.parse(step.created_at),updated=Date.parse(step.updated_at);
+  if(![created,started,updated].every(Number.isFinite) || updated<started || created<started-120000 || created>updated+300000)
     throw new Error('The ad creation time does not match this attempt');
   return {status:200,body:{id:String(ad.id)}};
 }

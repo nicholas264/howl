@@ -443,6 +443,8 @@ test('provider receipt recovery rejects an unrelated ad or account',()=>{
   assert.throws(()=>verifyRecoveredMetaAd(step,{...ad,account_id:'other'},'123'),/different account/);
   assert.throws(()=>verifyRecoveredMetaAd(step,{...ad,creative:{id:'other'}},'123'),/does not match/);
   assert.throws(()=>verifyRecoveredMetaAd(step,{...ad,created_time:'2000-01-01'},'123'),/creation time/);
+  assert.throws(()=>verifyRecoveredMetaAd({...step,step_key:'1:/v21.0/act_999/ads'},ad,'123'),/different account/);
+  assert.throws(()=>verifyRecoveredMetaAd({...step,created_at:'invalid'},ad,'123'),/creation time/);
 });
 
 test('transcription cannot run twice or replace edits made while processing',async()=>{
