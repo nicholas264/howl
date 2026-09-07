@@ -4,7 +4,7 @@ import { getApiToken } from '../apiFetch.js';
 import { uploadPublicBlob } from '../../utils/blobUpload.js';
 import { blankWorkspace } from './model.js';
 import { inspectImage, decodeImage } from './render.js';
-export const studioRequest = body => apiJson('/api/static-studio',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+export const studioRequest = body => apiJson('/api/static-studio',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,clientVersion:3})});
 export async function uploadStudioBlob(blob,kind='renders') {
   const ext=blob.type==='image/png'?'png':blob.type==='image/webp'?'webp':'jpg';
   const result=await uploadPublicBlob(`static-studio/${kind}/${crypto.randomUUID()}.${ext}`,blob,{contentType:blob.type,clientPayload:await getApiToken()});
@@ -37,7 +37,7 @@ export function useStudio() {
       const snapshot=current.current,serialized=JSON.stringify(snapshot);
       if(serialized===lastSaved.current)return snapshot;
       if(alive.current)setSaving(true);
-      try {const result=await studioRequest({action:'save',payload:snapshot,revision:revision.current});revision.current=result.revision;lastSaved.current=serialized;if(alive.current)setError('');return snapshot;}
+      try {const result=await studioRequest({action:'save',payload:snapshot,revision:revision.current});revision.current=result.revision;lastSaved.current=JSON.stringify(result.payload);if(current.current===snapshot){current.current=result.payload;if(alive.current)setState(result.payload);}if(alive.current)setError('');return result.payload;}
       catch(err){if(alive.current)setError(err.message);throw err;}
       finally {if(alive.current)setSaving(false);}
     });

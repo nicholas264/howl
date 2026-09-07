@@ -60,10 +60,14 @@ export function normalizeAsset(asset) {
     features, protectedRegion, assessment:normalizeAssessment(asset.assessment), notes:safeText(asset.notes,1200), analysis:safeText(asset.analysis,2000),
     driveId:safeText(asset.driveId,120),driveModified:safeText(asset.driveModified,80),createdAt:safeText(asset.createdAt,80)};
 }
+export function stableStringify(value) {
+  const canonical=v=>Array.isArray(v)?v.map(canonical):v && typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v;
+  return JSON.stringify(canonical(value));
+}
 export function conceptFingerprint(c, asset) {
   // An exact, readable input snapshot, not a security hash. Every editable design
   // field and source revision participates; any edit invalidates render/review.
-  return JSON.stringify([STUDIO_VERSION,RENDER_VERSION,c.productId,c.assetId,asset?.sha256,asset?.approved,asset?.productId,asset?.features,asset?.protectedRegion,
+  return stableStringify([STUDIO_VERSION,RENDER_VERSION,c.productId,c.assetId,asset?.sha256,asset?.approved,asset?.productId,asset?.features,asset?.protectedRegion,
     c.direction,c.headline,c.body,c.featureName,c.cta,c.scale,c.align,c.storyAlign,c.premise || '',c.visualIdea || '',c.claimIds || [],c.composition || null]);
 }
 export function normalizeConcept(c, assets) {

@@ -28,6 +28,7 @@ export default async function handler(req,res) {
     assert(JSON.stringify(req.body || {}).length<1500000,'Studio request is too large.');
     const {action}=req.body || {};
     if(action==='model-settings') return res.json({settings:await saveModelSettings(access.sql,access.userId,req.body.settings)});
+    assert(req.body.clientVersion===3,'Static Studio was updated. Reload this tab before continuing; your saved concepts are safe.');
     if(action==='save') return res.json(await saveStudio(access.sql,access.userId,req.body.payload,req.body.revision));
     if(action==='drive-list' || action==='drive-import') {
       const token=await studioDriveToken(access);

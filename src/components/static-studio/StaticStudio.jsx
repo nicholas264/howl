@@ -146,14 +146,18 @@ export default function StaticStudio({onAddToCart,onOpenLauncher,driveAuth}) {
     setMessage(`${round.length} concepts saved / ${round.filter(c=>c.render).length*2} exports. ${round.filter(c=>c.review?.verdict==='pass').length} pairs passed review. Inspect each pair before approval.`);
   }
   async function persistRender(c) {
-    const a=w.assets.find(a=>a.id===c.assetId);
+    const snapshot=await flush();c=snapshot.concepts.find(row=>row.id===c.id) || c;
+    const a=snapshot.assets.find(a=>a.id===c.assetId);
     const pair=previewRef.current?.fingerprint===conceptFingerprint(c,a)?previewRef.current:await renderPair(c,a);
     if(pair.checks.some(i=>i.level==='error'))throw new Error(`${productFor(c.productId).name}: fix the failed quality checks before exporting.`);
     const [feedUrl,storyUrl]=await Promise.all([uploadStudioBlob(pair.feed.blob),uploadStudioBlob(pair.story.blob)]);
     const next={...invalidate(c),render:{fingerprint:pair.fingerprint,feedUrl,storyUrl,checks:pair.checks}};
-    writeConcept(next);await flush();return next;
+    writeConcept(next);const saved=await flush(),persisted=saved.concepts.find(row=>row.id===c.id);
+    if(!persisted?.render)throw new Error('The server did not retain this render. Reload the updated Studio before retrying.');
+    return persisted;
   }
   async function reviewConcept(c=concept) {
+    c=(await flush()).concepts.find(row=>row.id===c.id) || c;
     const current=c.render?c:await persistRender(c);await flush();
     setBusy('Reviewing both exported placements');
     const {review}=await studioRequest({action:'review',conceptId:current.id});

@@ -29,6 +29,13 @@ test('product suggestions never become approval and warnings survive normalizati
   const assessment=normalizeAssessment({suggestedProductId:'r3',approved:true,productCount:'multiple',completeProduct:false,uncertainties:['Two units visible.']});
   assert.equal(assessment.approved,undefined);assert.deepEqual(assessment.uncertainties,['Two units visible.']);
 });
+test('database JSON key ordering cannot invalidate an unchanged render',()=>{
+  const c={direction:'field',composition:normalizeComposition(layout())},a={approved:true,productId:'r3',protectedRegion:{x:.2,y:.3,w:.4,h:.5,approved:false},features:[{name:'Gullwing Legs',x:.4,y:.7,approved:true}]};
+  const reorder=v=>Array.isArray(v)?v.map(reorder):v && typeof v==='object'?Object.fromEntries(Object.keys(v).reverse().map(k=>[k,reorder(v[k])])):v;
+  assert.equal(conceptFingerprint(c,a),conceptFingerprint(reorder(c),reorder(a)));
+  const changed=structuredClone(a);changed.protectedRegion.x=.21;
+  assert.notEqual(conceptFingerprint(c,a),conceptFingerprint(c,changed));
+});
 test('conflicting weights are caught even after a matching claim; tank capacity is not product weight',()=>{
   assert.equal(productClaimConflicts('r1','11 pounds. Runs on a 20 lb tank.').length,0);
   assert.equal(productClaimConflicts('r1','11 lbs packed. Also weighs 10 pounds.').length,1);
