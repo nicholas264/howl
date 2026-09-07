@@ -35,7 +35,11 @@ export async function assertLaunchReady(sql, input) {
   if (!external && !deliverableId) return;
   if (!deliverableId) throw Object.assign(new Error('Link the approved creator deliverable before launching this asset.'), { statusCode: 409 });
   const [deliverable] = await sql`
-    SELECT d.*, approval.snapshot AS approval_snapshot, e.paid_media_included, e.starts_on, e.ends_on, e.usage_term_months,
+    SELECT d.*, approval.snapshot AS approval_snapshot,
+      (approval.snapshot->>'context_version'='1'
+        AND approval.snapshot->'brief_snapshot' IS NOT DISTINCT FROM COALESCE((SELECT to_jsonb(b)-ARRAY['status','created_at','updated_at','generation_source','created_by']::text[] FROM creator_briefs b WHERE b.id=d.brief_id),'null'::jsonb)
+        AND approval.snapshot->'engagement_snapshot' IS NOT DISTINCT FROM COALESCE(to_jsonb(e)-ARRAY['status','approval_date','created_at','updated_at','created_by']::text[],'null'::jsonb)) AS approval_context_current,
+      e.paid_media_included, e.starts_on, e.ends_on, e.usage_term_months,
       e.status AS engagement_status,
       (SELECT MAX(a.accepted_at) FROM creator_agreements a
         WHERE a.engagement_id = d.engagement_id AND a.creator_id = d.creator_id AND a.status = 'accepted') AS accepted_at,
@@ -58,6 +62,7 @@ export async function assertLaunchReady(sql, input) {
   const approved = deliverable.approval_snapshot;
   if (!approved) fail('Review and approve the exact output again; this legacy approval has no immutable snapshot.');
   if (Number(approved.engagement_id) !== Number(deliverable.engagement_id) || Number(approved.brief_id) !== Number(deliverable.brief_id)) fail('Deliverable terms or brief changed since approval. Approve it again.');
+  if(!deliverable.approval_context_current) fail('Brief or engagement terms changed, or this approval lacks their snapshot. Review and approve the output again.');
   const expectedUrl = approved.output_url || approved.source_url;
   const actualUrls = media.ids.length ? media.verifiedUrls : media.urls;
   if (media.unresolvedCreative) fail('Creative has no verified creation receipt. Recreate it from the approved output through HOWL.');

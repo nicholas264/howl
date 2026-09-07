@@ -596,3 +596,21 @@ failure response cannot regress completed output. Browser polling reports a conf
 when its response is superseded, and cron recovery does not fail/release another
 attempt's work. Regression coverage compares the full saved session before/after
 completion replay and rejects contradictory completion and late failure writes.
+
+## Approval context snapshots — September 7
+
+Deliverable approvals now capture the linked brief content and engagement terms
+alongside the media fingerprint. Launch preflight compares those immutable snapshots
+with the current records rather than relying only on unchanged record IDs. A changed
+script or engagement restriction requires reapproval. Routine status/timestamp and
+creation-metadata changes are excluded from the comparison. Legacy snapshots without
+a context version require review again; a production aggregate check found zero
+current approval records in approved/complete/launched deliverables at this release.
+
+Regression coverage changes a linked script and engagement restriction independently,
+checks rejection, reapproves and verifies acceptance, and confirms a routine brief
+status change remains allowed. This is not approval of the full launch packet: copy,
+destination, placement, paired outputs and explicit rights exceptions still need a
+complete packet workflow. It also does not establish that changing engagement terms
+changes any previously accepted agreement; acceptance evidence remains a separate
+rights concern.

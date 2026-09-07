@@ -284,7 +284,8 @@ test('external creator launches require approval and current accepted paid-media
   await assert.rejects(assertLaunchReady(sql, { creatorId: 123 }), /deliverable/);
   const [creator] = await sql`INSERT INTO creators (name) VALUES ('Rights test') RETURNING id`;
   const [engagement] = await sql`INSERT INTO creator_engagements (creator_id,status,paid_media_included,usage_term_months) VALUES (${creator.id},'active',true,12) RETURNING id`;
-  const [deliverable] = await sql`INSERT INTO creator_deliverables (creator_id,engagement_id,title,status,approved_at) VALUES (${creator.id},${engagement.id},'Test','approved',now()) RETURNING id`;
+  const [brief]=await sql`INSERT INTO creator_briefs(creator_id,title,script) VALUES (${creator.id},'Reviewed brief','Reviewed script') RETURNING id`;
+  const [deliverable] = await sql`INSERT INTO creator_deliverables (creator_id,engagement_id,brief_id,title,status,approved_at) VALUES (${creator.id},${engagement.id},${brief.id},'Test','approved',now()) RETURNING id`;
   const input = { creatorId: creator.id, deliverableId: deliverable.id, sourceVideoUrl:'https://media.example/approved.mp4' };
   await ensureApprovalSnapshots(sql);
   const [review] = await sql`UPDATE creator_deliverables SET output_url = ${input.sourceVideoUrl} WHERE id = ${deliverable.id} RETURNING *`;
@@ -292,6 +293,18 @@ test('external creator launches require approval and current accepted paid-media
   await assert.rejects(assertLaunchReady(sql, input), /agreement/);
   await sql`INSERT INTO creator_agreements (creator_id,engagement_id,title,agreement_body,status,accepted_at) VALUES (${creator.id},${engagement.id},'Test','Terms','accepted',now())`;
   await assertLaunchReady(sql, input);
+  await sql`UPDATE creator_briefs SET script='Unreviewed script' WHERE id=${brief.id}`;
+  await assert.rejects(assertLaunchReady(sql,input),/terms changed/);
+  const [briefReview]=await sql`SELECT updated_at FROM creator_deliverables WHERE id=${deliverable.id}`;
+  assert.ok(await approveDeliverable(sql,deliverable.id,creator.id,briefReview.updated_at,'reviewer',{sha256:'approved-digest'}));
+  await assertLaunchReady(sql,input);
+  await sql`UPDATE creator_engagements SET exclusivity_notes='Changed restriction' WHERE id=${engagement.id}`;
+  await assert.rejects(assertLaunchReady(sql,input),/terms changed/);
+  const [termsReview]=await sql`SELECT updated_at FROM creator_deliverables WHERE id=${deliverable.id}`;
+  assert.ok(await approveDeliverable(sql,deliverable.id,creator.id,termsReview.updated_at,'reviewer',{sha256:'approved-digest'}));
+  await assertLaunchReady(sql,input);
+  await sql`UPDATE creator_briefs SET status='sent',updated_at=now() WHERE id=${brief.id}`;
+  await assertLaunchReady(sql,input);
   await sql`UPDATE creator_agreements SET accepted_at = now()-interval '2 years' WHERE engagement_id = ${engagement.id}`;
   await assert.rejects(assertLaunchReady(sql, input), /agreement/);
   await assertLaunchReady(sql, { sourceType: 'tool_generated' });
