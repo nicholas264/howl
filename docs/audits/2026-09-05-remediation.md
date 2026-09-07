@@ -138,6 +138,13 @@ not claim that the remaining infrastructure and product roadmap is complete.
   URL; reference-aware physical cleanup remains outstanding. Restricted-role
   endpoint tests cover library writes, cleared tags, and shared-object preservation.
 
+- Restricted runtime-role provisioning and grant-refresh tooling is prepared and
+  tested. It excludes migration-ledger access and verifies denial of schema changes
+  and TRUNCATE while allowing data operations and observation triggers. Creating the
+  persistent roles and switching Vercel targets awaits explicit approval; neither
+  production nor preview has switched credentials. See runtime-database-role.md
+  in the operations directory for the cutover and rollback procedure.
+
 ## Remaining work / external prerequisites
 
 1. Grant the narrowly scoped AWS permissions in `../operations/backup-provisioning-policy.json`,

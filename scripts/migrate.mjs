@@ -1,3 +1,4 @@
+import { grantRuntimeAccess } from './lib/runtime-grants.mjs';
 import { ensureLibrarySchema, ensureDriveLibrarySchema } from '../api/_lib/library-schema.js';
 import { ensureCreativeAssetTables } from '../api/_lib/creative-assets.js';
 import { ensureMapMonitorTables } from '../api/_lib/map-monitor.js';
@@ -81,4 +82,5 @@ await ensureTranscriptionJobs(sql);
 await ensureOperationJournal(sql);
 await sql`INSERT INTO app_schema_migrations (version) VALUES ('2026-09-05-hardening-2') ON CONFLICT DO NOTHING`;
 await ensureStudioCosts(sql);
+if (process.env.HOWL_RUNTIME_DB_ROLE) await grantRuntimeAccess(sql,process.env.HOWL_RUNTIME_DB_ROLE);
 console.log('Schema migrations applied.');

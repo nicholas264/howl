@@ -132,8 +132,8 @@ Run `npm run db:migrate` with the intended database selected before deploying to
 new database. Paid-work requests no longer create `app_work_lanes`, `app_work_runs`,
 `app_operation_budgets`, or `app_rate_limits`. The migration and offline backup
 verification cover these tables. Production tables were verified and the missing
-preview rate-limit table was migrated on September 6, 2026. Do not restrict the
-entire runtime role yet: other application paths still contain runtime DDL.
+preview rate-limit table was migrated on September 6, 2026. The request-time schema cleanup has since been deployed. Runtime-role provisioning
+and cutover still require approval and verification; see `runtime-database-role.md`.
 
 Workflow schema setup is also migration-only for provider/local receipts, operation
 journals, draft saves, transcription ownership, and approval snapshots. The existing
