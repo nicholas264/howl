@@ -175,7 +175,7 @@ export default async function handler(req, res) {
     if (!(await saveTranscription(sql,sessionId,sourceUrl.href,job,{words,duration,audioUrl:audioBlob.url})))
       throw Object.assign(new Error('Session changed during transcription. Your edits were preserved; reload before retrying.'),{statusCode:409});
 
-    return res.json({ words, duration, audioUrl: audioBlob.url });
+    return res.json({ words, duration, audioUrl: audioBlob.url, revision: Number(job.revision)+1 });
   } catch (err) {
     const message = redactPrivateMediaError(err,'Transcription failed');
     console.error('transcribe-url error', message);

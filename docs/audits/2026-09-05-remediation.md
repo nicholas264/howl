@@ -555,3 +555,12 @@ uncertainty remains quarantined separately. Regression checks cover competing an
 stale claims, guarded edits/publication/failure, interruption recovery, actual
 subprocess termination, and invalid requests leaving session state unchanged.
 Rendered output privacy and reference-aware orphan cleanup remain outstanding.
+
+## Saving after transcription — September 7
+
+Transcription returns the revision that its guarded database write committed. The
+editor retains that revision for automatic upload transcription, manual transcription
+and auto-edit transcription, so the next edit uses the correct optimistic-lock
+version. The handler regression now follows real FFmpeg extraction and a mocked
+speech response with a session edit using the returned revision, proving the next
+save succeeds. This does not substitute for real member browser verification.
