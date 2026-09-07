@@ -86,7 +86,7 @@ export function normalizeConcept(c, assets) {
   if(c.render?.fingerprint===fingerprint && validAssetUrl(c.render.feedUrl) && validAssetUrl(c.render.storyUrl)) {
     result.render={fingerprint,feedUrl:c.render.feedUrl,storyUrl:c.render.storyUrl,checks:(c.render.checks || []).slice(0,30).map(i=>({code:safeText(i.code,60),message:safeText(i.message,300),level:['pass','warning','error'].includes(i.level)?i.level:'error'}))};
   }
-  if(c.review?.fingerprint===fingerprint && result.render) result.review={fingerprint,summary:safeText(c.review.summary,2000),verdict:['pass','revise'].includes(c.review.verdict)?c.review.verdict:'revise',issues:(c.review.issues || []).slice(0,12).map(s=>safeText(s,300))};
+  if(c.review?.fingerprint===fingerprint && result.render) result.review={fingerprint,summary:safeText(c.review.summary,2000),verdict:['pass','revise'].includes(c.review.verdict)?c.review.verdict:'revise',issues:(c.review.issues || []).slice(0,12).map(s=>safeText(s,1000))};
   if(c.approval?.fingerprint===fingerprint && result.render && !result.render.checks.some(i=>i.level==='error')) result.approval={fingerprint,at:safeText(c.approval.at,80)};
   if(c.launchedToQueue && result.approval) result.launchedToQueue=true;
   return result;
