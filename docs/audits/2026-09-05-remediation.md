@@ -463,3 +463,25 @@ removing the four existing public objects because the user must explicitly autho
 their retirement. No deletion ran; all four original public URLs still returned 200
 after migration. The private copies and recovery copies remain intact. This requires
 approval before the `--retire-public` stage, not another copy or database migration.
+
+## Source-bound playback grants — September 7
+
+Playback grants now bind the session ID and a SHA-256 fingerprint of its stored
+source URL, with versioned claims, issued-at time and a maximum ten-minute lifetime.
+The source endpoint verifies the stored URL again before making a provider request,
+so replacing a session's video invalidates old links. Malformed framing, extra token
+segments, invalid IDs, future issuance and excessive lifetimes are rejected.
+
+Production, preview and development each received a distinct generated
+`UGC_SOURCE_TOKEN_SECRET`; production and preview values are sensitive Vercel
+variables. Signing requires that dedicated key. Clerk/database credentials and a
+static production fallback are no longer used. Missing signing configuration returns
+503 at issuance; grant responses disable caching. Existing playback links require a
+refresh after rollout. This does not sign users out of Clerk.
+
+Regression tests exercise the actual source endpoint: a valid HEAD request succeeds,
+then replacing its stored source causes the old grant to return 401 without another
+provider fetch. Unicode video filenames are encoded safely in Content-Disposition
+instead of producing invalid response headers. All 98 tests passed. This is a playback-access prerequisite; the one
+existing source video and eleven callout images remain public, and private processing,
+long-edit-session playback renewal and migration still need completion.

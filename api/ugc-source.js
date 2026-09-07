@@ -15,7 +15,7 @@ export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(405).end();
 
   const sessionId = Number(req.query?.id);
-  if (!sessionId) return res.status(400).json({ error: 'id required' });
+  if (!Number.isSafeInteger(sessionId) || sessionId<=0) return res.status(400).json({ error: 'id required' });
 
   let access = null;
   const token = Array.isArray(req.query?.token) ? req.query.token[0] : req.query?.token;
@@ -35,6 +35,7 @@ export default async function handler(req, res) {
     LIMIT 1
   `;
   if (!session?.video_url) return res.status(404).json({ error: 'Source not found' });
+  if(token && !verifyUgcSourceToken(token,sessionId,session.video_url))return res.status(401).json({error:'Playback source changed. Reload the video.'});
 
   let sourceUrl;
   try {
@@ -67,7 +68,8 @@ export default async function handler(req, res) {
     res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Content-Type', type);
     res.setHeader('Cache-Control', 'private, max-age=60');
-    res.setHeader('Content-Disposition', `inline; filename="${(session.file_name || `ugc-${sessionId}.mp4`).replace(/["\r\n\x00-\x1f\x7f]/g, '')}"`);
+    const fileName=encodeURIComponent(String(session.file_name || `ugc-${sessionId}.mp4`).slice(0,180)).replace(/['()*]/g,c=>'%'+c.charCodeAt(0).toString(16));
+    res.setHeader('Content-Disposition', `inline; filename="ugc-${sessionId}.mp4"; filename*=UTF-8''${fileName}`);
 
     if (req.method === 'HEAD') {
       if (range) {
