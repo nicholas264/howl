@@ -15,6 +15,7 @@ import {ensureOperationBudgets} from '../api/_lib/operation-budget.js';
 import {ensureTranscriptionJobs} from '../api/_lib/transcription-jobs.js';
 import {useTestDatabase} from './neon-test-adapter.mjs';
 import transcribe from '../api/transcribe-url.js';
+import {saveSessionEdits} from '../api/_lib/session-edits.js';
 
 test('private source transcription decodes media and keeps extracted audio private while saving the transcript',async()=>{
  const directory=mkdtempSync(join(tmpdir(),'private-transcription-')),db=new PGlite(),restore=useTestDatabase(db),previous={...process.env},originalFetch=globalThis.fetch;
@@ -40,6 +41,8 @@ test('private source transcription decodes media and keeps extracted audio priva
   await transcribe({method:'POST',headers:{},body:{sessionId:session.id}},res);
   assert.equal(res.statusCode,200,JSON.stringify(res.body));assert.equal(sourceReads,1);assert.equal(whisperCalls,1);assert.equal(audioUploads,1);
   const [saved]=await sql`SELECT status,audio_url,revision FROM ugc_sessions WHERE id=${session.id}`;
+  assert.equal(res.body.revision,saved.revision);
+  assert.ok(await saveSessionEdits(sql,session.id,{title:'Edited after transcription'},res.body.revision));
   assert.equal(saved.status,'transcribed');assert.equal(saved.revision,1);assert.ok(saved.audio_url.startsWith('https://fixture.private.blob.vercel-storage.com/ugc-audio/'));
   assert.equal((await sql`SELECT owner_id FROM app_media_objects WHERE url=${saved.audio_url}`)[0].owner_id,'local-dev');
  }finally{globalThis.fetch=originalFetch;setGlobalDispatcher(dispatcher);await mock.close();restore();for(const k of Object.keys(process.env))if(!(k in previous))delete process.env[k];Object.assign(process.env,previous);await db.close();rmSync(directory,{recursive:true,force:true});}

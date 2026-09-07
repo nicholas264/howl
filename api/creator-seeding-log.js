@@ -1,5 +1,5 @@
+import { getSeedingReport } from './_lib/seeding-report.js';
 import { requirePermission } from './_lib/app-access.js';
-
 
 function text(value, max = 1000) {
   const result = (value ?? '').toString().trim();
@@ -38,7 +38,6 @@ export default async function handler(req, res) {
 
   try {
 
-
     if (req.method === 'GET') {
       const units = await sql`SELECT unit_type, cogs::float AS cogs, active FROM seeding_units ORDER BY cogs DESC`;
       const rows = await sql`
@@ -48,7 +47,6 @@ export default async function handler(req, res) {
         FROM creator_seeding_log l
         JOIN creators c ON c.id = l.creator_id
         ORDER BY l.seeded_on DESC NULLS LAST, l.created_at DESC
-        LIMIT 2000
       `;
       const rollup = await sql`
         SELECT
@@ -64,7 +62,8 @@ export default async function handler(req, res) {
         GROUP BY 1
         ORDER BY 1 DESC
       `;
-      return res.json({ rows, units, rollup });
+      const report = await getSeedingReport(sql);
+      return res.json({ rows, units, rollup, report });
     }
 
     if (req.method === 'POST') {
@@ -98,6 +97,18 @@ export default async function handler(req, res) {
 
     if (req.method === 'PATCH') {
       const body = req.body || {};
+      if (body.action === 'budget') {
+        const month = String(body.month || '');
+        const seeding = num(body.seeding), creator = num(body.creator);
+        if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || ![seeding, creator].every(v => v !== null && v >= 0 && v <= 999999999999.99)) {
+          return res.status(400).json({ error: 'Choose a valid month and non-negative budgets.' });
+        }
+        await sql`INSERT INTO creator_monthly_budgets (month, seeding, creator, updated_by)
+          VALUES (${month}, ${seeding}, ${creator}, ${userId})
+          ON CONFLICT (month) DO UPDATE SET seeding = EXCLUDED.seeding, creator = EXCLUDED.creator,
+            updated_by = EXCLUDED.updated_by, updated_at = now()`;
+        return res.json({ ok: true });
+      }
       // Update a unit cost in the catalog.
       if (body.action === 'unit') {
         const unitType = text(body.unit_type, 60);

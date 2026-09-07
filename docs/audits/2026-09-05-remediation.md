@@ -555,3 +555,82 @@ uncertainty remains quarantined separately. Regression checks cover competing an
 stale claims, guarded edits/publication/failure, interruption recovery, actual
 subprocess termination, and invalid requests leaving session state unchanged.
 Rendered output privacy and reference-aware orphan cleanup remain outstanding.
+
+## Saving after transcription — September 7
+
+Transcription returns the revision that its guarded database write committed. The
+editor retains that revision for automatic upload transcription, manual transcription
+and auto-edit transcription, so the next edit uses the correct optimistic-lock
+version. The handler regression now follows real FFmpeg extraction and a mocked
+speech response with a session edit using the returned revision, proving the next
+save succeeds. This does not substitute for real member browser verification.
+
+## Render failure privacy — September 7
+
+Lambda status polling and background render recovery redact private media URLs
+from provider errors before returning or persisting them. The browser status route
+no longer returns the raw provider progress object on a fatal error, because nested
+provider diagnostics can contain signed source capabilities. Recovery regressions
+exercise both fatal render errors and thrown polling errors and verify that neither
+the returned result nor the stored session error retains the signed URL.
+
+## Existing source migration preparation — September 7
+
+A fresh production inventory confirms one remaining public editor source (session 1,
+51,370,969 bytes), with an owner and no references outside its session. Private-video
+migration tooling now verifies a recovery copy, source hashes, exact destination,
+anonymous denial, unchanged row state and registry ownership. A single database
+statement updates the session and registration or rolls back both; tests cover
+concurrent edits, registration failure and replay. The tooling never deletes the
+public original. Execution was rejected before starting by automatic approval review
+pending explicit approval of this production video and private destination. See
+`../operations/private-video-migration.md`; no source video was migrated in this step.
+
+## Terminal render state protection — September 7
+
+Lambda completion only publishes while the matching render is active. Replaying
+the same completed render/output returns its existing receipt without rewriting
+session history, timestamps or deliverables; a contradictory output is rejected.
+Provider failure updates likewise require the matching active render, so a late
+failure response cannot regress completed output. Browser polling reports a conflict
+when its response is superseded, and cron recovery does not fail/release another
+attempt's work. Regression coverage compares the full saved session before/after
+completion replay and rejects contradictory completion and late failure writes.
+
+## Approval context snapshots — September 7
+
+Deliverable approvals now capture the linked brief content and engagement terms
+alongside the media fingerprint. Launch preflight compares those immutable snapshots
+with the current records rather than relying only on unchanged record IDs. A changed
+script or engagement restriction requires reapproval. Routine status/timestamp and
+creation-metadata changes are excluded from the comparison. Legacy snapshots without
+a context version require review again; a production aggregate check found zero
+current approval records in approved/complete/launched deliverables at this release.
+
+Regression coverage changes a linked script and engagement restriction independently,
+checks rejection, reapproves and verifies acceptance, and confirms a routine brief
+status change remains allowed. This is not approval of the full launch packet: copy,
+destination, placement, paired outputs and explicit rights exceptions still need a
+complete packet workflow. It also does not establish that changing engagement terms
+changes any previously accepted agreement; acceptance evidence remains a separate
+rights concern.
+
+## Agreement terms and consent binding — September 7
+
+New generated agreements persist the engagement terms and creator details used to
+prepare their text. Creation compares the engagement row with that reviewed snapshot
+before inserting, returning a conflict if it changed. The public agreement view uses
+the stored terms and party details rather than later engagement/profile edits.
+Acceptance requires the content digest returned by the viewed agreement and guards
+its database write against changed text, metadata, recipient and version. Agreement
+responses are private/no-store. A legacy link without verified terms requires a new
+agreement; a fresh production inventory found four uploaded PDFs and no token links,
+so this release does not reinterpret an existing live acceptance link.
+
+Paid-media preflight additionally requires an accepted agreement whose stored terms
+match the current engagement. Reapproving a deliverable alone does not make changed
+terms accepted. Tests exercise the actual preparation/view/acceptance handlers,
+changed fees/duration/party details, changed consent text, a racing preparation,
+legacy rejection and launch rejection until a matching accepted agreement exists.
+Tests use isolated records and do not send agreements or create production consent.
+The full launch-packet approval workflow remains outstanding.

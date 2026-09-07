@@ -20,7 +20,7 @@ import { initializeSchema } from '../api/db/schema.js';
 import { enqueueCreativeAssetAnalysis, enqueueCreativeAnalyses, claimCreativeAnalysisJob, claimManualCreativeAnalysis, deferCreativeAnalysisJob, completeCreativeAnalysisJob, failCreativeAnalysisJob } from '../api/_lib/creative-analysis-queue.js';
 import { saveSessionEdits } from '../api/_lib/session-edits.js';
 import { reserveOperationBudget } from '../api/_lib/operation-budget.js';
-import { completeRender } from '../api/_lib/render-completion.js';
+import { completeRender, failRender } from '../api/_lib/render-completion.js';
 import { syncCreativeAnalytics } from '../api/_lib/meta/sync.js';
 import { assertLaunchReady } from '../api/_lib/launch-preflight.js';
 import { ensureLaunchDrafts, saveLaunchDraft } from '../api/_lib/launch-drafts.js';
@@ -227,12 +227,18 @@ test('daily seeding reservations are atomic and retries reuse their reservation'
 test('stale render completion cannot replace a current render or regress a launched deliverable', async () => {
   const [creator] = await sql`INSERT INTO creators (name) VALUES ('Render test') RETURNING id`;
   const [deliverable] = await sql`INSERT INTO creator_deliverables (creator_id,title,status,output_url) VALUES (${creator.id},'Approved output','launched','approved.mp4') RETURNING id`;
-  const [session] = await sql`INSERT INTO ugc_sessions (video_url,creator_id,deliverable_id,settings)
-    VALUES ('source.mp4',${creator.id},${deliverable.id},'{"captionScale":2,"remotion_render":{"render_id":"B"}}'::jsonb) RETURNING id`;
+  const [session] = await sql`INSERT INTO ugc_sessions (video_url,status,creator_id,deliverable_id,settings)
+    VALUES ('source.mp4','rendering',${creator.id},${deliverable.id},'{"captionScale":2,"remotion_render":{"render_id":"B"}}'::jsonb) RETURNING id`;
   assert.equal(await completeRender(sql, session.id, { render_id: 'A' }, 'old.mp4'), null);
   assert.ok(await completeRender(sql, session.id, { render_id: 'B' }, 'new.mp4'));
+  const [first]=await sql`SELECT to_jsonb(u) AS snapshot FROM ugc_sessions u WHERE id=${session.id}`;
+
   assert.ok(await completeRender(sql, session.id, { render_id: 'B' }, 'new.mp4'));
   const [saved] = await sql`SELECT * FROM ugc_sessions WHERE id = ${session.id}`;
+  const [replayed]=await sql`SELECT to_jsonb(u) AS snapshot FROM ugc_sessions u WHERE id=${session.id}`;
+  assert.deepEqual(replayed,first);
+  assert.equal(await completeRender(sql,session.id,{render_id:'B'},'contradictory.mp4'),null);
+  assert.equal(await failRender(sql,session.id,'B','Late provider error'),false);
   assert.equal(saved.settings.captionScale, 2);
   assert.equal(saved.settings.remotion_renders.length, 1);
   assert.equal(saved.rendered_url, 'new.mp4');
@@ -278,14 +284,29 @@ test('external creator launches require approval and current accepted paid-media
   await assert.rejects(assertLaunchReady(sql, { creatorId: 123 }), /deliverable/);
   const [creator] = await sql`INSERT INTO creators (name) VALUES ('Rights test') RETURNING id`;
   const [engagement] = await sql`INSERT INTO creator_engagements (creator_id,status,paid_media_included,usage_term_months) VALUES (${creator.id},'active',true,12) RETURNING id`;
-  const [deliverable] = await sql`INSERT INTO creator_deliverables (creator_id,engagement_id,title,status,approved_at) VALUES (${creator.id},${engagement.id},'Test','approved',now()) RETURNING id`;
+  const [brief]=await sql`INSERT INTO creator_briefs(creator_id,title,script) VALUES (${creator.id},'Reviewed brief','Reviewed script') RETURNING id`;
+  const [deliverable] = await sql`INSERT INTO creator_deliverables (creator_id,engagement_id,brief_id,title,status,approved_at) VALUES (${creator.id},${engagement.id},${brief.id},'Test','approved',now()) RETURNING id`;
   const input = { creatorId: creator.id, deliverableId: deliverable.id, sourceVideoUrl:'https://media.example/approved.mp4' };
   await ensureApprovalSnapshots(sql);
   const [review] = await sql`UPDATE creator_deliverables SET output_url = ${input.sourceVideoUrl} WHERE id = ${deliverable.id} RETURNING *`;
   assert.ok(await approveDeliverable(sql,deliverable.id,creator.id,review.updated_at,'reviewer',{sha256:'approved-digest'}));
   await assert.rejects(assertLaunchReady(sql, input), /agreement/);
-  await sql`INSERT INTO creator_agreements (creator_id,engagement_id,title,agreement_body,status,accepted_at) VALUES (${creator.id},${engagement.id},'Test','Terms','accepted',now())`;
+  await sql`INSERT INTO creator_agreements (creator_id,engagement_id,title,agreement_body,status,accepted_at,source_metadata) SELECT ${creator.id},${engagement.id},'Test','Terms','accepted',now(),jsonb_build_object('terms_version',1,'engagement_snapshot',to_jsonb(e)) FROM creator_engagements e WHERE id=${engagement.id}`;
   await assertLaunchReady(sql, input);
+  await sql`UPDATE creator_briefs SET script='Unreviewed script' WHERE id=${brief.id}`;
+  await assert.rejects(assertLaunchReady(sql,input),/terms changed/);
+  const [briefReview]=await sql`SELECT updated_at FROM creator_deliverables WHERE id=${deliverable.id}`;
+  assert.ok(await approveDeliverable(sql,deliverable.id,creator.id,briefReview.updated_at,'reviewer',{sha256:'approved-digest'}));
+  await assertLaunchReady(sql,input);
+  await sql`UPDATE creator_engagements SET exclusivity_notes='Changed restriction' WHERE id=${engagement.id}`;
+  await assert.rejects(assertLaunchReady(sql,input),/agreement/);
+  const [termsReview]=await sql`SELECT updated_at FROM creator_deliverables WHERE id=${deliverable.id}`;
+  assert.ok(await approveDeliverable(sql,deliverable.id,creator.id,termsReview.updated_at,'reviewer',{sha256:'approved-digest'}));
+  await assert.rejects(assertLaunchReady(sql,input),/agreement/);
+  await sql`INSERT INTO creator_agreements (creator_id,engagement_id,title,agreement_body,status,accepted_at,source_metadata) SELECT ${creator.id},${engagement.id},'Test','Terms','accepted',now(),jsonb_build_object('terms_version',1,'engagement_snapshot',to_jsonb(e)) FROM creator_engagements e WHERE id=${engagement.id}`;
+  await assertLaunchReady(sql,input);
+  await sql`UPDATE creator_briefs SET status='sent',updated_at=now() WHERE id=${brief.id}`;
+  await assertLaunchReady(sql,input);
   await sql`UPDATE creator_agreements SET accepted_at = now()-interval '2 years' WHERE engagement_id = ${engagement.id}`;
   await assert.rejects(assertLaunchReady(sql, input), /agreement/);
   await assertLaunchReady(sql, { sourceType: 'tool_generated' });
@@ -515,4 +536,17 @@ test('work-budget deferral preserves retries and refuses a replaced lease', asyn
   assert.equal((await deferCreativeAnalysisJob(sql,job,'limit')).length,1);
   const [row]=await sql`SELECT status,attempts,lease_token FROM creative_analysis_queue WHERE group_key=${group}`;
   assert.deepEqual(row,{status:'pending',attempts:0,lease_token:null});
+});
+
+test('render recovery never persists or returns private signed URLs from provider failures',async()=>{
+ const signed='https://fixture.private.blob.vercel-storage.com/ugc-source/video.mp4?signature=private-capability';
+ for(const fatal of [true,false]){
+  const [session]=await sql`INSERT INTO ugc_sessions(video_url,status,settings) VALUES ('source','rendering',${JSON.stringify({remotion_render:{render_id:'privacy-'+fatal,bucket_name:'bucket',region:'us-east-1',function_name:'function'}})}::jsonb) RETURNING id`;
+  const results=await recoverRenders(sql,async()=>{if(!fatal)throw new Error('Fetch failed '+signed);return {fatalErrorEncountered:true,errors:[{message:'Could not decode '+signed}]};});
+  const result=results.find(row=>row.id===session.id);
+  assert.equal(result.status,fatal?'failed':'poll_error');
+  const [saved]=await sql`SELECT last_error FROM ugc_sessions WHERE id=${session.id}`;
+  const output=JSON.stringify({result,saved});assert.ok(!output.includes('private-capability'));assert.ok(!output.includes(signed));assert.ok(output.includes('[private media]'));
+  await sql`DELETE FROM ugc_sessions WHERE id=${session.id}`;
+ }
 });

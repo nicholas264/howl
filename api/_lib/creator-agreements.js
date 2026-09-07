@@ -1,3 +1,4 @@
+import {digest} from './operation-journal.js';
 import { createHash } from 'node:crypto';
 
 export function agreementTokenHash(token) {
@@ -50,7 +51,7 @@ export async function getAgreementByToken(sql, token) {
   if (!token || token.length < 32 || token.length > 200) return null;
   const [agreement] = await sql`
     SELECT
-      a.id, a.creator_id, a.engagement_id, a.title, a.agreement_body,
+      a.id, a.creator_id, a.engagement_id, a.title, a.agreement_body, a.source_metadata,
       a.version, a.status, a.expires_at, a.sent_to, a.sent_at, a.viewed_at,
       a.accepted_name, a.accepted_email, a.accepted_at, a.created_at,
       c.name AS creator_name, c.email AS creator_email,
@@ -64,5 +65,15 @@ export async function getAgreementByToken(sql, token) {
     WHERE a.token_hash = ${agreementTokenHash(token)}
     LIMIT 1
   `;
-  return agreement || null;
+  if(!agreement)return null;
+  const snapshot=agreement.source_metadata?.engagement_snapshot;
+  agreement.terms_snapshot_valid=agreement.source_metadata?.terms_version===1 && snapshot && Number(snapshot.id)===Number(agreement.engagement_id) && Number(snapshot.creator_id)===Number(agreement.creator_id);
+  if(agreement.terms_snapshot_valid){
+    const party=agreement.source_metadata.creator_snapshot;
+    if(party && Number(party.id)===Number(agreement.creator_id)){agreement.creator_name=party.name;agreement.creator_email=party.email;}
+    for(const key of ['engagement_type','approval_date','starts_on','ends_on','asset_commitment','commitment_period','cadence','fee_amount','fee_currency','usage_term_months','paid_media_included','raw_footage_included','exclusivity_notes','payment_terms'])agreement[key]=snapshot[key] ?? null;
+  }
+  return agreement;
 }
+
+export const agreementConsentDigest=agreement=>digest({id:String(agreement.id),version:agreement.version,title:agreement.title,body:agreement.agreement_body,terms:agreement.source_metadata,sent_to:agreement.sent_to,expires_at:agreement.expires_at instanceof Date?agreement.expires_at.toISOString():agreement.expires_at});

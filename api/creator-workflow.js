@@ -844,7 +844,7 @@ export default async function handler(req, res) {
         const templateId = Number(body.template_id) || null;
         if (!engagementId) return res.status(400).json({ error: 'Engagement is required' });
         const [engagement] = await sql`
-          SELECT * FROM creator_engagements
+          SELECT e.*,to_jsonb(e) AS terms_snapshot FROM creator_engagements e
           WHERE id = ${engagementId} AND creator_id = ${creatorId}
         `;
         if (!engagement) return res.status(400).json({ error: 'Engagement does not belong to this creator' });
@@ -878,13 +878,15 @@ export default async function handler(req, res) {
         const [agreement] = await sql`
           INSERT INTO creator_agreements (
             creator_id, engagement_id, template_id, template_version, title, agreement_body, version, status,
-            token_hash, expires_at, created_by
-          ) VALUES (
+            token_hash, expires_at, created_by, source_metadata
+          ) SELECT
             ${creatorId}, ${engagementId}, ${templateId}, ${templateVersion}, ${title}, ${agreementBody}, ${versionRow.version},
-            'draft', ${agreementTokenHash(token)}, ${expiresAt}, ${access.userId}
-          )
+            'draft', ${agreementTokenHash(token)}, ${expiresAt}, ${access.userId},
+            ${JSON.stringify({terms_version:1,engagement_snapshot:engagement.terms_snapshot,creator_snapshot:creator})}::jsonb
+          FROM creator_engagements e WHERE e.id=${engagementId} AND to_jsonb(e)=${JSON.stringify(engagement.terms_snapshot)}::jsonb
           RETURNING id, creator_id, engagement_id, template_id, template_version, title, version, status, expires_at, created_at
         `;
+        if(!agreement)return res.status(409).json({error:'Engagement changed while preparing the agreement. Review its terms and retry.'});
         await sql`
           INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
           VALUES (

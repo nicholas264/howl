@@ -11,7 +11,10 @@ export async function approveDeliverable(sql, id, creatorId, expectedUpdatedAt, 
   if (!evidence?.sha256 && !evidence?.drive_md5) throw new Error('Verified output content is required for approval');
   const [saved] = await sql`
     WITH current AS MATERIALIZED (
-      SELECT d.* FROM creator_deliverables d
+      SELECT d.*,
+        (SELECT to_jsonb(b)-ARRAY['status','created_at','updated_at','generation_source','created_by']::text[] FROM creator_briefs b WHERE b.id=d.brief_id) AS brief_snapshot,
+        (SELECT to_jsonb(e)-ARRAY['status','approval_date','created_at','updated_at','created_by']::text[] FROM creator_engagements e WHERE e.id=d.engagement_id) AS engagement_snapshot
+      FROM creator_deliverables d
       WHERE d.id = ${id} AND d.creator_id = ${creatorId} AND d.updated_at = ${expectedUpdatedAt}::timestamptz
         AND (d.output_url IS NOT NULL OR d.source_url IS NOT NULL OR d.drive_file_id IS NOT NULL)
       FOR UPDATE
@@ -20,7 +23,8 @@ export async function approveDeliverable(sql, id, creatorId, expectedUpdatedAt, 
       SELECT id,creator_id,${actorId},jsonb_build_object(
         'output_url',output_url,'source_url',source_url,'drive_file_id',CASE WHEN output_url IS NULL THEN drive_file_id ELSE NULL END,
         'ugc_session_id',ugc_session_id,'creative_asset_id',creative_asset_id,
-        'engagement_id',engagement_id,'brief_id',brief_id,'deliverable_updated_at',updated_at,'evidence',${JSON.stringify(evidence)}::jsonb
+        'engagement_id',engagement_id,'brief_id',brief_id,'context_version',1,
+        'brief_snapshot',brief_snapshot,'engagement_snapshot',engagement_snapshot,'deliverable_updated_at',updated_at,'evidence',${JSON.stringify(evidence)}::jsonb
       ) FROM current RETURNING id,deliverable_id,approved_at
     )
     UPDATE creator_deliverables d SET status = 'approved', approval_id = approval.id,

@@ -44,7 +44,7 @@ export default function CreatorAgreementPage() {
       const response = await fetch('/api/creator-agreement', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, accepted_name: acceptedName, accepted_email: acceptedEmail, confirmed }),
+        body: JSON.stringify({ token, accepted_name: acceptedName, accepted_email: acceptedEmail, confirmed, consent_digest: agreement.consent_digest }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not accept this agreement');

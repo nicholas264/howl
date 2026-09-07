@@ -14,7 +14,7 @@ export function useTestDatabase(db, beforeQuery = () => {}, afterQuery = () => {
         if ([114,3802].includes(field.dataTypeID)) return JSON.stringify(value);
         // PostgreSQL text timestamps use a space separator; the pg parser rejects
         // ISO's T separator. Preserve timestamptz UTC offset for the real decoder.
-        if (value instanceof Date) return value.toISOString().replace('T',' ').replace('Z','+00');
+        if (value instanceof Date) return field.dataTypeID === 1082 ? value.toISOString().slice(0, 10) : value.toISOString().replace('T',' ').replace('Z','+00');
         if (typeof value === 'boolean') return value ? 't' : 'f';
         if (Array.isArray(value)) return `{${value.map(item=>item == null ? 'NULL' : '"'+String(item).replaceAll('\\','\\\\').replaceAll('"','\\"')+'"').join(',')}}`;
         return String(value);

@@ -522,7 +522,8 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         setStage('transcribing');
         setLogTail('Upload saved. Extracting audio and building word-level captions...');
         try {
-          const { words: nextWords, duration: nextDuration } = await transcribeSession(session.id);
+          const { words: nextWords, duration: nextDuration, revision } = await transcribeSession(session.id);
+          if(Number.isInteger(revision))savedRevisions.current.set(session.id,revision);
           setWords(nextWords);
           setDuration(nextDuration);
           setStage('ready');
@@ -633,7 +634,8 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
     setProgress(0);
     setError('');
     try {
-      const { words: ws, duration: nextDuration } = await transcribeSession(activeSession.id);
+      const { words: ws, duration: nextDuration, revision } = await transcribeSession(activeSession.id);
+      if(Number.isInteger(revision))savedRevisions.current.set(activeSession.id,revision);
       setWords(ws);
       setDuration(nextDuration);
       setStage('ready');
@@ -1092,6 +1094,7 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
         setStage('transcribing');
         setLogTail('Extracting audio and building word-level captions...');
         const transcript = await transcribeSession(activeSession.id);
+        if(Number.isInteger(transcript.revision))savedRevisions.current.set(activeSession.id,transcript.revision);
         nextWords = transcript.words;
         nextDuration = transcript.duration;
         setWords(nextWords);
@@ -1876,7 +1879,7 @@ async function transcribeSession(sessionId) {
     end: w.end,
     kept: w.kept !== false,
   }));
-  return { words: ws, duration: data.duration || (ws.length ? ws[ws.length - 1].end : 0) };
+  return { words: ws, duration: data.duration || (ws.length ? ws[ws.length - 1].end : 0), revision: data.revision };
 }
 
 async function requestCleanup(sessionId, options = {}) {

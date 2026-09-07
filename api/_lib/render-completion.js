@@ -7,7 +7,7 @@ export async function completeRender(sql, sessionId, renderState, outputFile, co
     duration_in_frames: renderState.duration_in_frames || null, rendered_at: new Date().toISOString(),
     costs: costs || null, settings: renderState.input?.settings || null,
   };
-  const [saved] = await sql`
+  let [saved] = await sql`
     WITH saved AS (
       UPDATE ugc_sessions u SET rendered_url = ${outputFile}, status = 'rendered', last_error = NULL,
         settings = jsonb_set(COALESCE(u.settings, '{}'::jsonb), '{remotion_renders}',
@@ -21,7 +21,7 @@ export async function completeRender(sql, sessionId, renderState, outputFile, co
               ORDER BY ordinal LIMIT 11
             ) prior
           ), '[]'::jsonb)), updated_at = now()
-      WHERE u.id = ${sessionId} AND u.settings->'remotion_render'->>'render_id' = ${renderState.render_id}
+      WHERE u.id = ${sessionId} AND u.status='rendering' AND u.settings->'remotion_render'->>'render_id' = ${renderState.render_id}
       RETURNING id, creator_id, deliverable_id
     ), deliverable_update AS (
       UPDATE creator_deliverables d SET output_url = ${outputFile}, status = 'edited',
@@ -31,7 +31,17 @@ export async function completeRender(sql, sessionId, renderState, outputFile, co
         AND d.status IN ('requested', 'received', 'editing', 'edited')
     ) SELECT id FROM saved
   `;
+  if(!saved){
+    [saved]=await sql`SELECT id FROM ugc_sessions WHERE id=${sessionId} AND status='rendered'
+      AND rendered_url=${outputFile} AND settings->'remotion_render'->>'render_id'=${renderState.render_id}`;
+  }
   if (saved && renderState.work_id) await finishWork(sql,renderState.work_id,'render',200,
     {provider:'remotion',costUsd:Number.isFinite(costs?.accruedSoFar) ? costs.accruedSoFar : null});
   return saved || null;
+}
+
+export async function failRender(sql,sessionId,renderId,message) {
+ const [failed]=await sql`UPDATE ugc_sessions SET status='render_error',last_error=${message},updated_at=now()
+  WHERE id=${sessionId} AND status='rendering' AND settings->'remotion_render'->>'render_id'=${renderId} RETURNING id`;
+ return Boolean(failed);
 }
