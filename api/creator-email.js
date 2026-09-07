@@ -162,15 +162,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'creator_id, valid to, subject, and body are required' });
     }
 
-    if (agreementId) {
-      const [agreement] = await sql`
-        SELECT id, status FROM creator_agreements
-        WHERE id = ${agreementId} AND creator_id = ${creatorId}
-      `;
-      if (!agreement || !['draft', 'sent'].includes(agreement.status)) {
-        return res.status(400).json({ error: 'A draft agreement for this creator is required' });
-      }
-    }
     const followUpAt = timestamp(req.body?.next_follow_up_at);
     if (followUpAt === undefined) return res.status(400).json({ error: 'Follow-up date is invalid' });
 
@@ -179,6 +170,18 @@ export default async function handler(req, res) {
     const { provider, externalId, externalThreadId, providerMessageId } = await runExternalStep(sql, {
       operationKey: requestKey, stepKey: 'send', payload: { creatorId, to, subject, body, agreementId, followUpAt }, actorId: access.userId,
     }, async () => {
+    if (agreementId) {
+      try {
+        const [agreement] = await sql`SELECT id,status FROM creator_agreements
+          WHERE id=${agreementId} AND creator_id=${creatorId}`;
+        if (!agreement || !['draft','sent'].includes(agreement.status)) {
+          throw Object.assign(new Error('A draft agreement for this creator is required'),{statusCode:400});
+        }
+      } catch(error) {
+        // Validate only before a new send; replay must survive later acceptance.
+        error.definitelyNotApplied=true;throw error;
+      }
+    }
     let provider = 'gmail';
     let externalId = null;
     let externalThreadId = null;

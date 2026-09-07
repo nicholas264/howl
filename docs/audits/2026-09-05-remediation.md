@@ -314,3 +314,13 @@ concurrent callers, changed pending inputs, user isolation and stale completion.
 Cross-device pending-intent discovery and an explicit cancel/reconcile flow for
 changed unresolved orders remain necessary; clearing browser storage is not a
 safe way to resolve provider uncertainty.
+
+## Agreement email replay after acceptance
+
+Agreement eligibility is now checked inside the journaled send callback, before
+a new external send. A completed send receipt can replay its local bookkeeping
+after the agreement is accepted or revoked, preserving the current agreement
+status. Pre-send validation failures are known not to have sent email and remain
+safely retryable. The endpoint regression simulates activity failure, subsequent
+acceptance, and successful replay with one provider call; a new send for the
+accepted agreement is still denied.
