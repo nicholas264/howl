@@ -300,3 +300,17 @@ Old email journal payloads lack the new bindings, so retrying those exact reques
 keys returns a conflict and needs receipt review; the server never silently
 rekeys or resends them. Email delivery/bounce ingestion and provider-specific
 uncertain-send reconciliation remain open.
+
+## Browser seeding retry identity
+
+The creator workspace no longer generates a fresh order key on every retry. A
+per-user/per-creator pending fingerprint and request ID survive browser reloads;
+Web Locks coordinate tabs. Different unresolved order details are refused. No
+address or notes are persisted by this helper. The key is cleared only when the
+server confirms ordered status, and the form resets before workspace refresh, so
+a failed refresh cannot leave the submitted form ready for an accidental repeat.
+Storage/lock failures stop before sending the order request. Tests cover reuse,
+concurrent callers, changed pending inputs, user isolation and stale completion.
+Cross-device pending-intent discovery and an explicit cancel/reconcile flow for
+changed unresolved orders remain necessary; clearing browser storage is not a
+safe way to resolve provider uncertainty.

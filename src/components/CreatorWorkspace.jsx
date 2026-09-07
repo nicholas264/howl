@@ -1,3 +1,4 @@
+import { pendingSeedRequest } from '../lib/seedRequest.js';
 import { apiFetch as fetch } from '../lib/apiFetch.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Papa from 'papaparse';
@@ -139,7 +140,7 @@ export default function CreatorWorkspace({
   onInitialWorkspaceViewLoaded,
   setActiveTab,
 }) {
-  const { getToken } = useAuth();
+  const { getToken, userId } = useAuth();
   const [creators, setCreators] = useState([]);
   const [workspaceView, setWorkspaceView] = useState('database');
   const [selected, setSelected] = useState(null);
@@ -973,27 +974,25 @@ export default function CreatorWorkspace({
     setSaving(true);
     setError('');
     try {
+      const payload={
+        creator_id: selected.id, product_id: product.id, variant_id: variant.id,
+        product_title: product.title, variant_title: variant.title, sku: variant.sku,
+        quantity: Number(seedForm.quantity) || 1, notes: seedForm.notes,
+      };
+      const pending=await pendingSeedRequest(window.localStorage,userId,payload);
       const response = await fetch('/api/creator-seeding', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          creator_id: selected.id,
-          product_id: product.id,
-          variant_id: variant.id,
-          product_title: product.title,
-          variant_title: variant.title,
-          sku: variant.sku,
-          quantity: Number(seedForm.quantity) || 1,
-          notes: seedForm.notes,
-          request_key: crypto.randomUUID(),
-        }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({...payload,request_key:pending.requestKey}),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not create Shopify seed order');
-      setSeeds(current => [data.seed, ...current]);
+      setSeeds(current => [data.seed, ...current.filter(seed=>seed.id!==data.seed.id)]);
+      if (data.seed?.status === 'ordered') {
+        setSeedForm({ product_variant: '', quantity: '1', notes: '' });
+        await pending.complete();
+      }
       await refreshWorkflow(selected.id);
       if (data.warning) setError(data.warning);
-      setSeedForm({ product_variant: '', quantity: '1', notes: '' });
     } catch (err) {
       setError(err.message);
     } finally {
