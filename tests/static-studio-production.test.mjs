@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { finishStudioBatch } from '../src/lib/static-studio/batch.js';
 import { normalizeComposition } from '../src/lib/static-studio/composition.js';
-import { designGeometry, conceptFingerprint, normalizeAssessment } from '../src/lib/static-studio/model.js';
+import { designGeometry, conceptFingerprint, normalizeAssessment, fullPhotoEvidence, validateImageLedPlacement } from '../src/lib/static-studio/model.js';
 import { productClaimConflicts } from '../src/lib/productClaims.js';
 
 const layout=()=>({feed:{photo:{x:48,y:420,w:984,h:656},headline:{x:72,y:166,w:936,h:224},body:{x:72,y:1120,w:936,h:60},headlineSize:92,bodySize:32},story:{photo:{x:48,y:340,w:984,h:656},headline:{x:72,y:1040,w:936,h:320},body:{x:72,y:1430,w:936,h:90},headlineSize:116,bodySize:34}});
@@ -57,4 +57,19 @@ test('image-led compositions cover both canvases and place type without reserved
   const unsafe=structuredClone(composition);unsafe.story.cta.y=1800;
   assert.throws(()=>normalizeComposition(unsafe),/composition area/);
   assert.throws(()=>designGeometry({direction:'field',composition},'feed'),/image-led/);
+});
+
+test('full-photo preflight exposes actual crops and blocks unsuitable originals before model work',()=>{
+  const asset={approved:true,productId:'r3',width:1800,height:3200,protectedRegion:{x:1/3,y:1350/3200,w:550/1800,h:750/3200,approved:true}};
+  const ready=fullPhotoEvidence(asset);assert.equal(ready.ready,true);
+  assert.equal(ready.placements.story.photo.h,1920);
+  assert.notDeepEqual(ready.placements.feed.protectedBox,ready.placements.story.protectedBox);
+  assert.equal(fullPhotoEvidence({...asset,approved:false}).ready,false);
+  const small=fullPhotoEvidence({...asset,width:900,height:1600});assert.equal(small.ready,false);assert(small.issues.some(s=>s.includes('enlargement')));
+  const edge=fullPhotoEvidence({...asset,protectedRegion:{x:0,y:0,w:1,h:1,approved:true}});assert.equal(edge.ready,false);
+  const rect=(y,h)=>({x:72,y,w:936,h});
+  const composition={mode:'overlay',feed:{headline:rect(80,210),body:rect(1050,70),cta:rect(1200,50),headlineSize:100,bodySize:34},story:{headline:rect(250,260),body:rect(1440,70),cta:rect(1560,50),headlineSize:110,bodySize:34}};
+  assert.doesNotThrow(()=>validateImageLedPlacement({direction:'scene',composition,body:''},asset));
+  composition.story.headline.y=850;
+  assert.throws(()=>validateImageLedPlacement({direction:'scene',composition,body:''},asset),/clear of the protected product/);
 });

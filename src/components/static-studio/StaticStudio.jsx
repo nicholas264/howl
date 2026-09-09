@@ -1,9 +1,10 @@
+import StudioReferences from './StudioReferences.jsx';
 import { DriveThumb } from '../launcher/shared.jsx';
 import { useEffect, useRef, useState } from 'react';
 import JSZip from 'jszip';
 import { apiFetch } from '../../lib/apiFetch.js';
 import { PRODUCTS } from '../../data/products.js';
-import { COPY, DIRECTIONS, FORMATS, productFor, generateConcepts, conceptFingerprint, assetReadiness, normalizeAssessment } from '../../lib/static-studio/model.js';
+import { COPY, DIRECTIONS, FORMATS, productFor, generateConcepts, conceptFingerprint, assetReadiness, normalizeAssessment, fullPhotoEvidence } from '../../lib/static-studio/model.js';
 import { renderPair } from '../../lib/static-studio/render.js';
 import { useStudio, studioRequest, importOriginal, uploadStudioBlob } from '../../lib/static-studio/client.js';
 import './studio.css';
@@ -127,6 +128,8 @@ export default function StaticStudio({onAddToCart,onOpenLauncher,driveAuth}) {
     }
     const unprotected=snapshot.selectedProducts.filter(id=>!snapshot.assets.some(a=>a.approved && a.role==='product' && a.productId===id && a.protectedRegion?.approved));
     if(unprotected.length)throw new Error(`Confirm the complete protected product region for ${unprotected.map(id=>productFor(id).name).join(', ')}. Image-led ads need a safe crop and clear space for text.`);
+    const unsuitable=snapshot.selectedProducts.filter(id=>!snapshot.assets.some(a=>a.productId===id && a.role==='product' && fullPhotoEvidence(a).ready));
+    if(unsuitable.length)throw new Error(snapshot.assets.filter(a=>a.approved && unsuitable.includes(a.productId)).map(a=>`${a.name}: ${fullPhotoEvidence(a).issues.join(' ')}`).join(' · '));
     const products=snapshot.selectedProducts.filter(id=>snapshot.assets.some(a=>a.approved && a.role==='product' && a.productId===id));
     const total=products.length*snapshot.count;
     if(!total)throw new Error('Confirm a product photograph first.');
@@ -227,12 +230,20 @@ export default function StaticStudio({onAddToCart,onOpenLauncher,driveAuth}) {
   if(!loaded)return <div className="ss-loading"><h1>Static Studio</h1><p>{saveError || 'Loading your studio…'}</p>{saveError && <button onClick={reload}>Retry</button>}</div>;
   return <div className="ss" aria-busy={!!busy}>
     <header className="ss-header"><div><h1>Static Studio<span>HOWL</span></h1><p>Real products. Considered design. Every placement.</p></div><div className="ss-header-actions"><span className="ss-save">{saving?'Saving…':saveError || dirty?'Unsaved changes':'Saved to your studio'}</span><button className="ss-button" onClick={()=>run('Saving',flush)} disabled={!!busy}>Save</button><button className="ss-button ss-primary" disabled={!!busy || !approved.length} onClick={()=>run('Sending approved creatives',()=>sendConcepts(approved))}>Send approved{approved.length?` (${approved.length})`:''}</button></div></header>
-    <nav className="ss-tabs" aria-label="Static Studio"><div>{[['library','Assets',w.assets.length],['create','Art direction',null],['review','Contact sheet',w.concepts.length],['costs','Costs & models',null]].map(([id,label,count])=><button key={id} aria-current={view===id?'page':undefined} onClick={()=>setView(id)} disabled={!!busy}>{label}{count!==null && <span>{count}</span>}</button>)}</div><button disabled={!!busy} onClick={onOpenLauncher}>Open launcher</button></nav>
+    <nav className="ss-tabs" aria-label="Static Studio"><div>{[['library','Assets',w.assets.length],['references','Ad references',null],['create','Art direction',null],['review','Contact sheet',w.concepts.length],['costs','Costs & models',null]].map(([id,label,count])=><button key={id} aria-current={view===id?'page':undefined} onClick={()=>setView(id)} disabled={!!busy}>{label}{count!==null && <span>{count}</span>}</button>)}</div><button disabled={!!busy} onClick={onOpenLauncher}>Open launcher</button></nav>
     {(error || saveError) && <div className="ss-alert" role="alert">{error || saveError}{saveError && <><button onClick={()=>run('Saving',flush)} disabled={!!busy}>Retry save</button><button onClick={()=>saveFile(new Blob([JSON.stringify(w,null,2)],{type:'application/json'}),'howl-studio-recovery.json')}>Download unsaved work</button><button onClick={()=>{if(window.confirm('Reload the saved studio? Download unsaved work first if you want to keep your changes.'))run('Reloading saved studio',reload);}} disabled={!!busy}>Reload saved version</button></>}</div>}
     {message && <div className="ss-notice" role="status">{message}<button aria-label="Dismiss notification" onClick={()=>setMessage('')}>×</button></div>}
     {busy && <div className="ss-progress" role="status"><span className="ss-spinner"/>{busy}<button onClick={()=>{cancelRef.current=true;setMessage('The batch will stop after the current item finishes.');}}>Stop after this item</button></div>}
     {zoom && asset && <div className="ss-zoom" role="dialog" aria-modal="true" aria-label="Original photograph" onKeyDown={e=>{if(e.key==='Escape')setZoom(false);}}><button autoFocus className="ss-button" onClick={()=>setZoom(false)}>Close photograph</button><img src={asset.url} crossOrigin="anonymous" alt={`Full original ${asset.name}`}/><p>{asset.name} · {asset.width} × {asset.height}</p></div>}
     <fieldset className="ss-work" disabled={!!busy}>
+    {view==='references' && <StudioReferences assets={w.assets} onImport={(variant,image)=>run('Importing account reference',async()=>{
+      const result=await studioRequest({action:'account-reference-import',variantKey:variant.key,hash:image.hash});
+      const response=await fetch(result.url);
+      if(!response.ok)throw new Error('Could not read the imported reference. Retry the import.');
+      const imported={...await importOriginal(await response.blob(),result.name,result),role:'reference',approved:false,productId:'',notes:'Learn the visual treatment and image/copy relationship. Develop a new idea; do not reuse claims or headlines.'};
+      update(current=>current.assets.some(a=>a.referenceKey===result.referenceKey)?current:{...current,assets:[...current.assets,imported]});
+      await flush();setMessage('Reference added. Add what you like about it in Assets → Reference notes.');
+    })}/>}
     {view==='costs' && <StudioCosts/>}
     {view==='library' && <div className="ss-library-layout">
       <section className="ss-library-main"><div className="ss-section-title"><div><h2>Your source material</h2><p>Import originals, confirm the product, then let the studio compose.</p></div><button className="ss-button" onClick={()=>uploadRef.current.click()}>Upload originals</button><input ref={uploadRef} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={e=>{const files=[...e.target.files];e.target.value='';run('Importing originals',()=>ingestFiles(files));}}/></div>
