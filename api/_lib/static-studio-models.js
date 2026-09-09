@@ -38,10 +38,10 @@ export function priceUsage(model,usage) {
     +(write-write1h)*rate.input*1.25+write1h*rate.input*2+output*rate.output*(long?1.5:1))/1e6;
   return {inputTokens:totalInput,outputTokens:output,cachedTokens:cached,costUsd:cost};
 }
-export function modelRequest(model,system,content,maxTokens,env=process.env) {
+export function modelRequest(model,system,content,maxTokens,env=process.env,{reasoningEffort='high'}={}) {
   const spec=STUDIO_MODELS[model];if(!spec)throw new Error('Unsupported studio model.');
   const key=providerKey(model,env);if(!key)throw new Error(`${spec.label} needs a ${spec.provider==='openai'?'OPENAI_API_KEY':'ANTHROPIC_API_KEY'} configured on the server. Open Costs & models for connection status.`);
-  if(spec.provider==='openai') return {url:'https://api.openai.com/v1/responses',init:{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${key}`},body:JSON.stringify({model,store:false,service_tier:'default',instructions:system,reasoning:{effort:'high'},max_output_tokens:Math.max(12000,maxTokens+8000),input:[{role:'user',content:content.map(c=>c.type==='text'?{type:'input_text',text:c.text}:{type:'input_image',image_url:`data:${c.source.media_type};base64,${c.source.data}`,detail:'high'})}]})}};
+  if(spec.provider==='openai') return {url:'https://api.openai.com/v1/responses',init:{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${key}`},body:JSON.stringify({model,store:false,service_tier:'default',instructions:system,reasoning:{effort:reasoningEffort},max_output_tokens:Math.max(12000,maxTokens+8000),input:[{role:'user',content:content.map(c=>c.type==='text'?{type:'input_text',text:c.text}:{type:'input_image',image_url:`data:${c.source.media_type};base64,${c.source.data}`,detail:'high'})}]})}};
   return {url:'https://api.anthropic.com/v1/messages',init:{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},body:JSON.stringify({model,max_tokens:Math.max(10000,maxTokens+6000),thinking:{type:'adaptive'},output_config:{effort:'high'},system,messages:[{role:'user',content}]})}};
 }
 export function parseModelResult(model,data) {

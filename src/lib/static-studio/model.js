@@ -1,4 +1,5 @@
 import { PRODUCTS } from '../../data/products.js';
+import { normalizeComposition } from './composition.js';
 
 export const STUDIO_VERSION = 1;
 export const RENDER_VERSION = 2;
@@ -56,14 +57,18 @@ export function normalizeAsset(asset) {
   const protectedRegion=normalizeProtectedRegion(asset.protectedRegion);
   return {id:asset.id,url:asset.url,name:safeText(asset.name,160),width:asset.width,height:asset.height,sha256:asset.sha256,
     previewUrl:validAssetUrl(asset.previewUrl)?asset.previewUrl:'', productId:asset.productId || '', approved:asset.approved===true, role:asset.role==='reference'?'reference':'product',
-    features, protectedRegion, notes:safeText(asset.notes,1200), analysis:safeText(asset.analysis,2000),
+    features, protectedRegion, assessment:normalizeAssessment(asset.assessment), notes:safeText(asset.notes,1200), analysis:safeText(asset.analysis,2000),
     driveId:safeText(asset.driveId,120),driveModified:safeText(asset.driveModified,80),createdAt:safeText(asset.createdAt,80)};
+}
+export function stableStringify(value) {
+  const canonical=v=>Array.isArray(v)?v.map(canonical):v && typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v;
+  return JSON.stringify(canonical(value));
 }
 export function conceptFingerprint(c, asset) {
   // An exact, readable input snapshot, not a security hash. Every editable design
   // field and source revision participates; any edit invalidates render/review.
-  return JSON.stringify([STUDIO_VERSION,RENDER_VERSION,c.productId,c.assetId,asset?.sha256,asset?.approved,asset?.productId,asset?.features,asset?.protectedRegion,
-    c.direction,c.headline,c.body,c.featureName,c.cta,c.scale,c.align,c.storyAlign,c.premise || '',c.visualIdea || '',c.claimIds || []]);
+  return stableStringify([STUDIO_VERSION,RENDER_VERSION,c.productId,c.assetId,asset?.sha256,asset?.approved,asset?.productId,asset?.features,asset?.protectedRegion,
+    c.direction,c.headline,c.body,c.featureName,c.cta,c.scale,c.align,c.storyAlign,c.premise || '',c.visualIdea || '',c.claimIds || [],c.composition || null]);
 }
 export function normalizeConcept(c, assets) {
   assert(c && /^[\w-]{1,100}$/.test(c.id || ''),'Invalid concept ID');
@@ -75,11 +80,13 @@ export function normalizeConcept(c, assets) {
     premise:safeText(c.premise,500),visualIdea:safeText(c.visualIdea,500),claimIds:Array.isArray(c.claimIds)?c.claimIds.filter(id=>typeof id==='string').slice(0,8):[],
     angle:safeText(c.angle,100),rationale:safeText(c.rationale,700),scale:Math.max(0.8,Math.min(1.15,Number(c.scale)||1)),
     align:['left','center'].includes(c.align)?c.align:'left',storyAlign:['left','center'].includes(c.storyAlign)?c.storyAlign:'left'};
+  result.composition=normalizeComposition(c.composition);
+  if(c.batchError)result.batchError=safeText(c.batchError,500);
   const fingerprint=conceptFingerprint(result,asset);
   if(c.render?.fingerprint===fingerprint && validAssetUrl(c.render.feedUrl) && validAssetUrl(c.render.storyUrl)) {
     result.render={fingerprint,feedUrl:c.render.feedUrl,storyUrl:c.render.storyUrl,checks:(c.render.checks || []).slice(0,30).map(i=>({code:safeText(i.code,60),message:safeText(i.message,300),level:['pass','warning','error'].includes(i.level)?i.level:'error'}))};
   }
-  if(c.review?.fingerprint===fingerprint && result.render) result.review={fingerprint,summary:safeText(c.review.summary,2000),verdict:['pass','revise'].includes(c.review.verdict)?c.review.verdict:'revise',issues:(c.review.issues || []).slice(0,12).map(s=>safeText(s,300))};
+  if(c.review?.fingerprint===fingerprint && result.render) result.review={fingerprint,summary:safeText(c.review.summary,2000),verdict:['pass','revise'].includes(c.review.verdict)?c.review.verdict:'revise',issues:(c.review.issues || []).slice(0,12).map(s=>safeText(s,1000))};
   if(c.approval?.fingerprint===fingerprint && result.render && !result.render.checks.some(i=>i.level==='error')) result.approval={fingerprint,at:safeText(c.approval.at,80)};
   if(c.launchedToQueue && result.approval) result.launchedToQueue=true;
   return result;
@@ -112,8 +119,8 @@ export function generateConcepts(workspace, choices=[]) {
       let direction=workspace.direction==='mix' ? (families.find(d=>d.id===choice?.direction)?.id || families[i%families.length].id) : workspace.direction;
       if(direction==='technical' && !approvedFeature || direction==='scene' && !asset.protectedRegion?.approved) direction='field';
       result.push({id:crypto.randomUUID(),assetId:asset.id,productId,direction,headline:choice?.headline || copy.headline,body:choice?.headline?choice.body:copy.body,angle:choice?.angle || copy.angle,
-        premise:choice?.premise || '',visualIdea:choice?.visualIdea || '',claimIds:choice?.claimIds || [],
-        featureName:direction==='technical'?approvedFeature.name:'',cta:choice?.cta || 'Explore the '+productFor(productId).name,scale:1,align:'left',storyAlign:'left',
+        premise:choice?.premise || '',visualIdea:choice?.visualIdea || '',claimIds:choice?.claimIds || [],composition:normalizeComposition(choice?.composition),
+        featureName:direction==='technical'?approvedFeature.name:'',cta:choice?.cta || 'Explore the '+productFor(productId).name,scale:1,align:choice?.composition?.feed?.align || 'left',storyAlign:choice?.composition?.story?.align || 'left',
         rationale:safeText(choice?.rationale,700) || `${copy.angle}. Original photograph preserved in a dedicated image area; each placement is composed independently.`});
     }
   }
@@ -124,12 +131,15 @@ export function containRect(imageWidth,imageHeight,box) {
   return {x:box.x+(box.w-imageWidth*scale)/2,y:box.y+(box.h-imageHeight*scale)/2,w:imageWidth*scale,h:imageHeight*scale,scale};
 }
 export function designGeometry(concept, formatId) {
+  assert(concept.composition?.mode!=='overlay' || concept.direction==='scene','Full-photo composition requires the image-led direction.');
   const {width:w,height:h}=FORMATS[formatId];
   const story=formatId==='story';
   const top=story?240:66, bottom=story?280:66;
   const safe={x:64,y:top,w:w-128,h:h-top-bottom};
   const footerY=h-bottom-32;
   const base={w,h,top,bottom,safe,footerY,logo:{x:72,y:top,w:146,h:68},product:{x:244,y:top+22},align:story?concept.storyAlign:concept.align};
+  if(concept.direction==='scene' && concept.composition?.mode==='overlay')return {...base,...normalizeComposition(concept.composition)[formatId],overlay:true,imageLed:true,align:base.align};
+  if(concept.composition && !['scene','technical'].includes(concept.direction))return {...base,...normalizeComposition(concept.composition)[formatId],align:base.align};
   if(concept.direction==='scene') return {...base,photo:{x:0,y:0,w,h},headline:{x:72,y:top+120,w:936,h:story?300:240},body:{x:72,y:footerY-105,w:936,h:64},headlineSize:story?104:94,overlay:true};
   if(concept.direction==='signal') {
     // A tall photographic column and a separate typographic column.
@@ -158,7 +168,7 @@ export function applyArtDirectionRepair(concept,asset,repair) {
   assert(['left','center'].includes(repair.align) && ['left','center'].includes(repair.storyAlign),'Invalid alignment revision.');
   assert(Number.isFinite(repair.scale) && repair.scale>=.8 && repair.scale<=1.15,'Invalid type-size revision.');
   const {render,review,approval,launchedToQueue,...draft}=concept;
-  return {...draft,...(repair.headline?copy:{}),headline:copy.headline,body:copy.body,angle:copy.angle,direction:direction.id,scale:repair.scale,align:repair.align,storyAlign:repair.storyAlign,
+  return {...draft,composition:normalizeComposition(repair.composition === undefined ? concept.composition : repair.composition),...(repair.headline?copy:{}),headline:copy.headline,body:copy.body,angle:copy.angle,direction:direction.id,scale:repair.scale,align:repair.align,storyAlign:repair.storyAlign,
     featureName:direction.id==='technical'?asset.features.find(f=>f.approved).name:'',rationale:safeText(repair.reason,700)};
 }
 
@@ -192,7 +202,7 @@ export function validateArtDirectorPlan(workspace,choices) {
       assert(!tooSimilar(creative.headline,prior.headline),'Art director recycled a headline. Request a new idea.');
       assert(!tooSimilar(creative.premise,prior.premise),'Art director repeated the same premise. Request a distinct idea.');
     }
-    return {productId:choice.productId,assetId:choice.assetId,...creative,direction:choice.direction,rationale:safeText(choice.rationale,700)};
+    return {productId:choice.productId,assetId:choice.assetId,...creative,composition:normalizeComposition(choice.composition),direction:choice.direction,rationale:safeText(choice.rationale,700)};
   });
   for(const id of productIds)assert(normalized.filter(c=>c.productId===id).length===workspace.count,`Art director returned the wrong number of concepts for ${productFor(id).name}.`);
   return normalized;
@@ -217,7 +227,7 @@ export function scenePhotoRect(asset,box) {
   return {x,y,w,h,scale,protectedBox};
 }
 export function verifiedFacts(asset) {
-  return [{id:'identity',text:productFor(asset.productId)?.name || ''},...asset.features.filter(f=>f.approved).map((f,i)=>({id:`feature-${i}`,text:f.name}))];
+  return [{id:'identity',text:productFor(asset.productId)?.name || ''},{id:'category',text:'Propane campfire'},...asset.features.filter(f=>f.approved).map((f,i)=>({id:`feature-${i}`,text:f.name}))];
 }
 export function validateCreativeCopy(choice,asset) {
   for(const [key,max] of [['headline',120],['body',220],['cta',60],['angle',100],['premise',500],['visualIdea',500]]) {
@@ -240,4 +250,19 @@ function tooSimilar(a,b) {
   const tokens=s=>new Set(s.split(' ').filter(t=>t.length>2));
   const x=tokens(left),y=tokens(right),intersection=[...x].filter(t=>y.has(t)).length;
   return x.size>2 && y.size>2 && intersection/(x.size+y.size-intersection)>.72;
+}
+
+export function normalizeAssessment(value) {
+  if(!value || typeof value!=='object')return null;
+  return {suggestedProductId:productFor(value.suggestedProductId)?value.suggestedProductId:null,
+    productCount:['one','multiple','unknown'].includes(value.productCount)?value.productCount:'unknown',
+    completeProduct:value.completeProduct===true, description:safeText(value.description,1600),
+    uncertainties:(Array.isArray(value.uncertainties)?value.uncertainties:[]).slice(0,6).map(s=>safeText(s,200))};
+}
+export function assetReadiness(asset) {
+  if(asset.role==='reference')return {label:'Design reference',ready:false};
+  if(!asset.productId || !asset.approved)return {label:'Confirm product identity',ready:false};
+  if(asset.assessment?.productCount==='multiple')return {label:'Confirmed · multiple products in scene',ready:true};
+  if(asset.assessment && !asset.assessment.completeProduct)return {label:'Confirmed · check cropped hardware',ready:true};
+  return {label:'Ready for art direction',ready:true};
 }

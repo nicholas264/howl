@@ -1,3 +1,4 @@
+import { productClaimConflicts } from '../lib/productClaims.js';
 import { apiFetch as fetch } from '../lib/apiFetch.js';
 // LauncherTool — unified ad launcher.
 //
@@ -85,7 +86,7 @@ const PRODUCT_COPY_OPTIONS = {
     },
     {
       label: 'Lightweight shock',
-      headline: '11 Pounds. Real Campfire.',
+      headline: `${Number.parseFloat(PRODUCTS.find(p=>p.id==='r1').specs.weight)} Pounds. Real Campfire.`,
       primaryText: 'Tiny enough to live in your rig. Big enough to make the stop worth it.',
     },
     {
@@ -243,6 +244,7 @@ function launcherCopyOptions(productId, variants = []) {
       })),
   ];
   return options.filter(option => {
+    if(productClaimConflicts(productId,`${option.headline} ${option.primaryText}`).length)return false;
     const key = `${option.headline.trim()}__${option.primaryText.trim()}`;
     if (seen.has(key)) return false;
     seen.add(key);
@@ -876,6 +878,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     if (!adsetId || adsetId === '__new__') return setGlobalError('Pick an ad set first.');
     const productUrl = destUrlForMeta(m);
     if (!productUrl) return setItemStatus(id, 'error', 'Add an ad URL before launching');
+    issues.push(...productClaimConflicts(m.productId,`${m.headline || ''} ${m.primaryText || ''}`));
     if (attribution.requiresCreator && !m.creatorId) return setItemStatus(id, 'error', 'Choose an exact creator record before launching creator UGC');
     if (attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim()) return setItemStatus(id, 'error', 'Add the internal/founder name before launching');
     if (!m.headline?.trim() && !m.primaryText?.trim()) return setItemStatus(id, 'error', 'Headline or primary text required');
@@ -958,6 +961,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     const productUrl = destUrlForMeta(m);
     if (!productUrl) return setItemStatus(id, 'error', 'Add an ad URL before launching');
     if (!m.headline?.trim()) return setItemStatus(id, 'error', 'Headline required');
+    issues.push(...productClaimConflicts(m.productId,`${m.headline || ''} ${m.primaryText || ''}`));
     if (attribution.requiresCreator && !m.creatorId) return setItemStatus(id, 'error', 'Choose an exact creator record before launching creator UGC');
     if (attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim()) return setItemStatus(id, 'error', 'Add the internal/founder name before launching');
 
@@ -1114,6 +1118,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     }
     if (item.source === 'drive' && !m.headline?.trim() && !m.primaryText?.trim()) issues.push('Add a headline or primary text.');
     if (item.source !== 'drive' && !m.headline?.trim()) issues.push('Add a headline.');
+    issues.push(...productClaimConflicts(m.productId,`${m.headline || ''} ${m.primaryText || ''}`));
     if (attribution.requiresCreator && !m.creatorId) issues.push('Choose an exact creator record.');
     if (attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim()) issues.push('Add the person responsible for this creative.');
     return issues;

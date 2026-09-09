@@ -129,7 +129,7 @@ const app = isCreatorSubmission ? (
     </SignedIn>
     <SignedOut>
       <div style={{ minHeight: '100vh', background: '#f7f6f2', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-        <SignIn routing="hash" />
+        <SignIn routing="hash" forceRedirectUrl={`${window.location.pathname}${window.location.search}`} />
       </div>
     </SignedOut>
   </ClerkProvider>

@@ -16,7 +16,7 @@ const INPUT_STYLE = {
 // COEP: require-corp, which blocks lh3.googleusercontent.com images, so we
 // fetch via /api/drive/thumb (auth header injected by FetchInterceptor) and
 // render the bytes through an object URL.
-export function DriveThumb({ fileId, alt, style, fallback }) {
+export function DriveThumb({ fileId, alt, style, fallback, studio = false }) {
   const [src, setSrc] = useState(null);
   const [errored, setErrored] = useState(false);
   useEffect(() => {
@@ -24,7 +24,7 @@ export function DriveThumb({ fileId, alt, style, fallback }) {
     let objectUrl = null;
     (async () => {
       try {
-        const r = await fetch(`/api/drive/thumb?fileId=${encodeURIComponent(fileId)}&size=320`);
+        const r = await fetch(`/api/drive/thumb?fileId=${encodeURIComponent(fileId)}&size=320${studio ? '&purpose=static_studio' : ''}`);
         if (!r.ok) throw new Error('thumb fetch failed');
         const blob = await r.blob();
         if (cancelled) return;
@@ -38,7 +38,7 @@ export function DriveThumb({ fileId, alt, style, fallback }) {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [fileId]);
+  }, [fileId, studio]);
   if (errored || !src) return fallback || null;
   return <img src={src} alt={alt || ''} style={style} draggable={false} />;
 }

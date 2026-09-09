@@ -81,16 +81,19 @@ export async function renderPair(concept,asset) {
     canvas.width=g.w;canvas.height=g.h;
     const ctx=canvas.getContext('2d',{alpha:false});
     const checks=[];
+    const ink=g.imageLed?(g.textColor==='dark'?'#101719':'#F9F3DF'):direction.foreground;
     const photo=g.overlay?scenePhotoRect(asset,g.photo):containRect(asset.width,asset.height,g.photo);
     ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
     ctx.fillStyle=direction.background;ctx.fillRect(0,0,g.w,g.h);
     if(g.overlay)ctx.drawImage(img,photo.x,photo.y,photo.w,photo.h);
     const originalPixels=g.overlay?ctx.getImageData(0,0,g.w,g.h):null;
+    if(!g.imageLed) {
     const logoRect=containRect(logo.width,logo.height,g.logo);
     ctx.drawImage(logo,logoRect.x,logoRect.y,logoRect.w,logoRect.h);
     ctx.font=canvasFont('subHeadline',28);ctx.fillStyle=direction.foreground;ctx.textBaseline='top';
     ctx.fillText(productFor(concept.productId).name,g.product.x,g.product.y);
-    const headline=textBlock(ctx,{text:concept.headline,box:g.headline,maxSize:Math.round(g.headlineSize*concept.scale),color:direction.foreground,align:g.align});
+    }
+    const headline=textBlock(ctx,{text:concept.headline,box:g.headline,maxSize:Math.round(g.headlineSize*concept.scale),color:ink,align:g.align});
     // One proportional draw of unchanged original pixels. Scene layouts may clip
     // surroundings at canvas edges, but never the confirmed product region.
     ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
@@ -101,25 +104,29 @@ export async function renderPair(concept,asset) {
       // Only the verified locator dot and leader enter the photograph.
       ctx.strokeStyle='#F9F3DF';ctx.lineWidth=5;ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2);ctx.stroke();
       ctx.strokeStyle='#DC440A';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x,y+12);ctx.lineTo(x,g.body.y-12);ctx.lineTo(g.body.x,g.body.y-12);ctx.stroke();
-      const featureText=textBlock(ctx,{text:feature.name,box:{...g.body,h:44},role:'subHeadline',maxSize:32,minSize:28,color:direction.foreground});
+      const featureText=textBlock(ctx,{text:feature.name,box:{...g.body,h:44},role:'subHeadline',maxSize:32,minSize:28,color:ink});
       if(!featureText.fits) checks.push(check('feature-fit','Feature label does not fit.','error'));
     }
     const bodyBox=concept.direction==='technical'?{...g.body,y:g.body.y+48,h:52}:g.body;
-    const body=textBlock(ctx,{text:concept.body,box:bodyBox,role:'body',maxSize:g.bodySize || 36,minSize:30,color:direction.foreground,lineHeight:1.15,align:g.align});
+    const body=textBlock(ctx,{text:concept.body,box:bodyBox,role:'body',maxSize:g.bodySize || 36,minSize:30,color:ink,lineHeight:1.15,align:g.align});
+    let ctaFits=true;
+    if(g.imageLed){ctaFits=textBlock(ctx,{text:concept.cta,box:g.cta,role:'subHeadline',maxSize:34,minSize:34,color:ink,align:g.align}).fits;}
+    else {
     ctx.fillStyle=direction.foreground;ctx.globalAlpha=0.4;ctx.fillRect(72,g.footerY-24,936,1);ctx.globalAlpha=1;
     ctx.font=canvasFont('subHeadline',26);ctx.textBaseline='top';
     ctx.fillText(concept.cta,72,g.footerY);
     ctx.textAlign='right';ctx.font=canvasFont('body',26);ctx.fillText('howlcampfires.com',1008,g.footerY);ctx.textAlign='left';
+    }
     const overlaps=(a,b)=>a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y;
     const textBoxes=[g.headline,...(concept.body.trim()?[bodyBox]:[])];
-    const criticalBoxes=[...textBoxes,g.logo,{x:g.product.x,y:g.product.y,w:420,h:36},{x:72,y:g.footerY-24,w:936,h:56}];
-    const layoutFits=textBoxes.every(box=>box.y>=g.top && box.y+box.h<=g.footerY-24) && (g.overlay?criticalBoxes.every(box=>!overlaps(box,photo.protectedBox)):textBoxes.every(box=>!overlaps(box,photo)));
+    const criticalBoxes=g.imageLed?[...textBoxes,g.cta]:[...textBoxes,g.logo,{x:g.product.x,y:g.product.y,w:420,h:36},{x:72,y:g.footerY-24,w:936,h:56}];
+    const layoutFits=textBoxes.every(box=>box.y>=g.top && box.y+box.h<=(g.imageLed?g.h-g.bottom:g.footerY-24)) && (g.overlay?criticalBoxes.every(box=>!overlaps(box,photo.protectedBox)):textBoxes.every(box=>!overlaps(box,photo)));
     if(g.overlay) {
-      const contrast=criticalBoxes.every(box=>backgroundSupportsLightText(originalPixels,box));
-      checks.push(check('contrast',contrast?'Light typography has dark negative space behind it.':'Photograph is too bright behind the type. Choose another photograph or layout.',contrast?'pass':'error'));
+      const contrast=criticalBoxes.every(box=>backgroundSupportsText(originalPixels,box,g.imageLed && g.textColor==='dark'));
+      checks.push(check('contrast',contrast?'Typography contrasts with the photograph behind it.':'Insufficient photo/text contrast. Move the text or change its color.',contrast?'pass':'error'));
       const r=photo.protectedBox;
       const inSafe=r.x>=g.safe.x && r.x+r.w<=g.safe.x+g.safe.w && r.y>=g.safe.y && r.y+r.h<=g.safe.y+g.safe.h;
-      checks.push(check('product-safe-area',inSafe?'Protected product region stays inside placement safe margins.':'The product enters placement UI margins. Choose another photograph or a framed layout.',inSafe?'pass':'error'));
+      checks.push(check('product-safe-area',inSafe?'Protected product region stays inside placement safe margins.':'The product enters placement UI margins. Choose another photograph or adjust the protected region only if it is inaccurate.',inSafe?'pass':'error'));
     }
     checks.push(check('layout',layoutFits?'Text stays clear of the protected product and footer.':'Text overlaps the protected product or footer. Choose another layout.',layoutFits?'pass':'error'));
     checks.push(check('source',g.overlay?'Original fingerprint verified; product region preserved without filters, stretching or overlays.':'Original photograph fingerprint verified; complete frame and proportions preserved.'));
@@ -128,7 +135,7 @@ export async function renderPair(concept,asset) {
     checks.push(check('headline',headline.fits?'Headline fits at a readable size.':'Headline is too long. Shorten it or reduce its size. ',headline.fits?'pass':'error'));
     checks.push(check('body',body.fits?'Supporting copy fits.':'Supporting copy is too long. Shorten it.',body.fits?'pass':'error'));
     ctx.font=canvasFont('subHeadline',26);
-    checks.push(check('cta',ctx.measureText(concept.cta).width<560?'CTA fits.':'CTA is too long.',ctx.measureText(concept.cta).width<560?'pass':'error'));
+    checks.push(check('cta',(g.imageLed?ctaFits:ctx.measureText(concept.cta).width<560)?'CTA fits.':'CTA is too long.',(g.imageLed?ctaFits:ctx.measureText(concept.cta).width<560)?'pass':'error'));
     checks.push(check('resolution',photo.scale<=1.05?'No material source upscaling.':`Source needs ${photo.scale.toFixed(2)}× enlargement. Use a higher-resolution original.`,photo.scale<=1.05?'pass':'error'));
     checks.push(check('prominence',photo.w>=440 && photo.h>=230?'Photograph has sufficient space.':'This aspect ratio makes the photograph small. Try a tighter original.',photo.w>=440 && photo.h>=230?'pass':'warning'));
     if(concept.direction==='technical') checks.push(check('anchor',feature?'Feature anchor was explicitly approved for this photograph.':'This callout has no approved feature anchor.',feature?'pass':'error'));
@@ -139,14 +146,14 @@ export async function renderPair(concept,asset) {
 }
 
 
-function backgroundSupportsLightText(image,box) {
+function backgroundSupportsText(image,box,dark=false) {
   // Conservative sampled background test; visual review still checks exact glyph edges.
   let pass=0,total=0;
   const linear=v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4;
   for(let y=Math.max(0,Math.ceil(box.y));y<Math.min(image.height,box.y+box.h);y+=12)for(let x=Math.max(0,Math.ceil(box.x));x<Math.min(image.width,box.x+box.w);x+=12) {
     const i=(y*image.width+x)*4;
     const luminance=.2126*linear(image.data[i]/255)+.7152*linear(image.data[i+1]/255)+.0722*linear(image.data[i+2]/255);
-    if((.893+.05)/(luminance+.05)>=4.5)pass++;
+    if((dark?(luminance+.05)/(.008+.05):(.893+.05)/(luminance+.05))>=4.5)pass++;
     total++;
   }
   return total>0 && pass/total>=.95;

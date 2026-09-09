@@ -1,3 +1,4 @@
+import { productClaimConflicts } from '../lib/productClaims.js';
 import { apiFetch as fetch } from '../lib/apiFetch.js';
 import React, { useEffect, useState, useCallback } from 'react';
 import { PRODUCTS } from '../data';
@@ -183,14 +184,7 @@ export function getCopyWarnings(variant) {
   }
   if (productIds.length === 1) {
     const product = PRODUCTS.find(item => item.id === productIds[0]);
-    const expectedWeight = Number.parseFloat(product?.specs?.weight);
-    const weightClaim = [...text.matchAll(/(\d+(?:\.\d+)?)\s*(?:lb|lbs|pounds?)\b/gi)].find(match => {
-      const context = text.slice(Math.max(0, match.index - 20), match.index + match[0].length + 20);
-      return !/\b(?:tank|lighter|heavier)\b/i.test(context);
-    });
-    if (weightClaim && Number.isFinite(expectedWeight) && Number(weightClaim[1]) !== expectedWeight) {
-      warnings.push(`Check weight claim: ${product.name} is listed as ${product.specs.weight}.`);
-    }
+    warnings.push(...productClaimConflicts(product.id,text));
   }
   if (/\b(?:UL|CSA|ETL)\s+certified\b/i.test(text)) warnings.push('Verify certification language before launch.');
   return warnings;
