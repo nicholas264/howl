@@ -913,3 +913,18 @@ budget checks passed focused regressions and API checks; dialog build passed.
 No production campaign or ad was created for testing. Provider-added targeting
 defaults that differ from reviewed intent fail closed and require review of the
 created ad set in Launcher; this recovery path still needs a live operator trial.
+
+### Mandatory review for fresh ad dispatch
+
+The shared Meta/Drive dispatch boundary now rejects fresh ad requests without a
+confirmed version-1 review before provider reads or writes. The review verifier
+also rejects absent plans. Completed operation receipts still replay without a
+new review or a new ad mutation; historical snapshots are not rewritten.
+The unused legacy UGC inbox import now aliases the reviewed unified Launcher,
+removing its separate unreviewed dispatch implementation. Creative-test guidance
+no longer presents a cost cap as a guarantee of achieved acquisition cost.
+
+Validation: 146 tests, API syntax and production build passed. Regression coverage
+rejects absent/unconfirmed/unsupported reviews with zero provider calls, verifies
+completed receipt replay without a plan, and retains the real handler's injected
+post-ad bookkeeping failure test (one provider ad, one recovered local launch).

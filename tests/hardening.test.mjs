@@ -11,7 +11,7 @@ import { ROLE_PERMISSIONS, getAppAccess } from '../api/_lib/app-access.js';
 import { META_ACTION_PERMISSIONS, canRunMetaAction } from '../api/_lib/meta-permissions.js';
 import callback from '../api/shopify-callback.js';
 import { resolvePublicUrl } from '../api/_lib/safe-fetch.js';
-import { ensureOperationJournal, runExternalStep, rememberProviderRead } from '../api/_lib/operation-journal.js';
+import { ensureOperationJournal, runExternalStep, rememberProviderRead, digest } from '../api/_lib/operation-journal.js';
 import metaHandler, { logLaunch } from '../api/meta.js';
 import { useTestDatabase } from './neon-test-adapter.mjs';
 import { resolveEmail, verifiedUserEmail } from '../api/_lib/auth.js';
@@ -387,12 +387,17 @@ test('Meta endpoint recovers a DB failure after provider acceptance without crea
     assert.equal(String(url),'https://graph.facebook.com/v21.0/act_test/ads');
     providerCreates++; return Response.json({id:'endpoint-replay-ad'});
   };
+  const reviewedPlan={version:1,confirmed:true,ad_name:'Endpoint replay',approval_hash:digest([null]),
+    fields:{headline:'Stored headline',primary_text:'Stored copy',dest_url:'https://example.test/product',url_tags:'tw_source={{site_source_name}}&tw_adid={{ad.id}}',page_id:'fixture-page',instagram_user_id:''},
+    media:[{role:'single',sha256:'c'.repeat(64)}],target:{mode:'existing',id:'synthetic-adset',snapshot:{id:'synthetic-adset',account_id:'test',campaign_id:'fixture-campaign',targeting:{geo_locations:{countries:['US']}}}}};
   const invoke = async (changes={}) => {
     const response={statusCode:200,status(code){this.statusCode=code;return this;},json(body){this.body=body;return this;},setHeader(){}};
-    await metaHandler({method:'POST',headers:{},body:{action:'create_ad_from_creative',creativeId:'synthetic-creative',adsetId:'synthetic-adset',adName:'Endpoint replay',sourceType:'tool_generated',...changes}},response);
+    await metaHandler({method:'POST',headers:{},body:{action:'create_ad_from_creative',creativeId:'synthetic-creative',adsetId:'synthetic-adset',adName:'Endpoint replay',sourceType:'tool_generated',reviewed_plan:reviewedPlan,...changes}},response);
     return response;
   };
   try {
+    await ensureProviderMedia(sql);
+    await sql`INSERT INTO provider_media(account_id,kind,provider_id,request_key,content_hash) VALUES ('act_test','image','fixture-image','endpoint-fixture',${'c'.repeat(64)})`;
     await runExternalStep(sql,{operationKey:'fixture-creative',stepKey:'1:/v21.0/act_test/adcreatives',actorId:'local-dev',payload:{
       object_story_spec:JSON.stringify({page_id:'fixture-page',link_data:{image_hash:'fixture-image',name:'Stored headline',message:'Stored copy',link:'https://example.test/product'}}),
       url_tags:'tw_source={{site_source_name}}&tw_adid={{ad.id}}',

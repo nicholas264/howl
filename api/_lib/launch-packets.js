@@ -46,6 +46,8 @@ export function launchEvidenceVerifier(sql,inputs,results,options) {
 
 export async function captureLaunchPacket(sql,{req,actorId,key,stepKey,target,payload,token,fetchImpl}) {
   try {
+    const confirmedReview=req.body?.action==='create_creative_test'?req.reviewedLaunchPlan:req.body?.reviewed_plan;
+    if(confirmedReview?.version!==1 || confirmedReview.confirmed!==true)throw conflict('Confirm the complete launch review before creating an ad.');
     if(typeof req.captureLaunchEvidence!=='function')throw conflict('Launch preflight evidence is unavailable.');
     const evidence=await req.captureLaunchEvidence();
     const creativeRef=typeof payload.creative==='string'?JSON.parse(payload.creative):payload.creative;

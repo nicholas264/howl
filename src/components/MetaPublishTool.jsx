@@ -639,7 +639,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
           <div style={S.section}>
             <span style={S.label}>Test Configuration</span>
             <div style={{ fontSize: 9, color: '#88857f', marginBottom: 14, letterSpacing: 1, lineHeight: 1.6 }}>
-              Creates 1 ABO campaign with 1 ad set per creative. Cost cap bid strategy — Meta only spends on creatives that can hit your CPA target.
+              Creates 1 ABO campaign with 1 ad set per creative. The cost cap guides bidding toward your target CPA; actual acquisition costs and delivery can vary.
               <br />Everything starts PAUSED — review in Ads Manager before going live.
             </div>
             <div style={{ ...S.row, marginBottom: 12 }}>

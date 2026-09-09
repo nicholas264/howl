@@ -7,7 +7,7 @@ const targetFields=['status','campaign_id','targeting','optimization_goal','bill
 export const reviewedTarget=adset=>Object.fromEntries(targetFields.map(key=>[key,adset[key] ?? null]));
 
 export async function verifyReviewedLaunch(sql,review,{payload,creative,adset,campaign,media,driveUploads,evidence}) {
-  if(review==null)return null;
+  if(review==null)fail('confirm the complete review before creating an ad');
   if(review.version!==1 || review.confirmed!==true || !review.fields || !Array.isArray(review.media))fail('confirm the complete review first');
   if(!/^[a-f0-9]{64}$/.test(review.approval_hash || '') || !validReviewMediaRoles(review.media))fail('invalid evidence or media roles');
   for(const item of review.media)if(!item || !(item.drive_file_id?/^[a-f0-9]{32}$/.test(item.drive_md5 || ''):/^[a-f0-9]{64}$/.test(item.sha256 || '')))fail('media fingerprint missing');

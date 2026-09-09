@@ -15,7 +15,10 @@ test('launch snapshots precede dispatch, survive replay and recovery, and reject
   await db.exec('CREATE TABLE app_admin_audit(id SERIAL PRIMARY KEY,actor_id TEXT,action TEXT,target TEXT,metadata JSONB)');
   await runExternalStep(sql,{operationKey:'creative',stepKey:'1:/v21.0/act_test/adcreatives',actorId:'fixture',payload:{object_story_spec:JSON.stringify({page_id:'page',link_data:{image_hash:'image',name:'Title',message:'Copy',link:'https://example.test/product'}})}},async()=>({status:200,body:{id:'creative'}}));
   await sql`INSERT INTO provider_media(account_id,kind,provider_id,source_url,request_key,content_hash) VALUES ('act_test','image','image','https://example.test/image.png','upload',${'a'.repeat(64)})`;
-  const request=key=>({headers:{},body:{action:'create_ad_from_creative',request_key:key},captureLaunchEvidence:async()=>({approvals:[],attribution:[{sourceType:'tool_generated'}]})});
+  const targetSnapshot={id:'adset',account_id:'test',campaign_id:'campaign',targeting:{publisher_platforms:['facebook'],facebook_positions:['feed']}};
+  const request=key=>({headers:{},body:{action:'create_ad_from_creative',request_key:key,reviewed_plan:{version:1,confirmed:true,ad_name:key==='success'?'Ad':key[0].toUpperCase()+key.slice(1),approval_hash:digest([]),
+    fields:{headline:'Title',primary_text:'Copy',dest_url:'https://example.test/product',url_tags:'',page_id:'page',instagram_user_id:''},
+    media:[{role:'single',sha256:'a'.repeat(64),url:'https://example.test/image.png'}],target:{mode:'existing',id:'adset',snapshot:targetSnapshot}}},captureLaunchEvidence:async()=>({approvals:[],attribution:[{sourceType:'tool_generated'}]})});
   const init=name=>({method:'POST',body:new URLSearchParams({name,adset_id:'adset',creative:JSON.stringify({creative_id:'creative'}),status:'PAUSED',access_token:'synthetic-secret'})});
   const url='https://graph.facebook.com/v21.0/act_test/ads';let reads=0,creates=0;
   const provider=async(target,options)=>{
@@ -28,12 +31,21 @@ test('launch snapshots precede dispatch, survive replay and recovery, and reject
    assert.ok(pending.result.launch_packet_key,'snapshot linked before provider mutation');
    return Response.json({id:'12345'});
   };
+  const absent=request('absent');delete absent.body.reviewed_plan;
+  await assert.rejects((await createMetaOperationFetch(sql,absent,'fixture',provider))(url,init('Absent')),/Confirm the complete launch review/);
+  assert.equal(reads,0);assert.equal(creates,0);
+  for(const plan of [{version:1,confirmed:false},{version:2,confirmed:true}]){
+    const unconfirmed=request(`unconfirmed-${plan.version}`);unconfirmed.body.reviewed_plan=plan;
+    await assert.rejects((await createMetaOperationFetch(sql,unconfirmed,'fixture',provider))(url,init('Unconfirmed')),/Confirm the complete launch review/);
+  }
+  assert.equal(reads,0);assert.equal(creates,0);
   const req=request('success');await (await createMetaOperationFetch(sql,req,'fixture',provider))(url,init('Ad'));
   const packet=await readLaunchPacket(sql,'12345');assert.ok(packet);assert.equal(packet.snapshot.media_receipts.length,1);
   assert.deepEqual(packet.snapshot.adset.targeting.facebook_positions,['feed']);assert.equal(packet.snapshot.actor_id,'fixture');
   assert.equal(typeof packet.snapshot.media_receipts[0].created_at,'string');
   assert.ok(!JSON.stringify(packet).includes('synthetic-secret'));assert.ok(!JSON.stringify(packet).includes('must-not-be-saved'));
-  await (await createMetaOperationFetch(sql,req,'fixture',provider))(url,init('Ad'));
+  const legacyReplay=structuredClone({headers:req.headers,body:req.body});delete legacyReplay.body.reviewed_plan;
+  await (await createMetaOperationFetch(sql,legacyReplay,'fixture',provider))(url,init('Ad'));
   assert.equal(reads,1);assert.equal(creates,1);assert.deepEqual(await readLaunchPacket(sql,'12345'),packet);
   const read=response();await endpoint({method:'GET',headers:{},query:{ad_id:'12345'}},read);assert.equal(read.statusCode,200);assert.deepEqual(read.body.packet,packet);
   const legacy=response();await endpoint({method:'GET',headers:{},query:{ad_id:'old'}},legacy);assert.equal(legacy.body.packet,null);
