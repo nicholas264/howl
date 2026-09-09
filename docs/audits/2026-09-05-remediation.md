@@ -654,3 +654,17 @@ older snapshots that contain notes. The comparison ignores only that internal fi
 in addition to the previously excluded workflow metadata. The launch regression now
 updates internal notes and verifies continued eligibility, while changed contractual
 restrictions still require review and matching acceptance.
+
+### September 9: authenticated owner and editor verification
+
+The production browser session reaches the workspace as Nicholas with OWNER access;
+the user menu shows the approved owner email. This clears the real owner sign-in
+verification prerequisite. The existing UGC session loads its transcript and source,
+and the Remotion preview advances during playback with no media error.
+
+The saved finished render was unavailable in the browser despite its public Blob
+returning HTTP 200 and video/mp4. Its video element now requests anonymous CORS,
+compatible with the page's require-corp isolation and Blob's allow-origin response.
+The finished-render Download and Send to Launcher handlers now invoke their helpers
+without passing React's click event as the media URL. Production media and launch
+records were not changed during these read-only checks.

@@ -1825,10 +1825,10 @@ export default function UgcEditorTool({ initialSessionId = null, onInitialSessio
               {stage === 'done' && outputUrl && (
                 <div style={outputPanel}>
                   <span style={eyebrow}>Finished render</span>
-                  <video src={outputUrl} controls playsInline style={{ width: '100%', borderRadius: 8, background: '#000' }} />
+                  <video crossOrigin="anonymous" src={outputUrl} controls playsInline style={{ width: '100%', borderRadius: 8, background: '#000' }} />
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={download} style={primaryBtn}>Download</button>
-                    {onAddToCart && <button onClick={sendToCart} style={secondaryBtn}>Send to Launcher</button>}
+                    <button onClick={() => download()} style={primaryBtn}>Download</button>
+                    {onAddToCart && <button onClick={() => sendToCart()} style={secondaryBtn}>Send to Launcher</button>}
                   </div>
                 </div>
               )}
