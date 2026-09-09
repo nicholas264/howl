@@ -3,6 +3,7 @@ import { journalMediaUpload } from './_lib/provider-media.js';
 import { fetchPublicResource } from './_lib/safe-fetch.js';
 import { checkWorkLimit } from './_lib/work-limits.js';
 import { assertLaunchReady } from './_lib/launch-preflight.js';
+import { bindCreativeContent } from './_lib/creative-receipt.js';
 import { syncCreativeAnalytics } from './_lib/meta/sync.js';
 import { createMetaOperationFetch } from './_lib/operation-journal.js';
 import { canRunMetaAction } from './_lib/meta-permissions.js';
@@ -433,6 +434,10 @@ export default async function handler(req, res) {
     ? await createMetaOperationFetch(appAccess.sql, req, appAccess.userId) : globalThis.fetch;
   try {
     if (launchActions.has(action)) {
+      if(action==='create_ad_from_creative') {
+        const storedCopy=await bindCreativeContent(appAccess.sql,req.body,cleanMetaUrlTags(req.body.urlParams));
+        await assertBrandSafe(appAccess.sql,storedCopy);
+      }
 
       if (!['upload_image', 'upload_video', 'upload_video_url', 'create_campaign', 'create_adset'].includes(action)) {
         if (!req.body.items?.length) await assertLaunchReady(appAccess.sql, req.body);

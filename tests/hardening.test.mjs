@@ -382,12 +382,20 @@ test('Meta endpoint recovers a DB failure after provider acceptance without crea
     assert.equal(String(url),'https://graph.facebook.com/v21.0/act_test/ads');
     providerCreates++; return Response.json({id:'endpoint-replay-ad'});
   };
-  const invoke = async () => {
+  const invoke = async (changes={}) => {
     const response={statusCode:200,status(code){this.statusCode=code;return this;},json(body){this.body=body;return this;},setHeader(){}};
-    await metaHandler({method:'POST',headers:{},body:{action:'create_ad_from_creative',creativeId:'synthetic-creative',adsetId:'synthetic-adset',adName:'Endpoint replay',sourceType:'tool_generated'}},response);
+    await metaHandler({method:'POST',headers:{},body:{action:'create_ad_from_creative',creativeId:'synthetic-creative',adsetId:'synthetic-adset',adName:'Endpoint replay',sourceType:'tool_generated',...changes}},response);
     return response;
   };
   try {
+    await runExternalStep(sql,{operationKey:'fixture-creative',stepKey:'1:/v21.0/act_test/adcreatives',actorId:'local-dev',payload:{
+      object_story_spec:JSON.stringify({page_id:'fixture-page',link_data:{image_hash:'fixture-image',name:'Stored headline',message:'Stored copy',link:'https://example.test/product'}}),
+      url_tags:'tw_source={{site_source_name}}&tw_adid={{ad.id}}',
+    }},async()=>({status:200,body:{id:'synthetic-creative'}}));
+    for(const changes of [{headline:'Different headline'},{primaryText:'Different copy'},{destUrl:'https://example.test/other'},{urlParams:'changed=1'},{creativeId:'unknown'}]) {
+      const denied=await invoke(changes);assert.equal(denied.statusCode,409,JSON.stringify(denied.body));
+    }
+    assert.equal(providerCreates,0,'mismatched creative content never reaches Meta');
     const first=await invoke();
     assert.equal(first.statusCode,503);
     const replay=await invoke();
@@ -396,6 +404,8 @@ test('Meta endpoint recovers a DB failure after provider acceptance without crea
     assert.equal(providerCreates,1);
     const [count]=await sql`SELECT count(*)::int AS count FROM launch_history WHERE ad_id = 'endpoint-replay-ad'`;
     assert.equal(count.count,1);
+    const [saved]=await sql`SELECT headline,primary_text,dest_url FROM launch_history WHERE ad_id='endpoint-replay-ad'`;
+    assert.deepEqual(saved,{headline:'Stored headline',primary_text:'Stored copy',dest_url:'https://example.test/product'});
   } finally {
     globalThis.fetch=originalFetch; restoreDatabase();
     for (const key of Object.keys(process.env)) if (!(key in savedEnv)) delete process.env[key];

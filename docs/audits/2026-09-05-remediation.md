@@ -157,9 +157,9 @@ not claim that the remaining infrastructure and product roadmap is complete.
 1. Grant the narrowly scoped AWS permissions in `../operations/backup-provisioning-policy.json`,
    provision the approved private destination, automate backups, and perform a timed
    offsite restore. RPO/RTO targets are documented but not yet proven.
-2. Complete production authentication deployment and real member sign-in verification;
-   isolate preview databases/provider credentials; re-encrypt legacy Google OAuth
-   records under a dedicated key before retiring the old Clerk secret.
+2. Production owner sign-in is verified. Finish the remaining role/suspension browser
+   checks, isolate Development credentials and old deployment snapshots, and
+   re-encrypt legacy Google OAuth records before retiring the old Clerk secret.
 3. Finish reconciliation for uncertain uploads, Meta creative/campaign/ad-set creation,
    Shopify draft/order outcomes, email sends, and unknown Remotion starts. Add render
    cancellation, email delivery/bounce ingestion, and seeding fulfillment synchronization.
@@ -169,7 +169,8 @@ not claim that the remaining infrastructure and product roadmap is complete.
 5. Establish private media access, lifecycle/retention policy, reference-aware orphan
    cleanup, proactive operational alert delivery, and provider completeness checks.
 6. Instrument remaining paid provider paths, configure a complete price book and
-   dollar budget reservations, remove runtime DDL, and restrict the runtime DB role.
+   dollar budget reservations, and restrict the runtime DB role. Normal runtime DDL
+   has been removed; provisioning the prepared restricted identities needs approval.
 
 See `../operations/recovery.md` for release, backup, authentication, and operation
 recovery procedures. Regression checks exercise isolated PostgreSQL and injected
@@ -688,3 +689,22 @@ PGlite serializes transactions; these tests do not establish cross-connection lo
 behavior on production. The wider investment intake remains a multi-step operation;
 this change does not claim atomicity for its other creator, seeding, or flow records.
 Validation: backend syntax checks, all 121 regressions, and the production build pass.
+
+### September 9: bind reused creatives to their recorded content
+
+Creating an ad from a saved creative now requires an unambiguous completed creation
+receipt in the configured Meta account whose payload matches its saved hash. The
+server compares supplied headline, copy, destination, attribution tags, and optional
+page/Instagram identity with that receipt. It rejects changes before dispatching an
+ad request and derives launch-log content from the receipt. Carousel card headlines
+and descriptions participate in brand checks; the unused parent headline is not
+misreported as rendered content. Media ownership lookup uses the same account-bound
+receipt reader.
+
+The actual endpoint regression rejects changed content and unknown creatives before
+any provider call, then verifies lost-bookkeeping-response recovery still creates
+one ad and records the original creative content. Format tests cover video,
+carousel, foreign-account receipts, identity mismatches, and altered stored payloads.
+This is one part of launch-packet integrity: paired deliverable approval, placement
+snapshots, explicit rights exceptions, and a unified review artifact remain open.
+Provider edits made outside HOWL are not detected by a creation receipt alone.
