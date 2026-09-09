@@ -1,3 +1,4 @@
+import {launchApprovalRecords} from '../lib/launch-review.js';
 import React,{useEffect,useState} from 'react';
 import {apiJson} from '../lib/api.js';
 
@@ -23,7 +24,7 @@ export default function LaunchPacketDetails({adId}) {
         <p>Captured {new Date(snapshot.captured_at).toLocaleString()} by {snapshot.actor_id}.</p>
         <p>Account {snapshot.account_id} · Ad set {snapshot.adset.name || snapshot.adset.id} · Campaign {snapshot.adset.campaign_id}</p>
         <p>{snapshot.basis}</p>
-        <p>{snapshot.evidence.approvals.filter(Boolean).length} creator approval record(s); {snapshot.media_receipts.length} media receipt(s); {snapshot.drive_uploads.length} Drive upload receipt(s).</p>
+        <p>{launchApprovalRecords(snapshot.evidence.approvals).length} creator approval record(s); {snapshot.media_receipts.length} media receipt(s); {snapshot.drive_uploads.length} Drive upload receipt(s).</p>
         {!!snapshot.unresolved_media_ids.length&&<p>Some provider media IDs have no upload-registry entry. Consult the captured Drive receipts and approval evidence.</p>}
         <details><summary>Creative, targeting, and approval evidence</summary>
           <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',maxHeight:480,overflow:'auto'}}>{JSON.stringify(snapshot,null,2)}</pre>

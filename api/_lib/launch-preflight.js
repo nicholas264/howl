@@ -1,6 +1,6 @@
 import { driveContentDigest } from './approval-evidence.js';
 import { resolveLaunchMedia } from './provider-media.js';
-export async function assertLaunchReady(sql, input) {
+export async function assertLaunchReady(sql, input, {driveDigest=driveContentDigest} = {}) {
   const media = await resolveLaunchMedia(sql,input);
   let creatorId = Number(input.creatorId || input.creator_id) || null;
   let deliverableId = Number(input.deliverableId || input.deliverable_id) || null;
@@ -26,7 +26,26 @@ export async function assertLaunchReady(sql, input) {
   `;
   const matchedCreators = [...new Set(known.map(row=>Number(row.creator_id)))];
   const matchedDeliverables = [...new Set(known.map(row=>Number(row.deliverable_id)).filter(Boolean))];
-  if (matchedCreators.length > 1 || matchedDeliverables.length > 1) throw Object.assign(new Error('Mixed creator assets require separate approved launch packets.'),{statusCode:409});
+  if (matchedCreators.length > 1) throw Object.assign(new Error('Mixed creators require separate approved launch packets.'),{statusCode:409});
+  if (matchedDeliverables.length > 1) {
+    const files=[input.pair?.feedFileId,input.pair?.storyFileId];
+    if(input.action!=='launch_meta_ad' || files.some(id=>!id) || new Set(files).size!==2
+      || media.driveIds.length!==2 || media.driveIds.some(id=>!files.includes(id)) || media.ids.length || media.urls.length)
+      throw Object.assign(new Error('Multiple deliverables require a separately approved Drive file for each paired placement.'),{statusCode:409});
+    if(deliverableId && !matchedDeliverables.includes(deliverableId))throw Object.assign(new Error('Selected deliverable is not part of this pair.'),{statusCode:409});
+    const registered=await sql`SELECT drive_file_id FROM creative_assets WHERE drive_file_id IN (SELECT jsonb_array_elements_text(${JSON.stringify(files)}::jsonb))`;
+    if(registered.length!==2)throw Object.assign(new Error('Refresh both paired files into the Drive workspace before launch.'),{statusCode:409});
+    const pairedApprovals={},driveDigests={};
+    for(const fileId of files){
+      const result=await assertLaunchReady(sql,{fileId,creatorId:creatorId || matchedCreators[0],sourceType:'external_creator',briefId:input.briefId || input.brief_id},{driveDigest});
+      if(!result?.approval)throw Object.assign(new Error('Every paired file requires its own current approval.'),{statusCode:409});
+      pairedApprovals[fileId]=result.approval;Object.assign(driveDigests,result.driveDigests);
+    }
+    if(new Set(Object.values(pairedApprovals).map(approval=>Number(approval.deliverable_id))).size!==2)
+      throw Object.assign(new Error('Paired files must resolve to two distinct approved deliverables.'),{statusCode:409});
+    input.creatorId=creatorId || matchedCreators[0];input.sourceType='external_creator';
+    return {driveDigests,pairedApprovals};
+  }
   if (matchedCreators.length && creatorId && creatorId !== matchedCreators[0]) throw Object.assign(new Error('Asset ownership does not match the selected creator.'),{statusCode:409});
   if (matchedDeliverables.length && deliverableId && deliverableId !== matchedDeliverables[0]) throw Object.assign(new Error('Asset does not belong to the selected deliverable.'),{statusCode:409});
   creatorId ||= matchedCreators[0] || null;
@@ -81,7 +100,7 @@ export async function assertLaunchReady(sql, input) {
   if (actualUrls.some(url=>url !== expectedUrl)) fail('The selected media differs from the approved output. Approve this revision before launching.');
   if (media.driveIds.some(id=>id !== approved.drive_file_id)) fail('The selected Drive asset differs from the approved output.');
   for (const id of media.driveIds) {
-    if (!approved.evidence?.drive_md5 || await driveContentDigest(id) !== approved.evidence.drive_md5) fail('Drive file content changed after approval. Review and approve this revision.');
+    if (!approved.evidence?.drive_md5 || await driveDigest(id) !== approved.evidence.drive_md5) fail('Drive file content changed after approval. Review and approve this revision.');
   }
   if (!actualUrls.length && !media.driveIds.length) fail('No verifiable approved media is attached to this launch.');
   input.creatorId = creatorId || Number(deliverable.creator_id);

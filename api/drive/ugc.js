@@ -1,3 +1,4 @@
+import {recordPairedDriveLaunch} from '../_lib/paired-drive-launch.js';
 import { associateDrivePair } from '../_lib/drive-pairs.js';
 import { assertLaunchReady } from '../_lib/launch-preflight.js';
 import { launchEvidenceVerifier } from '../_lib/launch-packets.js';
@@ -818,6 +819,10 @@ export default async function handler(req, res) {
                   (${adData.id}, ${adsetId}, ${campaignId || null}, ${pair.feedFileId}, ${feed.fileMeta.name + ' + ' + story.fileMeta.name}, ${creator || null}, ${creatorId || null}, ${attributionSourceType}, ${attributionSourceLabel}, ${briefId || null}, ${deliverableId || null}, ${productId || null}, ${angleId || null}, ${adName}, ${headline || null}, ${primaryText || null}, ${destUrl}, ${feed.mimeType + ' (paired)'}, ${appAccess.userId}, ${appAccess.email || null}, ${feed.blobUrl || null}, ${'drive:'+adData.id})
                 ON CONFLICT (operation_key) DO NOTHING
               `;
+              if(launchApproval?.pairedApprovals){
+                await recordPairedDriveLaunch(sql,{adId:adData.id,assets:[{...feed,fileId:pair.feedFileId,role:'feed'},{...story,fileId:pair.storyFileId,role:'story'}],
+                  pairedApprovals:launchApproval.pairedApprovals,creator,sourceLabel:attributionSourceLabel,productId,angleId});
+              }else{
               await Promise.all([
                 markCreativeAssetLaunched(sql, {
                   driveFileId: pair.feedFileId, durableUrl: feed.blobUrl,
@@ -840,6 +845,7 @@ export default async function handler(req, res) {
                 briefId,
                 deliverableId,
               });
+              }
               await Promise.all([
                 enqueueCreativeAssetAnalysis(sql, feed.videoId || feed.imageHash || adData.id, 'drive_launch'),
                 enqueueCreativeAssetAnalysis(sql, story.videoId || story.imageHash || adData.id, 'drive_launch'),

@@ -23,12 +23,12 @@ export async function readLaunchAdset(adsetId,{token=process.env.META_ACCESS_TOK
   return Object.fromEntries(fields.filter(field=>body[field]!=null).map(field=>[field,body[field]]));
 }
 
-export function launchEvidenceVerifier(sql,inputs,results) {
+export function launchEvidenceVerifier(sql,inputs,results,options) {
   const baseline=plain(results);
   const attribution=inputs.map(input=>Object.fromEntries(contextKeys.filter(key=>input[key]!=null).map(key=>[key,plain(input[key])])));
   return async()=>{
     const current=[];
-    for(const input of inputs)current.push(await assertLaunchReady(sql,input));
+    for(const input of inputs)current.push(await assertLaunchReady(sql,input,options));
     if(digest(plain(current))!==digest(baseline))throw conflict('Approval evidence changed during launch. Review the current outputs and retry as a new launch.');
     return {approvals:baseline,attribution};
   };

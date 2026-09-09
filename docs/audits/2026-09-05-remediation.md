@@ -800,3 +800,27 @@ completed against expected counts even when the linked output has a terminal
 status. Cancelling a deliverable remains an explicit exclusion. The regression
 verifies that two of three expected assets remain overdue after the first is
 marked launched.
+
+## Independently approved Drive pairs — September 9, 2026
+
+The Drive pair path can now launch two separately approved outputs from the same
+creator. Each registered file resolves to one unambiguous deliverable and must
+pass its own current agreement, brief/terms snapshot, output approval, and Drive
+checksum checks. A selected deliverable must belong to the pair; an explicitly
+selected brief must match both. Additional media references, mixed creators,
+ambiguous ownership and unsupported non-Drive bundles remain rejected. Evidence
+is rechecked before dispatch, and the confirmed review contains both approvals.
+
+Post-dispatch bookkeeping binds the feed and story assets to their respective
+approved deliverables and updates only those flow cards. Each deliverable receives
+credit for one output; retries preserve those counts. Missing workspace records or
+changed approval identities cause a visible bookkeeping error while the known ad
+receipt and captured packet remain available for reconciliation. The pair gate
+requires both files in the workspace before any upload or ad creation.
+
+Regression coverage uses isolated PostgreSQL and injected Drive checksums to
+exercise two approvals, rights revocation, checksum drift, changed approvals,
+wrong/ambiguous ownership, selected-deliverable mismatch, independent placement
+attribution and replayed bookkeeping. No production ad was created. Non-Drive
+paired deliverables, mixed-creator packets and explicit rights exceptions still
+require separate work; this release does not relax those gates.
