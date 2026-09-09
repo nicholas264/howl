@@ -58,7 +58,7 @@ export function normalizeAsset(asset) {
   return {id:asset.id,url:asset.url,name:safeText(asset.name,160),width:asset.width,height:asset.height,sha256:asset.sha256,
     previewUrl:validAssetUrl(asset.previewUrl)?asset.previewUrl:'', productId:asset.productId || '', approved:asset.approved===true, role:asset.role==='reference'?'reference':'product',
     features, protectedRegion, assessment:normalizeAssessment(asset.assessment), notes:safeText(asset.notes,1200), analysis:safeText(asset.analysis,2000),
-    driveId:safeText(asset.driveId,120),driveModified:safeText(asset.driveModified,80),createdAt:safeText(asset.createdAt,80)};
+    referenceKey:safeText(asset.referenceKey,200),driveId:safeText(asset.driveId,120),driveModified:safeText(asset.driveModified,80),createdAt:safeText(asset.createdAt,80)};
 }
 export function stableStringify(value) {
   const canonical=v=>Array.isArray(v)?v.map(canonical):v && typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v;

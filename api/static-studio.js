@@ -1,8 +1,9 @@
+import { accountReferenceRows, resolveReferenceImages, importAccountReference } from './_lib/static-studio-references.js';
 import { OVERLAY_INSTRUCTIONS } from '../src/lib/static-studio/composition.js';
 import { put } from '@vercel/blob';
 import { createStudioDrive } from './_lib/static-studio-drive.js';
 export { folderId } from './_lib/static-studio-drive.js';
-import { requirePermission } from './_lib/app-access.js';
+import { hasPermission, requirePermission } from './_lib/app-access.js';
 import { loadStudio, saveStudio } from './_lib/static-studio-store.js';
 import { studioDriveToken } from './_lib/static-studio-auth.js';
 import { fetchPublicResource } from './_lib/safe-fetch.js';
@@ -29,6 +30,18 @@ export default async function handler(req,res) {
     const {action}=req.body || {};
     if(action==='model-settings') return res.json({settings:await saveModelSettings(access.sql,access.userId,req.body.settings)});
     assert(req.body.clientVersion===3,'Static Studio was updated. Reload this tab before continuing; your saved concepts are safe.');
+    if(action==='account-references' || action==='account-reference-import') {
+      if(!hasPermission(access,'analytics.read'))return res.status(403).json({error:'Account references require analytics access.'});
+      res.setHeader('Cache-Control','private, no-store');
+      if(action==='account-reference-import')return res.json(await importAccountReference(access.sql,req.body.variantKey,req.body.hash,put));
+      const data=await accountReferenceRows(access.sql);
+      if(req.body.variantKey) {
+        const variant=data.variants.find(row=>row.key===req.body.variantKey);
+        assert(variant,'This account variant is no longer available. Refresh references.');
+        return res.json({images:await resolveReferenceImages(variant.images.slice(0,50).map(i=>i.hash))});
+      }
+      return res.json(data);
+    }
     if(action==='save') return res.json(await saveStudio(access.sql,access.userId,req.body.payload,req.body.revision));
     if(action==='drive-list' || action==='drive-import') {
       const token=await studioDriveToken(access);
