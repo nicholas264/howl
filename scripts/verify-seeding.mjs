@@ -25,7 +25,7 @@ try {
     INSERT INTO creator_seeding_log(creator_id,seeded_on,unit_cogs,quantity,shipping_cost,creator_fee)
     VALUES (98765,'2024-04-05',100,2,20,50),(98765,'2026-04-05',100,1,20,0),(98765,'2026-05-05',200,1,20,0),(98765,'2026-06-05',300,1,20,0),(98765,'2026-07-05',400,1,20,50),(98765,'2026-08-05',1200,2,150,1000),(98765,'2026-09-01',1000,1,75,500);
     INSERT INTO launch_history(ad_id,creator_id) VALUES ('qa-ad',98765);
-    INSERT INTO creative_insights_daily(ad_id,date,spend,purchase_value) VALUES ('qa-ad','2026-08-06',1000,10000);`);
+    INSERT INTO creative_insights_daily(ad_id,date,spend,purchase_value) VALUES ('qa-ad','2026-08-06',1000,10000),('qa-unreviewed','2026-08-06',3000,20000);`);
   const entry=`import React from 'react';import {createRoot} from 'react-dom/client';import Ledger from '/src/components/SeedingLedger.jsx';import '/src/styles.css';createRoot(document.getElementById('root')).render(<Ledger canManage={new URLSearchParams(location.search).get('readonly')!=='true'}/>);`;
   server=await createServer({configFile:false,root:process.cwd(),envDir:path.join(output,'empty-env'),optimizeDeps:{exclude:['@clerk/clerk-react'],force:true},plugins:[react(),{
     name:'seeding-qa',enforce:'pre',resolveId(id){if(id==='@clerk/clerk-react')return '\0qa-clerk';if(id==='/fixture.jsx')return path.join(process.cwd(),'__seeding_qa__.jsx')},load(id){if(id==='\0qa-clerk')return 'export const useAuth=()=>({getToken:async()=>null});';if(id.endsWith('__seeding_qa__.jsx'))return entry},configureServer(s){s.middlewares.use(async(req,res,next)=>{
@@ -45,6 +45,10 @@ try {
   assert.ok(await page.getByText('$220',{exact:true}).count());
   assert.ok(await page.getByRole('button',{name:'Aug 2026:',exact:false}).count());
   await page.getByRole('button',{name:'Aug 2026:',exact:false}).click();
+  await page.getByRole('heading',{name:'Creator linking coverage',exact:true}).waitFor();
+  assert.ok(await page.getByText('1 of 2 ads with spend are linked to creators · 25.0% of account spend.',{exact:false}).count());
+  assert.ok(await page.getByText('Partial attribution:',{exact:false}).count());
+  assert.equal(await page.getByRole('link',{name:'Review ad sources'}).getAttribute('href'),'/?tab=creative-analytics');
   await page.getByRole('button',{name:'Edit budgets'}).click();
   await page.getByLabel('Seeding budget ($)').fill('4000');await page.getByLabel('Creator fee budget ($)').fill('2000');
   await page.getByRole('button',{name:'Save for Aug 2026'}).click();await page.getByRole('button',{name:'Edit budgets'}).waitFor();
