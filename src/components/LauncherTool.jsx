@@ -1,3 +1,4 @@
+import {pairedPlacementRules,localMediaFingerprint} from '../lib/launch-review.js';
 import { productClaimConflicts } from '../lib/productClaims.js';
 import { apiFetch as fetch } from '../lib/apiFetch.js';
 // LauncherTool — unified ad launcher.
@@ -890,6 +891,9 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     const adName = options.adName || buildNamesForItem(item, options.index || 1).adName;
     const body = {
       action: 'launch_meta_ad',
+      reviewed_plan: options.reviewedPlan,
+      briefId: m.briefId || item.briefId || null,
+      deliverableId: m.deliverableId || item.deliverableId || null,
       adsetId,
       pageId: config.pageId.trim(),
       instagramUserId: (config.instagramUserId || '').trim(),
@@ -988,6 +992,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         setStep(id, 'meta_creative', 'running');
         const pr = await fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
           action: 'create_paired_image_ad',
+          reviewed_plan: options.reviewedPlan,
           feedImageHash: feedUp.hash,
           storyImageHash: storyUp.hash,
           adName,
@@ -1063,6 +1068,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'create_ad_from_creative',
+          reviewed_plan: options.reviewedPlan,
           creativeId: cd.creativeId,
           adName,
           adsetId,
@@ -1142,7 +1148,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     return warnings;
   };
 
-  const launchWithAdsetForItem = async (item, index = 1) => {
+  const launchWithAdsetForItem = async (item, index = 1, reviewedPlan) => {
     if (!selectedCampaignId || selectedCampaignId === '__new__') throw new Error('Pick a campaign first.');
     if (!config.pageId.trim()) throw new Error('Pick a Facebook Page.');
     const names = buildNamesForItem(item, index);
@@ -1154,16 +1160,16 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     } else if (!adsetId || adsetId === '__new__') {
       throw new Error('Pick an ad set or switch launch structure to one ad set per creative.');
     }
-    return launch(item, { adsetId, adName: names.adName, index });
+    return launch(item, { adsetId, adName: names.adName, index, reviewedPlan });
   };
 
-  const launchOne = async (item) => {
+  const launchOne = async (item, reviewedPlan) => {
     setGlobalError('');
     const issues = launchIssuesForItem(item);
     if (issues.length) return setGlobalError(issues[0]);
     setBatchLaunching(true);
     try {
-      await launchWithAdsetForItem(item, 1);
+      await launchWithAdsetForItem(item, 1, reviewedPlan);
       if (config.namingMode !== 'existing_adset') await loadAdsets(selectedCampaignId);
     } catch (err) {
       setGlobalError(err.message);
@@ -1177,7 +1183,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   };
   const selectedLaunchReadyCount = selectedQueue.filter(canLaunchItem).length;
 
-  const launchSelected = async (requestedItems = null) => {
+  const launchSelected = async (requestedItems = null, reviewedPlans = {}) => {
     setGlobalError('');
     const items = (requestedItems || selectedQueue).filter(canLaunchItem);
     if (!items.length) return setGlobalError('Select at least one launch-ready item.');
@@ -1188,7 +1194,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     setBatchLaunching(true);
     try {
       for (let i = 0; i < items.length; i++) {
-        await launchWithAdsetForItem(items[i], i + 1);
+        await launchWithAdsetForItem(items[i], i + 1, reviewedPlans[items[i].unifiedId]);
       }
       if (oneAdsetPerItem) await loadAdsets(selectedCampaignId);
     } catch (err) {
@@ -1320,6 +1326,12 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   const [bulkProductId, setBulkProductId] = useState('');
   const [bulkCopyIndex, setBulkCopyIndex] = useState('');
   const [preflightIds, setPreflightIds] = useState([]);
+  const [reviewState,setReviewState] = useState({loading:false,error:'',rows:[],fingerprint:''});
+  const reviewController=useRef(null);
+  const reviewDialog=useRef(null);
+  const closeReview=()=>{reviewController.current?.abort();setPreflightIds([]);};
+  useEffect(()=>()=>reviewController.current?.abort(),[]);
+  const reviewFingerprint=items=>JSON.stringify({items,metadata:items.map(item=>meta[item.unifiedId]),config,selectedCampaignId,selectedAdsetId,batchAdsetBudget,effectiveObjective,names:items.map((item,index)=>buildNamesForItem(item,index+1))});
   const selectedProductIds = [...new Set(selectedQueue.map(item => meta[item.unifiedId]?.productId).filter(Boolean))];
   const effectiveBulkProductId = bulkProductId || (selectedProductIds.length === 1 ? selectedProductIds[0] : '');
   const bulkCopyOptions = effectiveBulkProductId ? launcherCopyOptions(effectiveBulkProductId, library.variants) : [];
@@ -1327,11 +1339,19 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
 
   useEffect(() => {
     if (!preflightIds.length) return undefined;
+    const previousFocus=document.activeElement;
+    reviewDialog.current?.focus();
     const closeOnEscape = event => {
-      if (event.key === 'Escape') setPreflightIds([]);
+      if (event.key === 'Escape') closeReview();
+      if(event.key==='Tab'){
+        const controls=[...reviewDialog.current.querySelectorAll('button:not(:disabled), summary, a[href], [tabindex="0"]')];
+        const first=controls[0],last=controls.at(-1);
+        if(event.shiftKey && (document.activeElement===first || document.activeElement===reviewDialog.current)){event.preventDefault();last?.focus();}
+        else if(!event.shiftKey && document.activeElement===last){event.preventDefault();first?.focus();}
+      }
     };
     window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
+    return () => {window.removeEventListener('keydown', closeOnEscape);previousFocus?.focus();};
   }, [preflightIds.length]);
 
   const applyProductToSelected = () => {
@@ -1372,22 +1392,64 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     });
   };
 
-  const requestPreflight = (items) => {
+  const requestPreflight = async (items) => {
     const ready = items.filter(canLaunchItem);
     if (!ready.length) {
-      const firstIssue = items[0] ? launchIssuesForItem(items[0])[0] : 'Select at least one launch-ready creative.';
-      setGlobalError(firstIssue || 'Select at least one launch-ready creative.');
+      setGlobalError(items[0] ? launchIssuesForItem(items[0])[0] : 'Select at least one launch-ready creative.');
       return;
     }
-    setGlobalError('');
-    setPreflightIds(ready.map(item => item.unifiedId));
+    reviewController.current?.abort();
+    const controller=new AbortController();reviewController.current=controller;
+    const frozen=JSON.parse(JSON.stringify(ready));
+    const fingerprint=reviewFingerprint(frozen);
+    setGlobalError('');setPreflightIds(frozen.map(item=>item.unifiedId));
+    setReviewState({loading:true,error:'',rows:[],fingerprint});
+    const timer=setTimeout(()=>controller.abort(),240000);
+    try {
+      const rows=[];
+      for(let index=0;index<frozen.length;index++){
+        if(controller.signal.aborted)throw new Error('Review cancelled or timed out.');
+        const item=frozen[index],m=meta[item.unifiedId] || {},drive=item.source==='drive';
+        const attribution=sourceConfig(m.sourceType || (drive?'external_creator':m.creatorId?'external_creator':'tool_generated'));
+        const paired=drive?item.kind==='pair':item.type!=='video'&&!!item.storyUrl;
+        const names=buildNamesForItem(item,index+1);
+        const input={action:drive?'launch_meta_ad':'create_ad_from_creative',sourceType:attribution.value,
+          creatorId:attribution.requiresCreator?m.creatorId:null,deliverableId:m.deliverableId || item.deliverableId || null,
+          briefId:m.briefId || item.briefId || null,sourceVideoUrl:item.sourceVideoUrl || null};
+        let media;
+        if(drive){
+          if(paired){input.pair={feedFileId:item.feed.id,storyFileId:item.story.id};media=[{role:'feed',drive_file_id:item.feed.id},{role:'story',drive_file_id:item.story.id}];}
+          else {input.fileId=item.id;media=[{role:'single',drive_file_id:item.id}];}
+        }else{
+          const sources=paired?[['feed',item.squareUrl || item.url],['story',item.storyUrl]]:[['single',item.type==='video'?item.videoUrl:item.squareUrl || item.url]];
+          media=await Promise.all(sources.map(async([role,url])=>/^https:\/\//i.test(url || '')?{role,url}:{role,sha256:await localMediaFingerprint(url)}));
+          input.items=media.filter(asset=>asset.url).map(asset=>({imageUrl:asset.url}));
+        }
+        const existing=config.namingMode==='existing_adset';
+        const response=await fetch('/api/launch-review',{method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,
+          body:JSON.stringify({input,media,...(existing?{adset_id:selectedAdsetId}:{new_adset:{name:names.adsetName,campaign_id:selectedCampaignId,daily_budget_dollars:Number(batchAdsetBudget),objective:effectiveObjective,pixel_id:(config.defaultPixelId || '').trim()}})})});
+        const data=await response.json();if(!response.ok || data.error)throw new Error(data.error || 'Could not prepare the launch review.');
+        const headline=drive?(m.headline || '').trim():m.headline || '';
+        const primary=drive?(m.primaryText || '').trim():m.primaryText || '';
+        const plan={version:1,confirmed:false,ad_name:names.adName,approval_hash:data.approval_hash,media:data.media,
+          fields:{headline,primary_text:primary || headline,dest_url:destUrlForMeta(m),url_tags:urlParamsForMeta(m) || '',page_id:drive?config.pageId.trim():config.pageId,instagram_user_id:(config.instagramUserId || '').trim() || data.default_instagram_user_id || ''},
+          target:existing?{mode:'existing',id:selectedAdsetId,snapshot:data.adset}:{mode:'new',request:data.new_adset},
+          ...(paired?{placement_rules:pairedPlacementRules(drive && (item.feed.mimeType || '').startsWith('video/'))}:{})};
+        rows.push({item,plan,approvals:data.approvals,warnings:launchWarningsForItem(item)});
+        if(!controller.signal.aborted)setReviewState({loading:index<frozen.length-1,error:'',rows:[...rows],fingerprint});
+      }
+    }catch(error){if(reviewController.current===controller)setReviewState(previous=>({...previous,loading:false,error:controller.signal.aborted?'Review cancelled or timed out. Keep editing and try again.':error.message}));}
+    finally{clearTimeout(timer);}
   };
 
   const confirmPreflight = async () => {
-    const items = [...preflightItems];
-    setPreflightIds([]);
-    if (items.length === 1) await launchOne(items[0]);
-    else await launchSelected(items);
+    if(reviewState.loading || reviewState.error || !reviewState.rows.length)return;
+    const items=reviewState.rows.map(row=>row.item);
+    if(reviewFingerprint(preflightItems)!==reviewState.fingerprint){setReviewState(previous=>({...previous,error:'The selection or settings changed. Keep editing and review again.'}));return;}
+    const plans=Object.fromEntries(reviewState.rows.map(row=>[row.item.unifiedId,{...row.plan,confirmed:true}]));
+    closeReview();
+    if(items.length===1)await launchOne(items[0],plans[items[0].unifiedId]);
+    else await launchSelected(items,plans);
   };
 
   // ── render ────────────────────────────────────────────────────────────
@@ -2028,11 +2090,13 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       {preflightItems.length > 0 && (
         <div
           role="presentation"
-          onClick={() => setPreflightIds([])}
+          onClick={closeReview}
           style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'rgba(23,23,23,0.58)' }}
         >
           <div
             role="dialog"
+            ref={reviewDialog}
+            tabIndex={-1}
             aria-modal="true"
             aria-labelledby="launcher-preflight-title"
             onClick={event => event.stopPropagation()}
@@ -2049,29 +2113,36 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
             </div>
 
             <div style={{ padding: 20 }}>
-              {preflightItems.map((item, index) => {
-                const m = meta[item.unifiedId] || {};
-                const product = PRODUCTS.find(candidate => candidate.id === m.productId);
-                const itemAttribution = sourceConfig(m.sourceType || (item.source === 'drive' ? 'external_creator' : 'tool_generated'));
-                const warnings = launchWarningsForItem(item);
-                return (
-                  <div key={item.unifiedId} style={{ padding: '12px 0', borderBottom: index === preflightItems.length - 1 ? 0 : '1px solid #ebe8e1' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' }}>
-                      <strong style={{ color: '#171717', fontSize: 12 }}>{assetLabel(item)}</strong>
-                      <span style={{ color: '#77746f', fontSize: 10 }}>{product?.name || 'No product'} | {itemAttribution.label}</span>
-                    </div>
-                    <div style={{ marginTop: 5, color: '#171717', fontSize: 11, lineHeight: 1.4 }}>{m.headline}</div>
-                    <div style={{ marginTop: 3, color: '#77746f', fontSize: 10, lineHeight: 1.4, wordBreak: 'break-word' }}>{destUrlForMeta(m)}</div>
-                    <div style={{ marginTop: 3, color: '#88857f', fontSize: 9 }}>{buildNamesForItem(item, index + 1).adName}</div>
-                    {warnings.map(warning => <div key={warning} style={{ marginTop: 5, color: '#9f5b12', fontSize: 10 }}>{warning}</div>)}
-                  </div>
-                );
-              })}
+              {reviewState.loading && <p role="status">Checking media and approval evidence ({reviewState.rows.length}/{preflightItems.length})…</p>}
+              {reviewState.error && <p role="alert" style={{color:'#b42318'}}>{reviewState.error}</p>}
+              {reviewState.rows.map(({item,plan,approvals,warnings})=>(
+                <section key={item.unifiedId} style={{padding:'12px 0',borderBottom:'1px solid #ebe8e1',fontSize:12,overflowWrap:'anywhere'}}>
+                  <strong>{assetLabel(item)}</strong>
+                  <div style={{display:'flex',gap:12,marginTop:8}}>{plan.media.map(asset=>asset.drive_file_id
+                    ? <DriveThumb key={asset.role} fileId={asset.drive_file_id} alt={`${asset.role} preview`} style={{maxWidth:160,maxHeight:180,objectFit:'contain'}} fallback={<span>{asset.role} preview unavailable</span>} />
+                    : item.type!=='video' && <img key={asset.role} src={asset.role==='story'?item.storyUrl:item.squareUrl || item.url} alt={`${asset.role} preview`} style={{maxWidth:160,maxHeight:180,objectFit:'contain'}} />)}</div>
+                  <dl>
+                    <dt>Ad name</dt><dd>{plan.ad_name}</dd>
+                    <dt>Headline</dt><dd>{plan.fields.headline || '(blank)'}</dd>
+                    <dt>Primary text</dt><dd style={{whiteSpace:'pre-wrap'}}>{plan.fields.primary_text}</dd>
+                    <dt>Destination</dt><dd>{plan.fields.dest_url}</dd>
+                    <dt>Attribution tags</dt><dd>{plan.fields.url_tags || '(none)'}</dd>
+                    <dt>Facebook Page / Instagram</dt><dd>{plan.fields.page_id} / {plan.fields.instagram_user_id || '(none)'}</dd>
+                  </dl>
+                  <p>{plan.target.mode==='existing'?'Current ad-set configuration':'New paused ad-set request; Meta defaults must match before the ad is sent.'}</p>
+                  <pre style={{whiteSpace:'pre-wrap',fontSize:11}}>{JSON.stringify(plan.target.snapshot || plan.target.request,null,2)}</pre>
+                  <p>Media verified for this review:</p>
+                  {plan.media.map(asset=><div key={asset.role}>{asset.role}: {asset.drive_file_id || asset.url || 'Local asset'}<br/><small>{asset.drive_md5 || asset.sha256}</small></div>)}
+                  {plan.placement_rules && <details><summary>Placement mapping</summary><pre style={{whiteSpace:'pre-wrap',fontSize:11}}>{JSON.stringify(plan.placement_rules,null,2)}</pre></details>}
+                  <details><summary>Creator approval and agreement evidence</summary><pre style={{whiteSpace:'pre-wrap',fontSize:11}}>{approvals.some(Boolean)?JSON.stringify(approvals,null,2):'No external creator approval is associated with this internally attributed asset.'}</pre></details>
+                  {warnings.map(warning=><p key={warning} style={{color:'#9f5b12'}}>{warning}</p>)}
+                </section>
+              ))}
             </div>
 
             <div style={{ position: 'sticky', bottom: 0, display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '14px 20px', borderTop: '1px solid #dedbd3', background: '#faf9f6' }}>
-              <button type="button" onClick={() => setPreflightIds([])} style={S.ghost}>Keep editing</button>
-              <button type="button" onClick={confirmPreflight} disabled={batchLaunching} style={S.btn(batchLaunching)}>
+              <button type="button" onClick={closeReview} style={S.ghost}>Keep editing</button>
+              <button type="button" onClick={confirmPreflight} disabled={batchLaunching || reviewState.loading || !!reviewState.error || !reviewState.rows.length} style={S.btn(batchLaunching || reviewState.loading || !!reviewState.error)}>
                 Create {preflightItems.length} paused ad{preflightItems.length === 1 ? '' : 's'}
               </button>
             </div>

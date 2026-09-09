@@ -749,3 +749,29 @@ explicit rights exceptions remain open. Creative creation receipts do not prove
 the absence of subsequent provider edits, and targeting snapshots do not establish
 actual placement delivery. Snapshot capture is tested with injected provider
 responses; no paid ad was created for verification.
+
+## Launcher confirmation binds reviewed intent — September 9, 2026
+
+The unified Launcher now prepares an authenticated review before confirmation.
+It displays effective copy, destination, tags, account identities, media references
+and fingerprints, targeting/budget configuration, paired placement rules, and
+current creator approval/agreement evidence. The selection and settings are
+compared again at confirmation. Cancelled or stale preparations cannot dispatch.
+The final server snapshot compares the confirmed plan with the creative receipt,
+media upload receipts, fresh approval evidence, and current ad-set configuration
+before sending the paused ad to Meta. Comparison failures do not send the ad.
+
+Remote media hashes stream with byte/time limits and bounded concurrent review
+leases; inline assets use SHA-256 and Drive assets use their content checksum.
+New ad-set creation and review share one secret-free request builder. The resulting
+configuration must match that request; if Meta supplies different targeting or
+optimization defaults, the operator must select the created paused ad set and
+review its observed configuration before retrying. No ad is dispatched on drift.
+
+Validation includes stream overflow and exact-byte checks, malformed/duplicate
+media rejection, copy/rights/placement/targeting changes, creation-receipt binding,
+endpoint authorization and lease cleanup, actual Launcher preparation/confirmation
+callbacks, and the real journal wrapper rejecting drift before provider mutation.
+No real ad or ad set was created for these checks. Legacy publishing tools still
+lack this human-review UI; their snapshots explicitly contain no confirmed review.
+Paired external deliverables and rights-exception workflows remain outstanding.

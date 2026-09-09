@@ -32,3 +32,27 @@ for(const name of ['launchDriveItem','launchCartItem']) {
     }
   });
 }
+
+test('Launcher prepares read-only review, freezes fields and refuses changed state at confirmation',async()=>{
+  const extract=name=>{const start=source.indexOf(`  const ${name} = async `),end=source.indexOf('\n  };',start);assert.ok(start>=0&&end>start);return source.slice(start,end+5);};
+  const item={unifiedId:'fixture',source:'cart',type:'image',url:'https://example.test/image.png'};
+  let state,closed=false,launched;const calls=[];
+  const context={AbortController,setTimeout,clearTimeout,JSON,Number,Object,
+    config:{namingMode:'existing_adset',pageId:'page'},selectedCampaignId:'campaign',selectedAdsetId:'adset',batchAdsetBudget:10,effectiveObjective:'OUTCOME_TRAFFIC',
+    meta:{fixture:{headline:'Title',primaryText:'Copy',sourceType:'tool_generated'}},
+    sourceConfig:()=>({value:'tool_generated'}),canLaunchItem:()=>true,launchWarningsForItem:()=>[],
+    buildNamesForItem:()=>({adName:'Ad'}),destUrlForMeta:()=> 'https://example.test/product',urlParamsForMeta:()=>'',
+    reviewController:{current:null},reviewFingerprint:()=> 'unchanged',setGlobalError:()=>{},setPreflightIds:()=>{},
+    setReviewState:value=>{state=typeof value==='function'?value(state):value;},
+    fetch:async(url,options)=>{calls.push({url,body:JSON.parse(options.body)});return {ok:true,json:async()=>({approval_hash:'a'.repeat(64),media:[{role:'single',url:item.url,sha256:'b'.repeat(64)}],approvals:[null],adset:{id:'adset',targeting:{age_min:18}}})};},
+    closeReview:()=>{closed=true;},launchOne:async(asset,plan)=>{launched={asset,plan};},preflightItems:[item],
+  };
+  const prepare=vm.runInNewContext(`${extract('requestPreflight')}\nrequestPreflight`,context);
+  await prepare([item]);assert.equal(calls.length,1);assert.equal(calls[0].url,'/api/launch-review');
+  assert.deepEqual(calls[0].body.input.items,[{imageUrl:item.url}]);assert.equal(state.loading,false);assert.equal(state.rows[0].plan.confirmed,false);
+  assert.equal(state.rows[0].plan.fields.primary_text,'Copy');context.meta.fixture.primaryText='Changed';assert.equal(state.rows[0].plan.fields.primary_text,'Copy');
+  context.reviewState=state;context.reviewFingerprint=()=> 'changed';
+  const confirm=vm.runInNewContext(`${extract('confirmPreflight')}\nconfirmPreflight`,context);
+  await confirm();assert.equal(closed,false);assert.equal(launched,undefined);assert.match(state.error,/settings changed/);
+  context.reviewFingerprint=()=> 'unchanged';await confirm();assert.equal(closed,true);assert.equal(launched.plan.confirmed,true);assert.equal(launched.plan.fields.primary_text,'Copy');
+});

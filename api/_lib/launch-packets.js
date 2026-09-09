@@ -3,10 +3,25 @@ import {digest,operationKey} from './operation-journal.js';
 import {readCreativeReceipt} from './creative-receipt.js';
 import {assertLaunchReady} from './launch-preflight.js';
 import {resolveLaunchMedia} from './provider-media.js';
+import {verifyReviewedLaunch} from './reviewed-launch.js';
 
 const plain=value=>JSON.parse(JSON.stringify(value ?? null));
 const conflict=message=>Object.assign(new Error(message),{statusCode:409,definitelyNotApplied:true});
 const contextKeys=['creatorId','creator_id','deliverableId','deliverable_id','briefId','brief_id','sourceType','source_type','sourceLabel','productId','angleId','fileId','pair'];
+
+export async function readLaunchAdset(adsetId,{token=process.env.META_ACCESS_TOKEN,fetchImpl=globalThis.fetch,version='v21.0'}={}) {
+  if(!/^[A-Za-z0-9_-]{1,100}$/.test(String(adsetId)) || !/^v[\d.]+$/.test(version))throw conflict('Invalid ad set reference');
+  const account=process.env.META_AD_ACCOUNT_ID?.replace(/^act_/,'');
+  const fields=['id','name','account_id','campaign_id','targeting','status','optimization_goal','billing_event','bid_strategy','daily_budget','lifetime_budget','promoted_object','attribution_spec','start_time','end_time'];
+  const url=new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(adsetId)}`);
+  url.searchParams.set('fields',fields.join(','));
+  const response=await fetchImpl(url.toString(),{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(15000)});
+  const body=await response.json();
+  if(!response.ok || body.error || String(body.id)!==String(adsetId)
+    || String(body.account_id).replace(/^act_/,'')!==account || !body.campaign_id
+    || !body.targeting || typeof body.targeting!=='object')throw conflict('Could not verify the ad set and targeting before launch.');
+  return Object.fromEntries(fields.filter(field=>body[field]!=null).map(field=>[field,body[field]]));
+}
 
 export function launchEvidenceVerifier(sql,inputs,results) {
   const baseline=plain(results);
@@ -30,22 +45,15 @@ export async function captureLaunchPacket(sql,{req,actorId,key,stepKey,target,pa
     if(!creative)throw conflict('The creative has no verified account-bound creation receipt.');
     const account=process.env.META_AD_ACCOUNT_ID?.replace(/^act_/,'');
     if(target.protocol!=='https:' || !account || !target.pathname.endsWith(`/act_${account}/ads`))throw conflict('Launch account does not match the configured account.');
-    const fields=['id','name','account_id','campaign_id','targeting','status','optimization_goal','billing_event','bid_strategy','daily_budget','lifetime_budget','promoted_object','attribution_spec','start_time','end_time'];
-    const url=new URL(`${target.origin}/${target.pathname.split('/')[1]}/${encodeURIComponent(adsetId)}`);
-    url.searchParams.set('fields',fields.join(','));
-    const response=await fetchImpl(url.toString(),{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(15000)});
-    const body=await response.json();
-    if(!response.ok || body.error || String(body.id)!==String(adsetId)
-      || String(body.account_id).replace(/^act_/,'')!==account || !body.campaign_id
-      || !body.targeting || typeof body.targeting!=='object')throw conflict('Could not verify the ad set and targeting before launch.');
-    const adset=Object.fromEntries(fields.filter(field=>body[field]!=null).map(field=>[field,body[field]]));
+    const adset=await readLaunchAdset(adsetId,{token,fetchImpl,version:target.pathname.split('/')[1]});
     const media=await resolveLaunchMedia(sql,{creativeId});
     const driveUploads=req.body?.action==='launch_meta_ad'
       ? await sql`SELECT step_key,result FROM app_operation_steps WHERE operation_key=${operationKey(req,actorId,'drive-upload')} AND status='completed'`
       : [];
+    const review=await verifyReviewedLaunch(sql,req.body?.reviewed_plan,{payload,creative,adset,media,driveUploads,evidence});
     const snapshot=plain({version:1,captured_at:new Date().toISOString(),actor_id:actorId,account_id:account,
       action:req.body?.action,ad:payload,creative_id:String(creativeId),creative,adset,
-      media_receipts:media.receipts,unresolved_media_ids:media.unresolvedIds,drive_uploads:driveUploads,evidence,
+      media_receipts:media.receipts,unresolved_media_ids:media.unresolvedIds,drive_uploads:driveUploads,evidence,review,
       basis:'Configuration observed before dispatch. Subsequent provider edits and actual delivery are not inferred.'});
     const serialized=JSON.stringify(snapshot);
     if(Buffer.byteLength(serialized)>512000)throw conflict('Launch snapshot exceeds the supported size. Split this launch into smaller creatives.');

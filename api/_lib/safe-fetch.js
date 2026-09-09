@@ -2,6 +2,7 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import http from 'node:http';
 import https from 'node:https';
+import {createHash} from 'node:crypto';
 
 export function isPublicAddress(address) {
   if (isIP(address) === 4) {
@@ -32,7 +33,7 @@ export async function resolvePublicUrl(value, resolver = lookup) {
 
 // DNS is validated once and that exact address is pinned to the socket. Every
 // redirect is resolved and checked independently; no second unchecked DNS lookup.
-export async function fetchPublicResource(value, { maxBytes = 2 * 1024 * 1024, timeoutMs = 15000, maxRedirects = 4, contentTypes = /^(text\/(html|plain|xml)|application\/(xhtml\+xml|xml))(;|$)/i } = {}) {
+export async function fetchPublicResource(value, { maxBytes = 2 * 1024 * 1024, timeoutMs = 15000, maxRedirects = 4, hashOnly = false, contentTypes = /^(text\/(html|plain|xml)|application\/(xhtml\+xml|xml))(;|$)/i } = {}) {
   const deadline = Date.now() + timeoutMs;
   for (let redirects = 0; redirects <= maxRedirects; redirects++) {
     const remaining = deadline - Date.now();
@@ -61,14 +62,17 @@ export async function fetchPublicResource(value, { maxBytes = 2 * 1024 * 1024, t
           response.destroy(); reject(new Error('Source content type is not permitted')); return;
         }
         let size = 0;
+        let exceeded = false;
         const chunks = [];
+        const hash = hashOnly ? createHash('sha256') : null;
         response.on('data', chunk => {
           size += chunk.length;
-          if (size > maxBytes) request.destroy(new Error('Source exceeds size limit'));
+          if (size > maxBytes) { exceeded=true;const error=new Error('Source exceeds size limit');reject(error);request.destroy(error); }
+          else if(hash)hash.update(chunk);
           else chunks.push(chunk);
         });
         response.on('error', reject);
-        response.on('end', () => resolve({ bytes: Buffer.concat(chunks), contentType: response.headers['content-type'], url: url.toString() }));
+        response.on('end', () => {if(!exceeded)resolve({ ...(hash ? {sha256:hash.digest('hex'),size} : {bytes:Buffer.concat(chunks)}), contentType: response.headers['content-type'], url: url.toString() });});
       });
       const timer = setTimeout(() => request.destroy(new Error('Source fetch timed out')), Math.max(1, deadline - Date.now()));
       request.on('error', reject);

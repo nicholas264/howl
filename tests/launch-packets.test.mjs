@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {PGlite} from '@electric-sql/pglite';
-import {ensureOperationJournal,runExternalStep,createMetaOperationFetch,operationKey} from '../api/_lib/operation-journal.js';
+import {ensureOperationJournal,runExternalStep,createMetaOperationFetch,operationKey,digest} from '../api/_lib/operation-journal.js';
 import {ensureProviderMedia} from '../api/_lib/provider-media.js';
 import {readLaunchPacket} from '../api/_lib/launch-packets.js';
 import {recoverMetaAd} from '../api/_lib/operation-recovery.js';
@@ -14,7 +14,7 @@ test('launch snapshots precede dispatch, survive replay and recovery, and reject
   await ensureOperationJournal(sql);await ensureProviderMedia(sql);
   await db.exec('CREATE TABLE app_admin_audit(id SERIAL PRIMARY KEY,actor_id TEXT,action TEXT,target TEXT,metadata JSONB)');
   await runExternalStep(sql,{operationKey:'creative',stepKey:'1:/v21.0/act_test/adcreatives',actorId:'fixture',payload:{object_story_spec:JSON.stringify({page_id:'page',link_data:{image_hash:'image',name:'Title',message:'Copy',link:'https://example.test/product'}})}},async()=>({status:200,body:{id:'creative'}}));
-  await sql`INSERT INTO provider_media(account_id,kind,provider_id,source_url,request_key,content_hash) VALUES ('act_test','image','image','https://example.test/image.png','upload','fixture-sha')`;
+  await sql`INSERT INTO provider_media(account_id,kind,provider_id,source_url,request_key,content_hash) VALUES ('act_test','image','image','https://example.test/image.png','upload',${'a'.repeat(64)})`;
   const request=key=>({headers:{},body:{action:'create_ad_from_creative',request_key:key},captureLaunchEvidence:async()=>({approvals:[],attribution:[{sourceType:'tool_generated'}]})});
   const init=name=>({method:'POST',body:new URLSearchParams({name,adset_id:'adset',creative:JSON.stringify({creative_id:'creative'}),status:'PAUSED',access_token:'synthetic-secret'})});
   const url='https://graph.facebook.com/v21.0/act_test/ads';let reads=0,creates=0;
@@ -37,6 +37,13 @@ test('launch snapshots precede dispatch, survive replay and recovery, and reject
   assert.equal(reads,1);assert.equal(creates,1);assert.deepEqual(await readLaunchPacket(sql,'12345'),packet);
   const read=response();await endpoint({method:'GET',headers:{},query:{ad_id:'12345'}},read);assert.equal(read.statusCode,200);assert.deepEqual(read.body.packet,packet);
   const legacy=response();await endpoint({method:'GET',headers:{},query:{ad_id:'old'}},legacy);assert.equal(legacy.body.packet,null);
+  const reviewed=request('reviewed-mismatch');
+  reviewed.body.reviewed_plan={version:1,confirmed:true,ad_name:'Reviewed',approval_hash:digest([]),
+    fields:{headline:'Title',primary_text:'Changed copy',dest_url:'https://example.test/product',url_tags:'',page_id:'page',instagram_user_id:''},
+    media:[{role:'single',sha256:'a'.repeat(64),url:'https://example.test/image.png'}],
+    target:{mode:'existing',id:'adset',snapshot:packet.snapshot.adset}};
+  await assert.rejects((await createMetaOperationFetch(sql,reviewed,'fixture',provider))(url,init('Reviewed')),/primary text differs/);
+  assert.equal(creates,1,'review drift rejected before ad mutation');
   const stale=request('stale');stale.captureLaunchEvidence=async()=>{throw new Error('Changed approval');};
   await assert.rejects((await createMetaOperationFetch(sql,stale,'fixture',provider))(url,init('Stale')),/Changed approval/);assert.equal(creates,1);
   const failedSql=async(parts,...values)=>{if(parts.join('').includes('WITH packet AS'))throw new Error('Snapshot storage unavailable');return sql(parts,...values);};

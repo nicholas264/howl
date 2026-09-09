@@ -1,3 +1,4 @@
+import {newAdsetIntent} from '../src/lib/launch-review.js';
 import { mediaDigest } from './_lib/approval-evidence.js';
 import { journalMediaUpload } from './_lib/provider-media.js';
 import { fetchPublicResource } from './_lib/safe-fetch.js';
@@ -696,34 +697,7 @@ export default async function handler(req, res) {
 
       case 'create_adset': {
         const { name, campaign_id, daily_budget_dollars, objective, pixel_id } = req.body;
-        const dailyBudgetCents = Math.round(parseFloat(daily_budget_dollars || '10') * 100);
-
-        const adsetBody = {
-          name,
-          campaign_id,
-          daily_budget: String(dailyBudgetCents),
-          billing_event: 'IMPRESSIONS',
-          bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
-          status: 'PAUSED',
-          targeting: {
-            geo_locations: { countries: ['US'] },
-            age_min: 18,
-            age_max: 65,
-          },
-          access_token: accessToken,
-        };
-
-        if (objective === 'OUTCOME_SALES' && pixel_id) {
-          adsetBody.optimization_goal = 'OFFSITE_CONVERSIONS';
-          adsetBody.promoted_object = {
-            pixel_id,
-            custom_event_type: 'PURCHASE',
-          };
-        } else if (objective === 'OUTCOME_TRAFFIC') {
-          adsetBody.optimization_goal = 'LINK_CLICKS';
-        } else {
-          adsetBody.optimization_goal = 'REACH';
-        }
+        const adsetBody = {...newAdsetIntent({name,campaign_id,daily_budget_dollars,objective,pixel_id}),access_token:accessToken};
 
         const r = await fetch(`${BASE}/${adAccountId}/adsets`, {
           method: 'POST',
