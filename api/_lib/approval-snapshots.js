@@ -28,7 +28,7 @@ export async function approveDeliverable(sql, id, creatorId, expectedUpdatedAt, 
       ) FROM current RETURNING id,deliverable_id,approved_at
     )
     UPDATE creator_deliverables d SET status = 'approved', approval_id = approval.id,
-      approved_at = approval.approved_at, approved_asset_count = GREATEST(d.approved_asset_count,d.expected_asset_count), updated_at = now()
+      approved_at = approval.approved_at, approved_asset_count = GREATEST(d.approved_asset_count,1), updated_at = now()
     FROM approval WHERE d.id = approval.deliverable_id RETURNING d.*
   `;
   return saved || null;

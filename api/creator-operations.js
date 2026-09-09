@@ -431,7 +431,7 @@ export default async function handler(req, res) {
           FROM creator_deliverables d
           WHERE d.creator_id = c.id
             AND d.due_at < now()
-            AND d.status NOT IN ('complete', 'launched', 'cancelled')
+            AND d.status <> 'cancelled'
             AND d.completed_asset_count < d.expected_asset_count
           ORDER BY d.due_at ASC LIMIT 1
         ) overdue ON true

@@ -191,7 +191,7 @@ function buildWorkflowGuidance({
     .filter(item => (
       item.due_at
       && new Date(item.due_at).getTime() < Date.now()
-      && !['complete', 'launched', 'cancelled'].includes(item.status)
+      && item.status !== 'cancelled'
       && Number(item.completed_asset_count || 0) < Number(item.expected_asset_count || 1)
     ))
     .sort((a, b) => new Date(a.due_at) - new Date(b.due_at))[0];
@@ -407,7 +407,7 @@ async function getWorkflow(sql, creatorId) {
             AND due_at < date_trunc('month', now()) + interval '1 month'
         ), 0)::int AS due_this_month,
         COALESCE(sum(GREATEST(expected_asset_count - completed_asset_count, 0)) FILTER (
-          WHERE due_at < now() AND status NOT IN ('launched', 'complete', 'cancelled')
+          WHERE due_at < now() AND status <> 'cancelled'
         ), 0)::int AS overdue,
         count(*) FILTER (
           WHERE due_at >= date_trunc('month', now())
@@ -1236,19 +1236,15 @@ export default async function handler(req, res) {
                 THEN GREATEST(COALESCE(${count(body.received_asset_count)}, received_asset_count), 1)
               ELSE COALESCE(${count(body.received_asset_count)}, received_asset_count)
             END,
-            approved_asset_count = CASE
-              WHEN ${status} IN ('approved', 'complete', 'launched')
-                THEN GREATEST(COALESCE(${count(body.approved_asset_count)}, approved_asset_count), expected_asset_count)
-              ELSE COALESCE(${count(body.approved_asset_count)}, approved_asset_count)
-            END,
+            approved_asset_count = COALESCE(${count(body.approved_asset_count)}, approved_asset_count),
             completed_asset_count = CASE
               WHEN ${status} IN ('complete', 'launched')
-                THEN GREATEST(COALESCE(${count(body.completed_asset_count)}, completed_asset_count), expected_asset_count)
+                THEN GREATEST(COALESCE(${count(body.completed_asset_count)}, completed_asset_count), 1)
               ELSE COALESCE(${count(body.completed_asset_count)}, completed_asset_count)
             END,
             shipped_asset_count = CASE
               WHEN ${status} = 'launched'
-                THEN GREATEST(COALESCE(${count(body.shipped_asset_count)}, shipped_asset_count), expected_asset_count)
+                THEN GREATEST(COALESCE(${count(body.shipped_asset_count)}, shipped_asset_count), 1)
               ELSE COALESCE(${count(body.shipped_asset_count)}, shipped_asset_count)
             END,
             received_at = CASE WHEN ${status} IN ('received', 'editing', 'edited', 'approved', 'complete', 'launched') THEN COALESCE(received_at, now()) ELSE received_at END,

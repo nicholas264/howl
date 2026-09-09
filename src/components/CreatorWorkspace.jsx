@@ -1855,6 +1855,7 @@ export default function CreatorWorkspace({
 
             {detailTab === 'deliverables' && (
               <section className="creator-detail-section workflow-section">
+                <p>Counts include manually recorded work. Exact-output approval covers the linked output; changing status does not approve every expected asset.</p>
                 <div className="production-summary">
                   <div><span>Due this month</span><strong>{workflow.production_summary?.due_this_month || 0}</strong></div>
                   <div><span>Received</span><strong>{workflow.production_summary?.received || 0}</strong></div>
@@ -1961,9 +1962,9 @@ export default function CreatorWorkspace({
                             <option value="launched">Launched</option>
                             <option value="cancelled">Cancelled</option>
                           </select>
-                          <label>Received<input type="number" min="0" max={item.expected_asset_count || 1} defaultValue={item.received_asset_count || 0} onBlur={event => updateDeliverable(item.id, { received_asset_count: event.target.value })} /></label>
-                          <label>Approved<input type="number" min="0" max={item.expected_asset_count || 1} defaultValue={item.approved_asset_count || 0} onBlur={event => updateDeliverable(item.id, { approved_asset_count: event.target.value })} /></label>
-                          <label>Complete<input type="number" min="0" max={item.expected_asset_count || 1} defaultValue={item.completed_asset_count || 0} onBlur={event => updateDeliverable(item.id, { completed_asset_count: event.target.value })} /></label>
+                          <label>Received<input type="number" min="0" max={item.expected_asset_count || 1} key={`received:${item.received_asset_count || 0}`} defaultValue={item.received_asset_count || 0} onBlur={event => updateDeliverable(item.id, { received_asset_count: event.target.value })} /></label>
+                          <label>Approved<input type="number" min="0" max={item.expected_asset_count || 1} key={`approved:${item.approved_asset_count || 0}`} defaultValue={item.approved_asset_count || 0} onBlur={event => updateDeliverable(item.id, { approved_asset_count: event.target.value })} /></label>
+                          <label>Complete<input type="number" min="0" max={item.expected_asset_count || 1} key={`completed:${item.completed_asset_count || 0}`} defaultValue={item.completed_asset_count || 0} onBlur={event => updateDeliverable(item.id, { completed_asset_count: event.target.value })} /></label>
                         </div>
                       )}
                       {item.source_url && <a href={item.source_url} target="_blank" rel="noreferrer">Open source asset</a>}

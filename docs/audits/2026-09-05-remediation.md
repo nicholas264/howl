@@ -775,3 +775,28 @@ callbacks, and the real journal wrapper rejecting drift before provider mutation
 No real ad or ad set was created for these checks. Legacy publishing tools still
 lack this human-review UI; their snapshots explicitly contain no confirmed review.
 Paired external deliverables and rights-exception workflows remain outstanding.
+
+## Deliverable counts reflect one linked output — September 9, 2026
+
+Approving the current output previously credited the entire expected asset count.
+For a three-asset deliverable, one reviewed file therefore appeared as three
+approved files. Approval now establishes a minimum count of one. Re-reviewing the
+same output does not add another asset. Completion and launch status updates no
+longer increase approval counts or silently credit all expected outputs as
+complete/shipped. Explicitly entered totals are preserved, and the UI explains
+that operational totals can include manual entries rather than exact-output
+approval evidence. Count inputs refresh when an approval or status response
+changes the server value.
+
+A PostgreSQL regression exercises the actual workflow endpoint with three expected
+outputs, completion without approval, exact-output approval, repeated review, and
+manual counts followed by status changes. Existing historical totals are not
+reconstructed from insufficient evidence. Paired deliverables still require
+per-asset approval and launch bookkeeping before their current rejection can be
+safely removed; this release does not relax that gate.
+
+Overdue production summaries, creator guidance, and admin health also compare
+completed against expected counts even when the linked output has a terminal
+status. Cancelling a deliverable remains an explicit exclusion. The regression
+verifies that two of three expected assets remain overdue after the first is
+marked launched.

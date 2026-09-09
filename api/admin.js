@@ -90,7 +90,7 @@ export default async function handler(req, res) {
         SELECT count(*)::int AS overdue
         FROM creator_deliverables
         WHERE due_at < now()
-          AND status NOT IN ('launched', 'complete', 'cancelled')
+          AND status <> 'cancelled' AND completed_asset_count < expected_asset_count
       `;
       const [outreachHealth] = await sql`
         SELECT
