@@ -870,31 +870,27 @@ export default async function handler(req, res) {
         const expiresInDays = Math.min(Math.max(Number(body.expires_in_days) || 14, 1), 60);
         const expiresAt = new Date(Date.now() + expiresInDays * 86400000).toISOString();
         const token = randomBytes(32).toString('base64url');
-        const [versionRow] = await sql`
-          SELECT COALESCE(max(version), 0)::int + 1 AS version
-          FROM creator_agreements
-          WHERE creator_id = ${creatorId}
-        `;
-        const [agreement] = await sql`
-          INSERT INTO creator_agreements (
+        const prepared = await sql.transaction(tx => [
+          tx`SELECT id FROM creators WHERE id=${creatorId} FOR UPDATE`,
+          tx`WITH prepared AS (INSERT INTO creator_agreements (
             creator_id, engagement_id, template_id, template_version, title, agreement_body, version, status,
             token_hash, expires_at, created_by, source_metadata
           ) SELECT
-            ${creatorId}, ${engagementId}, ${templateId}, ${templateVersion}, ${title}, ${agreementBody}, ${versionRow.version},
+            ${creatorId}, ${engagementId}, ${templateId}, ${templateVersion}, ${title}, ${agreementBody},
+            (SELECT COALESCE(max(version),0)::int+1 FROM creator_agreements WHERE creator_id=${creatorId}),
             'draft', ${agreementTokenHash(token)}, ${expiresAt}, ${access.userId},
             ${JSON.stringify({terms_version:1,engagement_snapshot:engagement.terms_snapshot,creator_snapshot:creator})}::jsonb
           FROM creator_engagements e WHERE e.id=${engagementId} AND to_jsonb(e)=${JSON.stringify(engagement.terms_snapshot)}::jsonb
           RETURNING id, creator_id, engagement_id, template_id, template_version, title, version, status, expires_at, created_at
-        `;
+          ), activity AS (
+            INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+            SELECT creator_id,'agreement_created',${`Agreement prepared: ${title}`},
+              jsonb_build_object('agreement_id',id,'engagement_id',engagement_id,'version',version),${access.userId}
+            FROM prepared RETURNING id
+          ) SELECT prepared.* FROM prepared CROSS JOIN activity`,
+        ], {isolationLevel:'ReadCommitted'});
+        const agreement=prepared[1][0];
         if(!agreement)return res.status(409).json({error:'Engagement changed while preparing the agreement. Review its terms and retry.'});
-        await sql`
-          INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
-          VALUES (
-            ${creatorId}, 'agreement_created', ${`Agreement prepared: ${title}`},
-            ${JSON.stringify({ agreement_id: Number(agreement.id), engagement_id: engagementId, version: versionRow.version })}::jsonb,
-            ${access.userId}
-          )
-        `;
         return res.status(201).json({
           agreement,
           agreement_path: `/agreement?token=${encodeURIComponent(token)}`,

@@ -24,3 +24,17 @@ export function summarizeMonth(report, month) {
     roas: ads && spend > 0 ? revenue / spend : null,
     roi: ads && denominator > 0 ? (revenue - denominator) / denominator * 100 : null };
 }
+
+export function attributionCoverage(report, month) {
+  if (!report.attribution || report.performance_error) return null;
+  const rows = report.attribution.filter(row => row.month === month);
+  if (!rows.length) return null;
+  const bucket = name => rows.find(row => row.attribution === name) || {spend:0,revenue:0,spending_ads:0};
+  const creator = bucket('creator'), other = bucket('non_creator'), unreviewed = bucket('unreviewed');
+  const spend = rows.reduce((sum,row) => sum + Number(row.spend), 0);
+  const ads = rows.reduce((sum,row) => sum + Number(row.spending_ads), 0);
+  return { creator, other, unreviewed, spend, ads,
+    linkedShare: spend > 0 ? Number(creator.spend) / spend * 100 : null,
+    through: rows.map(row=>row.through).sort().at(-1),
+  };
+}

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { apiFetch } from '../lib/apiFetch.js';
-import { reportMonths, summarizeMonth } from '../lib/seeding-report.js';
+import { reportMonths, summarizeMonth, attributionCoverage } from '../lib/seeding-report.js';
 import './SeedingBudgetDashboard.css';
 
 const money = value => Number(value).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -24,6 +24,7 @@ export default function SeedingBudgetDashboard({ report, month, onMonth, canMana
   const current = report.as_of.slice(0, 7);
   const selected = /^\d{4}-\d{2}$/.test(month) ? month : current;
   const metrics = summarizeMonth(report, selected);
+  const coverage = attributionCoverage(report, selected);
   const months = reportMonths(report, selected);
   const chartMonths = months;
   const chart = chartMonths.map(m => ({ month: m, ...summarizeMonth(report, m) }));
@@ -55,9 +56,14 @@ export default function SeedingBudgetDashboard({ report, month, onMonth, canMana
     </div></div>
     <div className="seed-budget-returns-head"><h3>Creator ad returns · {monthLabel(selected)}</h3><span>{metrics.ads ? `Latest included ad data: ${String(metrics.ads.through).slice(0, 10)}` : 'No linked ad data for this month'}</span></div>
     {report.performance_error && <p role="alert">{report.performance_error}</p>}
+    {coverage && <div className="seed-attribution-coverage">
+      <div className="seed-attribution-heading"><div><h3>Creator linking coverage</h3><p>{coverage.creator.spending_ads} of {coverage.ads} ads with spend are linked to creators{coverage.linkedShare === null ? '.' : ` · ${coverage.linkedShare.toFixed(1)}% of account spend.`} Data through {String(coverage.through).slice(0,10)}.</p></div><a href="/?tab=creative-analytics">Review ad sources</a></div>
+      <div className="seed-attribution-buckets"><div><span>Creator-linked spend</span><strong>{money(coverage.creator.spend)}</strong></div><div><span>Known non-creator spend</span><strong>{money(coverage.other.spend)}</strong></div><div><span>Needs source review</span><strong>{money(coverage.unreviewed.spend)}</strong></div></div>
+      <p>{Number(coverage.unreviewed.spend) > 0 ? 'Partial attribution: unreviewed ads may include creator content. The returns below include linked creator ads only and should not be treated as complete creator performance.' : 'The returns below include creator-linked ads only.'} Founder, internal, and tool-made ads are excluded from creator returns.</p>
+    </div>}
     <div className="seed-budget-returns">{[
-      ['Ad-attributed revenue', metrics.ads ? money(metrics.revenue) : '—'],
-      ['Ad spend', metrics.ads ? money(metrics.spend) : '—'],
+      ['Creator-linked ad revenue', metrics.ads ? money(metrics.revenue) : '—'],
+      ['Creator-linked ad spend', metrics.ads ? money(metrics.spend) : '—'],
       ['ROAS', metrics.roas === null ? '—' : `${metrics.roas.toFixed(2)}×`],
       ['ROI before product margin', metrics.roi === null ? '—' : `${metrics.roi.toFixed(1)}%`],
     ].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>

@@ -32,3 +32,8 @@
 .seed-page .seed-edit-form input,.seed-page .seed-edit-form select{font-size:15px;min-height:44px}
 @media(max-width:900px){.seed-page .seed-intake section{grid-template-columns:repeat(2,minmax(0,1fr))}.seed-page .seed-item-row{grid-template-columns:minmax(0,1fr) 90px}.seed-page .seed-item-row .span-2{grid-column:1/-1}}
 @media(max-width:600px){.seed-page .seed-intake section{grid-template-columns:minmax(0,1fr);padding:12px}.seed-page .seed-intake .span-2{grid-column:1/-1}.seed-page .seed-intake-head{align-items:start;flex-wrap:wrap}.seed-budget-scale{gap:14px;flex-wrap:wrap}.seed-budget-returns{gap:18px 12px}.seed-page .seed-fee-actions{flex-wrap:wrap}.seed-budget-editor button{width:100%}}
+
+.seed-attribution-coverage{margin-top:18px;padding:18px;background:var(--surface2);border:1px solid var(--border);border-radius:8px}
+.seed-attribution-heading{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}.seed-attribution-heading a{padding:11px 14px;background:var(--surface);border:1px solid var(--flame-border);border-radius:6px;color:var(--flame);font-size:14px;text-decoration:none;font-weight:600}
+.seed-attribution-buckets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin:18px 0}.seed-attribution-buckets span{display:block;font-size:13px;color:var(--muted);margin-bottom:5px}.seed-attribution-buckets strong{font:28px/1.2 'Instrument Serif',Georgia,serif}
+@media(max-width:600px){.seed-attribution-buckets{grid-template-columns:1fr;gap:12px}}

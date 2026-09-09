@@ -374,11 +374,6 @@ export default async function handler(req, res) {
 
     let contractAgreement = null;
     if (contractPdfUrl) {
-      const [versionRow] = await sql`
-        SELECT COALESCE(max(version), 0)::int + 1 AS version
-        FROM creator_agreements
-        WHERE creator_id = ${updatedCreator.id}
-      `;
       const contractFileName = text(body.contract_file_name, 300) || 'Uploaded contract PDF';
       const title = text(body.contract_title, 300) || `Uploaded contract - ${updatedCreator.name}`;
       const contractBody = [
@@ -386,13 +381,15 @@ export default async function handler(req, res) {
         `File: ${contractFileName}`,
         `URL: ${contractPdfUrl}`,
       ].join('\n');
-      [contractAgreement] = await sql`
-        INSERT INTO creator_agreements (
+      const recorded = await sql.transaction(tx => [
+        tx`SELECT id FROM creators WHERE id=${updatedCreator.id} FOR UPDATE`,
+        tx`WITH recorded AS (INSERT INTO creator_agreements (
           creator_id, engagement_id, title, agreement_body, version, status,
           source_type, source_pdf_url, source_file_name, source_metadata, sent_to, created_by
         ) VALUES (
           ${updatedCreator.id}, ${engagement?.id || null}, ${title}, ${contractBody},
-          ${versionRow.version}, 'uploaded', 'uploaded_pdf', ${contractPdfUrl}, ${contractFileName},
+          (SELECT COALESCE(max(version),0)::int+1 FROM creator_agreements WHERE creator_id=${updatedCreator.id}),
+          'uploaded', 'uploaded_pdf', ${contractPdfUrl}, ${contractFileName},
           ${JSON.stringify({
             source: 'creator_investment_intake',
             content_type: text(body.contract_content_type, 120),
@@ -402,16 +399,14 @@ export default async function handler(req, res) {
           })}::jsonb,
           ${updatedCreator.email || text(body.email, 320)}, ${userId}
         )
-        RETURNING *
-      `;
-      await sql`
-        INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
-        VALUES (
-          ${updatedCreator.id}, 'agreement_uploaded', ${`Contract PDF uploaded: ${contractFileName}`},
-          ${JSON.stringify({ agreement_id: Number(contractAgreement.id), source_pdf_url: contractPdfUrl })}::jsonb,
-          ${userId}
-        )
-      `;
+        RETURNING *), activity AS (
+          INSERT INTO creator_activity (creator_id, kind, summary, metadata, user_id)
+          SELECT creator_id,'agreement_uploaded',${`Contract PDF uploaded: ${contractFileName}`},
+            jsonb_build_object('agreement_id',id,'source_pdf_url',source_pdf_url),${userId}
+          FROM recorded RETURNING id
+        ) SELECT recorded.* FROM recorded CROSS JOIN activity`,
+      ], {isolationLevel:'ReadCommitted'});
+      contractAgreement=recorded[1][0];
     }
 
     const investment = {
