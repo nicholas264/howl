@@ -7,6 +7,7 @@ export function publishAttribution(item) {
 }
 export async function preparePublishReview(item,config,adsetId,{fetchImpl,signal}) {
   if(!adsetId || adsetId==='__new__' || !config.pageId?.trim() || !config.destUrl?.trim() || !item.hook?.trim())throw new Error('Choose an ad set, Page, destination and headline before reviewing.');
+  if(item.storyUrl)throw new Error('Use the Launcher for paired feed and story assets.');
   const carousel=item.type==='carousel';
   if(carousel&&(!Array.isArray(item.cards)||item.cards.length<2||item.cards.length>10))throw new Error('A carousel requires two to ten cards.');
   const sources=carousel?item.cards.map((card,index)=>({role:`card:${index}`,value:card.imageBase64 || card.squareUrl}))

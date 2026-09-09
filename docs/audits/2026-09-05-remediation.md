@@ -882,3 +882,14 @@ approval requirements.
 Ad-set capture and review comparison now include `bid_amount`, so changing a
 cost cap while retaining the same bid strategy invalidates the review. The actual
 carousel dispatch regression checks this failure before any provider ad request.
+
+### Creative-test validation and identity follow-up
+
+Creative-test settings now use a shared secret-free campaign/ad-set intent builder.
+Invalid budgets, bid caps, IDs, destinations and incomplete uploaded assets are rejected
+before campaign creation. Batch results use stable cart item IDs, preserving attribution
+and avoiding duplicate-name status mix-ups. Remote videos use URL uploads. Legacy
+publishing rejects paired feed/story assets and directs them to the paired Launcher.
+Validation: full API/test/build check passed; an additional actual dispatch regression
+proves invalid requests make no provider call. No production ad was created.
+Full creative-test human review and per-item immutable review binding remain open.

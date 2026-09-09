@@ -1,3 +1,4 @@
+import {creativeTestIntent} from '../lib/creative-test-intent.js';
 import PublishReviewDialog from './PublishReviewDialog';
 import {publishAttribution} from '../lib/publish-review.js';
 import { apiFetch as fetch } from '../lib/apiFetch.js';
@@ -134,6 +135,11 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
     if (!ctConfig.pixelId.trim()) { alert('Enter your Pixel ID for purchase optimization.'); return; }
     if (!ctConfig.costCapTarget.trim()) { alert('Enter a cost cap target CPA.'); return; }
 
+    if (items.some(item => item.storyUrl)) { alert('Use the Launcher for paired feed and story assets.'); return; }
+    try {
+      creativeTestIntent({dailyBudgetDollars:ctConfig.budgetPerCreative,costCapCents:/^\d+(?:\.\d{1,2})?$/.test(ctConfig.costCapTarget.trim()) ? Math.round(Number(ctConfig.costCapTarget) * 100) : NaN,pixelId:ctConfig.pixelId,pageId:config.pageId,destUrl:config.destUrl});
+    } catch (error) { alert(error.message); return; }
+
     setCtRunning(true);
     setCtResult(null);
     setCtProgress('Uploading assets...');
@@ -149,6 +155,8 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
         setCtProgress(`Uploading ${i + 1}/${items.length}: ${item.name || 'Untitled'}...`);
 
         const prepared = {
+          id: item.id,
+          ...publishAttribution(item),
           name: item.name || 'Untitled',
           type: item.type || 'static',
           hook: item.hook || '',
@@ -175,7 +183,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
           const r = await fetch('/api/meta', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'upload_video', videoBase64: item.videoUrl, name: item.name }),
+            body: JSON.stringify(/^https:\/\//i.test(item.videoUrl || '') ? {action:'upload_video_url',videoUrl:item.videoUrl,name:item.name} : {action:'upload_video',videoBase64:item.videoUrl,name:item.name}),
           });
           const d = await r.json();
           if (d.error) throw new Error(`Video upload failed: ${d.error}`);
@@ -218,7 +226,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
       setCtProgress('');
       // Update metaStatus for each creative
       d.results?.forEach(r => {
-        const match = items.find(i => (i.name || 'Untitled') === r.item);
+        const match = items.find(i => String(i.id) === String(r.itemId));
         if (match) {
           onUpdateCartItem?.(match.id, {
             metaStatus: r.success ? 'pushed' : 'error',
@@ -593,7 +601,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
           </div>
         </div>
         <div style={{ fontSize: 9, color: '#88857f', letterSpacing: 1 }}>
-          Meta credentials (access token, ad account ID) are loaded from your .env file.
+          Publishing uses your workspace’s connected Meta account.
         </div>
       </div>
 
@@ -1023,7 +1031,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
             Drop rendered ad images here, or click "+ Upload Images" above.
             <br />
             <span style={{ fontSize: 9, letterSpacing: 1, marginTop: 8, display: 'block' }}>
-              Ads added from Image Ads or Review Ads appear here with both 1:1 and 9:16 formats paired automatically.
+              Use the Launcher to publish paired feed and story images together.
             </span>
           </div>
         )}

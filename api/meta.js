@@ -1,3 +1,4 @@
+import {creativeTestIntent,validateCreativeTestAssets} from '../src/lib/creative-test-intent.js';
 import {recordPairedImageLaunch} from './_lib/paired-image-launch.js';
 import {newAdsetIntent,effectiveMetaUrlTags} from '../src/lib/launch-review.js';
 import { mediaDigest } from './_lib/approval-evidence.js';
@@ -1153,19 +1154,16 @@ export default async function handler(req, res) {
         const pageId = req.body.pageId || defaultPageId;
         const destUrl = req.body.destUrl;
 
-        if (!items || items.length === 0) {
-          return res.status(400).json({ error: 'No creatives provided', step: 'validate' });
+        let intent;
+        try {
+          intent = creativeTestIntent({...req.body, pageId});
+          validateCreativeTestAssets(items);
+        } catch (error) {
+          return res.status(400).json({error:error.message,step:'validate'});
         }
 
-        // 1. Create ABO campaign (PAUSED)
-        const campaignBody = {
-          name: testName || `[CT] HOWL — ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
-          objective: 'OUTCOME_SALES',
-          status: 'PAUSED',
-          special_ad_categories: [],
-          is_adset_budget_sharing_enabled: false,
-          access_token: accessToken,
-        };
+        // All settings and assets are validated before the first provider write.
+        const campaignBody = {...intent.campaign,access_token:accessToken};
         const campaignRes = await fetch(`${BASE}/${adAccountId}/campaigns`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1178,39 +1176,13 @@ export default async function handler(req, res) {
         const campaignId = campaignData.id;
 
         // 2. Create one ad set per creative, each with equal budget
-        const dailyBudgetCents = String(Math.round(parseFloat(dailyBudgetDollars || '20') * 100));
         const results = [];
 
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
 
           // Create ad set
-          const adsetBody = {
-            name: `${item.name || `Creative ${i + 1}`}`,
-            campaign_id: campaignId,
-            daily_budget: dailyBudgetCents,
-            billing_event: 'IMPRESSIONS',
-            optimization_goal: 'OFFSITE_CONVERSIONS',
-            bid_strategy: costCapCents ? 'COST_CAP' : 'LOWEST_COST_WITHOUT_CAP',
-            ...(costCapCents ? { bid_amount: String(costCapCents) } : {}),
-            status: 'PAUSED',
-            targeting: {
-              geo_locations: { countries: ['US'] },
-              age_min: 18,
-              age_max: 65,
-              ...(req.body.excludeAudienceId
-                ? { exclusions: { custom_audiences: [{ id: req.body.excludeAudienceId }] } }
-                : {}),
-            },
-            access_token: accessToken,
-          };
-
-          if (pixelId) {
-            adsetBody.promoted_object = {
-              pixel_id: pixelId,
-              custom_event_type: 'PURCHASE',
-            };
-          }
+          const adsetBody = {...intent.adset,name:item.name || `Creative ${i + 1}`,campaign_id:campaignId,access_token:accessToken};
 
           const adsetRes = await fetch(`${BASE}/${adAccountId}/adsets`, {
             method: 'POST',
@@ -1219,7 +1191,7 @@ export default async function handler(req, res) {
           });
           const adsetData = await adsetRes.json();
           if (adsetData.error) {
-            results.push({ item: item.name, error: adsetData.error.error_user_msg || adsetData.error.message, step: 'create_adset' });
+            results.push({ itemId: item.id, item: item.name, error: adsetData.error.error_user_msg || adsetData.error.message, step: 'create_adset' });
             continue;
           }
 
@@ -1278,7 +1250,7 @@ export default async function handler(req, res) {
               });
             }
           } catch (err) {
-            results.push({ item: item.name, error: err.message, step: 'build_creative' });
+            results.push({ itemId: item.id, item: item.name, error: err.message, step: 'build_creative' });
             continue;
           }
 
@@ -1289,7 +1261,7 @@ export default async function handler(req, res) {
           });
           const creativeData = await creativeRes.json();
           if (creativeData.error) {
-            results.push({ item: item.name, error: creativeData.error.error_user_msg || creativeData.error.message, step: 'create_creative' });
+            results.push({ itemId: item.id, item: item.name, error: creativeData.error.error_user_msg || creativeData.error.message, step: 'create_creative' });
             continue;
           }
 
@@ -1308,7 +1280,7 @@ export default async function handler(req, res) {
           });
           const adData = await adRes.json();
           if (adData.error) {
-            results.push({ item: item.name, error: adData.error.message, step: 'create_ad' });
+            results.push({ itemId: item.id, item: item.name, error: adData.error.message, step: 'create_ad' });
             continue;
           }
 
@@ -1333,7 +1305,7 @@ export default async function handler(req, res) {
             ...actor,
           });
 
-          results.push({ item: item.name, adsetId: adsetData.id, adId: adData.id, success: true });
+          results.push({ itemId: item.id, item: item.name, adsetId: adsetData.id, adId: adData.id, success: true });
         }
 
         const succeeded = results.filter(item => item.success).length;
