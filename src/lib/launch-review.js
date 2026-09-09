@@ -28,3 +28,11 @@ export function launchApprovalRecords(evidence=[]) {
 export function effectiveMetaUrlTags(value) {
   return String(value || 'tw_source={{site_source_name}}&tw_adid={{ad.id}}').trim().replace(/^[?&]+/, '');
 }
+
+export function validReviewMediaRoles(media) {
+  if(!Array.isArray(media) || !media.length || media.length>10 || media.some(item=>!item))return false;
+  const roles=new Set(media.map(item=>item.role));
+  return roles.size===media.length && (media.length===1&&roles.has('single')
+    || media.length===2&&roles.has('feed')&&roles.has('story')
+    || media.length>=2&&media.every((_,index)=>roles.has(`card:${index}`)));
+}

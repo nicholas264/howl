@@ -12,7 +12,7 @@ const contextKeys=['creatorId','creator_id','deliverableId','deliverable_id','br
 export async function readLaunchAdset(adsetId,{token=process.env.META_ACCESS_TOKEN,fetchImpl=globalThis.fetch,version='v21.0'}={}) {
   if(!/^[A-Za-z0-9_-]{1,100}$/.test(String(adsetId)) || !/^v[\d.]+$/.test(version))throw conflict('Invalid ad set reference');
   const account=process.env.META_AD_ACCOUNT_ID?.replace(/^act_/,'');
-  const fields=['id','name','account_id','campaign_id','targeting','status','optimization_goal','billing_event','bid_strategy','daily_budget','lifetime_budget','promoted_object','attribution_spec','start_time','end_time'];
+  const fields=['id','name','account_id','campaign_id','targeting','status','optimization_goal','billing_event','bid_strategy','bid_amount','daily_budget','lifetime_budget','promoted_object','attribution_spec','start_time','end_time'];
   const url=new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(adsetId)}`);
   url.searchParams.set('fields',fields.join(','));
   const response=await fetchImpl(url.toString(),{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(15000)});

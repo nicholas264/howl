@@ -1,3 +1,5 @@
+import PublishReviewDialog from './PublishReviewDialog';
+import {publishAttribution} from '../lib/publish-review.js';
 import { apiFetch as fetch } from '../lib/apiFetch.js';
 import React, { useState, useRef, useCallback } from 'react';
 import { buildSystemPrompt } from '../prompts';
@@ -411,7 +413,8 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
   };
 
   // ── Push single ad ────────────────────────────────────────────────────────
-  const pushAd = useCallback(async (item) => {
+  const pushAd = useCallback(async (item, reviewedPlan) => {
+    if(!reviewedPlan?.confirmed){alert('Review this ad before publishing.');return;}
     const adsetId = selectedAdsetId;
     if (!adsetId || adsetId === '__new__') { alert('Select or create an ad set first.'); return; }
     if (!config.pageId.trim()) { alert('Enter your Facebook Page ID in Settings.'); return; }
@@ -420,7 +423,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
 
     // Reset steps for this item
     setStatuses(prev => ({ ...prev, [item.id]: { status: 'pushing', message: '', steps: {}, currentStep: null } }));
-    const adName = item.name || `HOWL Ad ${new Date().toLocaleDateString()}`;
+    const adName = reviewedPlan.ad_name;
     const mimeType = item.type === 'carousel' ? 'carousel' : item.type === 'video' ? 'video/mp4' : 'image';
 
     try {
@@ -428,6 +431,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
       setStep(item.id, 'meta_upload', 'running');
       const creativeBody = {
         action: 'create_creative',
+        ...publishAttribution(item),
         adName,
         headline: item.hook,
         primaryText: item.body || item.hook,
@@ -459,7 +463,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
         const ur = await fetch('/api/meta', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'upload_video', videoBase64: item.videoUrl, name: item.name }),
+          body: JSON.stringify(/^https:\/\//i.test(item.videoUrl || '')?{action:'upload_video_url',videoUrl:item.videoUrl,name:item.name}:{action:'upload_video',videoBase64:item.videoUrl,name:item.name}),
         });
         const ud = await ur.json();
         if (ud.error) throw new Error(`Video upload: ${ud.error}`);
@@ -498,6 +502,8 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'create_ad_from_creative',
+          reviewed_plan: reviewedPlan,
+          ...publishAttribution(item),
           creativeId: cd.creativeId,
           adName,
           adsetId,
@@ -505,7 +511,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
           primaryText: item.body || item.hook,
           destUrl: config.destUrl,
           mimeType,
-          creator: 'Static Builder',
+          creator: item.creator || 'Static Builder',
         }),
       });
       const ad = await ar.json();
@@ -527,21 +533,25 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
   const [pushingAll, setPushingAll] = useState(false);
   const [pushAllProgress, setPushAllProgress] = useState('');
 
-  const pushAll = useCallback(async () => {
-    const unpushed = queue.filter(item => !statuses[item.id] || statuses[item.id].status !== 'success');
-    if (unpushed.length === 0) return;
-    if (!selectedAdsetId || selectedAdsetId === '__new__') {
-      alert('Select or create an ad set first.');
-      return;
-    }
-    setPushingAll(true);
-    for (let i = 0; i < unpushed.length; i++) {
-      setPushAllProgress(`${i + 1}/${unpushed.length}`);
-      await pushAd(unpushed[i]);
-    }
-    setPushingAll(false);
-    setPushAllProgress('');
-  }, [queue, selectedAdsetId, statuses, pushAd]);
+  const [publishReview,setPublishReview]=useState(null);
+  const [publishReviewError,setPublishReviewError]=useState('');
+  const reviewFingerprint=(items)=>JSON.stringify({items,config,adsetId:selectedAdsetId});
+  const requestManualReview=items=>{
+    if(!items.length || pushingAll || ctRunning)return;
+    const frozen=JSON.parse(JSON.stringify(items));
+    setPublishReviewError('');
+    setPublishReview({items:frozen,config:JSON.parse(JSON.stringify(config)),adsetId:selectedAdsetId,fingerprint:reviewFingerprint(frozen)});
+  };
+  const confirmManualReview=async rows=>{
+    const current=publishReview.items.map(item=>queue.find(candidate=>candidate.id===item.id));
+    if(reviewFingerprint(current)!==publishReview.fingerprint){setPublishReviewError('The queue or settings changed. Keep editing and review again.');return;}
+    setPublishReview(null);setPushingAll(true);
+    try{for(let index=0;index<rows.length;index++){
+      setPushAllProgress(`${index+1}/${rows.length}`);
+      await pushAd(rows[index].item,{...rows[index].plan,confirmed:true});
+    }}finally{setPushingAll(false);setPushAllProgress('');}
+  };
+  const pushAll=()=>requestManualReview(queue.filter(item=>!statuses[item.id] || statuses[item.id].status!=='success'));
 
   const activeAdsetId = selectedAdsetId && selectedAdsetId !== '__new__' ? selectedAdsetId : null;
   const activeCampaignId = selectedCampaignId && selectedCampaignId !== '__new__' ? selectedCampaignId : null;
@@ -1107,8 +1117,8 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0, alignItems: 'flex-end' }}>
                   <div style={S.statusDot(st.status)} title={st.status || 'idle'} />
                   <button
-                    onClick={() => pushAd(item)}
-                    disabled={isPushing || isDone}
+                    onClick={() => requestManualReview([item])}
+                    disabled={isPushing || isDone || pushingAll || ctRunning}
                     style={S.btn(isPushing || isDone)}
                   >
                     {isPushing ? 'Pushing…' : isDone ? 'Pushed' : 'Push to Meta'}
@@ -1162,6 +1172,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
       </div>
         </>
       )}
+      {publishReview&&<PublishReviewDialog request={publishReview} error={publishReviewError} onCancel={()=>setPublishReview(null)} onConfirm={confirmManualReview}/>}
     </div>
   );
 }

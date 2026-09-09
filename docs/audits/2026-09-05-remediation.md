@@ -855,3 +855,30 @@ actual dispatch. Review preparation also compares freshly fetched media hashes
 against approval evidence before presenting a launch-ready review. Existing source
 provenance remains in validation; additional unapproved references are not removed
 to make a pair pass.
+
+## Legacy manual publishing review and ordered carousels — September 9, 2026
+
+The legacy Publish screen's manual single-ad and Push All actions now prepare a
+frozen review before uploading. Operators see effective copy, destination,
+tracking tags, Page identity, targeting/budget, media fingerprints and approval
+evidence. Confirmation rejects changed queue contents or settings, and the actual
+publishing callback refuses unconfirmed work. Remote Blob videos use the URL upload
+path; creator/deliverable/source metadata is retained through creative and ad
+creation.
+
+Carousel review supports two to ten ordered cards. Server comparison binds each
+card's image bytes, headline, description, destination and action, and rejects
+provider order optimization. Remote fingerprint preparation has an overall time
+budget. The actual Meta handler test rejects a reordered review before any ad
+request and captures a successful two-card reviewed launch with both media
+receipts. Component callback tests verify confirmation gating, plan propagation
+and stale-queue rejection. No production ad was created.
+
+Creative-test batch publishing still needs review integration, including its new
+campaign/ad-set intent. Multi-creator and arbitrary multi-deliverable carousels
+remain rejected; this release does not introduce rights exceptions or relax those
+approval requirements.
+
+Ad-set capture and review comparison now include `bid_amount`, so changing a
+cost cap while retaining the same bid strategy invalidates the review. The actual
+carousel dispatch regression checks this failure before any provider ad request.

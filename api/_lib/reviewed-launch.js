@@ -1,15 +1,16 @@
+import {validReviewMediaRoles} from '../../src/lib/launch-review.js';
 import {digest} from './operation-journal.js';
 
 const fail=message=>{throw Object.assign(new Error(`Launch review changed: ${message}`),{statusCode:409,definitelyNotApplied:true});};
 const json=value=>typeof value==='string'?JSON.parse(value):value;
-const targetFields=['status','campaign_id','targeting','optimization_goal','billing_event','bid_strategy','daily_budget','lifetime_budget','promoted_object','attribution_spec','start_time','end_time'];
+const targetFields=['status','campaign_id','targeting','optimization_goal','billing_event','bid_strategy','bid_amount','daily_budget','lifetime_budget','promoted_object','attribution_spec','start_time','end_time'];
 export const reviewedTarget=adset=>Object.fromEntries(targetFields.map(key=>[key,adset[key] ?? null]));
 
 export async function verifyReviewedLaunch(sql,review,{payload,creative,adset,media,driveUploads,evidence}) {
   if(review==null)return null;
   if(review.version!==1 || review.confirmed!==true || !review.fields || !Array.isArray(review.media))fail('confirm the complete review first');
-  if(!/^[a-f0-9]{64}$/.test(review.approval_hash || '') || !review.media.length || review.media.length>2 || new Set(review.media.map(item=>item?.role)).size!==review.media.length)fail('invalid evidence or media roles');
-  for(const item of review.media)if(!item || !['single','feed','story'].includes(item.role) || !(item.drive_file_id?/^[a-f0-9]{32}$/.test(item.drive_md5 || ''):/^[a-f0-9]{64}$/.test(item.sha256 || '')))fail('media fingerprint missing');
+  if(!/^[a-f0-9]{64}$/.test(review.approval_hash || '') || !validReviewMediaRoles(review.media))fail('invalid evidence or media roles');
+  for(const item of review.media)if(!item || !(item.drive_file_id?/^[a-f0-9]{32}$/.test(item.drive_md5 || ''):/^[a-f0-9]{64}$/.test(item.sha256 || '')))fail('media fingerprint missing');
   if(['headline','primary_text','dest_url','url_tags','page_id','instagram_user_id'].some(key=>typeof review.fields[key]!=='string'))fail('complete creative fields required');
   if(digest(evidence.approvals)!==review.approval_hash)fail('creator approval or rights evidence differs');
   if(payload.name!==review.ad_name)fail('ad name differs');
@@ -28,8 +29,16 @@ export async function verifyReviewedLaunch(sql,review,{payload,creative,adset,me
     equal(feed.link_urls?.map(row=>row.website_url),[fields.dest_url],'destination differs');
     assets=[...(feed.images || []).map(row=>({id:row.hash,labels:row.adlabels})),...(feed.videos || []).map(row=>({id:row.video_id,labels:row.adlabels}))]
       .map(row=>({...row,role:row.labels?.some(label=>/_feed$/.test(label.name))?'feed':row.labels?.some(label=>/_story$/.test(label.name))?'story':null}));
+  }else if(link?.child_attachments){
+    const cards=link.child_attachments;
+    if(!Array.isArray(cards) || cards.length<2 || cards.length>10 || video)fail('unsupported reviewed carousel');
+    equal(link.message || '',fields.primary_text,'carousel primary text differs');
+    equal(link.link,fields.dest_url,'carousel destination differs');
+    equal(link.multi_share_optimized,false,'carousel order optimization differs');
+    equal(cards.map(card=>({headline:card.name || '',body:card.description || '',dest_url:card.link,call_to_action:card.call_to_action?.type})),review.cards,'carousel card order, copy, destination or action differs');
+    assets=cards.map((card,index)=>({id:card.image_hash,role:`card:${index}`}));
   }else{
-    if((!link&&!video)||link?.child_attachments)fail('unsupported reviewed creative format');
+    if(!link&&!video)fail('unsupported reviewed creative format');
     equal(video?.title ?? link?.name ?? '',fields.headline,'headline differs');
     equal(video?.message ?? link?.message ?? '',fields.primary_text,'primary text differs');
     equal(video?.call_to_action?.value?.link ?? link?.link,fields.dest_url,'destination differs');
