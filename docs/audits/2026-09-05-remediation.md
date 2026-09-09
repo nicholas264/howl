@@ -928,3 +928,20 @@ Validation: 146 tests, API syntax and production build passed. Regression covera
 rejects absent/unconfirmed/unsupported reviews with zero provider calls, verifies
 completed receipt replay without a plan, and retains the real handler's injected
 post-ad bookkeeping failure test (one provider ad, one recovered local launch).
+
+### Recoverable UGC session creation
+
+Session creation now uses an actor-scoped creation identity and an atomic unique
+insert. The retained upload URL identifies retries from existing clients; explicit
+stable creation keys allow intentional additional sessions for the same source.
+An identical retry returns the current session without overwriting later edits.
+Changed original details under the same identity return a 409 conflict. Private
+media ownership is still checked on every request, including retries.
+
+Validation: 147 tests, API checks and build passed, including actual private-upload
+handler replay and permission checks. Eight concurrent real preview requests
+returned one session; only the uniquely scoped test records were removed and
+cleanup was verified. Additive migration `2026-09-09-session-creation` applied to
+preview and production; both columns and the valid unique index were verified.
+Production retained its one existing session. Historical rows are not merged or
+backfilled with inferred creation identities. No production test session was made.

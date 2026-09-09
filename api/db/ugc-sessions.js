@@ -1,3 +1,4 @@
+import {createSession} from '../_lib/session-creation.js';
 import {videoSource,requirePrivateVideo} from '../_lib/private-video.js';
 import { saveSessionEdits } from '../_lib/session-edits.js';
 import { neon } from '@neondatabase/serverless';
@@ -67,47 +68,14 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const {
-        title,
-        file_name,
-        file_size,
-        video_url,
-        duration,
-        words,
-        settings,
-        thumbnail_url,
-        status,
-        creator_id,
-        source_type,
-        source_label,
-        brief_id,
-        deliverable_id,
-      } = req.body || {};
-      if (!video_url) return res.status(400).json({ error: 'video_url required' });
-      try{if(videoSource(video_url).private)await requirePrivateVideo(sql,video_url,auth.userId);}
+      const input=req.body || {};
+      if (!input.video_url) return res.status(400).json({ error: 'video_url required' });
+      try{if(videoSource(input.video_url).private)await requirePrivateVideo(sql,input.video_url,auth.userId);}
       catch(error){return res.status(error.statusCode || 400).json({error:error.message});}
-      const rows = await sql`
-        INSERT INTO ugc_sessions (user_id, title, file_name, file_size, duration, video_url, words, settings, thumbnail_url, status, creator_id, source_type, source_label, brief_id, deliverable_id)
-        VALUES (
-          ${auth.userId},
-          ${title || file_name || 'Untitled session'},
-          ${file_name || null},
-          ${file_size || null},
-          ${duration || null},
-          ${video_url},
-          ${words ? JSON.stringify(words) : null},
-          ${settings ? JSON.stringify(settings) : null},
-          ${thumbnail_url || null},
-          ${status || 'uploaded'},
-          ${Number(creator_id) || null},
-          ${source_type || (creator_id ? 'external_creator' : 'internal_employee')},
-          ${source_label || (creator_id ? null : auth.email) || null},
-          ${Number(brief_id) || null},
-          ${Number(deliverable_id) || null}
-        )
-        RETURNING *
-      `;
-      return res.status(201).json({ session: rows[0] });
+      try{
+        const session=await createSession(sql,auth,input);
+        return res.status(201).json({session});
+      }catch(error){if(error.statusCode)return res.status(error.statusCode).json({error:error.message});throw error;}
     }
 
     if (req.method === 'PATCH') {

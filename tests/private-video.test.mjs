@@ -1,3 +1,4 @@
+import {ensureSessionCreation} from '../api/_lib/session-creation.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {PGlite} from '@electric-sql/pglite';
@@ -46,13 +47,14 @@ test('private editor upload callbacks authorize session attachment and scoped pl
  const url='https://fixture.private.blob.vercel-storage.com/ugc-source/video.mp4';let signedRequests=0;
  try{
   Object.assign(process.env,{NODE_ENV:'development',AUTH_DISABLED:'true',DATABASE_URL:'postgresql://fixture:fixture@fixture.test/db',BLOB_READ_WRITE_TOKEN:'vercel_blob_rw_publicfixture_test',HOWL_PRIVATE_READ_WRITE_TOKEN:'vercel_blob_rw_fixture_test',UGC_SOURCE_TOKEN_SECRET:'fixture-playback-secret',VERCEL_BLOB_CALLBACK_URL:'https://fixture.example.test'});
-  await initializeSchema(sql);await ensureMediaObjects(sql);await ensureRateLimits(sql);
+  await initializeSchema(sql);await ensureSessionCreation(sql);await ensureMediaObjects(sql);await ensureRateLimits(sql);
   const grant=response();await upload({method:'POST',url:'/api/blob/upload-token',headers:{},body:{type:'blob.generate-client-token',payload:{pathname:'ugc-source/video.mp4',clientPayload:'fixture-session'}}},grant);assert.equal(grant.statusCode,200);assert.equal(grant.body.access,'private');assert.match(grant.body.clientToken,/^vercel_blob_client_fixture_/);
   const request={method:'POST',query:{},headers:{},body:{video_url:url,title:'Private source'}};
   const pending=response();await sessions(request,pending);assert.equal(pending.statusCode,409);assert.equal((await sql`SELECT count(*)::int AS n FROM ugc_sessions`)[0].n,0);
   const body={type:'blob.upload-completed',payload:{blob:{url,pathname:'ugc-source/video.mp4',contentType:'video/mp4'},tokenPayload:JSON.stringify({v:1,ownerId:'local-dev',scope:'assets'})}};
   const callback=response();await upload({method:'POST',headers:{'x-vercel-signature':createHmac('sha256',process.env.HOWL_PRIVATE_READ_WRITE_TOKEN).update(JSON.stringify(body)).digest('hex')},body},callback);assert.equal(callback.statusCode,200);
   const saved=response();await sessions(request,saved);assert.equal(saved.statusCode,201);
+  const retry=response();await sessions(request,retry);assert.equal(retry.statusCode,201);assert.equal(retry.body.session.id,saved.body.session.id);
   await sql`UPDATE app_media_objects SET owner_id='other' WHERE url=${url}`;
   const other=response();await sessions(request,other);assert.equal(other.statusCode,403);assert.equal((await sql`SELECT count(*)::int AS n FROM ugc_sessions`)[0].n,1);
   await sql`UPDATE app_media_objects SET owner_id='local-dev' WHERE url=${url}`;

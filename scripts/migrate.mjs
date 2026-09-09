@@ -1,3 +1,4 @@
+import {ensureSessionCreation} from '../api/_lib/session-creation.js';
 import { ensureSeedingBudgets } from '../api/_lib/seeding-report.js';
 import { ensureMediaObjects } from '../api/_lib/media-objects.js';
 import { grantRuntimeAccess } from './lib/runtime-grants.mjs';
@@ -86,5 +87,7 @@ await ensureOperationJournal(sql);
 await sql`INSERT INTO app_schema_migrations (version) VALUES ('2026-09-05-hardening-2') ON CONFLICT DO NOTHING`;
 await ensureStudioCosts(sql);
 await ensureSeedingBudgets(sql);
+await ensureSessionCreation(sql);
+await sql`INSERT INTO app_schema_migrations (version) VALUES ('2026-09-09-session-creation') ON CONFLICT DO NOTHING`;
 if (process.env.HOWL_RUNTIME_DB_ROLE) await grantRuntimeAccess(sql,process.env.HOWL_RUNTIME_DB_ROLE);
 console.log('Schema migrations applied.');
