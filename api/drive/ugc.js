@@ -1,5 +1,6 @@
 import { associateDrivePair } from '../_lib/drive-pairs.js';
 import { assertLaunchReady } from '../_lib/launch-preflight.js';
+import { launchEvidenceVerifier } from '../_lib/launch-packets.js';
 import { createHash } from 'node:crypto';
 import { boundedResponseBytes } from '../_lib/response-bytes.js';
 import { createMetaOperationFetch, runExternalStep, operationKey, rememberProviderRead } from '../_lib/operation-journal.js';
@@ -517,6 +518,7 @@ export default async function handler(req, res) {
 
 
       const launchApproval=await assertLaunchReady(appAccess.sql, req.body);
+      req.captureLaunchEvidence=launchEvidenceVerifier(appAccess.sql,[req.body],[launchApproval]);
       // End-to-end launch: streams NDJSON progress events so the client can render a live timeline.
       // Events: { step, status: "start"|"done"|"error", detail? }. Final: { done: true, adId, ... } or { done: true, error }.
       // Accepts EITHER a single fileId OR a pair { feedFileId, storyFileId } for placement-asset customization.

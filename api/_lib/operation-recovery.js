@@ -51,6 +51,7 @@ export async function recoverMetaAd(sql,{operationKey,stepKey,providerId,actorId
   const ad=await response.json();
   if(String(ad.id)!==providerId)throw new Error('Meta returned an unexpected object identity');
   const result=(kind==='campaigns'?verifyRecoveredMetaCampaign:verifyRecoveredMetaAd)(step,ad,process.env.META_AD_ACCOUNT_ID);
+  if(kind==='ads' && step.result?.launch_packet_key)result.launch_packet_key=step.result.launch_packet_key;
   const verification=kind==='campaigns'?'Meta account, campaign name, objective, paused status, categories, budget sharing and creation time':'Meta account, creative, ad set, name, tracking, creation time';
   const [saved]=await sql`WITH recovered AS (
     UPDATE app_operation_steps SET status='completed',result=${JSON.stringify(result)}::jsonb,updated_at=now()

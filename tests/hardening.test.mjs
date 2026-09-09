@@ -23,6 +23,7 @@ import { reserveOperationBudget } from '../api/_lib/operation-budget.js';
 import { completeRender, failRender } from '../api/_lib/render-completion.js';
 import { syncCreativeAnalytics } from '../api/_lib/meta/sync.js';
 import { assertLaunchReady } from '../api/_lib/launch-preflight.js';
+import { launchEvidenceVerifier } from '../api/_lib/launch-packets.js';
 import { ensureLaunchDrafts, saveLaunchDraft } from '../api/_lib/launch-drafts.js';
 import { recoverRenders } from '../api/_lib/render-recovery.js';
 import { boundedWork, workSignal, checkWork } from '../api/_lib/bounded-work.js';
@@ -292,12 +293,15 @@ test('external creator launches require approval and current accepted paid-media
   assert.ok(await approveDeliverable(sql,deliverable.id,creator.id,review.updated_at,'reviewer',{sha256:'approved-digest'}));
   await assert.rejects(assertLaunchReady(sql, input), /agreement/);
   await sql`INSERT INTO creator_agreements (creator_id,engagement_id,title,agreement_body,status,accepted_at,source_metadata) SELECT ${creator.id},${engagement.id},'Test','Terms','accepted',now(),jsonb_build_object('terms_version',1,'engagement_snapshot',to_jsonb(e)) FROM creator_engagements e WHERE id=${engagement.id}`;
-  await assertLaunchReady(sql, input);
+  const evidence=await assertLaunchReady(sql, input);
+  assert.ok(evidence.approval.accepted_agreement.id);
+  const verify=launchEvidenceVerifier(sql,[input],[evidence]);await verify();
   await sql`UPDATE creator_briefs SET script='Unreviewed script' WHERE id=${brief.id}`;
   await assert.rejects(assertLaunchReady(sql,input),/terms changed/);
   const [briefReview]=await sql`SELECT updated_at FROM creator_deliverables WHERE id=${deliverable.id}`;
   assert.ok(await approveDeliverable(sql,deliverable.id,creator.id,briefReview.updated_at,'reviewer',{sha256:'approved-digest'}));
   await assertLaunchReady(sql,input);
+  await assert.rejects(verify(),/Approval evidence changed/);
   await sql`UPDATE creator_engagements SET exclusivity_notes='Changed restriction' WHERE id=${engagement.id}`;
   await assert.rejects(assertLaunchReady(sql,input),/agreement/);
   const [termsReview]=await sql`SELECT updated_at FROM creator_deliverables WHERE id=${deliverable.id}`;
@@ -379,6 +383,7 @@ test('Meta endpoint recovers a DB failure after provider acceptance without crea
   });
   Object.assign(process.env,{NODE_ENV:'development',AUTH_DISABLED:'true',DATABASE_URL:'postgresql://test:test@test.neon.tech/test',META_ACCESS_TOKEN:'synthetic',META_AD_ACCOUNT_ID:'test'});
   globalThis.fetch = async url => {
+    if(String(url).startsWith('https://graph.facebook.com/v21.0/synthetic-adset?'))return Response.json({id:'synthetic-adset',account_id:'test',campaign_id:'fixture-campaign',targeting:{geo_locations:{countries:['US']}}});
     assert.equal(String(url),'https://graph.facebook.com/v21.0/act_test/ads');
     providerCreates++; return Response.json({id:'endpoint-replay-ad'});
   };

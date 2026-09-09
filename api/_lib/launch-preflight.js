@@ -41,6 +41,13 @@ export async function assertLaunchReady(sql, input) {
         AND (approval.snapshot->'engagement_snapshot')-'notes' IS NOT DISTINCT FROM COALESCE(to_jsonb(e)-ARRAY['status','approval_date','created_at','updated_at','created_by','notes']::text[],'null'::jsonb)) AS approval_context_current,
       e.paid_media_included, e.starts_on, e.ends_on, e.usage_term_months,
       e.status AS engagement_status,
+      (SELECT jsonb_build_object('id',a.id,'version',a.version,'accepted_at',a.accepted_at)
+        FROM creator_agreements a WHERE a.engagement_id=d.engagement_id AND a.creator_id=d.creator_id AND a.status='accepted'
+          AND a.source_metadata->>'terms_version'='1'
+          AND (a.source_metadata->'engagement_snapshot')-ARRAY['status','approval_date','created_at','updated_at','created_by','notes']::text[]
+            = to_jsonb(e)-ARRAY['status','approval_date','created_at','updated_at','created_by','notes']::text[]
+          AND (e.usage_term_months IS NULL OR a.accepted_at+make_interval(months=>e.usage_term_months)>now())
+        ORDER BY a.accepted_at DESC,a.id DESC LIMIT 1) AS rights_record,
       (SELECT MAX(a.accepted_at) FROM creator_agreements a
         WHERE a.engagement_id = d.engagement_id AND a.creator_id = d.creator_id AND a.status = 'accepted') AS accepted_at,
       EXISTS (SELECT 1 FROM creator_agreements a
@@ -80,5 +87,7 @@ export async function assertLaunchReady(sql, input) {
   input.creatorId = creatorId || Number(deliverable.creator_id);
   input.deliverableId = deliverableId;
   input.sourceType = 'external_creator';
-  return {driveDigests:Object.fromEntries(media.driveIds.map(id=>[id,approved.evidence.drive_md5]))};
+  return {driveDigests:Object.fromEntries(media.driveIds.map(id=>[id,approved.evidence.drive_md5])),
+    approval:{id:deliverable.approval_id,creator_id:deliverable.creator_id,deliverable_id:deliverableId,
+      snapshot:approved,accepted_agreement:deliverable.rights_record}};
 }

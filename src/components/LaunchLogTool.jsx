@@ -1,6 +1,7 @@
 import { apiFetch as fetch } from '../lib/apiFetch.js';
 import React, { useEffect, useState, useCallback } from 'react';
 import { PRODUCTS, ANGLES } from '../data';
+import LaunchPacketDetails from './LaunchPacketDetails.jsx';
 
 const S = {
   wrap: { padding: '28px 36px', maxWidth: 1400 },
@@ -236,6 +237,7 @@ export default function LaunchLogTool() {
                     Open ↗
                   </a>
                   <div style={{ ...S.mono, fontSize: 9, color: '#88857f', marginTop: 4 }}>{r.ad_id}</div>
+                  <LaunchPacketDetails adId={r.ad_id} />
                 </td>
               </tr>
             ))}

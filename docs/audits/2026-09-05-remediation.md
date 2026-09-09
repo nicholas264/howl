@@ -718,3 +718,34 @@ conflicts and displays the first conflict; the shared preflight checks remain.
 Regressions execute the actual component callbacks with a stopped request boundary:
 valid copy reaches the expected Drive or media-upload request, while conflicting
 product weight claims produce no request. No production upload or launch was used.
+
+### September 9: immutable pre-dispatch launch snapshots
+
+Every new ad request through the shared Meta dispatcher now captures a versioned
+snapshot before the provider mutation. It contains the submitted ad payload,
+verified account-bound creative creation receipt, observed ad-set targeting and
+configuration, actor, media/Drive upload receipts, attribution context, and exact
+creator approval and accepted-agreement references. Approval evidence is checked
+again after uploads and must still match the evidence checked at launch entry.
+
+Snapshots are append-only journal entries with a hash checked on reads. The pending
+ad operation links its snapshot before dispatch; successful responses and manual
+uncertain-ad recovery preserve that link. A failed snapshot write or unverified
+ad-set read prevents the ad request. Completed legacy retries retain their original
+receipt without inventing a historical snapshot. The authenticated Launch Log has
+an on-demand, read-only snapshot view; older launches explicitly show no snapshot.
+No schema migration or new production credential is required.
+
+Validation: all 129 regressions, backend syntax checks, and the production build
+pass. Tests exercise ordering before dispatch, receipt/date serialization, replay,
+snapshot-write failure, foreign-account targeting, approval changes, uncertain
+recovery, integrity failure, and unauthenticated reads. A read-only production Meta
+request returned HTTP 200 with matching account and targeting for the requested
+ad-set fields. Field reference: [Meta's Marketing API collection](https://www.postman.com/meta/facebook-marketing-api/documentation/0zr4mes/facebook-marketing-api-mapi).
+
+This records configuration and preflight evidence, not a claim of human approval
+of every field. Full pre-dispatch packet review, paired-deliverable approval and
+explicit rights exceptions remain open. Creative creation receipts do not prove
+the absence of subsequent provider edits, and targeting snapshots do not establish
+actual placement delivery. Snapshot capture is tested with injected provider
+responses; no paid ad was created for verification.

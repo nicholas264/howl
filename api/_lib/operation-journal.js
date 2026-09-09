@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { captureLaunchPacket } from './launch-packets.js';
 
 export function stableJson(value) {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
@@ -72,15 +73,19 @@ export async function createMetaOperationFetch(sql, req, actorId, fetchImpl = gl
       || !/\/(ads|adcreatives|campaigns|adsets)$/.test(target.pathname)) return fetchImpl(url, init);
     let payload = init.body instanceof URLSearchParams ? Object.fromEntries(init.body)
       : typeof init.body === 'string' ? JSON.parse(init.body) : {};
+    const token=payload.access_token;
     payload = { ...payload }; delete payload.access_token;
+    const stepKey=`${++step}:${target.pathname}`;
     const result = await runExternalStep(sql, {
-      operationKey: key, stepKey: `${++step}:${target.pathname}`, payload, actorId,
+      operationKey: key, stepKey, payload, actorId,
     }, async () => {
+      const packetKey=target.pathname.endsWith('/ads')
+        ? await captureLaunchPacket(sql,{req,actorId,key,stepKey,target,payload,token,fetchImpl}) : null;
       const response = await fetchImpl(url, init);
       const body = await response.json();
       if (response.status >= 500) throw new Error('Meta returned an uncertain server failure; review the operation before retrying.');
       if (!response.ok && body.error && !body.id) throw Object.assign(new Error(body.error.message || 'Meta rejected this request'), { statusCode: response.status, definitelyNotApplied: true });
-      return { status: response.status, body };
+      return { status: response.status, body, ...(packetKey?{launch_packet_key:packetKey}:{}) };
     });
     return new Response(JSON.stringify(result.body), { status: result.status, headers: { 'Content-Type': 'application/json' } });
   };

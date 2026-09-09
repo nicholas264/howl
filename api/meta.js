@@ -4,6 +4,7 @@ import { fetchPublicResource } from './_lib/safe-fetch.js';
 import { checkWorkLimit } from './_lib/work-limits.js';
 import { assertLaunchReady } from './_lib/launch-preflight.js';
 import { bindCreativeContent } from './_lib/creative-receipt.js';
+import { launchEvidenceVerifier } from './_lib/launch-packets.js';
 import { syncCreativeAnalytics } from './_lib/meta/sync.js';
 import { createMetaOperationFetch } from './_lib/operation-journal.js';
 import { canRunMetaAction } from './_lib/meta-permissions.js';
@@ -440,8 +441,10 @@ export default async function handler(req, res) {
       }
 
       if (!['upload_image', 'upload_video', 'upload_video_url', 'create_campaign', 'create_adset'].includes(action)) {
-        if (!req.body.items?.length) await assertLaunchReady(appAccess.sql, req.body);
-        for (const item of req.body.items || []) await assertLaunchReady(appAccess.sql, { ...req.body, ...item });
+        const inputs=req.body.items?.length?req.body.items.map(item=>({...req.body,...item,items:undefined})):[req.body];
+        const evidence=[];
+        for(const input of inputs)evidence.push(await assertLaunchReady(appAccess.sql,input));
+        req.captureLaunchEvidence=launchEvidenceVerifier(appAccess.sql,inputs,evidence);
       }
       const launchCopy = [
         req.body?.adName, req.body?.headline, req.body?.primaryText,
