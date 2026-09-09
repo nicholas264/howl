@@ -27,6 +27,26 @@ export async function assertLaunchReady(sql, input, {driveDigest=driveContentDig
   const matchedCreators = [...new Set(known.map(row=>Number(row.creator_id)))];
   const matchedDeliverables = [...new Set(known.map(row=>Number(row.deliverable_id)).filter(Boolean))];
   if (matchedCreators.length > 1) throw Object.assign(new Error('Mixed creators require separate approved launch packets.'),{statusCode:409});
+  if (matchedDeliverables.length > 1 && input.action==='create_paired_image_ad') {
+    const fail=message=>{throw Object.assign(new Error(message),{statusCode:409});};
+    if(matchedDeliverables.length!==2 || media.driveIds.length || media.unresolvedIds.length || media.unresolvedCreative)fail('A paired image launch requires exactly two verified deliverables.');
+    const references=media.ids.length
+      ? ['feed','story'].map(role=>{const id=input[`${role}ImageHash`],receipt=media.receipts.find(row=>row.provider_id===id&&row.kind==='image');return {role,id,url:receipt?.source_url};})
+      : (input.review_sources || []).map(row=>({role:row.role,url:row.imageUrl}));
+    if(references.length!==2 || new Set(references.map(row=>row.role)).size!==2 || references.some(row=>!['feed','story'].includes(row.role)||!row.url)
+      || new Set(references.map(row=>row.url)).size!==2 || (media.ids.length && (media.ids.length!==2 || references.some(row=>!row.id))))fail('Feed and story must each identify their own approved image.');
+    if(media.urls.some(url=>!references.some(row=>row.url===url)))fail('The pair includes an additional unreviewed media reference.');
+    const pairedMediaApprovals={};
+    for(const reference of references){
+      const result=await assertLaunchReady(sql,{...(reference.id?{imageHash:reference.id}:{imageUrl:reference.url}),creatorId:creatorId || matchedCreators[0],sourceType:'external_creator',briefId:input.briefId || input.brief_id},{driveDigest});
+      if(!result?.approval)fail('Each paired image requires its own current output approval.');
+      pairedMediaApprovals[reference.role]=result.approval;
+    }
+    const approvedIds=Object.values(pairedMediaApprovals).map(approval=>Number(approval.deliverable_id));
+    if(new Set(approvedIds).size!==2 || matchedDeliverables.some(id=>!approvedIds.includes(id)) || (deliverableId&&!approvedIds.includes(deliverableId)))fail('Selected deliverables do not match the paired outputs.');
+    input.creatorId=creatorId || matchedCreators[0];input.sourceType='external_creator';
+    return {pairedMediaApprovals};
+  }
   if (matchedDeliverables.length > 1) {
     const files=[input.pair?.feedFileId,input.pair?.storyFileId];
     if(input.action!=='launch_meta_ad' || files.some(id=>!id) || new Set(files).size!==2
@@ -109,4 +129,14 @@ export async function assertLaunchReady(sql, input, {driveDigest=driveContentDig
   return {driveDigests:Object.fromEntries(media.driveIds.map(id=>[id,approved.evidence.drive_md5])),
     approval:{id:deliverable.approval_id,creator_id:deliverable.creator_id,deliverable_id:deliverableId,
       snapshot:approved,accepted_agreement:deliverable.rights_record}};
+}
+
+export function assertApprovalMediaMatches(evidence,media) {
+  const approvals=evidence?.approval?[evidence.approval]:Object.values(evidence?.pairedApprovals || evidence?.pairedMediaApprovals || {});
+  for(const approval of approvals){
+    const snapshot=approval.snapshot,url=snapshot.output_url || snapshot.source_url;
+    const matching=media.filter(asset=>snapshot.drive_file_id?asset.drive_file_id===snapshot.drive_file_id:asset.url===url);
+    if(!matching.length || matching.some(asset=>snapshot.drive_file_id?asset.drive_md5!==snapshot.evidence?.drive_md5:asset.sha256!==snapshot.evidence?.sha256))
+      throw Object.assign(new Error('Media content changed since output approval. Review and approve this revision before launching.'),{statusCode:409});
+  }
 }

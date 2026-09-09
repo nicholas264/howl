@@ -1,6 +1,6 @@
 import {newAdsetIntent} from '../src/lib/launch-review.js';
 import {requirePermission,hasPermission} from './_lib/app-access.js';
-import {assertLaunchReady} from './_lib/launch-preflight.js';
+import {assertLaunchReady,assertApprovalMediaMatches} from './_lib/launch-preflight.js';
 import {driveContentDigest} from './_lib/approval-evidence.js';
 import {fetchPublicResource} from './_lib/safe-fetch.js';
 import {digest} from './_lib/operation-journal.js';
@@ -25,7 +25,7 @@ export default async function handler(req,res) {
     if(!limit.allowed)return sendRateLimited(res,limit);
     workId=await claimWork(access.sql,'launch-review',access.userId,{globalLimit:4,userLimit:2,ttlSeconds:150});
     if(!workId){res.setHeader('Retry-After','15');return res.status(429).json({error:'Other launch reviews are running. Retry shortly.'});}
-    const approval=await assertLaunchReady(access.sql,{...input,review_sources:media.map(item=>item.drive_file_id?{drive_file_id:item.drive_file_id}:item.url?{imageUrl:item.url}:{})});
+    const approval=await assertLaunchReady(access.sql,{...input,review_sources:media.map(item=>item.drive_file_id?{drive_file_id:item.drive_file_id}:item.url?{role:item.role,imageUrl:item.url}:{})});
     const checked=[];
     for(const item of media){
       if(!['single','feed','story'].includes(item.role))throw new Error('Invalid media placement role');
@@ -48,6 +48,7 @@ export default async function handler(req,res) {
         checked.push({role:item.role,sha256:item.sha256});
       }else throw new Error('Media reference or local content fingerprint required');
     }
+    assertApprovalMediaMatches(approval,checked);
     const approvals=JSON.parse(JSON.stringify([approval]));
     const adset=req.body.adset_id?await readLaunchAdset(req.body.adset_id):null;
     return res.json({approvals,approval_hash:digest(approvals),media:checked,adset,new_adset:newAdset,

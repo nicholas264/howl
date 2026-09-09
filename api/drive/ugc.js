@@ -1,3 +1,4 @@
+import {effectiveMetaUrlTags} from '../../src/lib/launch-review.js';
 import {recordPairedDriveLaunch} from '../_lib/paired-drive-launch.js';
 import { associateDrivePair } from '../_lib/drive-pairs.js';
 import { assertLaunchReady } from '../_lib/launch-preflight.js';
@@ -18,10 +19,9 @@ import { markCreativeAssetLaunched, upsertDriveAsset } from '../_lib/creative-as
 
 
 const DRIVE = 'https://www.googleapis.com/drive/v3';
-const DEFAULT_META_URL_TAGS = 'tw_source={{site_source_name}}&tw_adid={{ad.id}}';
 
 function cleanMetaUrlTags(value) {
-  return String(value || DEFAULT_META_URL_TAGS).trim().replace(/^[?&]+/, '');
+  return effectiveMetaUrlTags(value);
 }
 
 function appendUrlTags(params, urlParams) {

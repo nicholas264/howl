@@ -1,4 +1,5 @@
-import {newAdsetIntent} from '../src/lib/launch-review.js';
+import {recordPairedImageLaunch} from './_lib/paired-image-launch.js';
+import {newAdsetIntent,effectiveMetaUrlTags} from '../src/lib/launch-review.js';
 import { mediaDigest } from './_lib/approval-evidence.js';
 import { journalMediaUpload } from './_lib/provider-media.js';
 import { fetchPublicResource } from './_lib/safe-fetch.js';
@@ -14,7 +15,6 @@ import { backfillCreativeAssetsFromLaunchHistory } from './_lib/creative-assets.
 import { enqueueCreativeAnalyses, enqueueCreativeAssetAnalysis } from './_lib/creative-analysis-queue.js';
 import { normalizeCreativeAsset, normalizeCreativeAssetBatch } from './_lib/creative-asset-normalizer.js';
 
-const DEFAULT_META_URL_TAGS = 'tw_source={{site_source_name}}&tw_adid={{ad.id}}';
 
 const SKU_SPEND_RULES = [
   { sku: 'R1 RallyMount', productIds: ['r1-rallymount', 'rallymount-r1'], terms: ['r1 rallymount', 'r1 rally mount', 'rallymount r1', 'rally mount r1'] },
@@ -35,7 +35,7 @@ const SKU_SPEND_RULES = [
 ];
 
 function cleanMetaUrlTags(value) {
-  return String(value || DEFAULT_META_URL_TAGS).trim().replace(/^[?&]+/, '');
+  return effectiveMetaUrlTags(value);
 }
 
 function appendUrlTags(params, urlParams) {
@@ -116,7 +116,7 @@ export async function logLaunch(row, sqlOverride = null) {
       RETURNING id
     `;
     const groupKey = row.group_key || row.meta_video_id || row.meta_image_hash || row.ad_id;
-    await stampFlowLaunched(sql, {
+    if(!row.paired_deliverables)await stampFlowLaunched(sql, {
       adId: row.ad_id,
       groupKey,
       briefId: row.brief_id,
@@ -445,6 +445,7 @@ export default async function handler(req, res) {
         const inputs=req.body.items?.length?req.body.items.map(item=>({...req.body,...item,items:undefined})):[req.body];
         const evidence=[];
         for(const input of inputs)evidence.push(await assertLaunchReady(appAccess.sql,input));
+        req.launchApprovalEvidence=evidence;
         req.captureLaunchEvidence=launchEvidenceVerifier(appAccess.sql,inputs,evidence);
       }
       const launchCopy = [
@@ -905,6 +906,7 @@ export default async function handler(req, res) {
           primary_text: primaryText,
           dest_url: destUrl,
           mime_type: 'image (paired)',
+          paired_deliverables: !!req.launchApprovalEvidence?.[0]?.pairedMediaApprovals,
           creator: req.body.creator || 'Static Builder',
           creator_id: req.body.creatorId || null,
           source_type: req.body.sourceType || 'tool_generated',
@@ -914,6 +916,12 @@ export default async function handler(req, res) {
           source_video_url: req.body.sourceVideoUrl || null,
           ...actor,
         });
+
+        const pairedApprovals=req.launchApprovalEvidence?.[0]?.pairedMediaApprovals;
+        if(pairedApprovals)try {await recordPairedImageLaunch(appAccess.sql,{adId:adData.id,adName,
+          images:{feed:feedImageHash,story:storyImageHash},pairedApprovals,
+          creator:req.body.creator,sourceLabel:req.body.sourceLabel});}
+        catch(error){throw Object.assign(new Error(`Meta ad ${adData.id} exists, but paired bookkeeping failed: ${error.message}`),{statusCode:503});}
 
         return res.json({ success: true, adId: adData.id, creativeId: creativeData.id });
       }

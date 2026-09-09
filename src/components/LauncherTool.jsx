@@ -1,4 +1,4 @@
-import {pairedPlacementRules,localMediaFingerprint,launchApprovalRecords} from '../lib/launch-review.js';
+import {pairedPlacementRules,localMediaFingerprint,launchApprovalRecords,effectiveMetaUrlTags} from '../lib/launch-review.js';
 import { productClaimConflicts } from '../lib/productClaims.js';
 import { apiFetch as fetch } from '../lib/apiFetch.js';
 // LauncherTool — unified ad launcher.
@@ -845,7 +845,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   const focusedItem = useMemo(() => queue.find(item => item.unifiedId === focusedItemId) || selectedQueue[0] || null, [queue, focusedItemId, selectedQueue]);
   const focusedAdsetName = focusedItem ? buildNamesForItem(focusedItem).adsetName : '';
   const destUrlForMeta = (m = {}) => normalizedDestUrlFor(m.productId, m.destUrl);
-  const urlParamsForMeta = (m = {}) => cleanUrlParams(m.urlParams ?? config.defaultUrlParams ?? DEFAULT_URL_PARAMS);
+  const urlParamsForMeta = (m = {}) => effectiveMetaUrlTags(m.urlParams ?? config.defaultUrlParams ?? DEFAULT_URL_PARAMS);
   const clearLaunchedItem = (item) => {
     const id = item.unifiedId;
     if (item.source === 'drive') {
@@ -1413,7 +1413,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         const attribution=sourceConfig(m.sourceType || (drive?'external_creator':m.creatorId?'external_creator':'tool_generated'));
         const paired=drive?item.kind==='pair':item.type!=='video'&&!!item.storyUrl;
         const names=buildNamesForItem(item,index+1);
-        const input={action:drive?'launch_meta_ad':'create_ad_from_creative',sourceType:attribution.value,
+        const input={action:drive?'launch_meta_ad':paired?'create_paired_image_ad':'create_ad_from_creative',sourceType:attribution.value,
           creatorId:attribution.requiresCreator?m.creatorId:null,deliverableId:m.deliverableId || item.deliverableId || null,
           briefId:m.briefId || item.briefId || null,sourceVideoUrl:item.sourceVideoUrl || null};
         let media;

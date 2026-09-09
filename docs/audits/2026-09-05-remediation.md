@@ -824,3 +824,34 @@ wrong/ambiguous ownership, selected-deliverable mismatch, independent placement
 attribution and replayed bookkeeping. No production ad was created. Non-Drive
 paired deliverables, mixed-creator packets and explicit rights exceptions still
 require separate work; this release does not relax those gates.
+
+## Independently approved cart image pairs — September 9, 2026
+
+Cart image pairs now bind feed and story to two distinct, independently approved
+outputs from one creator. Review preparation uses the exact two image URLs;
+provider dispatch resolves both upload IDs from the account-scoped registry and
+checks their bytes against the corresponding approval fingerprints. Additional
+media references, unknown uploads, mismatched creator/deliverable selection,
+ambiguous outputs and revoked rights remain rejected. Approval evidence remains
+identical across preparation and upload, so the confirmed review can be verified
+before dispatch.
+
+Successful pairs retain one launch-history row and two placement-specific asset
+receipts, each linked to its own deliverable. Progress updates compare approval
+identity and credit only one output per deliverable. A local write failure reports
+the known ad ID; replay resumes bookkeeping using the existing provider receipts.
+The actual Meta handler regression forces the story receipt to fail, then confirms
+that retry produces two correct asset records with exactly one ad and creative.
+It also exercises the confirmed review through dispatch, changed upload bytes,
+missing receipts, extra sources, mismatched selections and agreement revocation.
+No production ad was created. Mixed-creator packets, arbitrary multi-asset bundles,
+legacy publisher review UI and explicit rights exceptions remain open.
+
+The complete confirmed-review regression also exposed two shared gaps: paired
+Meta image IDs use `hash` inside `asset_feed_spec`, and blank tracking inputs
+receive server defaults. The resolver now includes both paired image receipts;
+Launcher and server share tracking-tag normalization so the reviewed tags match
+actual dispatch. Review preparation also compares freshly fetched media hashes
+against approval evidence before presenting a launch-ready review. Existing source
+provenance remains in validation; additional unapproved references are not removed
+to make a pair pass.

@@ -46,6 +46,9 @@ export async function resolveLaunchMedia(sql, input) {
       for (const key of ['object_story_spec','asset_feed_spec']) {
         if (typeof payload[key] === 'string') { try {payload[key]=JSON.parse(payload[key]);} catch {} }
       }
+      // Meta placement-customized images use `hash`, unlike single-image
+      // object_story_spec entries which use `image_hash`.
+      for(const image of payload.asset_feed_spec?.images || [])if(typeof image.hash==='string')ids.add(image.hash);
       walk(payload);
     }
   }

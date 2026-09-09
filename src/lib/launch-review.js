@@ -22,5 +22,9 @@ export async function localMediaFingerprint(value) {
 }
 
 export function launchApprovalRecords(evidence=[]) {
-  return evidence.flatMap(record=>record?.approval?[record.approval]:Object.values(record?.pairedApprovals || {}));
+  return evidence.flatMap(record=>record?.approval?[record.approval]:Object.values(record?.pairedApprovals || record?.pairedMediaApprovals || {}));
+}
+
+export function effectiveMetaUrlTags(value) {
+  return String(value || 'tw_source={{site_source_name}}&tw_adid={{ad.id}}').trim().replace(/^[?&]+/, '');
 }
