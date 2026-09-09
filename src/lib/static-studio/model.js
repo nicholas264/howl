@@ -1,5 +1,5 @@
 import { PRODUCTS } from '../../data/products.js';
-import { normalizeComposition } from './composition.js';
+import { normalizeComposition, overlaps } from './composition.js';
 
 export const STUDIO_VERSION = 1;
 export const RENDER_VERSION = 2;
@@ -167,6 +167,7 @@ export function applyArtDirectionRepair(concept,asset,repair) {
   assert(direction.id!=='technical' || asset.features.some(f=>f.approved),'Revision requires an unverified feature.');
   assert(['left','center'].includes(repair.align) && ['left','center'].includes(repair.storyAlign),'Invalid alignment revision.');
   assert(Number.isFinite(repair.scale) && repair.scale>=.8 && repair.scale<=1.15,'Invalid type-size revision.');
+  validateImageLedPlacement({...concept,...repair,...copy},asset);
   const {render,review,approval,launchedToQueue,...draft}=concept;
   return {...draft,composition:normalizeComposition(repair.composition === undefined ? concept.composition : repair.composition),...(repair.headline?copy:{}),headline:copy.headline,body:copy.body,angle:copy.angle,direction:direction.id,scale:repair.scale,align:repair.align,storyAlign:repair.storyAlign,
     featureName:direction.id==='technical'?asset.features.find(f=>f.approved).name:'',rationale:safeText(repair.reason,700)};
@@ -202,6 +203,7 @@ export function validateArtDirectorPlan(workspace,choices) {
       assert(!tooSimilar(creative.headline,prior.headline),'Art director recycled a headline. Request a new idea.');
       assert(!tooSimilar(creative.premise,prior.premise),'Art director repeated the same premise. Request a distinct idea.');
     }
+    validateImageLedPlacement({...choice,...creative},asset);
     return {productId:choice.productId,assetId:choice.assetId,...creative,composition:normalizeComposition(choice.composition),direction:choice.direction,rationale:safeText(choice.rationale,700)};
   });
   for(const id of productIds)assert(normalized.filter(c=>c.productId===id).length===workspace.count,`Art director returned the wrong number of concepts for ${productFor(id).name}.`);
@@ -225,6 +227,30 @@ export function scenePhotoRect(asset,box) {
   const protectedBox={x:x+region.x*w,y:y+region.y*h,w:region.w*w,h:region.h*h};
   assert(protectedBox.x>=box.x-0.01 && protectedBox.y>=box.y-0.01 && protectedBox.x+protectedBox.w<=box.x+box.w+0.01 && protectedBox.y+protectedBox.h<=box.y+box.h+0.01,'This photograph cannot fill this format without cropping the protected product. Choose another photograph or layout.');
   return {x,y,w,h,scale,protectedBox};
+}
+export function fullPhotoEvidence(asset) {
+  const placements={},issues=[];
+  if(!asset.approved || !productFor(asset.productId))return {ready:false,placements,issues:['Confirm the product identity first.']};
+  for(const [id,format] of Object.entries(FORMATS)) {
+    try {
+      const photo=scenePhotoRect(asset,{x:0,y:0,w:format.width,h:format.height});
+      const top=id==='story'?240:66,bottom=id==='story'?280:66;
+      const safe={x:64,y:top,w:format.width-128,h:format.height-top-bottom},r=photo.protectedBox;
+      placements[id]={width:format.width,height:format.height,photo,protectedBox:r,textSafeArea:safe};
+      if(r.x<safe.x || r.y<safe.y || r.x+r.w>safe.x+safe.w || r.y+r.h>safe.y+safe.h)issues.push(`${format.label}: the protected product enters placement UI margins.`);
+      if(photo.scale>1.05)issues.push(`${format.label}: the source needs ${photo.scale.toFixed(2)}× enlargement. Use a higher-resolution or better-oriented source.`);
+    } catch(error){issues.push(`${format.label}: ${error.message}`);}
+  }
+  return {ready:issues.length===0,placements,issues};
+}
+export function validateImageLedPlacement(concept,asset) {
+  if(concept.composition?.mode!=='overlay')return;
+  const evidence=fullPhotoEvidence(asset);
+  assert(evidence.ready,evidence.issues.join(' '));
+  for(const id of Object.keys(FORMATS)) {
+    const g=designGeometry(concept,id),r=evidence.placements[id].protectedBox;
+    for(const key of ['headline',...(concept.body.trim()?['body']:[]),'cta'])assert(!overlaps(g[key],r),`${FORMATS[id].label}: move ${key} clear of the protected product at ${JSON.stringify(r)}.`);
+  }
 }
 export function verifiedFacts(asset) {
   return [{id:'identity',text:productFor(asset.productId)?.name || ''},{id:'category',text:'Propane campfire'},...asset.features.filter(f=>f.approved).map((f,i)=>({id:`feature-${i}`,text:f.name}))];
@@ -262,6 +288,8 @@ export function normalizeAssessment(value) {
 export function assetReadiness(asset) {
   if(asset.role==='reference')return {label:'Design reference',ready:false};
   if(!asset.productId || !asset.approved)return {label:'Confirm product identity',ready:false};
+  const evidence=fullPhotoEvidence(asset);
+  if(!evidence.ready)return {label:evidence.issues[0],ready:false};
   if(asset.assessment?.productCount==='multiple')return {label:'Confirmed · multiple products in scene',ready:true};
   if(asset.assessment && !asset.assessment.completeProduct)return {label:'Confirmed · check cropped hardware',ready:true};
   return {label:'Ready for art direction',ready:true};

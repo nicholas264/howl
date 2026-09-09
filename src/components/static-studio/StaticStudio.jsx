@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import JSZip from 'jszip';
 import { apiFetch } from '../../lib/apiFetch.js';
 import { PRODUCTS } from '../../data/products.js';
-import { COPY, DIRECTIONS, FORMATS, productFor, generateConcepts, conceptFingerprint, assetReadiness, normalizeAssessment } from '../../lib/static-studio/model.js';
+import { COPY, DIRECTIONS, FORMATS, productFor, generateConcepts, conceptFingerprint, assetReadiness, normalizeAssessment, fullPhotoEvidence } from '../../lib/static-studio/model.js';
 import { renderPair } from '../../lib/static-studio/render.js';
 import { useStudio, studioRequest, importOriginal, uploadStudioBlob } from '../../lib/static-studio/client.js';
 import './studio.css';
@@ -127,6 +127,8 @@ export default function StaticStudio({onAddToCart,onOpenLauncher,driveAuth}) {
     }
     const unprotected=snapshot.selectedProducts.filter(id=>!snapshot.assets.some(a=>a.approved && a.role==='product' && a.productId===id && a.protectedRegion?.approved));
     if(unprotected.length)throw new Error(`Confirm the complete protected product region for ${unprotected.map(id=>productFor(id).name).join(', ')}. Image-led ads need a safe crop and clear space for text.`);
+    const unsuitable=snapshot.selectedProducts.filter(id=>!snapshot.assets.some(a=>a.productId===id && a.role==='product' && fullPhotoEvidence(a).ready));
+    if(unsuitable.length)throw new Error(snapshot.assets.filter(a=>a.approved && unsuitable.includes(a.productId)).map(a=>`${a.name}: ${fullPhotoEvidence(a).issues.join(' ')}`).join(' · '));
     const products=snapshot.selectedProducts.filter(id=>snapshot.assets.some(a=>a.approved && a.role==='product' && a.productId===id));
     const total=products.length*snapshot.count;
     if(!total)throw new Error('Confirm a product photograph first.');
