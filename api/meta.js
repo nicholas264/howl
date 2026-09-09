@@ -9,7 +9,7 @@ import { assertLaunchReady } from './_lib/launch-preflight.js';
 import { bindCreativeContent } from './_lib/creative-receipt.js';
 import { launchEvidenceVerifier } from './_lib/launch-packets.js';
 import { syncCreativeAnalytics } from './_lib/meta/sync.js';
-import { createMetaOperationFetch } from './_lib/operation-journal.js';
+import { createMetaOperationFetch, digest } from './_lib/operation-journal.js';
 import { canRunMetaAction } from './_lib/meta-permissions.js';
 import { mirrorVideoToBlob } from './_lib/blob/mirror.js';
 import { backfillCreativeAssetsFromLaunchHistory } from './_lib/creative-assets.js';
@@ -447,11 +447,12 @@ export default async function handler(req, res) {
         const evidence=[];
         for(const input of inputs)evidence.push(await assertLaunchReady(appAccess.sql,input));
         req.launchApprovalEvidence=evidence;
+        req.launchApprovalInputs=inputs;
         req.captureLaunchEvidence=launchEvidenceVerifier(appAccess.sql,inputs,evidence);
       }
       const launchCopy = [
         req.body?.adName, req.body?.headline, req.body?.primaryText,
-        ...(req.body?.items || []).flatMap(item => [item.name, item.hook, item.body]),
+        ...(req.body?.items || []).flatMap(item => [item.name, item.hook, item.body,...(item.cards || []).flatMap(card=>[card.headline,card.body])]),
       ].filter(Boolean).join('\n');
       if (launchCopy) await assertBrandSafe(appAccess.sql, launchCopy);
     }
@@ -1158,6 +1159,11 @@ export default async function handler(req, res) {
         try {
           intent = creativeTestIntent({...req.body, pageId});
           validateCreativeTestAssets(items);
+          for(const item of items){
+            const review=item.reviewed_plan;
+            if(review?.version!==1 || review.confirmed!==true || review.target?.mode!=='creative_test')throw new Error('Confirm every creative-test review before creating the campaign.');
+            if(digest(review.target.campaign)!==digest(intent.campaign) || digest(review.target.request)!==digest({...intent.adset,name:item.name || 'Untitled'}))throw new Error('Creative-test settings changed after review. Review again.');
+          }
         } catch (error) {
           return res.status(400).json({error:error.message,step:'validate'});
         }
@@ -1180,6 +1186,8 @@ export default async function handler(req, res) {
 
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
+          req.reviewedLaunchPlan=item.reviewed_plan;
+          req.captureLaunchEvidence=launchEvidenceVerifier(appAccess.sql,[req.launchApprovalInputs[i]],[req.launchApprovalEvidence[i]]);
 
           // Create ad set
           const adsetBody = {...intent.adset,name:item.name || `Creative ${i + 1}`,campaign_id:campaignId,access_token:accessToken};
@@ -1254,6 +1262,7 @@ export default async function handler(req, res) {
             continue;
           }
 
+          appendUrlTags(creativeParams);
           const creativeRes = await fetch(`${BASE}/${adAccountId}/adcreatives`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

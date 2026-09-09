@@ -6,7 +6,7 @@ const json=value=>typeof value==='string'?JSON.parse(value):value;
 const targetFields=['status','campaign_id','targeting','optimization_goal','billing_event','bid_strategy','bid_amount','daily_budget','lifetime_budget','promoted_object','attribution_spec','start_time','end_time'];
 export const reviewedTarget=adset=>Object.fromEntries(targetFields.map(key=>[key,adset[key] ?? null]));
 
-export async function verifyReviewedLaunch(sql,review,{payload,creative,adset,media,driveUploads,evidence}) {
+export async function verifyReviewedLaunch(sql,review,{payload,creative,adset,campaign,media,driveUploads,evidence}) {
   if(review==null)return null;
   if(review.version!==1 || review.confirmed!==true || !review.fields || !Array.isArray(review.media))fail('confirm the complete review first');
   if(!/^[a-f0-9]{64}$/.test(review.approval_hash || '') || !validReviewMediaRoles(review.media))fail('invalid evidence or media roles');
@@ -59,6 +59,22 @@ export async function verifyReviewedLaunch(sql,review,{payload,creative,adset,me
     equal(String(adset.id),String(review.target.id),'ad set differs');
     if(!review.target.snapshot || typeof review.target.snapshot!=='object')fail('ad-set snapshot missing');
     equal(reviewedTarget(adset),reviewedTarget(review.target.snapshot),'ad-set configuration differs');
+  }else if(review.target?.mode==='creative_test'){
+    if(!review.target.request || !review.target.campaign || !campaign)fail('creative-test configuration missing');
+    const readReceipt=async(kind,id)=>{
+      const suffix=`/act_${adset.account_id}/${kind}`;
+      const [receipt]=await sql`SELECT request_payload,request_hash FROM app_operation_steps WHERE status='completed' AND right(step_key,length(${suffix}))=${suffix} AND result->'body'->>'id'=${String(id)} LIMIT 1`;
+      if(!receipt || digest(receipt.request_payload)!==receipt.request_hash)fail(`creative-test ${kind} receipt missing`);
+      return receipt.request_payload;
+    };
+    equal(await readReceipt('campaigns',adset.campaign_id),review.target.campaign,'campaign creation request differs');
+    equal(await readReceipt('adsets',adset.id),{...review.target.request,campaign_id:adset.campaign_id},'ad-set creation request differs');
+    equal(String(campaign.id),String(adset.campaign_id),'campaign differs');
+    if(Number(campaign.daily_budget || 0)!==0 || Number(campaign.lifetime_budget || 0)!==0)fail('unexpected campaign budget');
+    for(const key of ['name','objective','status','special_ad_categories','is_adset_budget_sharing_enabled'])equal(campaign[key],review.target.campaign[key],`campaign ${key} differs`);
+    for(const key of ['name','status','targeting','optimization_goal','billing_event','bid_strategy','promoted_object'])equal(adset[key] ?? null,review.target.request[key] ?? null,`ad-set ${key} differs; review the created ad set in the Launcher`);
+    for(const key of ['daily_budget','bid_amount'])equal(String(adset[key]),String(review.target.request[key]),`${key} differs`);
+    if(adset.lifetime_budget && Number(adset.lifetime_budget)!==0)fail('unexpected lifetime budget');
   }else if(review.target?.mode==='new'){
     if(!review.target.request || typeof review.target.request!=='object')fail('new ad-set request missing');
     const suffix=`/act_${adset.account_id}/adsets`;

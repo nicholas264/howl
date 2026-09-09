@@ -127,26 +127,16 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
   const selectAllCt = () => setCtSelected(new Set(queue.map(i => i.id)));
   const selectNoneCt = () => setCtSelected(new Set());
 
-  const launchCreativeTest = useCallback(async () => {
-    const items = queue.filter(i => ctSelected.has(i.id));
-    if (items.length === 0) { alert('Select at least one creative.'); return; }
-    if (!config.pageId.trim()) { alert('Enter your Facebook Page ID in Settings.'); return; }
-    if (!config.destUrl.trim()) { alert('Enter a destination URL in Settings.'); return; }
-    if (!ctConfig.pixelId.trim()) { alert('Enter your Pixel ID for purchase optimization.'); return; }
-    if (!ctConfig.costCapTarget.trim()) { alert('Enter a cost cap target CPA.'); return; }
-
-    if (items.some(item => item.storyUrl)) { alert('Use the Launcher for paired feed and story assets.'); return; }
-    try {
-      creativeTestIntent({dailyBudgetDollars:ctConfig.budgetPerCreative,costCapCents:/^\d+(?:\.\d{1,2})?$/.test(ctConfig.costCapTarget.trim()) ? Math.round(Number(ctConfig.costCapTarget) * 100) : NaN,pixelId:ctConfig.pixelId,pageId:config.pageId,destUrl:config.destUrl});
-    } catch (error) { alert(error.message); return; }
+  const launchCreativeTest = useCallback(async (rows,settings) => {
+    if(!rows?.length || rows.some(row=>row.plan?.confirmed!==true))throw new Error('Confirm the creative-test review before publishing.');
+    const items=rows.map(row=>row.item);
 
     setCtRunning(true);
     setCtResult(null);
     setCtProgress('Uploading assets...');
 
     try {
-      const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const testName = ctConfig.testName.trim() || `[CT] HOWL — ${dateStr}`;
+      const testName = settings.testName;
 
       // Step 1: Upload all assets individually (avoids body size limit)
       const preparedItems = [];
@@ -156,6 +146,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
 
         const prepared = {
           id: item.id,
+          reviewed_plan: rows[i].plan,
           ...publishAttribution(item),
           name: item.name || 'Untitled',
           type: item.type || 'static',
@@ -210,12 +201,8 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'create_creative_test',
+          ...settings,
           testName,
-          dailyBudgetDollars: ctConfig.budgetPerCreative,
-          costCapCents: Math.round(parseFloat(ctConfig.costCapTarget) * 100),
-          pixelId: ctConfig.pixelId,
-          pageId: config.pageId,
-          destUrl: config.destUrl,
           items: preparedItems,
           creator: 'Static Builder',
         }),
@@ -559,6 +546,27 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
       await pushAd(rows[index].item,{...rows[index].plan,confirmed:true});
     }}finally{setPushingAll(false);setPushAllProgress('');}
   };
+  const ctFingerprint=items=>JSON.stringify({items,config,ctConfig,selected:[...ctSelected]});
+  const requestCreativeTestReview=()=>{
+    const items=queue.filter(item=>ctSelected.has(item.id));
+    if(!items.length || ctRunning || pushingAll)return;
+    const frozen=JSON.parse(JSON.stringify(items));
+    try{
+      const creativeTest={testName:ctConfig.testName.trim() || `[CT] HOWL — ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'})}`,
+        dailyBudgetDollars:ctConfig.budgetPerCreative,costCapCents:/^\d+(?:\.\d{1,2})?$/.test(ctConfig.costCapTarget.trim())?Math.round(Number(ctConfig.costCapTarget)*100):NaN,
+        pixelId:ctConfig.pixelId,pageId:config.pageId,destUrl:config.destUrl};
+      creativeTestIntent(creativeTest);
+      setPublishReviewError('');
+      setPublishReview({kind:'creative_test',items:frozen,config:JSON.parse(JSON.stringify(config)),creativeTest,fingerprint:ctFingerprint(frozen)});
+    }catch(error){setCtResult({error:error.message});}
+  };
+  const confirmCreativeTestReview=async rows=>{
+    const current=publishReview.items.map(item=>queue.find(candidate=>candidate.id===item.id));
+    if(ctFingerprint(current)!==publishReview.fingerprint){setPublishReviewError('The queue or test settings changed. Keep editing and review again.');return;}
+    const settings=publishReview.creativeTest;
+    setPublishReview(null);
+    await launchCreativeTest(rows.map(row=>({...row,plan:{...row.plan,confirmed:true}})),settings);
+  };
   const pushAll=()=>requestManualReview(queue.filter(item=>!statuses[item.id] || statuses[item.id].status!=='success'));
 
   const activeAdsetId = selectedAdsetId && selectedAdsetId !== '__new__' ? selectedAdsetId : null;
@@ -827,7 +835,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
             {queue.length > 0 && (
               <div style={{ marginTop: 20 }}>
                 <button
-                  onClick={launchCreativeTest}
+                  onClick={requestCreativeTestReview}
                   disabled={ctRunning}
                   style={{ ...S.btn(ctRunning), width: '100%', padding: '14px 0', fontSize: 11 }}
                 >
@@ -1180,7 +1188,7 @@ export default function MetaPublishTool({ cart = [], onAddToCart, onUpdateCartIt
       </div>
         </>
       )}
-      {publishReview&&<PublishReviewDialog request={publishReview} error={publishReviewError} onCancel={()=>setPublishReview(null)} onConfirm={confirmManualReview}/>}
+      {publishReview&&<PublishReviewDialog request={publishReview} error={publishReviewError} onCancel={()=>setPublishReview(null)} onConfirm={publishReview.kind==='creative_test'?confirmCreativeTestReview:confirmManualReview}/>}
     </div>
   );
 }

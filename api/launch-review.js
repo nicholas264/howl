@@ -1,3 +1,4 @@
+import {creativeTestIntent} from '../src/lib/creative-test-intent.js';
 import {newAdsetIntent,validReviewMediaRoles} from '../src/lib/launch-review.js';
 import {requirePermission,hasPermission} from './_lib/app-access.js';
 import {assertLaunchReady,assertApprovalMediaMatches} from './_lib/launch-preflight.js';
@@ -20,6 +21,7 @@ export default async function handler(req,res) {
     if(!input || typeof input!=='object' || !validReviewMediaRoles(media))
       return res.status(400).json({error:'One creative with a single asset, a pair, or up to ten ordered cards is required.'});
     if(media.some(item=>item.role.startsWith('card:')&&item.drive_file_id))return res.status(400).json({error:'Carousel review requires image URLs or local image fingerprints.'});
+    const creativeTest=req.body.creative_test?creativeTestIntent(req.body.creative_test):null;
     const newAdset=req.body.new_adset?newAdsetIntent(req.body.new_adset):null;
     const limit=await checkRateLimit(access.sql,{route:'launch-review',key:digest(access.userId),limit:120,windowSeconds:3600});
     if(!limit.allowed)return sendRateLimited(res,limit);
@@ -52,7 +54,7 @@ export default async function handler(req,res) {
     assertApprovalMediaMatches(approval,checked);
     const approvals=JSON.parse(JSON.stringify([approval]));
     const adset=req.body.adset_id?await readLaunchAdset(req.body.adset_id):null;
-    return res.json({approvals,approval_hash:digest(approvals),media:checked,adset,new_adset:newAdset,
+    return res.json({approvals,approval_hash:digest(approvals),media:checked,adset,new_adset:newAdset,creative_test:creativeTest,
       default_instagram_user_id:input.action==='launch_meta_ad'?(process.env.META_INSTAGRAM_USER_ID || '').trim():''});
   }catch(error){return res.status(error.statusCode || 400).json({error:redactPrivateMediaError(error)});}
   finally{if(workId)await finishWork(access.sql,workId,'launch-review',res.statusCode || 200).catch(error=>console.error('Review lease release failed',error.message));}

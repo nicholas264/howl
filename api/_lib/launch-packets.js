@@ -23,6 +23,16 @@ export async function readLaunchAdset(adsetId,{token=process.env.META_ACCESS_TOK
   return Object.fromEntries(fields.filter(field=>body[field]!=null).map(field=>[field,body[field]]));
 }
 
+export async function readLaunchCampaign(campaignId,{token,fetchImpl,version='v21.0'}={}) {
+  if(!/^[A-Za-z0-9_-]{1,100}$/.test(String(campaignId)))throw conflict('Invalid campaign reference');
+  const fields=['id','account_id','name','objective','status','special_ad_categories','is_adset_budget_sharing_enabled','daily_budget','lifetime_budget'];
+  const url=new URL(`https://graph.facebook.com/${version}/${encodeURIComponent(campaignId)}`);url.searchParams.set('fields',fields.join(','));
+  const response=await fetchImpl(url.toString(),{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(15000)});
+  const body=await response.json();
+  if(!response.ok || body.error || String(body.id)!==String(campaignId) || String(body.account_id).replace(/^act_/,'')!==process.env.META_AD_ACCOUNT_ID?.replace(/^act_/,''))throw conflict('Could not verify the creative-test campaign before launch.');
+  return Object.fromEntries(fields.filter(field=>body[field]!=null).map(field=>[field,body[field]]));
+}
+
 export function launchEvidenceVerifier(sql,inputs,results,options) {
   const baseline=plain(results);
   const attribution=inputs.map(input=>Object.fromEntries(contextKeys.filter(key=>input[key]!=null).map(key=>[key,plain(input[key])])));
@@ -50,9 +60,12 @@ export async function captureLaunchPacket(sql,{req,actorId,key,stepKey,target,pa
     const driveUploads=req.body?.action==='launch_meta_ad'
       ? await sql`SELECT step_key,result FROM app_operation_steps WHERE operation_key=${operationKey(req,actorId,'drive-upload')} AND status='completed'`
       : [];
-    const review=await verifyReviewedLaunch(sql,req.body?.reviewed_plan,{payload,creative,adset,media,driveUploads,evidence});
+    const isCreativeTest=req.body?.action==='create_creative_test';
+    if(isCreativeTest&&!req.reviewedLaunchPlan)throw conflict('Creative-test review is required.');
+    const campaign=isCreativeTest?await readLaunchCampaign(adset.campaign_id,{token,fetchImpl,version:target.pathname.split('/')[1]}):null;
+    const review=await verifyReviewedLaunch(sql,isCreativeTest?req.reviewedLaunchPlan:req.body?.reviewed_plan,{payload,creative,adset,campaign,media,driveUploads,evidence});
     const snapshot=plain({version:1,captured_at:new Date().toISOString(),actor_id:actorId,account_id:account,
-      action:req.body?.action,ad:payload,creative_id:String(creativeId),creative,adset,
+      action:req.body?.action,ad:payload,creative_id:String(creativeId),creative,adset,campaign,
       media_receipts:media.receipts,unresolved_media_ids:media.unresolvedIds,drive_uploads:driveUploads,evidence,review,
       basis:'Configuration observed before dispatch. Subsequent provider edits and actual delivery are not inferred.'});
     const serialized=JSON.stringify(snapshot);

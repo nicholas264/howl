@@ -893,3 +893,23 @@ publishing rejects paired feed/story assets and directs them to the paired Launc
 Validation: full API/test/build check passed; an additional actual dispatch regression
 proves invalid requests make no provider call. No production ad was created.
 Full creative-test human review and per-item immutable review binding remain open.
+
+### Creative-test review and dispatch binding
+
+Creative-test batches now prepare and display each item's media fingerprints,
+approval evidence, copy, destination and campaign/ad-set intent before uploads.
+The dialog shows per-creative and total daily budgets and the cost cap in dollars.
+Queue, selection or settings changes invalidate confirmation. The API requires
+confirmed batch reviews before campaign creation; each fresh ad dispatch rechecks
+its own current approval evidence, uploaded bytes, creative content, account-bound
+campaign/ad-set creation receipts and live campaign/ad-set configuration. Snapshot
+packets now retain the campaign and per-item review. Card copy receives brand checks.
+
+Validation: 146 tests plus API syntax and build passed. Actual handler regressions
+cover missing reviews, changed caps, swapped media, unexpected campaign budgets,
+duplicate creative names, separate ad sets/snapshots and completed-request replay.
+A callback regression proves changed test settings prevent upload. Final campaign
+budget checks passed focused regressions and API checks; dialog build passed.
+No production campaign or ad was created for testing. Provider-added targeting
+defaults that differ from reviewed intent fail closed and require review of the
+created ad set in Launcher; this recovery path still needs a live operator trial.
