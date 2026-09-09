@@ -4,7 +4,7 @@ import {useTestDatabase} from './neon-test-adapter.mjs';import workflow from '..
 const response=()=>({statusCode:200,setHeader(){},status(n){this.statusCode=n;return this;},json(body){this.body=body;return this;}});
 test('agreements retain prepared terms through viewing and acceptance and reject a racing preparation',async()=>{
  const db=new PGlite(),previous={...process.env};let race=false;
- const restore=useTestDatabase(db,async(query)=>{if(race&&query.includes('INSERT INTO creator_agreements')){race=false;await db.exec('UPDATE creator_engagements SET fee_amount=777');}});
+ const restore=useTestDatabase(db,async(query)=>{if(race&&query.includes('SELECT id, name, email FROM creators')){race=false;await db.exec('UPDATE creator_engagements SET fee_amount=777');}});
  const sql=async(parts,...values)=>(await db.query(parts.reduce((s,p,i)=>s+(i?`$${i}`:'')+p,''),values)).rows;
  try{
   Object.assign(process.env,{NODE_ENV:'development',AUTH_DISABLED:'true',DATABASE_URL:'postgresql://fixture:fixture@fixture.test/db'});
@@ -32,5 +32,12 @@ test('agreements retain prepared terms through viewing and acceptance and reject
   race=true;const conflict=response();await workflow(request,conflict);assert.equal(conflict.statusCode,409,JSON.stringify(conflict.body));assert.equal((await sql`SELECT count(*)::int AS n FROM creator_agreements`)[0].n,1);
   await sql`UPDATE creator_agreements SET source_metadata='{}'::jsonb WHERE id=${id}`;
   const legacy=response();await accept({method:'GET',headers:{},query:{token}},legacy);assert.equal(legacy.statusCode,409);
+  const first=response(),second=response();await Promise.all([workflow(request,first),workflow(request,second)]);
+  assert.equal(first.statusCode,201,JSON.stringify(first.body));assert.equal(second.statusCode,201,JSON.stringify(second.body));
+  assert.deepEqual([first.body.agreement.version,second.body.agreement.version].sort(),[2,3]);
+  assert.equal((await sql`SELECT count(*)::int AS n FROM creator_activity WHERE kind='agreement_created'`)[0].n,3);
+  await db.exec("ALTER TABLE creator_activity ADD CONSTRAINT reject_prepared CHECK (kind <> 'agreement_created') NOT VALID");
+  const failed=response();await workflow(request,failed);assert.equal(failed.statusCode,500);
+  assert.equal((await sql`SELECT count(*)::int AS n FROM creator_agreements`)[0].n,3,'failed audit write rolls back agreement');
  }finally{restore();for(const key of Object.keys(process.env))if(!(key in previous))delete process.env[key];Object.assign(process.env,previous);await db.close();}
 });

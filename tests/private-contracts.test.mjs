@@ -39,6 +39,13 @@ test('private contracts require signed ownership and only authenticated agreemen
   mock.get('https://privatefixture.private.blob.vercel-storage.com').intercept({path:'/creator-contracts/signed.pdf',method:'GET',headers:{authorization:`Bearer ${process.env.HOWL_PRIVATE_READ_WRITE_TOKEN}`}}).reply(()=>{providerCalls++;return {statusCode:200,data:pdf,responseOptions:{headers:{'content-type':'application/pdf','content-length':String(Buffer.byteLength(pdf)),etag:'"fixture"','last-modified':'Mon, 07 Sep 2026 00:00:00 GMT'}}};}).persist();
   const [creator]=await sql`INSERT INTO creators(name) VALUES ('Private contract fixture') RETURNING id`;
   const [agreement]=await sql`INSERT INTO creator_agreements(creator_id,title,agreement_body,status,source_type,source_pdf_url,source_file_name) VALUES (${creator.id},'Contract','Fixture','uploaded','uploaded_pdf',${url},'Contract … signed.pdf') RETURNING id`;
+  const recorded=response();await intake({method:'POST',headers:{},body:{creator_id:creator.id,contract_pdf_url:url}},recorded);
+  assert.equal(recorded.statusCode,201,JSON.stringify(recorded.body));assert.equal(recorded.body.agreement.version,2);
+  const [receipt]=await sql`SELECT metadata FROM creator_activity WHERE kind='agreement_uploaded' AND creator_id=${creator.id}`;
+  assert.equal(receipt.metadata.agreement_id,Number(recorded.body.agreement.id));
+  await db.exec("ALTER TABLE creator_activity ADD CONSTRAINT reject_uploaded CHECK (kind <> 'agreement_uploaded') NOT VALID");
+  const failed=response();await intake({method:'POST',headers:{},body:{creator_id:creator.id,contract_pdf_url:url}},failed);
+  assert.equal(failed.statusCode,500);assert.equal((await sql`SELECT count(*)::int AS n FROM creator_agreements WHERE creator_id=${creator.id}`)[0].n,2);
   class DownloadResponse extends Writable {
    constructor(){super();this.statusCode=200;this.headers={};this.chunks=[];}
    _write(chunk,_encoding,done){this.headersSent=true;this.chunks.push(Buffer.from(chunk));done();}

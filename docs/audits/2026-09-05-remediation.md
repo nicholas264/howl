@@ -668,3 +668,23 @@ compatible with the page's require-corp isolation and Blob's allow-origin respon
 The finished-render Download and Send to Launcher handlers now invoke their helpers
 without passing React's click event as the media URL. Production media and launch
 records were not changed during these read-only checks.
+
+Production verification after deployment: the existing finished render reports
+17.8 seconds, readyState 4, anonymous CORS, and no media error. The superseding main
+deployment includes the editor fix; its earlier queued deployment was canceled.
+
+### September 9: agreement version allocation and audit atomicity
+
+Prepared agreements and uploaded PDF agreements now lock the same creator row in
+a Read Committed transaction before allocating the next version. The following
+statement sees the preceding writer's committed agreement. Both paths insert the
+agreement and its activity receipt in one data-modifying CTE, so a failed activity
+write cannot leave an unreported agreement behind. Prepared terms still use the
+snapshot comparison and reject a changed engagement.
+
+Isolated PostgreSQL handler regressions cover distinct prepared versions, uploaded
+version allocation, and injected activity failures rolling back agreement inserts.
+PGlite serializes transactions; these tests do not establish cross-connection lock
+behavior on production. The wider investment intake remains a multi-step operation;
+this change does not claim atomicity for its other creator, seeding, or flow records.
+Validation: backend syntax checks, all 121 regressions, and the production build pass.
