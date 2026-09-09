@@ -1,4 +1,5 @@
 import { runExternalStep, operationKey, digest } from './operation-journal.js';
+import { readCreativeReceipt } from './creative-receipt.js';
 
 export async function ensureProviderMedia(sql) {
   await sql`CREATE TABLE IF NOT EXISTS provider_media (
@@ -38,11 +39,10 @@ export async function resolveLaunchMedia(sql, input) {
   walk(input);
   let unresolvedCreative = false;
   if (input.creativeId) {
-    const [receipt] = await sql`SELECT request_payload FROM app_operation_steps
-      WHERE status = 'completed' AND step_key LIKE '%/adcreatives' AND result->'body'->>'id' = ${String(input.creativeId)} LIMIT 1`;
+    const receipt=await readCreativeReceipt(sql,input.creativeId);
     unresolvedCreative = !receipt;
     if (receipt) {
-      const payload = {...receipt.request_payload};
+      const payload = {...receipt};
       for (const key of ['object_story_spec','asset_feed_spec']) {
         if (typeof payload[key] === 'string') { try {payload[key]=JSON.parse(payload[key]);} catch {} }
       }
