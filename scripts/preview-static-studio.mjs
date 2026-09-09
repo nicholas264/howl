@@ -35,7 +35,14 @@ for(const bright of [false,true]){
  if(!bright && errors.length)throw Error('Dark fixture failed: '+JSON.stringify(errors));
  const overlapping=await renderPair(c,{...a,protectedRegion:{x:.2,y:.15,w:.5,h:.45,approved:true}});
  if(!overlapping.checks.some(e=>e.level==='error' && e.code.includes('layout')))throw Error('Product/text overlap incorrectly passed');
- results.push({scenario:'text overlap blocked',passed:true});URL.revokeObjectURL(url);
+ results.push({scenario:'text overlap blocked',passed:true});
+ const rect=(y,h)=>({x:72,y,w:936,h});
+ const composition={mode:'overlay',feed:{headline:rect(80,210),body:rect(1050,70),cta:rect(1200,50),headlineSize:100,bodySize:34,textColor:bright?'dark':'light'},story:{headline:rect(250,260),body:rect(1440,70),cta:rect(1560,50),headlineSize:110,bodySize:34,textColor:bright?'dark':'light'}};
+ const imageLed=await renderPair({...c,composition},a),imageLedErrors=imageLed.checks.filter(e=>e.level==='error');
+ if(imageLedErrors.length)throw Error('Image-led fixture failed: '+JSON.stringify(imageLedErrors));
+ const panel=document.createElement('section');const title=document.createElement('h2');title.textContent='Full-photo overlay / '+(bright?'dark ink':'light ink');panel.append(title);
+ for(const f of ['feed','story']){const img=document.createElement('img');img.src=URL.createObjectURL(imageLed[f].blob);panel.append(img);}document.querySelector('main').append(panel);
+ results.push({scenario:'image-led '+(bright?'dark':'light')+' type passes',passed:true});URL.revokeObjectURL(url);
 }
 if(results.some(r=>r.product && r.errors.length))throw Error('A product rendering failed');
 const saved=await fetch('/results',{method:'POST',body:JSON.stringify(results)});if(!saved.ok)throw Error('Evidence save failed');status.textContent='All rendering checks passed. Evidence saved locally.';

@@ -41,3 +41,20 @@ test('conflicting weights are caught even after a matching claim; tank capacity 
   assert.equal(productClaimConflicts('r1','11 lbs packed. Also weighs 10 pounds.').length,1);
   assert.equal(productClaimConflicts('r3','19.6 lbs. Uses a 20 lb propane tank.').length,0);
 });
+
+test('image-led compositions cover both canvases and place type without reserved card furniture',()=>{
+  const box=(y,h)=>({x:72,y,w:936,h});
+  const composition=normalizeComposition({mode:'overlay',feed:{headline:box(80,210),body:box(1050,70),cta:box(1200,50),headlineSize:100,bodySize:34,textColor:'dark'},story:{headline:box(250,260),body:box(1440,70),cta:box(1560,50),headlineSize:110,bodySize:34,textColor:'light'}});
+  for(const [format,height] of [['feed',1350],['story',1920]]){
+    const g=designGeometry({direction:'scene',composition,align:'left',storyAlign:'center'},format);
+    assert.equal(g.imageLed,true);assert.equal(g.overlay,true);
+    assert.deepEqual(g.photo,{x:0,y:0,w:1080,h:height});
+    assert.deepEqual(g.cta,composition[format].cta);
+  }
+  assert.equal(composition.feed.textColor,'dark');
+  const collision=structuredClone(composition);collision.feed.cta=box(100,50);
+  assert.throws(()=>normalizeComposition(collision),/overlap/);
+  const unsafe=structuredClone(composition);unsafe.story.cta.y=1800;
+  assert.throws(()=>normalizeComposition(unsafe),/composition area/);
+  assert.throws(()=>designGeometry({direction:'field',composition},'feed'),/image-led/);
+});

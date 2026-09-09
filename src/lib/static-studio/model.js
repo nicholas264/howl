@@ -131,12 +131,14 @@ export function containRect(imageWidth,imageHeight,box) {
   return {x:box.x+(box.w-imageWidth*scale)/2,y:box.y+(box.h-imageHeight*scale)/2,w:imageWidth*scale,h:imageHeight*scale,scale};
 }
 export function designGeometry(concept, formatId) {
+  assert(concept.composition?.mode!=='overlay' || concept.direction==='scene','Full-photo composition requires the image-led direction.');
   const {width:w,height:h}=FORMATS[formatId];
   const story=formatId==='story';
   const top=story?240:66, bottom=story?280:66;
   const safe={x:64,y:top,w:w-128,h:h-top-bottom};
   const footerY=h-bottom-32;
   const base={w,h,top,bottom,safe,footerY,logo:{x:72,y:top,w:146,h:68},product:{x:244,y:top+22},align:story?concept.storyAlign:concept.align};
+  if(concept.direction==='scene' && concept.composition?.mode==='overlay')return {...base,...normalizeComposition(concept.composition)[formatId],overlay:true,imageLed:true,align:base.align};
   if(concept.composition && !['scene','technical'].includes(concept.direction))return {...base,...normalizeComposition(concept.composition)[formatId],align:base.align};
   if(concept.direction==='scene') return {...base,photo:{x:0,y:0,w,h},headline:{x:72,y:top+120,w:936,h:story?300:240},body:{x:72,y:footerY-105,w:936,h:64},headlineSize:story?104:94,overlay:true};
   if(concept.direction==='signal') {
