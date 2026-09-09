@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import TrendLineChart from './TrendLineChart';
 import DealerCsvImport from './DealerCsvImport';
 import CreativePerformanceWorkspace from './CreativePerformanceWorkspace';
 import { apiJson } from '../lib/api';
@@ -142,92 +143,6 @@ function acquisitionRevenueFor(source, revenue) {
   const totalCustomers = newCustomers + returningCustomers;
   if (totalCustomers <= 0) return rawNewRevenue;
   return totalRevenue * (newCustomers / totalCustomers);
-}
-
-function TrendLineChart({
-  rows,
-  value,
-  format,
-  color = DASH.flame,
-  target,
-  targetLabel,
-  higherIsBetter = true,
-  height = 168,
-}) {
-  const points = (rows || [])
-    .map(row => ({ row, y: value(row) }))
-    .filter(point => point.y != null && Number.isFinite(point.y));
-  if (points.length === 0) {
-    return <div style={{ height, display: 'grid', placeItems: 'center', color: DASH.muted2, fontSize: 11 }}>No trend data yet</div>;
-  }
-
-  const width = 640;
-  const padX = 34;
-  const padTop = 16;
-  const padBottom = 34;
-  const ys = points.map(point => point.y);
-  if (target != null && Number.isFinite(target)) ys.push(target);
-  const minRaw = Math.min(...ys);
-  const maxRaw = Math.max(...ys);
-  const range = Math.max(maxRaw - minRaw, maxRaw * 0.08, 1);
-  const minY = Math.max(0, minRaw - range * 0.12);
-  const maxY = maxRaw + range * 0.12;
-  const plotH = height - padTop - padBottom;
-  const xFor = (idx) => points.length === 1
-    ? width / 2
-    : padX + (idx * (width - padX * 2)) / (points.length - 1);
-  const yFor = (v) => padTop + ((maxY - v) / Math.max(maxY - minY, 1)) * plotH;
-  const path = points.map((point, idx) => `${xFor(idx).toFixed(1)},${yFor(point.y).toFixed(1)}`).join(' ');
-  const targetY = target != null && Number.isFinite(target) ? yFor(target) : null;
-  const latest = points[points.length - 1];
-  const prior = points.length > 1 ? points[points.length - 2] : null;
-  const latestGood = target == null || !Number.isFinite(target)
-    ? null
-    : higherIsBetter ? latest.y >= target : latest.y <= target;
-
-  return (
-    <div>
-      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height, display: 'block', overflow: 'visible' }} preserveAspectRatio="none">
-        {[0, 0.5, 1].map(tick => {
-          const y = padTop + tick * plotH;
-          return <line key={tick} x1={padX} x2={width - padX} y1={y} y2={y} stroke={DASH.border} strokeWidth="1" />;
-        })}
-        {targetY != null && (
-          <>
-            <line x1={padX} x2={width - padX} y1={targetY} y2={targetY} stroke={DASH.success} strokeWidth="1.4" strokeDasharray="5 5" />
-            {targetLabel && <text x={width - padX} y={Math.max(10, targetY - 5)} textAnchor="end" fontSize="10" fill={DASH.success} fontWeight="700">{targetLabel}</text>}
-          </>
-        )}
-        <polyline points={path} fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-        {points.map((point, idx) => {
-          const x = xFor(idx);
-          const y = yFor(point.y);
-          return (
-            <g key={point.row.month}>
-              <circle cx={x} cy={y} r="4" fill={DASH.surface} stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" />
-              {(idx === 0 || idx === points.length - 1 || point.row.isCurrent) && (
-                <text x={x} y={y - 9} textAnchor={idx === 0 ? 'start' : idx === points.length - 1 ? 'end' : 'middle'} fontSize="10" fill={DASH.text} fontWeight="700">
-                  {format(point.y)}
-                </text>
-              )}
-            </g>
-          );
-        })}
-        {points.map((point, idx) => {
-          const x = xFor(idx);
-          const [year, month] = point.row.month.split('-');
-          const label = new Date(Number(year), Number(month) - 1).toLocaleDateString('en-US', { month: 'short' });
-          return <text key={`${point.row.month}-label`} x={x} y={height - 9} textAnchor="middle" fontSize="10" fill={DASH.muted2}>{label}</text>;
-        })}
-      </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 4, fontSize: 10, color: DASH.muted2 }}>
-        <span>Latest {format(latest.y)}</span>
-        <span style={{ color: latestGood == null ? DASH.muted2 : latestGood ? DASH.success : DASH.danger, fontWeight: 800 }}>
-          {prior ? `${latest.y - prior.y >= 0 ? '+' : ''}${format(latest.y - prior.y)} vs prior` : targetLabel || ''}
-        </span>
-      </div>
-    </div>
-  );
 }
 
 function fmtCtr(n) {
@@ -2556,7 +2471,6 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                       color="#d84a17"
                       target={0.015}
                       targetLabel="1.5% target"
-                      higherIsBetter
                     />
                   </div>
                   <div style={{ padding: '10px 12px', background: '#fff', border: '1px solid #dedbd3', borderRadius: 6 }}>
@@ -2567,11 +2481,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                     <TrendLineChart
                       rows={trendRows}
                       value={r => r.ncac}
+                      label="NCAC"
                       format={fmtSignedCurrency}
                       color="#9a6a0a"
                       target={120}
                       targetLabel="$120 target"
-                      higherIsBetter={false}
                     />
                   </div>
                 </div>
@@ -3169,21 +3083,38 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
                   </div>
                 </div>
 
+                <div style={{ ...S.card, marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+                    <span style={{ ...S.label, marginBottom: 0 }}>AMER by month</span>
+                    <span style={{ fontSize: 12, color: DASH.muted }}>Known new-customer revenue ÷ (Meta + Google spend)</span>
+                  </div>
+                  <TrendLineChart
+                    rows={rows.filter(r => r.month <= currentMonthKey)}
+                    value={r => r.newRoas}
+                    format={v => `${v.toFixed(2)}x`}
+                    color={DASH.blue}
+                    label="AMER"
+                  />
+                  <div style={{ fontSize: 11, color: DASH.muted, marginTop: 10 }}>
+                    Completed months show monthly actuals. MTD uses current-month revenue and spend to date.
+                  </div>
+                </div>
+
                 {/* NCAC + CM3 side by side */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 360px), 1fr))', gap: 12, marginBottom: 20 }}>
                   <div style={S.card}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
                       <span style={{ ...S.label, marginBottom: 0 }}>NCAC Trend</span>
                       <span style={{ fontSize: 10, color: '#88857f' }}>Ad spend ÷ new customers</span>
                     </div>
                     <TrendLineChart
-                      rows={rows}
+                      rows={rows.filter(r => r.month <= currentMonthKey)}
                       value={r => r.ncac}
+                      label="NCAC"
                       format={fmtSignedCurrency}
                       color="#9a6a0a"
                       target={120}
                       targetLabel="$120 target"
-                      higherIsBetter={false}
                     />
                   </div>
 

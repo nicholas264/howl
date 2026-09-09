@@ -634,3 +634,23 @@ changed fees/duration/party details, changed consent text, a racing preparation,
 legacy rejection and launch rejection until a matching accepted agreement exists.
 Tests use isolated records and do not send agreements or create production consent.
 The full launch-packet approval workflow remains outstanding.
+
+## Acceptance response recovery — September 7
+
+An identical agreement acceptance retry returns the saved confirmation, including
+its original acceptance time, without updating consent or emitting another activity.
+The retry must match the accepted name/email and viewed-content digest. The same
+check handles a concurrent request that loses the guarded acceptance update. Changed
+consent or identity is not treated as a successful replay. Handler tests issue
+concurrent acceptance requests, replay the result, compare the entire stored record
+and assert a single acceptance activity; a different signer is rejected.
+
+## Internal notes versus agreed terms — September 7
+
+Internal engagement notes are excluded from approval and accepted-terms comparisons.
+They are not part of the rendered agreement terms; changing a scheduling note must
+not invalidate consent or prevent launch. Stored snapshots remain intact, including
+older snapshots that contain notes. The comparison ignores only that internal field
+in addition to the previously excluded workflow metadata. The launch regression now
+updates internal notes and verifies continued eligibility, while changed contractual
+restrictions still require review and matching acceptance.

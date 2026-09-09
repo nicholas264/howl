@@ -65,11 +65,6 @@ export default async function handler(req, res) {
       return res.json({ agreement: publicAgreement(agreement) });
     }
 
-    if (agreement.status !== 'sent'
-      || (agreement.expires_at && new Date(agreement.expires_at).getTime() <= Date.now())) {
-      return res.status(409).json({ error: 'This agreement is no longer available for acceptance' });
-    }
-
     if(req.body?.consent_digest!==agreementConsentDigest(agreement))return res.status(409).json({error:'Agreement content changed or needs to be refreshed. Reload and review it before accepting.'});
 
     const acceptedName = (req.body?.accepted_name || '').toString().trim().slice(0, 200);
@@ -80,6 +75,15 @@ export default async function handler(req, res) {
     }
     if (agreement.sent_to && acceptedEmail !== agreement.sent_to.toLowerCase()) {
       return res.status(400).json({ error: 'Use the email address this agreement was sent to' });
+    }
+
+    const isAcceptedReplay=value=>value?.status==='accepted'
+      && value.accepted_name===acceptedName && value.accepted_email===acceptedEmail
+      && agreementConsentDigest(value)===req.body.consent_digest;
+    if(isAcceptedReplay(agreement))return res.status(201).json({agreement:publicAgreement(agreement)});
+    if (agreement.status !== 'sent'
+      || (agreement.expires_at && new Date(agreement.expires_at).getTime() <= Date.now())) {
+      return res.status(409).json({ error: 'This agreement is no longer available for acceptance' });
     }
 
     const forwarded = (req.headers['x-forwarded-for'] || '').toString().split(',')[0].trim();
@@ -125,7 +129,11 @@ export default async function handler(req, res) {
       )
       SELECT * FROM signed
     `;
-    if (!accepted) return res.status(409).json({ error: 'This agreement was already accepted or is unavailable' });
+    if (!accepted) {
+      const latest=await getAgreementByToken(sql,token);
+      if(isAcceptedReplay(latest))return res.status(201).json({agreement:publicAgreement(latest)});
+      return res.status(409).json({ error: 'This agreement was already accepted or is unavailable' });
+    }
     const updated = await getAgreementByToken(sql, token);
     return res.status(201).json({ agreement: publicAgreement(updated) });
   } catch (err) {
