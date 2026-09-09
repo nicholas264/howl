@@ -708,3 +708,13 @@ carousel, foreign-account receipts, identity mismatches, and altered stored payl
 This is one part of launch-packet integrity: paired deliverable approval, placement
 snapshots, explicit rights exceptions, and a unified review artifact remain open.
 Provider edits made outside HOWL are not detected by a creation receipt alone.
+
+### September 9: restore Launcher dispatch after product-claim checks
+
+Both the Drive and cart launch callbacks referenced an undefined `issues` array.
+Valid copy could therefore fail before the first launch request, potentially after
+the batch wrapper had created an ad set. Each callback now evaluates its own claim
+conflicts and displays the first conflict; the shared preflight checks remain.
+Regressions execute the actual component callbacks with a stopped request boundary:
+valid copy reaches the expected Drive or media-upload request, while conflicting
+product weight claims produce no request. No production upload or launch was used.

@@ -878,7 +878,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     if (!adsetId || adsetId === '__new__') return setGlobalError('Pick an ad set first.');
     const productUrl = destUrlForMeta(m);
     if (!productUrl) return setItemStatus(id, 'error', 'Add an ad URL before launching');
-    issues.push(...productClaimConflicts(m.productId,`${m.headline || ''} ${m.primaryText || ''}`));
+    const claimIssues = productClaimConflicts(m.productId, `${m.headline || ''} ${m.primaryText || ''}`);
+    if (claimIssues.length) return setItemStatus(id, 'error', claimIssues[0]);
     if (attribution.requiresCreator && !m.creatorId) return setItemStatus(id, 'error', 'Choose an exact creator record before launching creator UGC');
     if (attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim()) return setItemStatus(id, 'error', 'Add the internal/founder name before launching');
     if (!m.headline?.trim() && !m.primaryText?.trim()) return setItemStatus(id, 'error', 'Headline or primary text required');
@@ -961,7 +962,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     const productUrl = destUrlForMeta(m);
     if (!productUrl) return setItemStatus(id, 'error', 'Add an ad URL before launching');
     if (!m.headline?.trim()) return setItemStatus(id, 'error', 'Headline required');
-    issues.push(...productClaimConflicts(m.productId,`${m.headline || ''} ${m.primaryText || ''}`));
+    const claimIssues = productClaimConflicts(m.productId, `${m.headline || ''} ${m.primaryText || ''}`);
+    if (claimIssues.length) return setItemStatus(id, 'error', claimIssues[0]);
     if (attribution.requiresCreator && !m.creatorId) return setItemStatus(id, 'error', 'Choose an exact creator record before launching creator UGC');
     if (attribution.requiresLabel && !(m.sourceLabel || m.creator)?.trim()) return setItemStatus(id, 'error', 'Add the internal/founder name before launching');
 
