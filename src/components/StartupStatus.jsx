@@ -6,11 +6,13 @@ export function StartupStatus({ message = 'Connecting to secure sign-in…', err
     const timer = setTimeout(() => setSlow(true), 15000);
     return () => clearTimeout(timer);
   }, []);
+  const wrongHost = window.location.hostname.endsWith('.vercel.app')
   return <main className="access-denied" role={error || slow ? 'alert' : 'status'}>
     <img src="/logos/howl-stacked-blk.png" alt="HOWL Campfires" />
     <h1>{error ? 'The workspace could not open.' : 'Opening the campfire'}</h1>
     <p>{message}</p>
     {slow && !error && <p>Sign-in is taking longer than expected. Check your connection and try again.</p>}
+    {wrongHost && <p>This address cannot use production sign-in. <a href="https://welcometothecampfire.io/">Open the HOWL workspace</a>.</p>}
     {(error || slow) && <button type="button" onClick={onRetry || (() => window.location.reload())}>Try again</button>}
   </main>;
 }

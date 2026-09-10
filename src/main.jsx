@@ -3,7 +3,7 @@ import { AppErrorBoundary, StartupStatus } from './components/StartupStatus.jsx'
 import { apiFetch, configureApiSession } from './lib/apiFetch.js'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { ClerkProvider, ClerkLoading, SignedIn, SignedOut, SignIn, UserButton, useAuth } from '@clerk/clerk-react'
+import { ClerkProvider, SignedIn, SignedOut, SignIn, UserButton, useAuth } from '@clerk/clerk-react'
 import App from './App.jsx'
 import './styles.css'
 
@@ -102,6 +102,38 @@ const appearance = {
   },
 }
 
+// Keep the loading UI outside Clerk: its provider can return null after a
+// script/origin failure, which also removes ClerkLoading and all descendants.
+function AuthReadiness({ onReady }) {
+  const { isLoaded } = useAuth()
+  React.useEffect(() => {
+    onReady(isLoaded)
+    return () => onReady(false)
+  }, [isLoaded, onReady])
+  return null
+}
+function SignInWorkspace() {
+  const [ready, setReady] = React.useState(false)
+  return <>
+    {!ready && <StartupStatus />}
+    <ClerkProvider publishableKey={PUB_KEY} appearance={appearance}>
+      <AuthReadiness onReady={setReady} />
+      <SignedIn><AuthenticatedApp /></SignedIn>
+      <SignedOut>
+        <div style={{ minHeight: '100vh', background: '#f7f6f2', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+          <SignIn routing="hash" forceRedirectUrl={`${window.location.pathname}${window.location.search}`} />
+        </div>
+      </SignedOut>
+    </ClerkProvider>
+  </>
+}
+const legacyHost = ['howl-teal.vercel.app', 'howl-nicholas-7844s-projects.vercel.app', 'howl-git-main-nicholas-7844s-projects.vercel.app'].includes(window.location.hostname)
+if (legacyHost && PUB_KEY?.startsWith('pk_live_')) {
+  const destination = new URL(window.location.pathname + window.location.search + window.location.hash, 'https://welcometothecampfire.io')
+  destination.searchParams.delete('dpl')
+  window.location.replace(destination.href)
+}
+
 const app = isCreatorSubmission ? (
   <React.Suspense fallback={<StartupStatus message="Opening your creator page…" />}>
     <CreatorSubmissionPage />
@@ -135,17 +167,7 @@ const app = isCreatorSubmission ? (
 ) : !PUB_KEY ? (
   <StartupStatus error message="Sign-in is temporarily unavailable. Please contact the workspace administrator." />
 ) : (
-  <ClerkProvider publishableKey={PUB_KEY} appearance={appearance}>
-    <ClerkLoading><StartupStatus /></ClerkLoading>
-    <SignedIn>
-      <AuthenticatedApp />
-    </SignedIn>
-    <SignedOut>
-      <div style={{ minHeight: '100vh', background: '#f7f6f2', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
-        <SignIn routing="hash" forceRedirectUrl={`${window.location.pathname}${window.location.search}`} />
-      </div>
-    </SignedOut>
-  </ClerkProvider>
+  <SignInWorkspace />
 )
 
 ReactDOM.createRoot(document.getElementById('root')).render(
