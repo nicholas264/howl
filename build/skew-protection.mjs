@@ -17,6 +17,14 @@ export function skewProtectionPlugin({ enabled, deploymentId } = {}) {
           while (stack.length) {
             const node = stack.pop();
             if (!node || typeof node !== 'object') continue;
+            // Vite identifies lazy stylesheets by their extension. Deployment
+            // queries must not make the preload helper treat CSS as a module.
+            if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression'
+              && node.callee.property.name === 'endsWith' && node.arguments.length === 1
+              && node.arguments[0].value === '.css') {
+              const receiver = node.callee.object;
+              edits.push({ start: receiver.end, end: receiver.end, text: '.split("?")[0]' });
+            }
             if (node.type === 'Literal' && typeof node.value === 'string') {
               const value = node.value;
               const resolved = value.startsWith('./') ? directory + value.slice(2) : value.replace(/^\//, '');

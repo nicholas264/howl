@@ -52,5 +52,21 @@ test('Vite output pins entry, lazy imports, shared chunks, and CSS preload refer
       }
     }
     assert.ok(references>=4,`Only ${references} asset references found`);
+    // Execute the emitted preload helper: pinning must preserve CSS detection.
+    const links=[];
+    const document={
+      createElement:()=>({relList:{supports:()=>true},addEventListener(type,fn){if(type==='load')queueMicrotask(fn);}}),
+      getElementsByTagName:()=>links, querySelector:()=>null, querySelectorAll:()=>[],
+      head:{appendChild:link=>links.push(link)},
+    };
+    const window={};
+    const entry=output.find(x=>x.type==='chunk' && x.isEntry).code
+      .replace(/import\(([^)]+)\)/g,'Promise.resolve({})')
+      .replace(/export\s*\{[^}]*\};?/g,'');
+    new Function('document','window',entry)(document,window);
+    await window.one();
+    const css=links.find(link=>link.href?.includes('.css?'));
+    assert.ok(css,'Lazy stylesheet was requested');
+    assert.equal(css.rel,'stylesheet','Pinned lazy CSS must be applied, not module-preloaded');
   } finally { await rm(root,{recursive:true,force:true}); }
 });
