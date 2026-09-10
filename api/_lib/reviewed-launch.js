@@ -84,7 +84,13 @@ export async function verifyReviewedLaunch(sql,review,{payload,creative,adset,ca
     equal(receipt.request_payload,review.target.request,'new ad-set request differs');
     equal(String(adset.campaign_id),String(review.target.request.campaign_id),'campaign differs');
     for(const key of ['status','targeting','optimization_goal','billing_event','bid_strategy','promoted_object'])equal(adset[key] ?? null,review.target.request[key] ?? null,`${key} differs; select the created ad set and review its current configuration`);
-    equal(String(adset.daily_budget),String(review.target.request.daily_budget),'daily budget differs');
+    equal(String(adset.daily_budget || 0),String(review.target.request.daily_budget || 0),'daily budget differs');
+    equal(String(adset.bid_amount || 0),String(review.target.request.bid_amount || 0),'bid amount differs');
+    if(review.target.campaign){
+      if(!campaign)fail('campaign settings unavailable');
+      for(const key of ['id','objective','bid_strategy'])equal(campaign[key] ?? null,review.target.campaign[key] ?? null,`campaign ${key} differs`);
+      for(const key of ['daily_budget','lifetime_budget'])equal(String(campaign[key] || 0),String(review.target.campaign[key] || 0),`campaign ${key} differs`);
+    }
     if(adset.lifetime_budget && Number(adset.lifetime_budget)!==0)fail('unexpected lifetime budget');
   }else fail('ad-set review missing');
   return review;

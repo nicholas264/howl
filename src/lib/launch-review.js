@@ -1,9 +1,10 @@
 // Shared, secret-free provider intent used by the review and creation paths.
-export function newAdsetIntent({name,campaign_id,daily_budget_dollars,objective,pixel_id}) {
+export function newAdsetIntent({name,campaign_id,daily_budget_dollars,objective,pixel_id,campaign,bid_amount}) {
   const cents=Math.round(Number(daily_budget_dollars)*100);
-  if(!name?.trim() || !campaign_id || !Number.isSafeInteger(cents) || cents<=0)throw new Error('A name, campaign and positive daily budget are required.');
+  const campaignBudget=Number(campaign?.daily_budget)>0 || Number(campaign?.lifetime_budget)>0;
+  if(!name?.trim() || !campaign_id || (!campaignBudget && (!Number.isSafeInteger(cents) || cents<=0)))throw new Error('A name, campaign and positive daily budget are required.');
   if(objective==='OUTCOME_SALES'&&!pixel_id)throw new Error('A pixel is required for sales ad sets.');
-  return {name:name.trim(),campaign_id,daily_budget:String(cents),billing_event:'IMPRESSIONS',bid_strategy:'LOWEST_COST_WITHOUT_CAP',status:'PAUSED',
+  return {name:name.trim(),campaign_id,...(!campaignBudget?{daily_budget:String(cents),bid_strategy:campaign?.bid_strategy || 'LOWEST_COST_WITHOUT_CAP'}:{}),...(bid_amount?{bid_amount}:{}),billing_event:'IMPRESSIONS',status:'PAUSED',
     targeting:{geo_locations:{countries:['US']},age_min:18,age_max:65},
     optimization_goal:objective==='OUTCOME_SALES'?'OFFSITE_CONVERSIONS':objective==='OUTCOME_TRAFFIC'?'LINK_CLICKS':'REACH',
     ...(objective==='OUTCOME_SALES'?{promoted_object:{pixel_id,custom_event_type:'PURCHASE'}}:{})};

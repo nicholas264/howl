@@ -58,16 +58,26 @@ test('new ad-set review requires account-bound receipt and matching observed con
   assert.ok(await verifyReviewedLaunch(sql,plan,context));
   await assert.rejects(verifyReviewedLaunch(sql,plan,{...context,adset:{...context.adset,targeting:{age_min:25}}}),/targeting differs/);
   assert.throws(()=>newAdsetIntent({name:'x',campaign_id:'c',daily_budget_dollars:-1}),/positive daily budget/);
+  const campaign={id:'campaign',objective:'OUTCOME_TRAFFIC',bid_strategy:'COST_CAP',daily_budget:'150000'};
+  const cbo=newAdsetIntent({name:'Ad set',campaign_id:'campaign',objective:'OUTCOME_TRAFFIC',campaign,bid_amount:15000});
+  const cboPlan={...plan,target:{mode:'new',request:cbo,campaign}};
+  const cboContext={...context,campaign,adset:{...cbo,id:'cbo',account_id:'test',daily_budget:'0'}};
+  await runExternalStep(sql,{operationKey:'cbo',stepKey:'1:/v21.0/act_test/adsets',payload:cbo},async()=>({body:{id:'cbo'}}));
+  assert.ok(await verifyReviewedLaunch(sql,cboPlan,cboContext));
+  await assert.rejects(verifyReviewedLaunch(sql,cboPlan,{...cboContext,adset:{...cboContext.adset,bid_amount:20000}}),/bid amount differs/);
+  await assert.rejects(verifyReviewedLaunch(sql,cboPlan,{...cboContext,campaign:{...campaign,daily_budget:'200000'}}),/campaign daily_budget differs/);
+
  }finally{await db.close();}
 });
 
-test('review endpoint returns evidence without provider mutation and releases leases on failure',async()=>{
+test('review endpoint returns evidence without provider mutation and releases leases on failure',async t=>{
+ t.mock.method(globalThis,'fetch',async()=>new Response(JSON.stringify({id:'123',account_id:'456',objective:'OUTCOME_TRAFFIC'})));
  const db=new PGlite(),previous={...process.env},restore=useTestDatabase(db);
  const sql=async(parts,...values)=>(await db.query(parts.reduce((s,p,i)=>s+(i?`$${i}`:'')+p,''),values)).rows;
  try{
-  Object.assign(process.env,{AUTH_DISABLED:'true',NODE_ENV:'development',DATABASE_URL:'postgresql://fixture:fixture@fixture.test/db'});
+  Object.assign(process.env,{META_AD_ACCOUNT_ID:'act_456',AUTH_DISABLED:'true',NODE_ENV:'development',DATABASE_URL:'postgresql://fixture:fixture@fixture.test/db'});
   await initializeSchema(sql);await ensureWorkControls(sql);await ensureRateLimits(sql);
-  const body={input:{sourceType:'tool_generated'},media:[{role:'single',sha256:'a'.repeat(64)}],new_adset:{name:'Set',campaign_id:'campaign',daily_budget_dollars:10,objective:'OUTCOME_TRAFFIC'}};
+  const body={input:{sourceType:'tool_generated'},media:[{role:'single',sha256:'a'.repeat(64)}],new_adset:{name:'Set',campaign_id:'123',daily_budget_dollars:10,objective:'OUTCOME_TRAFFIC'}};
   const success=response();await endpoint({method:'POST',headers:{},body},success);
   assert.equal(success.statusCode,200);assert.equal(success.body.approval_hash,digest([null]));assert.equal(success.body.new_adset.status,'PAUSED');
   const invalid=response();await endpoint({method:'POST',headers:{},body:{...body,media:[{role:'single',sha256:'invalid'}]}},invalid);assert.equal(invalid.statusCode,400);

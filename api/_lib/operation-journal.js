@@ -30,8 +30,8 @@ export async function runExternalStep(sql, { operationKey, stepKey, payload, act
   const [claim] = await sql`
     INSERT INTO app_operation_steps (operation_key, step_key, request_hash, actor_id, request_payload)
     VALUES (${operationKey}, ${stepKey}, ${hash}, ${actorId || null}, ${JSON.stringify(payload)}::jsonb)
-    ON CONFLICT (operation_key,step_key) DO UPDATE SET status = 'pending', updated_at = now()
-      WHERE app_operation_steps.status = 'rejected' AND app_operation_steps.request_hash = EXCLUDED.request_hash
+    ON CONFLICT (operation_key,step_key) DO UPDATE SET status = 'pending', request_hash = EXCLUDED.request_hash, request_payload = EXCLUDED.request_payload, updated_at = now()
+      WHERE app_operation_steps.status = 'rejected'
     RETURNING operation_key
   `;
   if (!claim) {
@@ -84,7 +84,7 @@ export async function createMetaOperationFetch(sql, req, actorId, fetchImpl = gl
       const response = await fetchImpl(url, init);
       const body = await response.json();
       if (response.status >= 500) throw new Error('Meta returned an uncertain server failure; review the operation before retrying.');
-      if (!response.ok && body.error && !body.id) throw Object.assign(new Error(body.error.message || 'Meta rejected this request'), { statusCode: response.status, definitelyNotApplied: true });
+      if (!response.ok && body.error && !body.id) throw Object.assign(new Error(body.error.error_user_msg || body.error.message || 'Meta rejected this request'), { statusCode: response.status, definitelyNotApplied: true, detail: body.error });
       return { status: response.status, body, ...(packetKey?{launch_packet_key:packetKey}:{}) };
     });
     return new Response(JSON.stringify(result.body), { status: result.status, headers: { 'Content-Type': 'application/json' } });

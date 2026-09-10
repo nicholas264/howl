@@ -537,13 +537,14 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   // Falls back to config.defaultObjective when the campaign list hasn't loaded
   // or the campaign isn't found (e.g. it was just created in this session).
   const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId);
+  const campaignBudget=Number(selectedCampaign?.daily_budget)>0 || Number(selectedCampaign?.lifetime_budget)>0;
   const effectiveObjective = selectedCampaign?.objective || config.defaultObjective || 'OUTCOME_SALES';
 
   const createAdsetRequest = async ({ name, budget, select = false }) => {
     if (!selectedCampaignId || selectedCampaignId === '__new__') throw new Error('Pick a campaign first.');
     if (!name.trim()) throw new Error('Ad set name required.');
     const budgetDollars = parseFloat(budget);
-    if (!(budgetDollars > 0)) throw new Error('Daily budget must be greater than 0.');
+    if (!campaignBudget && !(budgetDollars > 0)) throw new Error('Daily budget must be greater than 0.');
     const pixelId = (config.defaultPixelId || '').trim();
     if (effectiveObjective === 'OUTCOME_SALES' && !pixelId) {
       throw new Error('Pixel ID required for sales ad sets. Set Default Pixel ID in launcher settings.');
@@ -1115,7 +1116,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     if ((config.namingMode || 'batch_adsets') === 'existing_adset' && (!selectedAdsetId || selectedAdsetId === '__new__')) {
       issues.push('Pick an ad set.');
     }
-    if ((config.namingMode || 'batch_adsets') !== 'existing_adset' && !(Number(batchAdsetBudget) > 0)) {
+    if (!campaignBudget && (config.namingMode || 'batch_adsets') !== 'existing_adset' && !(Number(batchAdsetBudget) > 0)) {
       issues.push('Enter a valid ad set budget.');
     }
     if (!m.productId) issues.push('Pick a product.');
@@ -1433,7 +1434,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         const primary=drive?(m.primaryText || '').trim():m.primaryText || '';
         const plan={version:1,confirmed:false,ad_name:names.adName,approval_hash:data.approval_hash,media:data.media,
           fields:{headline,primary_text:primary || headline,dest_url:destUrlForMeta(m),url_tags:urlParamsForMeta(m) || '',page_id:drive?config.pageId.trim():config.pageId,instagram_user_id:(config.instagramUserId || '').trim() || data.default_instagram_user_id || ''},
-          target:existing?{mode:'existing',id:selectedAdsetId,snapshot:data.adset}:{mode:'new',request:data.new_adset},
+          target:existing?{mode:'existing',id:selectedAdsetId,snapshot:data.adset}:{mode:'new',request:data.new_adset,campaign:data.campaign},
           ...(paired?{placement_rules:pairedPlacementRules(drive && (item.feed.mimeType || '').startsWith('video/'))}:{})};
         rows.push({item,plan,approvals:data.approvals,warnings:launchWarningsForItem(item)});
         if(!controller.signal.aborted)setReviewState({loading:index<frozen.length-1,error:'',rows:[...rows],fingerprint});
@@ -1546,8 +1547,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
             <input style={S.input} value={config.adNameTemplate || ''} onChange={e => updateConfig({ adNameTemplate: e.target.value })} />
           </div>
           <div>
-            <label style={S.label}>Budget/ad set</label>
-            <input style={S.input} type="number" min="1" step="1" value={batchAdsetBudget} onChange={e => setBatchAdsetBudget(e.target.value)} disabled={(config.namingMode || 'batch_adsets') === 'existing_adset'} />
+            <label style={S.label}>{campaignBudget ? 'Budget managed by campaign' : 'Budget/ad set'}</label>
+            <input style={S.input} type="number" min="1" step="1" value={batchAdsetBudget} onChange={e => setBatchAdsetBudget(e.target.value)} disabled={campaignBudget || (config.namingMode || 'batch_adsets') === 'existing_adset'} />
           </div>
         </div>
         <div style={{ marginTop: 8, color: '#88857f', fontSize: 10 }}>
@@ -1610,8 +1611,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                 <input style={S.input} placeholder={focusedAdsetName || 'Select a creative below'} value={newAdset.name} onChange={e => { setNewAdsetNameEdited(true); setNewAdset({ ...newAdset, name: e.target.value }); }} />
               </div>
               <div>
-                <label style={S.label}>Daily budget ($)</label>
-                <input style={S.input} type="number" min="1" step="1" placeholder="50" value={newAdset.budget} onChange={e => setNewAdset({ ...newAdset, budget: e.target.value })} />
+                <label style={S.label}>{campaignBudget ? 'Budget managed by campaign' : 'Daily budget ($)'}</label>
+                <input style={S.input} type="number" min="1" step="1" placeholder="50" disabled={campaignBudget} value={newAdset.budget} onChange={e => setNewAdset({ ...newAdset, budget: e.target.value })} />
               </div>
               <button onClick={createAdset} disabled={creatingAdset} style={S.btn(creatingAdset)}>
                 {creatingAdset ? 'Creating…' : 'Create'}
@@ -2108,7 +2109,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                 Campaign: <strong style={{ color: '#171717' }}>{campaigns.find(campaign => String(campaign.id) === String(selectedCampaignId))?.name || selectedCampaignId}</strong>
                 {' | '}{(config.namingMode || 'batch_adsets') === 'existing_adset'
                   ? `Existing ad set: ${adsets.find(adset => String(adset.id) === String(selectedAdsetId))?.name || selectedAdsetId}`
-                  : `One new ad set per creative at $${batchAdsetBudget}/day`}
+                  : campaignBudget ? 'One new ad set per creative; existing campaign budget and bid settings' : `One new ad set per creative at $${batchAdsetBudget}/day`}
               </div>
             </div>
 

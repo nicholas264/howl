@@ -1,6 +1,7 @@
+import {resolveNewAdset} from './_lib/launch-adset.js';
 import {creativeTestIntent,validateCreativeTestAssets} from '../src/lib/creative-test-intent.js';
 import {recordPairedImageLaunch} from './_lib/paired-image-launch.js';
-import {newAdsetIntent,effectiveMetaUrlTags} from '../src/lib/launch-review.js';
+import {effectiveMetaUrlTags} from '../src/lib/launch-review.js';
 import { mediaDigest } from './_lib/approval-evidence.js';
 import { journalMediaUpload } from './_lib/provider-media.js';
 import { fetchPublicResource } from './_lib/safe-fetch.js';
@@ -664,7 +665,7 @@ export default async function handler(req, res) {
           { field: 'effective_status', operator: 'IN', value: ['ACTIVE'] },
         ]));
         const r = await fetch(
-          `${BASE}/${adAccountId}/campaigns?fields=id,name,status,effective_status,objective&filtering=${activeFilter}&limit=200&access_token=${accessToken}`
+          `${BASE}/${adAccountId}/campaigns?fields=id,name,status,effective_status,objective,bid_strategy,daily_budget,lifetime_budget&filtering=${activeFilter}&limit=200&access_token=${accessToken}`
         );
         const d = await r.json();
         return res.status(r.status).json(d);
@@ -700,7 +701,8 @@ export default async function handler(req, res) {
 
       case 'create_adset': {
         const { name, campaign_id, daily_budget_dollars, objective, pixel_id } = req.body;
-        const adsetBody = {...newAdsetIntent({name,campaign_id,daily_budget_dollars,objective,pixel_id}),access_token:accessToken};
+        const {request}=await resolveNewAdset({name,campaign_id,daily_budget_dollars,objective,pixel_id},{fetchImpl:fetch,token:accessToken});
+        const adsetBody = {...request,access_token:accessToken};
 
         const r = await fetch(`${BASE}/${adAccountId}/adsets`, {
           method: 'POST',
