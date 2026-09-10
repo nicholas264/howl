@@ -1,4 +1,4 @@
-import {pairedPlacementRules,localMediaFingerprint,launchApprovalRecords,effectiveMetaUrlTags} from '../lib/launch-review.js';
+import {effectiveNewAdsetFields,pairedPlacementRules,localMediaFingerprint,launchApprovalRecords,effectiveMetaUrlTags} from '../lib/launch-review.js';
 import { productClaimConflicts } from '../lib/productClaims.js';
 import { apiFetch as fetch } from '../lib/apiFetch.js';
 // LauncherTool — unified ad launcher.
@@ -2130,8 +2130,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                     <dt>Attribution tags</dt><dd>{plan.fields.url_tags || '(none)'}</dd>
                     <dt>Facebook Page / Instagram</dt><dd>{plan.fields.page_id} / {plan.fields.instagram_user_id || '(none)'}</dd>
                   </dl>
-                  <p>{plan.target.mode==='existing'?'Current ad-set configuration':'New paused ad-set request; Meta defaults must match before the ad is sent.'}</p>
-                  <pre style={{whiteSpace:'pre-wrap',fontSize:11}}>{JSON.stringify(plan.target.snapshot || plan.target.request,null,2)}</pre>
+                  <p>{plan.target.mode==='existing'?'Current ad-set configuration':'New paused ad set, including Meta targeting defaults shown below.'}</p>
+                  <pre style={{whiteSpace:'pre-wrap',fontSize:11}}>{JSON.stringify(plan.target.snapshot || effectiveNewAdsetFields(plan.target.request),null,2)}</pre>
                   <p>Media verified for this review:</p>
                   {plan.media.map(asset=><div key={asset.role}>{asset.role}: {asset.drive_file_id || asset.url || 'Local asset'}<br/><small>{asset.drive_md5 || asset.sha256}</small></div>)}
                   {plan.placement_rules && <details><summary>Placement mapping</summary><pre style={{whiteSpace:'pre-wrap',fontSize:11}}>{JSON.stringify(plan.placement_rules,null,2)}</pre></details>}

@@ -64,6 +64,16 @@ test('new ad-set review requires account-bound receipt and matching observed con
   const cboContext={...context,campaign,adset:{...cbo,id:'cbo',account_id:'test',daily_budget:'0'}};
   await runExternalStep(sql,{operationKey:'cbo',stepKey:'1:/v21.0/act_test/adsets',payload:cbo},async()=>({body:{id:'cbo'}}));
   assert.ok(await verifyReviewedLaunch(sql,cboPlan,cboContext));
+  const expanded={...cboContext,adset:{...cboContext.adset,targeting:{...cbo.targeting,age_range:[18,65],geo_locations:{countries:['US'],location_types:['frequently_in','home','recent']},targeting_automation:{advantage_audience:1}}}};
+  assert.ok(await verifyReviewedLaunch(sql,cboPlan,expanded));
+  for(const targeting of [
+    {...expanded.adset.targeting,age_min:25},
+    {...expanded.adset.targeting,age_range:[21,65]},
+    {...expanded.adset.targeting,geo_locations:{countries:['CA']}},
+    {...expanded.adset.targeting,targeting_automation:{advantage_audience:0}},
+    {...expanded.adset.targeting,publisher_platforms:['instagram']},
+  ])await assert.rejects(verifyReviewedLaunch(sql,cboPlan,{...expanded,adset:{...expanded.adset,targeting}}),/targeting differs/);
+
   await assert.rejects(verifyReviewedLaunch(sql,cboPlan,{...cboContext,adset:{...cboContext.adset,bid_amount:20000}}),/bid amount differs/);
   await assert.rejects(verifyReviewedLaunch(sql,cboPlan,{...cboContext,campaign:{...campaign,daily_budget:'200000'}}),/campaign daily_budget differs/);
 

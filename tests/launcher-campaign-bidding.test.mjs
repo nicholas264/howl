@@ -35,3 +35,13 @@ test('Meta detailed errors survive journaling and corrected rejected payloads ca
     await assert.rejects(runExternalStep(sql,{...step,payload:{bid:20000}},async()=>({id:'duplicate'})),/operation changed/);
   }finally{await db.close();}
 });
+
+test('Meta adds only known defaults; explicit targeting and promoted-object choices remain distinct',async()=>{
+  const {effectiveNewAdsetFields}=await import('../src/lib/launch-review.js');
+  const request={targeting:{age_min:18,age_max:65,geo_locations:{countries:['US']}},promoted_object:{pixel_id:'pixel',custom_event_type:'PURCHASE'}};
+  const observed={targeting:{...request.targeting,age_range:[18,65],geo_locations:{countries:['US'],location_types:['recent','home','frequently_in']},targeting_automation:{advantage_audience:1}},promoted_object:{...request.promoted_object,smart_pse_enabled:false}};
+  assert.deepEqual(effectiveNewAdsetFields(request),effectiveNewAdsetFields(observed));
+  assert.notDeepEqual(effectiveNewAdsetFields(request),effectiveNewAdsetFields({...observed,promoted_object:{...observed.promoted_object,smart_pse_enabled:true}}));
+  assert.notDeepEqual(effectiveNewAdsetFields(request),effectiveNewAdsetFields({...observed,targeting:{...observed.targeting,geo_locations:{countries:['US'],location_types:['home']}}}));
+  assert.equal(request.targeting.targeting_automation,undefined);
+});

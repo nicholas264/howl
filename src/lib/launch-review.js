@@ -37,3 +37,25 @@ export function validReviewMediaRoles(media) {
     || media.length===2&&roles.has('feed')&&roles.has('story')
     || media.length>=2&&media.every((_,index)=>roles.has(`card:${index}`)));
 }
+
+// Meta expands a broad US/18–65 request with these provider defaults on read.
+// Preserve all explicit constraints and unknown fields; only redundant/default
+// representations are equivalent. Used in both the visible review and verifier.
+export function effectiveNewAdsetFields(input) {
+  const result=JSON.parse(JSON.stringify(input));
+  const targeting=result.targeting;
+  if(targeting){
+    if(JSON.stringify(targeting.age_range)===JSON.stringify([targeting.age_min,targeting.age_max]))delete targeting.age_range;
+    const geo=targeting.geo_locations;
+    if(geo && Object.keys(geo).every(key=>['countries','location_types'].includes(key)) && geo.countries?.length){
+      geo.location_types ??= ['frequently_in','home','recent'];
+      if(Array.isArray(geo.location_types))geo.location_types.sort();
+    }
+    if(targeting.age_min===18 && targeting.age_max===65 && geo?.countries?.length
+      && Object.keys(targeting).every(key=>['age_min','age_max','geo_locations','targeting_automation'].includes(key))) {
+      targeting.targeting_automation ??= {advantage_audience:1};
+    }
+  }
+  if(result.promoted_object)result.promoted_object.smart_pse_enabled ??= false;
+  return result;
+}

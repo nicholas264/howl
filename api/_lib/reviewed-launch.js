@@ -1,4 +1,4 @@
-import {validReviewMediaRoles} from '../../src/lib/launch-review.js';
+import {validReviewMediaRoles,effectiveNewAdsetFields} from '../../src/lib/launch-review.js';
 import {digest} from './operation-journal.js';
 
 const fail=message=>{throw Object.assign(new Error(`Launch review changed: ${message}`),{statusCode:409,definitelyNotApplied:true});};
@@ -83,7 +83,8 @@ export async function verifyReviewedLaunch(sql,review,{payload,creative,adset,ca
     if(!receipt || digest(receipt.request_payload)!==receipt.request_hash)fail('new ad set has no verified receipt');
     equal(receipt.request_payload,review.target.request,'new ad-set request differs');
     equal(String(adset.campaign_id),String(review.target.request.campaign_id),'campaign differs');
-    for(const key of ['status','targeting','optimization_goal','billing_event','bid_strategy','promoted_object'])equal(adset[key] ?? null,review.target.request[key] ?? null,`${key} differs; select the created ad set and review its current configuration`);
+    const observed=effectiveNewAdsetFields(adset),expected=effectiveNewAdsetFields(review.target.request);
+    for(const key of ['status','targeting','optimization_goal','billing_event','bid_strategy','promoted_object'])equal(observed[key] ?? null,expected[key] ?? null,`${key} differs; select the created ad set and review its current configuration`);
     equal(String(adset.daily_budget || 0),String(review.target.request.daily_budget || 0),'daily budget differs');
     equal(String(adset.bid_amount || 0),String(review.target.request.bid_amount || 0),'bid amount differs');
     if(review.target.campaign){
