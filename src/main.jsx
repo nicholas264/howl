@@ -1,7 +1,9 @@
+import { installLoadRecovery, withDeadline } from './lib/loadRecovery.js'
+import { AppErrorBoundary, StartupStatus } from './components/StartupStatus.jsx'
 import { apiFetch, configureApiSession } from './lib/apiFetch.js'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { ClerkProvider, SignedIn, SignedOut, SignIn, UserButton, useAuth } from '@clerk/clerk-react'
+import { ClerkProvider, ClerkLoading, SignedIn, SignedOut, SignIn, UserButton, useAuth } from '@clerk/clerk-react'
 import App from './App.jsx'
 import './styles.css'
 
@@ -13,8 +15,7 @@ const DEV_AUTH_BYPASS = import.meta.env.DEV && import.meta.env.VITE_AUTH_DISABLE
 const isCreatorSubmission = /^\/submit\/?$/.test(window.location.pathname)
 const isCreatorAgreement = /^\/agreement\/?$/.test(window.location.pathname)
 const isCreatorApplication = /^\/apply\/?$/.test(window.location.pathname)
-const isPublicCreatorPage = isCreatorSubmission || isCreatorAgreement || isCreatorApplication
-if (!PUB_KEY && !isPublicCreatorPage && !DEV_AUTH_BYPASS) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY')
+installLoadRecovery()
 
 // Install authenticated API access and verify workspace membership before any
 // private application component is mounted.
@@ -22,29 +23,37 @@ function AuthenticatedApp() {
   const { getToken, isSignedIn, userId } = useAuth()
   const [access, setAccess] = React.useState(null)
   const [error, setError] = React.useState('')
+  const [attempt, setAttempt] = React.useState(0)
+  const tokenGetter = React.useRef(getToken)
+  tokenGetter.current = getToken
 
   React.useEffect(() => {
     if (!isSignedIn) return
     setAccess(null)
     setError('')
     let active = true
-    const clearSession = configureApiSession(getToken)
+    const clearSession = configureApiSession((...args) => tokenGetter.current(...args))
+    const controller = new AbortController()
 
-    apiFetch('/api/app-context')
-      .then(async response => {
+    withDeadline((async () => {
+        const response = await apiFetch('/api/app-context', { signal: controller.signal, cache: 'no-store' })
         const data = await response.json()
         if (!response.ok) throw new Error(data.error || 'Could not verify workspace access')
-        if (active) setAccess(data)
-      })
+        if (data.auth_subject !== userId) throw new Error('Your sign-in changed. Please try again.')
+        return data
+      })(), 20000, 'The access check timed out. Please try again.')
+      .then(data => { if (active) setAccess(data) })
       .catch(err => {
+        controller.abort()
         if (active) setError(err.message)
       })
 
     return () => {
       active = false
+      controller.abort()
       clearSession()
     }
-  }, [isSignedIn, getToken, userId])
+  }, [isSignedIn, userId, attempt])
 
   if (error) {
     return (
@@ -53,13 +62,14 @@ function AuthenticatedApp() {
         <span className="workspace-kicker">Access check failed</span>
         <h1>We could not verify this account.</h1>
         <p>{error}</p>
+        <button type="button" onClick={() => setAttempt(value => value + 1)}>Try again</button>
         <UserButton afterSignOutUrl="/" />
       </div>
     )
   }
 
   if (!access || access.auth_subject !== userId) {
-    return <div className="access-loading">Verifying workspace access…</div>
+    return <StartupStatus message="Verifying workspace access…" />
   }
 
   if (!access.user || access.user.status !== 'active') {
@@ -93,15 +103,15 @@ const appearance = {
 }
 
 const app = isCreatorSubmission ? (
-  <React.Suspense fallback={<div className="creator-submit-page" />}>
+  <React.Suspense fallback={<StartupStatus message="Opening your creator page…" />}>
     <CreatorSubmissionPage />
   </React.Suspense>
 ) : isCreatorAgreement ? (
-  <React.Suspense fallback={<div className="creator-submit-page" />}>
+  <React.Suspense fallback={<StartupStatus message="Opening your creator page…" />}>
     <CreatorAgreementPage />
   </React.Suspense>
 ) : isCreatorApplication ? (
-  <React.Suspense fallback={<div className="creator-apply-page" />}>
+  <React.Suspense fallback={<StartupStatus message="Opening your application…" />}>
     <CreatorApplicationPage />
   </React.Suspense>
 ) : DEV_AUTH_BYPASS ? (
@@ -122,8 +132,11 @@ const app = isCreatorSubmission ? (
       localAuthBypass: true,
     }} />
   )
+) : !PUB_KEY ? (
+  <StartupStatus error message="Sign-in is temporarily unavailable. Please contact the workspace administrator." />
 ) : (
   <ClerkProvider publishableKey={PUB_KEY} appearance={appearance}>
+    <ClerkLoading><StartupStatus /></ClerkLoading>
     <SignedIn>
       <AuthenticatedApp />
     </SignedIn>
@@ -137,6 +150,6 @@ const app = isCreatorSubmission ? (
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    {app}
+    <AppErrorBoundary>{app}</AppErrorBoundary>
   </React.StrictMode>,
 )

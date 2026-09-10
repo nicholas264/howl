@@ -1,3 +1,4 @@
+import { skewProtectionPlugin } from './build/skew-protection.mjs'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -79,7 +80,7 @@ export default defineConfig(({ mode }) => {
   if (!process.env.NODE_ENV) process.env.NODE_ENV = mode === 'production' ? 'production' : 'development'
 
   return {
-    plugins: [react(), localApiPlugin(process.cwd())],
+    plugins: [react(), localApiPlugin(process.cwd()), skewProtectionPlugin({ enabled: process.env.VERCEL_SKEW_PROTECTION_ENABLED === '1', deploymentId: process.env.VERCEL_DEPLOYMENT_ID })],
     server: {
       headers: {
         'Cross-Origin-Opener-Policy': 'same-origin',

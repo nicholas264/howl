@@ -14,7 +14,11 @@
     </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><main style="padding:48px;font-family:Helvetica,Arial,sans-serif;color:#171717;background:#f7f6f2;min-height:100vh" role="status"><h1>Opening the campfire</h1><p>Loading your workspace…</p><div id="boot-retry" hidden><p>The workspace could not finish loading. Check your connection and try again.</p><button type="button" onclick="location.reload()">Try again</button></div><noscript>Please enable JavaScript to open this workspace.</noscript></main></div>
+    <script>
+      // This remains usable even when the entry module cannot download or execute.
+      window.setTimeout(function () { var retry = document.getElementById('boot-retry'); if (retry) retry.hidden = false; }, 15000);
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
