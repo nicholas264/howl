@@ -1,3 +1,4 @@
+import { moveLaunchedDriveFile } from '../_lib/drive-launch-move.js';
 import {effectiveMetaUrlTags} from '../../src/lib/launch-review.js';
 import {recordPairedDriveLaunch} from '../_lib/paired-drive-launch.js';
 import { associateDrivePair } from '../_lib/drive-pairs.js';
@@ -29,14 +30,10 @@ function appendUrlTags(params, urlParams) {
   if (tags) params.set('url_tags', tags);
 }
 
-async function moveLaunchedFile(token,fileId,folderId,name) {
-  const current = await driveFetch(token,`/files/${encodeURIComponent(fileId)}?fields=name,parents&supportsAllDrives=true`);
-  if (current.name === name && current.parents?.includes(folderId)) return current;
-  const query = new URLSearchParams({fields:'id,name',supportsAllDrives:'true'});
-  if (!current.parents?.includes(folderId)) query.set('addParents',folderId);
-  const remove = (current.parents || []).filter(id=>id !== folderId);
-  if (remove.length) query.set('removeParents',remove.join(','));
-  return driveFetch(token,`/files/${encodeURIComponent(fileId)}?${query}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+async function moveLaunchedFile(token, fileId, folderId, name) {
+  return moveLaunchedDriveFile((path, init) => driveFetch(token, path, init), {
+    fileId, launchedId: folderId, name, rootId: process.env.UGC_INBOX_FOLDER_ID,
+  });
 }
 
 async function getAccessToken() {
@@ -989,7 +986,6 @@ export default async function handler(req, res) {
       const ext = current.name.includes('.') ? current.name.substring(current.name.lastIndexOf('.')) : '';
       const base = current.name.replace(ext, '');
       const finalName = newName || `${base}__LAUNCHED__${adId}${ext}`;
-      const removeParents = (current.parents || []).join(',');
 
       let durableUrl = null;
       try {
@@ -1006,15 +1002,7 @@ export default async function handler(req, res) {
         console.error('mark_launched mirror failed:', err.message);
       }
 
-      const updated = await driveFetch(
-        token,
-        `/files/${fileId}?addParents=${launchedId}&removeParents=${encodeURIComponent(removeParents)}&fields=id,name,parents&supportsAllDrives=true`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: finalName }),
-        }
-      );
+      const updated = await moveLaunchedFile(token, fileId, launchedId, finalName);
       if (process.env.DATABASE_URL) {
         try {
           const sql = neon(process.env.DATABASE_URL);
