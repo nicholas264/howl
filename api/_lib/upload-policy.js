@@ -9,7 +9,7 @@ export function uploadPolicy(pathname) {
   if(pathname.startsWith('ugc-source/')){permission='assets.write';allowedContentTypes=videos;maximumSizeInBytes=2048*MB;}
   else if(/^creator-footage\/\d+\//.test(pathname)){permission='creators.write';allowedContentTypes=videos;maximumSizeInBytes=2048*MB;}
   else if(pathname.startsWith('creator-contracts/')){permission='creators.write';allowedContentTypes=['application/pdf'];maximumSizeInBytes=20*MB;}
-  else if(pathname.startsWith('callout-photos/') || pathname.startsWith('static-studio/')){permission='assets.write';allowedContentTypes=images;maximumSizeInBytes=20*MB;}
+  else if(pathname.startsWith('image-library/') || pathname.startsWith('callout-photos/') || pathname.startsWith('static-studio/')){permission='assets.write';allowedContentTypes=images;maximumSizeInBytes=20*MB;}
   else if(pathname.startsWith('drafts/')){permission='assets.write';allowedContentTypes=[...images,...videos,'audio/mpeg'];maximumSizeInBytes=2048*MB;}
   else throw new Error('Unsupported upload destination');
   return {permission,allowedContentTypes,maximumSizeInBytes};
