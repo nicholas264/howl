@@ -21,12 +21,15 @@ async function resolvePreview(groupKey) {
   return promise;
 }
 
-export default function CreativePreviewImage({ groupKey, src, alt = '', className = '', loading = 'lazy' }) {
+export default function CreativePreviewImage(props) {
+  return <PreviewImage key={`${props.groupKey || ''}:${props.src || ''}`} {...props} />;
+}
+
+function PreviewImage({ groupKey, src, alt = '', className = '', loading = 'lazy' }) {
   const [resolved, setResolved] = useState(null);
   const [needsPreview, setNeedsPreview] = useState(!src);
   const [failed, setFailed] = useState(false);
   const [limited, setLimited] = useState(false);
-  useEffect(() => { setResolved(null); setNeedsPreview(!src); setFailed(false); setLimited(false); }, [groupKey, src]);
   useEffect(() => {
     if (!needsPreview || !groupKey) return;
     let live = true;
