@@ -1,3 +1,4 @@
+import { requestUploadToken } from '../lib/upload-token-retry.js';
 import { apiFetch as fetch } from '../lib/apiFetch.js';
 // Shared image library — Vercel Blob upload + Neon record. Used by
 // ImageAdTool and ReviewAdTool. Replaces the old localStorage key
@@ -36,14 +37,14 @@ export async function uploadImageToLibrary(file, getToken) {
   if (!token) throw new Error('Not signed in — please reload and sign in again.');
 
   // Step 1: get a clientToken from our handleUpload endpoint.
-  const tokenRes = await fetch('/api/blob/upload-token', {
+  const tokenRes = await requestUploadToken(async () => fetch('/api/blob/upload-token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       type: 'blob.generate-client-token',
-      payload: { pathname, clientPayload: token, multipart: false },
+      payload: { pathname, clientPayload: await getToken(), multipart: false },
     }),
-  });
+  }));
   if (!tokenRes.ok) {
     const txt = await tokenRes.text().catch(() => '');
     throw new Error(`upload-token failed (${tokenRes.status}): ${txt.slice(0, 200)}`);

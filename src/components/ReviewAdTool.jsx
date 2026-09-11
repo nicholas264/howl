@@ -610,7 +610,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
           <TextColorPicker textColor={textColor} onChange={handleTextColorChange} />
           <div style={{ fontSize: 11, color: '#77746f', lineHeight: 1.5 }}>
             {selectedCount} reviews × {bgMode === 'rotate' ? Math.max(1, bgImages.length) : 1} images = {variants.length} paired ads.
-            Cart always includes matching 4:5 + 9:16. Format buttons control previews and PNG exports.
+            Cart always includes matching 4:5 + 9:16. Format buttons control previews and PNG exports. Large batches pause automatically for upload limits; keep this tab open.
           </div>
           <button
             onClick={() => handleBulkExport()}

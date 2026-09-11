@@ -26,7 +26,7 @@ export async function persistLaunchDraft(item) {
       const body = await (await globalThis.fetch(value)).blob();
       const extension = body.type.includes('video') ? 'mp4' : body.type.includes('png') ? 'png' : 'jpg';
       const uploaded = await uploadPublicBlob(`drafts/${crypto.randomUUID()}.${extension}`,body,
-        { contentType:body.type,clientPayload:await getApiToken() });
+        { contentType:body.type,clientPayload:await getApiToken(),refreshClientPayload:getApiToken });
       uploads.set(value,uploaded.url);
     }
     return uploads.get(value);
