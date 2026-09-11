@@ -3,7 +3,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import Papa from 'papaparse';
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
-import { reviewAdVariants, addReviewAdPairs } from '../lib/review-ad-batch.js';
+import { reviewAdVariants, addReviewAdPairs, reviewProduct } from '../lib/review-ad-batch.js';
 import { toPng } from 'html-to-image';
 import { useAuth } from '@clerk/clerk-react';
 import { FORMATS } from '../brand';
@@ -15,10 +15,11 @@ const LS_NAME = 'howl_review_ads_name';
 
 const PRODUCT_NAMES = {
   'r1': 'HOWL R1',
+  'r3': 'HOWL R3',
   'r4mkii': 'HOWL R4 MkII',
 };
 
-const VALID_HANDLES = new Set(['r1', 'r4mkii']);
+const VALID_HANDLES = new Set(['r1', 'r3', 'r4mkii']);
 
 function verifiedLabel(handle) {
   const name = PRODUCT_NAMES[handle] || 'HOWL';
@@ -34,7 +35,7 @@ function parseLoox(csv) {
       rating: parseInt(r.rating, 10) || 5,
       quote: r.review.trim(),
       nickname: r.nickname || r.full_name || 'Verified HOWL Customer',
-      handle: (r.handle || '').replace('the-howl-', ''),
+      handle: reviewProduct(r.handle || r.product_handle || r.product_url),
     }))
     .filter(r => VALID_HANDLES.has(r.handle));
 }
@@ -42,7 +43,7 @@ function parseLoox(csv) {
 function loadSaved() {
   try {
     const data = JSON.parse(localStorage.getItem(LS_REVIEWS) || '[]');
-    return data.filter(r => VALID_HANDLES.has(r.handle));
+    return data.map(r => ({ ...r, handle: reviewProduct(r.handle) })).filter(r => VALID_HANDLES.has(r.handle));
   } catch { return []; }
 }
 
@@ -76,13 +77,13 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   const { getToken } = useAuth();
   const [reviews, setReviews] = useState(loadSaved);
   const [csvName, setCsvName] = useState(() => localStorage.getItem(LS_NAME) || '');
-  const [selected, setSelected] = useState(() => {
-    const saved = loadSaved();
-    return new Set(saved.filter(r => r.rating === 5).map(r => r.id));
-  });
+  const [selected, setSelected] = useState(() => new Set());
+  const [reviewSearch, setReviewSearch] = useState('');
+  const [batchSize, setBatchSize] = useState(10);
   const [previewId, setPreviewId] = useState(() => loadSaved()[0]?.id || null);
   const [ratingFilter, setRatingFilter] = useState(5);
   const [productFilter, setProductFilter] = useState('all');
+  const [productImages, setProductImages] = useState(() => { try { return JSON.parse(localStorage.getItem('howl_review_product_images') || '{}'); } catch { return {}; } });
   const [formatKeys, setFormatKeys] = useState(['square', 'story']);
   const [previewBackground, setPreviewBackground] = useState(null);
   const [previewMode, setPreviewMode] = useState('single');
@@ -90,7 +91,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   const [exportProgress, setExportProgress] = useState('');
   const [dragging, setDragging] = useState(false);
   const [bgImages, setBgImages] = useState(loadBgImages);
-  const [bgMode, setBgMode] = useState(() => { try { return localStorage.getItem(LS_BG_MODE) || 'single'; } catch { return 'single'; } });
+  const [bgMode, setBgMode] = useState(() => { try { return localStorage.getItem(LS_BG_MODE) || 'cycle'; } catch { return 'cycle'; } });
   const [scrimColor, setScrimColor] = useState(() => { try { return localStorage.getItem('howl_review_scrim') || 'rgba(249,243,223,0.72)'; } catch { return 'rgba(249,243,223,0.72)'; } });
   const [savedImages, setSavedImages] = useState([]);
   const [bgUploading, setBgUploading] = useState(false);
@@ -112,6 +113,9 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   const saveBgImages = (next) => {
     const clean = [...new Set(next.filter(Boolean))];
     setBgImages(clean);
+    if (productFilter !== 'all') {
+      setProductImages(prev => { const updated = { ...prev, [productFilter]: clean }; try { localStorage.setItem('howl_review_product_images', JSON.stringify(updated)); } catch {} return updated; });
+    }
     try {
       localStorage.setItem(LS_BG_SET, JSON.stringify(clean));
       if (clean[0]) localStorage.setItem(LS_BG, clean[0]);
@@ -126,17 +130,21 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
 
   const selectBgImage = (url) => {
     if (!url) return;
-    if (bgMode === 'rotate') {
+    if (bgMode !== 'single') {
       const next = bgImages.includes(url)
         ? bgImages.filter(item => item !== url)
         : [...bgImages, url];
-      saveBgImages(next.length ? next : [url]);
+      saveBgImages(next);
     } else {
       saveBgImages([url]);
     }
   };
 
-  const backgroundForReview = () => bgMode === 'rotate' && bgImages.includes(previewBackground) ? previewBackground : bgImages[0] || null;
+  const backgroundForReview = review => {
+    const options = reviewAdVariants(filtered.filter(r => selected.has(r.id)), bgImages, bgMode);
+    return options.find(v => v.review.id === review?.id && v.backgroundImage === previewBackground)?.backgroundImage
+      || options.find(v => v.review.id === review?.id)?.backgroundImage || bgImages[0] || null;
+  };
 
   // Mount only the current pair, even when a batch contains thousands of variants.
   const renderVariant = async (variant, formats = ['square', 'story']) => {
@@ -214,7 +222,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
       }
       if (records.length === 0) throw new Error('Upload failed');
       setSavedImages(prev => [...records, ...prev.filter(i => !records.some(r => r.url === i.url))]);
-      saveBgImages(bgMode === 'rotate'
+      saveBgImages(bgMode !== 'single'
         ? [...bgImages, ...records.map(r => r.url)]
         : [records[0].url]);
     } catch (err) {
@@ -247,11 +255,11 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
       const parsed = parseLoox(e.target.result);
       setReviews(parsed);
       setCsvName(file.name);
-      const fiveStars = new Set(parsed.filter(r => r.rating === 5).map(r => r.id));
-      setSelected(fiveStars);
+      setSelected(new Set());
       setPreviewId(parsed[0]?.id || null);
       setRatingFilter(5);
       setProductFilter('all');
+      setBgImages([]);
       try { localStorage.setItem(LS_REVIEWS, JSON.stringify(parsed)); } catch {}
       try { localStorage.setItem(LS_NAME, file.name); } catch {}
     };
@@ -264,13 +272,14 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
       const r = await fetch('/api/db/loox-reviews?limit=500');
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || 'Could not load synced reviews');
-      const rows = (data.reviews || []).filter(row => VALID_HANDLES.has(row.handle));
+      const rows = (data.reviews || []).map(row => ({ ...row, handle: reviewProduct(row.handle) })).filter(row => VALID_HANDLES.has(row.handle));
       setReviews(rows);
       setCsvName('Synced Loox reviews');
-      setSelected(new Set(rows.filter(row => row.rating === 5 && row.adStatus !== 'hold').map(row => row.id)));
+      setSelected(new Set());
       setPreviewId(rows[0]?.id || null);
       setRatingFilter(5);
       setProductFilter('all');
+      setBgImages([]);
       if (rows.length > 0) setPreviewMode('bulk');
     } catch (err) {
       alert(`Could not load synced Loox reviews: ${err?.message || err}`);
@@ -311,7 +320,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   }, [manualQuote, manualFormat]);
 
   const handleBulkExport = async ({ toDrive = false } = {}) => {
-    if (!variants.length) return;
+    if (!batchReady) return;
     setExporting(true);
     try {
       let count = 0;
@@ -344,7 +353,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   };
 
   const handleBulkAddToCart = async () => {
-    if (!variants.length || exporting) return;
+    if (!batchReady || exporting) return;
     setExporting(true);
     let saved = 0;
     try {
@@ -358,10 +367,8 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   };
 
   const handleAddCarouselToCart = async () => {
-    const toExport = reviews.filter(r =>
-      (ratingFilter === 0 || r.rating === ratingFilter) &&
-      (productFilter === 'all' || r.handle === productFilter)
-    ).filter(r => selected.has(r.id));
+    const toExport = selectedReviews;
+    if (!batchReady) return;
     if (toExport.length < 2) { alert('Select at least 2 reviews for a carousel.'); return; }
     if (toExport.length > 10) { alert('Meta carousels support up to 10 cards. Deselect some reviews.'); return; }
     setExporting(true);
@@ -389,6 +396,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
         await onAddToCart?.({
           id: Date.now(),
           type: 'carousel',
+          product: productFilter,
           cards,
           squareUrl: cards[0].squareUrl,
           name: `HOWL | Review Carousel (${cards.length}) | ${monthDay}`,
@@ -400,15 +408,26 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
     finally { setExporting(false); setExportProgress(''); }
   };
 
-  const products = [...new Set(reviews.map(r => r.handle).filter(Boolean))].sort();
+  const changeBatchProduct = product => {
+    setProductFilter(product);
+    setSelected(new Set());
+    setReviewSearch('');
+    setBgImages(productImages[product] || []);
+    setPreviewBackground(null);
+    setPreviewId(null);
+    handleBgModeChange('cycle');
+  };
+
   const filtered = reviews.filter(r =>
     (ratingFilter === 0 || r.rating === ratingFilter) &&
-    (productFilter === 'all' || r.handle === productFilter)
+    (productFilter === 'all' || r.handle === productFilter) &&
+    (!reviewSearch.trim() || `${r.quote} ${r.nickname}`.toLowerCase().includes(reviewSearch.trim().toLowerCase()))
   );
-  const previewReview = reviews.find(r => r.id === previewId) || filtered[0] || null;
+  const previewReview = filtered.find(r => r.id === previewId) || filtered[0] || null;
   const selectedReviews = filtered.filter(r => selected.has(r.id));
   const selectedCount = filtered.filter(r => selected.has(r.id)).length;
-  const variants = reviewAdVariants(selectedReviews, bgImages, bgMode);
+  const variants = productFilter === 'all' ? [] : reviewAdVariants(selectedReviews, bgImages, bgMode);
+  const batchReady = variants.length > 0 && bgImages.length > 0;
   const exportTotal = variants.length * formatKeys.length;
   const bulkPreviewVariants = variants.slice(0, 40);
 
@@ -554,16 +573,23 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
           </div>
         </div>
 
-        {/* Fixed: Product filter (only if multiple products) */}
-        {products.length > 1 && (
-          <div style={{ padding: '8px 16px', borderBottom: '1px solid #dedbd3', flexShrink: 0, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            {['all', ...products].map(p => (
-              <button key={p} onClick={() => setProductFilter(p)} style={{ ...S.filterBtn(productFilter === p), textTransform: 'uppercase', letterSpacing: 1 }}>
-                {p === 'all' ? 'All' : p}
-              </button>
-            ))}
+        <div style={{ padding: '10px 16px', borderBottom: '1px solid #dedbd3', display: 'grid', gap: 8 }}>
+          <label style={{ fontSize: 11 }}>Batch product
+            <select aria-label="Batch product" disabled={exporting || bgUploading} value={productFilter} onChange={e => changeBatchProduct(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 5 }}>
+              <option value="all">Choose a product — browse all reviews</option>
+              {Object.entries(PRODUCT_NAMES).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            </select>
+          </label>
+          <input aria-label="Search reviews" placeholder="Search review text or reviewer" value={reviewSearch} onChange={e => setReviewSearch(e.target.value)} style={{ padding: 8 }} />
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input aria-label="Auto batch review count" type="number" min="1" max="500" value={batchSize} onChange={e => setBatchSize(Math.max(1, Math.min(500, Number(e.target.value) || 1)))} style={{ width: 60, padding: 6 }} />
+            <button disabled={productFilter === 'all' || exporting} onClick={() => {
+              setSelected(new Set(filtered.filter(r => r.adStatus !== 'hold').slice(0, batchSize).map(r => r.id)));
+              handleBgModeChange('cycle'); setPreviewMode('bulk');
+            }}>Auto-select batch</button>
           </div>
-        )}
+          <span style={{ fontSize: 10, color: '#77746f' }}>Choose reviews below, or auto-select up to {batchSize} visible reviews (excluding held reviews). Nothing is launched automatically.</span>
+        </div>
 
         {/* Scrollable: review list */}
         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
@@ -577,6 +603,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
               <div key={r.id} onClick={() => setPreviewId(r.id)} style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid #dedbd3', background: isPreviewing ? 'rgba(220,68,10,0.1)' : 'transparent', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                 <input
                   type="checkbox"
+                  aria-label={`Use review by ${r.nickname}: ${r.quote}`}
                   checked={isSelected}
                   onChange={() => {
                     setSelected(prev => {
@@ -592,7 +619,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 9, color: '#d84a17', marginBottom: 2 }}>{'★'.repeat(r.rating)}</div>
                   <div style={{ fontSize: 10, color: '#171717', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{r.quote}</div>
-                  <div style={{ fontSize: 9, color: '#77746f', marginTop: 3 }}>{r.nickname}</div>
+                  <div style={{ fontSize: 9, color: '#77746f', marginTop: 3 }}>{r.nickname} · {PRODUCT_NAMES[r.handle]}{r.adStatus === 'hold' ? ' · On hold' : ''}</div>
                 </div>
               </div>
             );
@@ -600,22 +627,25 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
         </div>
 
         {/* Fixed: Format + background + export */}
-        <div style={{ flexShrink: 0, padding: '14px 16px', borderTop: '1px solid #dedbd3', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ flexShrink: 0, maxHeight: '48vh', overflowY: 'auto', padding: '14px 16px', borderTop: '1px solid #dedbd3', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', gap: 6 }}>
             {Object.entries(FORMATS).map(([key, f]) => (
               <button key={key} onClick={() => toggleFormat(key)} style={S.fmtBtn(formatKeys.includes(key))}>{f.label}</button>
             ))}
           </div>
+          <div style={{ fontSize: 11, fontWeight: 600 }}>{productFilter === 'all' ? 'Choose a product before selecting images' : `Select backgrounds showing ${PRODUCT_NAMES[productFilter]}`}</div>
+          <div style={{ fontSize: 10, color: '#77746f' }}>Image choices are remembered separately for each product in this browser.</div>
           <BgImagePicker bgImages={bgImages} bgMode={bgMode} savedImages={savedImages} onModeChange={handleBgModeChange} onSelect={selectBgImage} onUpload={handleBgFiles} onClear={clearBg} fileRef={bgFileRef} scrimColor={scrimColor} onScrimChange={handleScrimChange} uploading={bgUploading} />
           <TextColorPicker textColor={textColor} onChange={handleTextColorChange} />
           <div style={{ fontSize: 11, color: '#77746f', lineHeight: 1.5 }}>
-            {selectedCount} reviews × {bgMode === 'rotate' ? Math.max(1, bgImages.length) : 1} images = {variants.length} paired ads.
+            {productFilter === 'all' ? 'Choose a batch product first.' : `${PRODUCT_NAMES[productFilter]}: ${selectedCount} reviews, ${bgImages.length} images → ${variants.length} paired ads.`}{' '}
+            {bgImages.length === 0 && ' Select images for this product.'}
             Cart always includes matching 4:5 + 9:16. Format buttons control previews and PNG exports. Large batches pause automatically for upload limits; keep this tab open.
           </div>
           <button
             onClick={() => handleBulkExport()}
-            disabled={exporting || selectedCount === 0}
-            style={S.exportBtn(exporting || selectedCount === 0)}
+            disabled={exporting || !batchReady}
+            style={S.exportBtn(exporting || !batchReady)}
             title={selectedCount === 0 ? 'Select at least one review first.' : ''}
           >
             {exporting
@@ -626,8 +656,8 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
           {onAddToCart && (
             <button
               onClick={handleBulkAddToCart}
-              disabled={exporting || selectedCount === 0}
-              style={{ ...S.exportBtn(exporting || selectedCount === 0), background: (exporting || selectedCount === 0) ? '#dedbd3' : '#6e40c9', marginTop: 4 }}
+              disabled={exporting || !batchReady}
+              style={{ ...S.exportBtn(exporting || !batchReady), background: (exporting || !batchReady) ? '#dedbd3' : '#6e40c9', marginTop: 4 }}
               title={selectedCount === 0 ? 'Select at least one review before adding to cart.' : ''}
             >
               {exporting ? `Rendering ${exportProgress}...` : selectedCount === 0 ? 'Select reviews' : `Add ${variants.length} paired ads to Cart`}
@@ -636,8 +666,8 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
           {onAddToCart && (
             <button
               onClick={handleAddCarouselToCart}
-              disabled={exporting || selectedCount < 2}
-              style={{ ...S.exportBtn(exporting || selectedCount < 2), background: (exporting || selectedCount < 2) ? '#dedbd3' : '#1a7f37', marginTop: 4 }}
+              disabled={exporting || !batchReady || selectedCount < 2}
+              style={{ ...S.exportBtn(exporting || !batchReady || selectedCount < 2), background: (exporting || !batchReady || selectedCount < 2) ? '#dedbd3' : '#1a7f37', marginTop: 4 }}
               title={selectedCount < 2 ? 'Select at least two reviews to build a carousel.' : ''}
             >
               {exporting ? `Building carousel ${exportProgress}...` : selectedCount < 2 ? 'Select 2+ for carousel' : `Add as Carousel (${selectedCount} cards)`}
@@ -646,8 +676,8 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
           {driveAuth?.connected && (
             <button
               onClick={() => handleBulkExport({ toDrive: true })}
-              disabled={exporting || selectedCount === 0}
-              style={{ ...S.exportBtn(exporting || selectedCount === 0), background: exporting || selectedCount === 0 ? '#dedbd3' : '#1a7f37', marginTop: 4 }}
+              disabled={exporting || !batchReady}
+              style={{ ...S.exportBtn(exporting || !batchReady), background: exporting || !batchReady ? '#dedbd3' : '#1a7f37', marginTop: 4 }}
               title={selectedCount === 0 ? 'Select at least one review before saving to Drive.' : ''}
             >
               {exporting ? `Saving ${exportProgress}...` : `Save to Drive`}
@@ -840,16 +870,18 @@ function BgImagePicker({ bgImages, bgMode, savedImages, onModeChange, onSelect, 
         </div>
       </div>
       <div style={{ display: 'flex', gap: 5 }}>
-        <button onClick={() => onModeChange('single')} style={S.miniModeBtn(bgMode !== 'rotate')}>Single</button>
+        <button onClick={() => onModeChange('single')} style={S.miniModeBtn(bgMode === 'single')}>Single</button>
+        <button onClick={() => onModeChange('cycle')} style={S.miniModeBtn(bgMode === 'cycle')}>Cycle images</button>
         <button onClick={() => onModeChange('rotate')} style={S.miniModeBtn(bgMode === 'rotate')}>Every image</button>
       </div>
       <input ref={fileRef} type="file" multiple accept="image/*" onChange={e => { onUpload(e.target.files); e.target.value = ''; }} style={{ display: 'none' }} />
+      <div style={{ fontSize: 10, color: '#77746f' }}>Cycle images uses one background per review, repeating in selection order. Every image creates all combinations.</div>
       {savedImages.length > 0 ? (
-        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', maxHeight: 140, overflowY: 'auto' }}>
           {savedImages.map(img => (
-            <div key={img.id} onClick={() => onSelect(img.url)} style={{ width: 48, height: 48, borderRadius: 3, overflow: 'hidden', border: `2px solid ${bgImages.includes(img.url) ? '#d84a17' : '#e0d9c4'}`, cursor: 'pointer', flexShrink: 0, position: 'relative' }}>
+            <div key={img.id} role="button" tabIndex={0} aria-pressed={bgImages.includes(img.url)} title={img.file_name || 'Select background'} aria-label={img.file_name || 'Select background'} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(img.url); } }} onClick={() => onSelect(img.url)} style={{ width: 48, height: 48, borderRadius: 3, overflow: 'hidden', border: `2px solid ${bgImages.includes(img.url) ? '#d84a17' : '#e0d9c4'}`, cursor: 'pointer', flexShrink: 0, position: 'relative' }}>
               <img crossOrigin="anonymous" src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-              {bgMode === 'rotate' && bgImages.includes(img.url) && (
+              {bgMode !== 'single' && bgImages.includes(img.url) && (
                 <span style={{ position: 'absolute', right: 3, bottom: 3, padding: '1px 4px', borderRadius: 2, background: '#d84a17', color: '#fff', fontSize: 8, fontWeight: 700 }}>
                   {bgImages.indexOf(img.url) + 1}
                 </span>
