@@ -221,6 +221,7 @@ export default function HowlAdEngine({ appAccess }) {
       items: [
         { key: 'seeding-ledger', label: 'Seeding', permission: 'creators.read' },
         { key: 'creative-analytics', label: 'Creative Analytics', permission: 'analytics.read' },
+        { key: 'creative-flow', label: 'Creative Board', permission: 'creators.read' },
         { key: 'from-winners', label: 'Concept Studio', permission: 'briefs.write' },
         { key: 'content-studio', label: 'Blog Studio', permission: 'briefs.write' },
         { key: 'ugc-editor', label: 'UGC Editor', permission: 'assets.write' },
