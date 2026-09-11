@@ -31,6 +31,7 @@ import {
   retryFailedCreativeAnalysisJobs,
 } from '../creative-analysis-queue.js';
 import { getGoogleAccessToken } from '../gcp-auth.js';
+import { loadCreativePerformanceSnapshot } from './creative-performance-snapshot.js';
 
 const fetch=scopedMeteredFetch(boundedFetch);
 const DRIVE = 'https://www.googleapis.com/drive/v3';
@@ -434,15 +435,7 @@ async function analyzeCreativeGroupWithinBudget({ groupKey, assetId = null, manu
     visualSignalCount === 0 ? 'visual' : null,
   ].filter(Boolean);
 
-  const perf = {
-    spend: Number(topAd.spend) || 0,
-    purchaseValue: Number(topAd.purchase_value) || 0,
-    purchases: Number(topAd.purchases) || 0,
-    impressions: Number(topAd.impressions) || 0,
-    clicks: Number(topAd.clicks) || 0,
-  };
-  perf.roas = perf.spend > 0 ? perf.purchaseValue / perf.spend : 0;
-  perf.cpa = perf.purchases > 0 ? perf.spend / perf.purchases : null;
+  const perf = await loadCreativePerformanceSnapshot(sql, groupKey);
 
   const haveTranscript = !!transcript;
   const systemPrompt = `You analyze HOWL Campfires Meta ads. HOWL sells smokeless propane fire pits (R1, R4 MKii, etc.) — outdoor brand, masculine voice, "burn-ban-friendly" angle is recurring.
@@ -450,6 +443,7 @@ async function analyzeCreativeGroupWithinBudget({ groupKey, assetId = null, manu
 You will receive either one static image or a chronological sequence of sampled video frames, plus optionally a full transcript and performance numbers.
 
 CRITICAL RULES:
+- Performance is descriptive ad attribution, not evidence of causal lift. Present explanations as hypotheses and do not claim a creative element caused the results.
 - If a transcript is provided, the verbal hook is the FIRST sentence or two of that transcript. Quote it verbatim.
 - If NO transcript is provided, you CANNOT know the spoken hook from visual frames alone. Set "hook_text_verbatim" to null and note this clearly in why_it_worked.
 - For videos with no transcript, mark hook_type as "unknown" rather than fabricating one.
@@ -482,7 +476,7 @@ Return ONLY a single valid JSON object with these exact fields:
 
 Evidence references must be honest: use transcript excerpts, frame order, or exact performance metrics. Do not invent timecodes if no timecoded transcript was provided. No prose outside the JSON. No markdown fences.`;
 
-  const userText = `Performance (last 30d, this creative group):
+  const userText = `Performance (${perf.since} through ${perf.until}, all ads in this creative group):
 - Spend: $${perf.spend.toFixed(2)}
 - Revenue: $${perf.purchaseValue.toFixed(2)}
 - Purchases: ${perf.purchases}

@@ -1492,7 +1492,7 @@ export default async function handler(req, res) {
 
 
         const sinceDays = Math.max(1, Math.min(365, parseInt(req.body.sinceDays || 14, 10)));
-        const fmtYmd = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        const fmtYmd = (d) => d.toISOString().slice(0, 10);
         const [latestInsight] = await sql`
           SELECT max(date)::text AS latest_date
           FROM creative_insights_daily
@@ -1651,11 +1651,11 @@ export default async function handler(req, res) {
         `;
 
         const creatorRows = await sql`
-          SELECT c.id, c.name,
+          SELECT c.id, c.name, c.archived_at,
             COALESCE(array_agg(s.handle) FILTER (WHERE s.handle IS NOT NULL), '{}') AS handles
           FROM creators c
           LEFT JOIN creator_social_accounts s ON s.creator_id = c.id
-          GROUP BY c.id, c.name
+          GROUP BY c.id, c.name, c.archived_at
         `;
         const matchIndex = creatorMatchIndex(creatorRows);
         const groups = rows.map(r => {
@@ -1739,7 +1739,7 @@ export default async function handler(req, res) {
           };
         });
 
-        return res.json({ groups, sinceDays, since, until });
+        return res.json({ groups, creators: creatorRows.map(c => ({ id: c.id, name: c.name, archived: Boolean(c.archived_at) })), sinceDays, since, until });
       }
 
       case 'assign_creative_creator': {

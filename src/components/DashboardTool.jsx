@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import TrendLineChart from './TrendLineChart';
 import DealerCsvImport from './DealerCsvImport';
 import CreativePerformanceWorkspace from './CreativePerformanceWorkspace';
@@ -226,7 +226,7 @@ const DASH_TABS = [
   { key: 'dashboard-forecast', view: 'forecast', label: 'Forecast' },
 ];
 
-export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCreators = false, canWriteAnalytics = false, canRunJobs = false, canWriteAssets = false }) {
+export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreator, canManageCreators = false, canWriteAnalytics = false, canRunJobs = false, canWriteAssets = false }) {
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
@@ -269,7 +269,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
   const [playbackRepairMessage, setPlaybackRepairMessage] = useState('');
   const creativeWorkspaceMode = 'motion';
 
+  const creativeRequest = useRef(0);
   const loadCreativeTable = useCallback(async (days) => {
+    const request = ++creativeRequest.current;
     setCreativeTableLoading(true); setCreativeTableError('');
     try {
       const d = await apiJson('/api/meta', {
@@ -277,9 +279,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         body: JSON.stringify({ action: 'get_creative_table', sinceDays: days }),
       }, 'Creative performance failed');
       if (d.error) throw new Error(d.error);
-      setCreativeTable(d);
-    } catch (err) { setCreativeTableError(err.message); }
-    finally { setCreativeTableLoading(false); }
+      if (request === creativeRequest.current) setCreativeTable(d);
+    } catch (err) { if (request === creativeRequest.current) setCreativeTableError(err.message); }
+    finally { if (request === creativeRequest.current) setCreativeTableLoading(false); }
   }, []);
 
   // Auto-load Top Creatives when entering the creative view or changing the window.
@@ -1000,7 +1002,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
 
   return (
     <div className="dashboard-workspace dashboard-motion-workspace" style={{ ...S.wrap, maxWidth: view === 'creative' ? 1600 : S.wrap.maxWidth }}>
-      {setActiveTab && (
+      {view !== 'creative' && setActiveTab && (
         <div className="dash-subnav">
           {DASH_TABS.map(t => (
             <button
@@ -1011,6 +1013,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           ))}
         </div>
       )}
+      {view !== 'creative' && <>
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <div className="eyebrow" style={{ marginBottom: 6 }}>Dashboard</div>
@@ -1034,8 +1037,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           Google Ads: pulled {googleData.months?.length || 0} months · ${(googleData.months || []).reduce((a, m) => a + (m.spend || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} total spend
         </div>
       )}
+      </>}
       {view === 'creative' && creativeWorkspaceMode === 'motion' && (
         <CreativePerformanceWorkspace
+          onOpenCreator={onOpenCreator}
+          canWriteAnalytics={canWriteAnalytics}
           creativeTable={creativeTable}
           loading={creativeTableLoading}
           error={creativeTableError}
@@ -1408,7 +1414,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
       })()}
 
 
-      {/* Launch Log stats — DB-backed, on Creative sub-tab */}
+      {view === 'creative' && <details className="ca-launch-details"><summary>Launch activity</summary>
       {view === 'creative' && launches && launches.length > 0 && (() => {
         const now = new Date();
         const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay()); startOfWeek.setHours(0,0,0,0);
@@ -1596,6 +1602,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
         <div style={{ ...S.card, color: '#77746f', fontSize: 12 }}>No launches logged yet. Push an ad via Launcher to populate this view.</div>
       )}
 
+      </details>}
       {/* Creative DNA drawer — overlay on top of Creative Analytics */}
       {analysisDrawer && (
         <div onClick={() => setAnalysisDrawer(null)} style={{
@@ -1608,8 +1615,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, canManageCre
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
               <div>
-                <div style={{ fontSize: 9, letterSpacing: 2, color: '#88857f', textTransform: 'uppercase', marginBottom: 6 }}>Creative DNA</div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: '#171717', maxWidth: 460 }}>{analysisDrawer.name || '(unnamed)'}</div>
+                <div style={{ fontSize: 12, color: '#68746c', marginBottom: 6 }}>Saved creative analysis</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#171717', maxWidth: 460 }}>{analysisDrawer.name || '(unnamed)'}</div><p className="ca-caption">This analysis reflects the evidence and metrics available when it was generated. Use the analytics cards for the selected reporting window.</p>
               </div>
               <button onClick={() => setAnalysisDrawer(null)} style={{
                 padding: '6px 10px', fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase',
