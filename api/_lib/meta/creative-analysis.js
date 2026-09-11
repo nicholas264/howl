@@ -242,7 +242,7 @@ async function analyzeCreativeGroupWithinBudget({ groupKey, assetId = null, manu
     || /\.(mp4|mov|m4v|webm)(\?|$)/i.test(sourceAsset?.durable_url || '');
   const isVideo = !!topAd.video_id || isAssetVideo;
   const assetKind = isVideo ? 'video' : 'image';
-  let imageUrl = (!isVideo && sourceAsset?.durable_url) || topAd.thumbnail_url;
+  let imageUrl = (!isVideo && sourceAsset?.durable_url) || sourceAsset?.preview_url || topAd.thumbnail_url;
   let videoSource = sourceAsset?.durable_url || null;
   if (isVideo && topAd.video_id) {
     const r = await fetch(`${BASE}/${topAd.video_id}?fields=source,picture,format,permalink_url,embed_html&access_token=${accessToken}`);
@@ -255,7 +255,7 @@ async function analyzeCreativeGroupWithinBudget({ groupKey, assetId = null, manu
       if (!videoSource && Array.isArray(d.format)) {
         for (const f of d.format) { if (f?.picture) imageUrl = f.picture; }
       }
-      if (d.picture) imageUrl = d.picture;
+      if (!imageUrl && d.picture) imageUrl = d.picture;
       if (!videoSource) {
         try {
           const r2 = await fetch(`${BASE}/${adAccountId}/advideos?ids=${encodeURIComponent(topAd.video_id)}&fields=source&access_token=${accessToken}`);

@@ -88,7 +88,11 @@ export async function syncCreativeAnalytics({ sql, accessToken, adAccountId, sin
                 video_id = EXCLUDED.video_id,
                 image_hash = EXCLUDED.image_hash,
                 group_key = EXCLUDED.group_key,
-                thumbnail_url = COALESCE(EXCLUDED.thumbnail_url, creative_performance.thumbnail_url),
+                thumbnail_url = CASE
+                  WHEN EXCLUDED.thumbnail_url LIKE '%p64x64%' AND creative_performance.thumbnail_url IS NOT NULL
+                    THEN creative_performance.thumbnail_url
+                  ELSE COALESCE(EXCLUDED.thumbnail_url, creative_performance.thumbnail_url)
+                END,
                 status = EXCLUDED.status,
                 synced_at = NOW()
             `;

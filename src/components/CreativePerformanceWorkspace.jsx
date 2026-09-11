@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { apiJson } from '../lib/api';
 import CreativeAssetReview from './CreativeAssetReview.jsx';
+import CreativePreviewImage from './CreativePreviewImage.jsx';
 import CreativeVariantReport from './CreativeVariantReport.jsx';
 import { creatorRollups } from '../lib/creative-analytics-view.js';
 import './CreativeAnalytics.css';
@@ -1635,7 +1636,7 @@ export default function CreativePerformanceWorkspace({
         <div className="motion-card-grid">
           {topGroups.map(g => <article className={`motion-creative-card ${selectedSet.has(g.groupKey) ? 'selected' : ''}`} key={g.groupKey}>
             <button className="motion-select" aria-label={`Select ${g.name}`} aria-pressed={selectedSet.has(g.groupKey)} onClick={() => toggleSelected(g.groupKey)}>{selectedSet.has(g.groupKey) ? '✓' : ''}</button>
-            <button className="ca-preview" aria-label={`Review ${g.name}`} onClick={() => setReviewKey(g.groupKey)}>{g.previewUrl || g.thumbnailUrl ? <img loading="lazy" src={g.previewUrl || g.thumbnailUrl} alt="" /> : <span className="ca-no-preview">{g.assetKind === 'video' ? 'Video' : 'Image'} preview unavailable</span>}<span className="ca-format">{g.assetKind === 'video' ? '▷ Video' : 'Image'}</span></button>
+            <button className="ca-preview" aria-label={`Review ${g.name}`} onClick={() => setReviewKey(g.groupKey)}><CreativePreviewImage groupKey={g.groupKey} src={g.previewUrl || g.thumbnailUrl} /><span className="ca-format">{g.assetKind === 'video' ? '▷ Video' : 'Image'}</span></button>
             <div className="motion-card-body"><button className="ca-card-title" onClick={() => setReviewKey(g.groupKey)}>{g.name || 'Untitled creative'}</button><button className={`ca-source ${!g.creatorId && !g.sourceType ? 'unlinked' : ''}`} onClick={() => setReviewKey(g.groupKey)}>{g.creatorConflict ? 'Resolve creator conflict' : g.creatorName || g.sourceLabel || '＋ Connect creator'}</button>
               <dl>{selectedMetrics.map(key => <div key={key}><dt>{METRICS[key].label}</dt><dd>{METRICS[key].format(g[key])}</dd></div>)}</dl>
               <div className="ca-card-footer"><span>{g.adCount} {g.adCount === 1 ? 'ad' : 'ads'}</span><span>{statusFor(g)}</span><button onClick={() => setReviewKey(g.groupKey)}>Review</button></div>
@@ -1654,7 +1655,7 @@ export default function CreativePerformanceWorkspace({
             <tbody>
               {topGroups.map(g => <tr key={g.groupKey}>
                 <td><button className="motion-name" onClick={() => setReviewKey(g.groupKey)}>
-                  {g.previewUrl || g.thumbnailUrl ? <img src={g.previewUrl || g.thumbnailUrl} alt="" /> : null}<span><strong>{g.name}</strong><small>{g.adCount} ads</small></span>
+                  <CreativePreviewImage groupKey={g.groupKey} src={g.previewUrl || g.thumbnailUrl} /><span><strong>{g.name}</strong><small>{g.adCount} ads</small></span>
                 </button></td>
                 <td><button className="ca-source" onClick={() => setReviewKey(g.groupKey)}>{g.creatorConflict ? 'Resolve conflict' : g.creatorName || g.sourceLabel || 'Connect creator'}</button></td>
                 <td>{g.firstLaunchDate ? new Date(g.firstLaunchDate).toLocaleDateString() : '—'}</td>

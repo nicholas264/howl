@@ -8,7 +8,7 @@ export const META_ACTION_PERMISSIONS = Object.freeze({
   upload_video: ['launch.write'], upload_video_url: ['launch.write'],
   create_creative_test: ['launch.write'], get_cpa_analysis: ['analytics.read'],
   sync_creative_analytics: ['analytics.write'], get_sku_spend_pacing: ['analytics.read'],
-  get_creative_table: ['analytics.read'], assign_creative_creator: ['creators.write'],
+  get_creative_table: ['analytics.read'], get_creative_preview: ['analytics.read'], assign_creative_creator: ['creators.write'],
   assign_creative_creators: ['creators.write'], get_creative_operator_audit: ['analytics.read'],
   update_creative_evidence_task: ['analytics.write'], get_creative_group_ads: ['analytics.read'],
   analyze_creative_group: ['analytics.write', 'jobs.run'],
