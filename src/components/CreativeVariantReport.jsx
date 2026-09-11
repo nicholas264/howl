@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { apiJson } from '../lib/api.js';
 import CreativeExperiments from './CreativeExperiments.jsx';
 
-export default function CreativeVariantReport({canWrite=false}) {
+export default function CreativeVariantReport({canWrite=false, windowDays=30, setWindowDays}) {
   const [data,setData] = useState(null);
   const [error,setError] = useState('');
-  const [days,setDays] = useState(30);
+  const days = windowDays;
+  const setDays = setWindowDays;
   useEffect(() => {
     let active = true;
     setData(null); setError('');
@@ -17,7 +18,7 @@ export default function CreativeVariantReport({canWrite=false}) {
     <h2>Creative variants</h2>
     <p>Compare complete creative definitions separately from the media rollups below. Reusing an image does not merge different hooks, copy, carousel cards, or destinations.</p>
     <label>Reporting window <select value={days} onChange={event => setDays(Number(event.target.value))}>
-      <option value={7}>7 days</option><option value={30}>30 days</option><option value={90}>90 days</option>
+      <option value={7}>7 days</option><option value={14}>14 days</option><option value={30}>30 days</option><option value={90}>90 days</option>
     </select></label>
     {error && <p role="alert">{error}</p>}
     {!data && !error && <p role="status">Loading variants…</p>}

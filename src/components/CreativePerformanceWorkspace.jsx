@@ -1,9 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { apiJson } from '../lib/api';
+import CreativeAssetReview from './CreativeAssetReview.jsx';
+import CreativeVariantReport from './CreativeVariantReport.jsx';
+import { creatorRollups } from '../lib/creative-analytics-view.js';
+import './CreativeAnalytics.css';
 
 const METRICS = {
   cpa: { label: 'CPA', format: v => v == null ? '—' : `$${v.toFixed(0)}`, better: 'low' },
-  roas: { label: 'ROAS', format: v => `${(v || 0).toFixed(2)}x`, better: 'high' },
+  roas: { label: 'ROAS', format: v => v == null ? '—' : `${v.toFixed(2)}x`, better: 'high' },
   purchases: { label: 'Purchases', format: v => Math.round(v || 0).toLocaleString(), better: 'high' },
   spend: { label: 'Spend', format: v => `$${Math.round(v || 0).toLocaleString()}`, better: 'high' },
   purchaseValue: { label: 'Purchase value', format: v => `$${Math.round(v || 0).toLocaleString()}`, better: 'high' },
@@ -52,33 +56,32 @@ function labelForState(value, fallback = 'Missing') {
   return value ? value.replaceAll('-', ' ') : fallback;
 }
 
-function playableStateFor(group) {
-  if (group.assetKind !== 'video') return 'N/A';
-  if (group.playableUrl || group.playbackEmbedUrl) return 'ready';
-  return group.playbackStatus || (group.assetId ? 'missing' : 'no asset');
-}
-
 function readinessFor(group) {
-  if (group.assetKind === 'video' && !group.playableUrl && !group.playbackEmbedUrl) return 'Needs playback';
+  if (group.creatorConflict || (!group.creatorId && !group.sourceType)) return 'Needs source';
+  if (group.analysisConfidence != null && Number(group.analysisConfidence) < 0.45) return 'Limited evidence';
+  if (group.assetKind === 'video' && !group.playableUrl) return 'Needs playback';
   if (group.assetKind === 'video' && group.transcriptStatus !== 'complete') return 'Needs transcript';
   if (!group.isAnalyzed) return 'Needs analysis';
   return 'Ready';
 }
 
 function qualityStateFor(group) {
-  if (group.assetKind === 'video' && !group.playableUrl && !group.playbackEmbedUrl) {
+  if (group.creatorConflict || (!group.creatorId && !group.sourceType)) {
+    return { label: 'Connect creator', tone: 'warn', action: 'Confirm the source' };
+  }
+  if (group.assetKind === 'video' && !group.playableUrl) {
     return { label: 'Source blocked', tone: 'bad', action: 'Repair playback' };
   }
   if (!group.isAnalyzed) {
     return { label: 'Needs analysis', tone: 'warn', action: 'Analyze creative' };
   }
   if (group.analysisConfidence != null && Number(group.analysisConfidence) < 0.45) {
-    return { label: 'Limited evidence', tone: 'warn', action: group.analysisRecommendedNextStep || 'Review source' };
+    return { label: 'Limited evidence', tone: 'warn', action: 'Review source evidence' };
   }
   if (group.assetKind === 'video' && group.transcriptStatus !== 'complete') {
-    return { label: 'Transcript missing', tone: 'warn', action: group.analysisRecommendedNextStep || 'Add script when available' };
+    return { label: 'Transcript missing', tone: 'warn', action: 'Add a transcript' };
   }
-  return { label: 'Decision ready', tone: 'good', action: group.analysisRecommendedNextStep || 'Review and iterate' };
+  return { label: 'Decision ready', tone: 'good', action: 'Review and iterate' };
 }
 
 function percent(part, total) {
@@ -383,16 +386,23 @@ export default function CreativePerformanceWorkspace({
   onAssignCreators,
   canManageCreators,
   setActiveTab,
+  onOpenCreator,
+  canWriteAnalytics,
 }) {
+  const [workspaceView, setWorkspaceView] = useState('creatives');
+  const [reviewKey, setReviewKey] = useState(null);
+  const [page, setPage] = useState(1);
+  const [sortDirection, setSortDirection] = useState('desc');
   const [viewMode, setViewMode] = useState('cards');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('All');
   const [readinessFilter, setReadinessFilter] = useState('All');
   const [creatorFilter, setCreatorFilter] = useState('All');
-  const [sortKey, setSortKey] = useState('purchaseValue');
+  const [sortKey, setSortKey] = useState('spend');
   const [selectedMetrics, setSelectedMetrics] = useState(['cpa', 'roas', 'purchases', 'spend', 'purchaseValue']);
   const [selected, setSelected] = useState(() => new Set());
-  const [creators, setCreators] = useState([]);
+  const creators = creativeTable?.creators || [];
+  const reviewGroup = creativeTable?.groups?.find(g => g.groupKey === reviewKey);
   const [assigning, setAssigning] = useState('');
   const [assignmentMessage, setAssignmentMessage] = useState('');
   const [assignmentError, setAssignmentError] = useState(false);
@@ -444,14 +454,9 @@ export default function CreativePerformanceWorkspace({
   };
 
   useEffect(() => {
-    apiJson('/api/creators', undefined, 'Creators failed')
-      .then(data => setCreators(data.creators || []))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    loadAuditEvents();
-  }, []);
+    if (workspaceView === 'operations') loadAuditEvents();
+  }, [workspaceView]);
+  useEffect(() => { setPage(1); }, [query, status, readinessFilter, creatorFilter, sortKey, sortDirection, windowDays, workspaceView]);
 
   const taskKeyFor = (group, taskType) => `${taskType}:${group.groupKey}`;
   const taskFromGroup = (group, taskType) => {
@@ -524,7 +529,7 @@ export default function CreativePerformanceWorkspace({
   const groups = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return [...rawGroups]
-      .filter(g => !needle || (g.name || '').toLowerCase().includes(needle))
+      .filter(g => !needle || [g.name, g.creatorName, g.sourceLabel].some(value => (value || '').toLowerCase().includes(needle)))
       .filter(g => status === 'All' || statusFor(g) === status)
       .filter(g => readinessFilter === 'All' || readinessFor(g) === readinessFilter)
       .filter(g => creatorFilter === 'All'
@@ -533,10 +538,17 @@ export default function CreativePerformanceWorkspace({
             : creatorFilter.startsWith('source:')
               ? g.sourceType === creatorFilter.replace('source:', '')
               : String(g.creatorId) === creatorFilter))
-      .sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
-  }, [creatorFilter, query, rawGroups, readinessFilter, status, sortKey]);
+      .sort((a, b) => {
+        if (a[sortKey] == null) return b[sortKey] == null ? 0 : 1;
+        if (b[sortKey] == null) return -1;
+        return (Number(a[sortKey]) - Number(b[sortKey])) * (sortDirection === 'asc' ? 1 : -1);
+      });
+  }, [creatorFilter, query, rawGroups, readinessFilter, status, sortKey, sortDirection]);
 
-  const topGroups = groups.slice(0, 12);
+  const pageCount = Math.max(1, Math.ceil(groups.length / 12));
+  const currentPage = Math.min(page, pageCount);
+  const topGroups = groups.slice((currentPage - 1) * 12, currentPage * 12);
+  const creatorRows = useMemo(() => creatorRollups(groups), [groups]);
   const metricRanges = useMemo(
     () => Object.keys(METRICS).reduce((ranges, key) => {
       ranges[key] = metricRange(groups, key);
@@ -545,12 +557,12 @@ export default function CreativePerformanceWorkspace({
     [groups],
   );
   const selectedSet = selected;
-  const selectedAnalyzedCount = groups.filter(g => selected.has(g.groupKey) && g.isAnalyzed).length;
-  const fallbackWinnerCount = topGroups.filter(g => g.isAnalyzed && statusFor(g) === 'Winner').slice(0, 4).length;
-  const conceptReferenceCount = selectedAnalyzedCount || fallbackWinnerCount;
+  const selectedAnalyzedCount = groups.filter(g => selected.has(g.groupKey) && g.isAnalyzed && qualityStateFor(g).tone === 'good').length;
+  const fallbackWinnerCount = groups.filter(g => g.isAnalyzed && qualityStateFor(g).tone === 'good' && statusFor(g) === 'Promising').slice(0, 4).length;
+  const conceptReferenceCount = selected.size ? selectedAnalyzedCount : fallbackWinnerCount;
   const conceptButtonLabel = selected.size
     ? `Generate from ${selectedAnalyzedCount || 0} selected`
-    : `Generate from ${fallbackWinnerCount || 'winners'}`;
+    : 'Develop concepts';
   const toggleSelected = (key) => {
     setSelected(prev => {
       const next = new Set(prev);
@@ -565,12 +577,12 @@ export default function CreativePerformanceWorkspace({
       : [...prev, key]);
   };
   const sendToConcepts = () => {
-    const selectedAnalyzed = groups.filter(g => selected.has(g.groupKey) && g.isAnalyzed);
-    const fallbackWinners = topGroups
-      .filter(g => g.isAnalyzed && statusFor(g) === 'Winner')
+    const selectedAnalyzed = groups.filter(g => selected.has(g.groupKey) && g.isAnalyzed && qualityStateFor(g).tone === 'good');
+    const fallbackWinners = groups
+      .filter(g => g.isAnalyzed && qualityStateFor(g).tone === 'good' && statusFor(g) === 'Promising')
       .slice(0, 4);
-    if (!selectedAnalyzed.length && !fallbackWinners.length) {
-      setConceptMessage('Analyze at least one winning creative before generating scripts from performance.');
+    if (!(selected.size ? selectedAnalyzed.length : fallbackWinners.length)) {
+      setConceptMessage('Select a creative with a confirmed source, analysis, and complete evidence.');
       return;
     }
     const keys = (selectedAnalyzed.length ? selectedAnalyzed : fallbackWinners).map(g => g.groupKey);
@@ -680,8 +692,8 @@ export default function CreativePerformanceWorkspace({
 
   const totalSpend = groups.reduce((sum, g) => sum + (g.spend || 0), 0);
   const totalRevenue = groups.reduce((sum, g) => sum + (g.purchaseValue || 0), 0);
-  const winners = groups.filter(g => statusFor(g) === 'Winner').length;
-  const playbackGapCount = rawGroups.filter(group => group.assetKind === 'video' && !group.playableUrl && !group.playbackEmbedUrl).length;
+
+  const playbackGapCount = rawGroups.filter(group => group.assetKind === 'video' && !group.playableUrl).length;
   const transcriptGapCount = rawGroups.filter(group => group.assetKind === 'video' && group.transcriptStatus !== 'complete').length;
   const analysisGapCount = rawGroups.filter(group => !group.isAnalyzed).length;
   const assignedCount = rawGroups.filter(group => group.creatorId || group.sourceType).length;
@@ -691,7 +703,7 @@ export default function CreativePerformanceWorkspace({
     group.suggestionConfidence === 'high' || group.suggestedSourceConfidence === 'high'
   )).length;
   const totalGroups = rawGroups.length;
-  const playableReadyCount = rawGroups.filter(group => group.assetKind !== 'video' || group.playableUrl || group.playbackEmbedUrl).length;
+  const playableReadyCount = rawGroups.filter(group => group.assetKind !== 'video' || group.playableUrl).length;
   const transcriptReadyCount = rawGroups.filter(group => group.assetKind !== 'video' || group.transcriptStatus === 'complete').length;
   const analyzedCount = rawGroups.filter(group => group.isAnalyzed).length;
   const operatorReadyCount = rawGroups.filter(group => qualityStateFor(group).tone === 'good').length;
@@ -1051,34 +1063,6 @@ export default function CreativePerformanceWorkspace({
       setAssigning('');
     }
   };
-  const renderMedia = (group, { compact = false } = {}) => {
-    const poster = group.previewUrl || group.thumbnailUrl || '';
-    if (group.assetKind === 'video' && group.playableUrl) {
-      return (
-        <video
-          src={group.playableUrl}
-          poster={poster || undefined}
-          controls
-          playsInline
-          preload="metadata"
-          className={compact ? 'motion-media-video compact' : 'motion-media-video'}
-        />
-      );
-    }
-    if (group.assetKind === 'video' && group.playbackEmbedUrl) {
-      return (
-        <iframe
-          src={group.playbackEmbedUrl}
-          title={`${group.name || 'Creative'} playback`}
-          className={compact ? 'motion-media-video compact' : 'motion-media-video'}
-          allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-          allowFullScreen
-        />
-      );
-    }
-    if (poster) return <img src={poster} alt="" />;
-    return <div className="motion-media-empty">No preview</div>;
-  };
   const openGroupAnalysis = (group) => onOpenAnalysis(group.groupKey, group.name, {
     assetId: group.assetId,
     assetKind: group.assetKind,
@@ -1228,23 +1212,11 @@ export default function CreativePerformanceWorkspace({
   };
 
   return (
-    <section className="motion-workspace">
-      <header className="motion-report-head">
-        <div>
-          <div className="motion-kicker">Creative intelligence</div>
-          <h1>Top creatives</h1>
-          <p>See where HOWL is spending money, making money, and finding repeatable creative patterns. Data window: {dataWindowLabel}.</p>
-        </div>
-        <div className="motion-summary">
-          <div><span>Spend</span><strong>${Math.round(totalSpend).toLocaleString()}</strong></div>
-          <div><span>Purchase value</span><strong>${Math.round(totalRevenue).toLocaleString()}</strong></div>
-          <div><span>Winners</span><strong>{winners}</strong></div>
-          <div><span>Playback gaps</span><strong>{playbackGapCount}</strong></div>
-          <div><span>Transcript gaps</span><strong>{transcriptGapCount}</strong></div>
-          <div><span>Analysis gaps</span><strong>{analysisGapCount}</strong></div>
-        </div>
-      </header>
-
+    <section className="motion-workspace ca-workspace" aria-busy={loading || false}>
+      <header className="ca-heading"><div><h1>Creative analytics</h1><p>Find what works. Connect the creator. Make the next creative better.</p></div><button className="ca-secondary" onClick={onSync} disabled={!onSync || syncing}>{syncing ? 'Syncing…' : 'Sync Meta'}</button></header>
+      <nav className="ca-tabs" aria-label="Creative analytics views">{[['creatives', 'Creatives'], ['creators', 'Creators'], ['operations', 'Data & sources'], ['variants', 'Variants & tests']].map(([key, label]) => <button key={key} aria-current={workspaceView === key ? 'page' : undefined} onClick={() => setWorkspaceView(key)}>{label}{key === 'operations' && sourceReviewCount > 0 ? <span>{sourceReviewCount}</span> : null}</button>)}</nav>
+      <div className="ca-overview"><span>{dataWindowLabel}</span><span>Spend <b>{METRICS.spend.format(totalSpend)}</b></span><span>Purchase value <b>{METRICS.purchaseValue.format(totalRevenue)}</b></span><span>{assignedCount} of {totalGroups} sources connected</span></div>
+      {workspaceView === 'operations' && <>
       <div className="motion-quality-strip">
         <div className="motion-quality-copy">
           <span>Operator trust</span>
@@ -1270,7 +1242,7 @@ export default function CreativePerformanceWorkspace({
               <span>Quality inbox</span>
               <strong>Highest leverage fixes</strong>
             </div>
-            <button type="button" onClick={() => setViewMode('table')}>Open table</button>
+            <button type="button" onClick={() => { setWorkspaceView('creatives'); setViewMode('table'); }}>Open table</button>
           </header>
           <div>
             {qualityInbox.map(({ group, quality }) => (
@@ -1316,16 +1288,16 @@ export default function CreativePerformanceWorkspace({
         </div>
         <div className="motion-task-filters">
           <select aria-label="Filter evidence tasks by status" value={taskStatusFilter} onChange={event => setTaskStatusFilter(event.target.value)}>
-            <option>All</option>
+            <option value="All">All</option>
             {TASK_STATUSES.map(statusItem => <option key={statusItem.value} value={statusItem.value}>{statusItem.label}</option>)}
           </select>
           <select aria-label="Filter evidence tasks by owner" value={taskOwnerFilter} onChange={event => setTaskOwnerFilter(event.target.value)}>
-            <option>All</option>
+            <option value="All">All</option>
             <option>Unassigned</option>
             {taskOwnerOptions.map(owner => <option key={owner} value={owner}>{owner}</option>)}
           </select>
           <select aria-label="Filter evidence tasks by due date" value={taskDueFilter} onChange={event => setTaskDueFilter(event.target.value)}>
-            <option>All</option>
+            <option value="All">All</option>
             <option value="overdue">Overdue</option>
             <option value="today">Due today</option>
             <option value="future">Future due</option>
@@ -1376,7 +1348,7 @@ export default function CreativePerformanceWorkspace({
             <button type="button" onClick={downloadAttributionQueue} disabled={!filteredSourceReviewGroups.length}>
               Download CSV
             </button>
-            <button type="button" onClick={() => { setCreatorFilter('Suggested'); setViewMode('table'); }}>
+            <button type="button" onClick={() => { setCreatorFilter('Suggested'); setWorkspaceView('creatives'); setViewMode('table'); }}>
               Review matches
             </button>
           </div>
@@ -1400,7 +1372,7 @@ export default function CreativePerformanceWorkspace({
             <strong>{operatorReadyCount}/{totalGroups || 0} ready</strong>
             <p>Only creatives with playback, evidence, analysis, and source attribution should feed confident iteration decisions.</p>
           </div>
-          <button type="button" onClick={() => { setReadinessFilter('Needs transcript'); setViewMode('table'); }}>
+          <button type="button" onClick={() => { setReadinessFilter('Needs transcript'); setWorkspaceView('creatives'); setViewMode('table'); }}>
             Open gaps
           </button>
           <div className="motion-evidence-list">
@@ -1527,6 +1499,8 @@ export default function CreativePerformanceWorkspace({
       {renderPreflight(attributionIntakePreview, 'attribution')}
       {renderIntakeConfirmation()}
 
+      </>}
+      {workspaceView !== 'variants' && <>
       <div className="motion-toolbar">
         <div className="motion-toolbar-group">
           {[7, 14, 30, 90].map(days => (
@@ -1534,13 +1508,13 @@ export default function CreativePerformanceWorkspace({
           ))}
           <input aria-label="Search creatives" placeholder="Search creatives" value={query} onChange={e => setQuery(e.target.value)} />
           <select aria-label="Filter by status" value={status} onChange={e => setStatus(e.target.value)}>
-            {['All', 'Winner', 'Watch', 'Learning', 'Hook weak', 'Fix offer', 'Stop'].map(item => <option key={item}>{item}</option>)}
+            {['All', 'Promising', 'Watch', 'Learning', 'Hook weak', 'Fix offer', 'Stop'].map(item => <option key={item} value={item}>{item === 'All' ? 'All statuses' : item}</option>)}
           </select>
           <select aria-label="Filter by readiness" value={readinessFilter} onChange={e => setReadinessFilter(e.target.value)}>
-            {['All', 'Needs playback', 'Needs transcript', 'Needs analysis', 'Ready'].map(item => <option key={item}>{item}</option>)}
+            {['All', 'Needs source', 'Needs playback', 'Needs transcript', 'Needs analysis', 'Limited evidence', 'Ready'].map(item => <option key={item} value={item}>{item === 'All' ? 'All evidence' : item}</option>)}
           </select>
           <select aria-label="Filter by creator" value={creatorFilter} onChange={e => setCreatorFilter(e.target.value)}>
-            <option>All</option>
+            <option value="All">All sources</option>
             <option>Unassigned</option>
             <option>Suggested</option>
             <option value="source:founder">Founder</option>
@@ -1550,11 +1524,12 @@ export default function CreativePerformanceWorkspace({
           </select>
         </div>
         <div className="motion-toolbar-group">
-          <button onClick={onSync} disabled={!onSync || syncing}>{syncing ? 'Syncing…' : 'Sync Meta'}</button>
+
           <button
             className="motion-primary"
             onClick={sendToConcepts}
-            title={!conceptReferenceCount ? 'Analyze at least one winning creative first.' : ''}
+            disabled={!conceptReferenceCount || !setActiveTab}
+            title={!conceptReferenceCount ? 'Select a creative with source attribution and complete evidence.' : ''}
           >
             {conceptButtonLabel}
           </button>
@@ -1562,6 +1537,8 @@ export default function CreativePerformanceWorkspace({
       </div>
       {conceptMessage ? <div className="motion-error">{conceptMessage}</div> : null}
 
+      </>}
+      {workspaceView === 'operations' && <>
       <div className="motion-attribution">
         <div className="motion-attribution-copy">
           <span>Source attribution</span>
@@ -1574,7 +1551,7 @@ export default function CreativePerformanceWorkspace({
           <div><span>High confidence</span><strong>{highConfidenceCount}</strong></div>
         </div>
         <div className="motion-attribution-actions">
-          <button onClick={() => { setCreatorFilter('Suggested'); setViewMode('table'); }}>Review matches</button>
+          <button onClick={() => { setCreatorFilter('Suggested'); setWorkspaceView('creatives'); setViewMode('table'); }}>Review matches</button>
           <button className="motion-primary" onClick={applyHighConfidenceSuggestions} disabled={!canManageCreators || batchAssigning || !highConfidenceCount}>
             {batchAssigning ? 'Applying…' : `Apply high confidence (${Math.min(100, highConfidenceCount)})`}
           </button>
@@ -1627,6 +1604,9 @@ export default function CreativePerformanceWorkspace({
         </div>
       ) : null}
 
+      </>}
+      {workspaceView === 'creatives' && <>
+      <div className="ca-sort"><span>{groups.length} creatives{selected.size ? ` • ${selected.size} selected` : ''}</span><label>Sort by <select aria-label="Sort creatives" value={sortKey} onChange={e => setSortKey(e.target.value)}>{Object.entries(METRICS).map(([key, metric]) => <option key={key} value={key}>{metric.label}</option>)}</select></label><button className="ca-secondary" aria-label="Reverse sort direction" onClick={() => setSortDirection(value => value === 'desc' ? 'asc' : 'desc')}>{sortDirection === 'desc' ? 'High to low' : 'Low to high'}</button>{selected.size > 0 && <button className="ca-secondary" onClick={() => setSelected(new Set())}>Clear selection</button>}</div>
       <div className="motion-metric-bar">
         <span>Add metric</span>
         {Object.entries(METRICS).map(([key, metric], index) => (
@@ -1635,145 +1615,36 @@ export default function CreativePerformanceWorkspace({
           </button>
         ))}
         <div className="motion-view-toggle">
-          {['cards', 'chart', 'table'].map(mode => (
+          {['cards', 'table'].map(mode => (
             <button key={mode} className={viewMode === mode ? 'active' : ''} onClick={() => setViewMode(mode)}>{mode}</button>
           ))}
         </div>
       </div>
 
+      </>}
       {syncMessage ? <div className="motion-notice">{syncMessage}</div> : null}
       {analysisQueueMessage ? <div className="motion-notice">{analysisQueueMessage}</div> : null}
       {playbackRepairMessage ? <div className="motion-notice">{playbackRepairMessage}</div> : null}
       {playbackMessage ? <div className={playbackError ? 'motion-error' : 'motion-notice'}>{playbackMessage}</div> : null}
       {assignmentMessage ? <div className={assignmentError ? 'motion-error' : 'motion-notice'}>{assignmentMessage}</div> : null}
       {error ? <div className="motion-error">{error}</div> : null}
+      {loading && creativeTable ? <p role="status" className="ca-caption">Updating the reporting window…</p> : null}
       {loading && !creativeTable ? <div className="motion-loading">Loading creative performance…</div> : null}
 
-      {viewMode === 'cards' && (
+      {workspaceView === 'creatives' && viewMode === 'cards' && (
         <div className="motion-card-grid">
-          {topGroups.map(g => {
-            const quality = qualityStateFor(g);
-            const confidence = g.analysisConfidence == null ? null : Math.round(Number(g.analysisConfidence) * 100);
-            return (
-            <article className={`motion-creative-card ${selectedSet.has(g.groupKey) ? 'selected' : ''}`} key={g.groupKey}>
-              <button className="motion-select" aria-label={`Select ${g.name}`} onClick={() => toggleSelected(g.groupKey)}>
-                {selectedSet.has(g.groupKey) ? '✓' : ''}
-              </button>
-              <div className="motion-media">
-                {renderMedia(g)}
-                <span>{statusFor(g)}</span>
-              </div>
-              <div className="motion-card-body">
-                <h3>{g.name || 'Untitled creative'}</h3>
-                <p>{g.adCount} ad{g.adCount === 1 ? '' : 's'} · {g.firstLaunchDate ? new Date(g.firstLaunchDate).toLocaleDateString() : 'No launch date'}</p>
-                <div className={`motion-decision-strip ${quality.tone}`}>
-                  <div>
-                    <span>{quality.label}</span>
-                    <strong>{quality.action}</strong>
-                  </div>
-                  <em>{confidence == null ? 'No score' : `${confidence}%`}</em>
-                </div>
-                {g.analysisOperatorSummary ? (
-                  <p className="motion-card-summary">{g.analysisOperatorSummary}</p>
-                ) : null}
-                <div className="motion-readiness">
-                  <div className={g.assetKind !== 'video' || g.playableUrl || g.playbackEmbedUrl ? 'ready' : 'warn'}>
-                    <span>Playback</span>
-                    <strong>{g.playableUrl || g.playbackEmbedUrl ? 'Ready' : labelForState(playableStateFor(g))}</strong>
-                  </div>
-                  <div className={g.transcriptStatus === 'complete' ? 'ready' : 'warn'}>
-                    <span>Transcript</span>
-                    <strong>{labelForState(g.transcriptStatus, g.assetKind === 'video' ? 'Needed' : 'N/A')}</strong>
-                  </div>
-                  <div className={g.isAnalyzed ? 'ready' : 'warn'}>
-                    <span>Analysis</span>
-                    <strong>{g.isAnalyzed ? 'Complete' : labelForState(g.analysisQueueStatus, 'Not run')}</strong>
-                  </div>
-                </div>
-                {g.assetKind === 'video' && !g.playableUrl && !g.playbackEmbedUrl ? (
-                  <button
-                    type="button"
-                    className="motion-repair-playback"
-                    disabled={!onNormalizeAsset || repairingPlayback === g.groupKey}
-                    onClick={() => repairPlayback(g)}
-                  >
-                    {repairingPlayback === g.groupKey ? 'Repairing playback…' : 'Repair playback'}
-                  </button>
-                ) : null}
-                <div className={`motion-creator-assignment ${g.creatorConflict ? 'conflict' : ''}`}>
-                  <span>{g.creatorConflict ? 'Creator conflict' : 'Creator'}</span>
-                  <select
-                    aria-label={`Assign creator to ${g.name || 'creative'}`}
-                    value={g.creatorId || ''}
-                    disabled={!canManageCreators || assigning === g.groupKey}
-                    onChange={event => assignCreator(g, event.target.value ? Number(event.target.value) : null)}
-                  >
-                    <option value="">Unassigned</option>
-                    {creators.map(creator => <option key={creator.id} value={creator.id}>{creator.name}</option>)}
-                  </select>
-                  {!g.creatorId && g.sourceType ? (
-                    <small>{sourceTypeLabel(g.sourceType)} · {g.sourceLabel || 'source tagged'}</small>
-                  ) : null}
-                </div>
-                {renderSourceControls(g)}
-                {canManageCreators && !g.creatorId && !g.sourceType && g.suggestedCreatorId ? (
-                  <button className="motion-creator-suggestion" title={g.suggestionReason} onClick={() => assignCreator(g, g.suggestedCreatorId)}>
-                    <span>{g.suggestionConfidence === 'high' ? 'High confidence' : 'Review match'}</span>
-                    Use {g.suggestedCreatorName}
-                  </button>
-                ) : null}
-                {canManageCreators && !g.creatorId && !g.sourceType && !g.suggestedCreatorId && g.suggestedSourceType ? (
-                  <button className="motion-creator-suggestion source" title={g.suggestedSourceReason} onClick={() => applySourceSuggestion(g)}>
-                    <span>{g.suggestedSourceConfidence === 'high' ? 'High confidence source' : 'Review source'}</span>
-                    Mark {sourceTypeLabel(g.suggestedSourceType)}
-                  </button>
-                ) : null}
-                <dl>
-                  {selectedMetrics.slice(0, 5).map(key => (
-                    <div key={key}><dt>{METRICS[key].label}</dt><dd>{METRICS[key].format(g[key])}</dd></div>
-                  ))}
-                </dl>
-                <button className="motion-analysis-link" onClick={() => g.isAnalyzed ? openGroupAnalysis(g) : onAnalyze?.(g.groupKey, g.name, '', g.assetId || null)}>
-                  {g.isAnalyzed
-                    ? 'Open review'
-                    : g.analysisQueueStatus === 'processing'
-                      ? 'Analysis running'
-                      : g.analysisQueueStatus === 'pending'
-                        ? 'Analyze now'
-                        : g.analysisQueueStatus === 'failed'
-                          ? 'Retry analysis now'
-                      : 'Analyze creative'}
-                </button>
-              </div>
-            </article>
-          );
-          })}
+          {topGroups.map(g => <article className={`motion-creative-card ${selectedSet.has(g.groupKey) ? 'selected' : ''}`} key={g.groupKey}>
+            <button className="motion-select" aria-label={`Select ${g.name}`} aria-pressed={selectedSet.has(g.groupKey)} onClick={() => toggleSelected(g.groupKey)}>{selectedSet.has(g.groupKey) ? '✓' : ''}</button>
+            <button className="ca-preview" aria-label={`Review ${g.name}`} onClick={() => setReviewKey(g.groupKey)}>{g.previewUrl || g.thumbnailUrl ? <img loading="lazy" src={g.previewUrl || g.thumbnailUrl} alt="" /> : <span className="ca-no-preview">{g.assetKind === 'video' ? 'Video' : 'Image'} preview unavailable</span>}<span className="ca-format">{g.assetKind === 'video' ? '▷ Video' : 'Image'}</span></button>
+            <div className="motion-card-body"><button className="ca-card-title" onClick={() => setReviewKey(g.groupKey)}>{g.name || 'Untitled creative'}</button><button className={`ca-source ${!g.creatorId && !g.sourceType ? 'unlinked' : ''}`} onClick={() => setReviewKey(g.groupKey)}>{g.creatorConflict ? 'Resolve creator conflict' : g.creatorName || g.sourceLabel || '＋ Connect creator'}</button>
+              <dl>{selectedMetrics.map(key => <div key={key}><dt>{METRICS[key].label}</dt><dd>{METRICS[key].format(g[key])}</dd></div>)}</dl>
+              <div className="ca-card-footer"><span>{g.adCount} {g.adCount === 1 ? 'ad' : 'ads'}</span><span>{statusFor(g)}</span><button onClick={() => setReviewKey(g.groupKey)}>Review</button></div>
+            </div>
+          </article>)}
         </div>
       )}
 
-      {viewMode === 'chart' && (
-        <div className="motion-chart">
-          <div className="motion-chart-legend">
-            <span><i className="cpa" />CPA</span><span><i className="roas" />ROAS</span>
-          </div>
-          <div className="motion-chart-bars">
-            {topGroups.slice(0, 8).map(g => {
-              return (
-                <div className="motion-chart-item" key={g.groupKey}>
-                  <div className="motion-bars">
-                    <div className="motion-bar cpa" style={{ height: `${Math.max(8, ((g.cpa || 0) / metricRanges.cpa.max) * 100)}%` }}><span>{METRICS.cpa.format(g.cpa)}</span></div>
-                    <div className="motion-bar roas" style={{ height: `${Math.max(8, ((g.roas || 0) / metricRanges.roas.max) * 100)}%` }}><span>{METRICS.roas.format(g.roas)}</span></div>
-                  </div>
-                  {g.thumbnailUrl ? <img src={g.thumbnailUrl} alt="" /> : <div className="motion-chart-thumb" />}
-                  <strong>{g.name}</strong>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {viewMode === 'table' && (
+      {workspaceView === 'creatives' && viewMode === 'table' && (
         <div className="motion-table-wrap">
           <table className="motion-table">
             <thead><tr>
@@ -1781,36 +1652,11 @@ export default function CreativePerformanceWorkspace({
               {selectedMetrics.map(key => <th key={key}><button onClick={() => setSortKey(key)}>{METRICS[key].label}</button></th>)}
             </tr></thead>
             <tbody>
-              {groups.map(g => <tr key={g.groupKey}>
-                <td><button className="motion-name" onClick={() => openGroupAnalysis(g)}>
-                  {g.previewUrl || g.thumbnailUrl ? <img src={g.previewUrl || g.thumbnailUrl} alt="" /> : null}<span><strong>{g.name}</strong><small>{g.adCount} ads · playback {g.playableUrl || g.playbackEmbedUrl ? 'ready' : labelForState(playableStateFor(g)).toLowerCase()}</small></span>
+              {topGroups.map(g => <tr key={g.groupKey}>
+                <td><button className="motion-name" onClick={() => setReviewKey(g.groupKey)}>
+                  {g.previewUrl || g.thumbnailUrl ? <img src={g.previewUrl || g.thumbnailUrl} alt="" /> : null}<span><strong>{g.name}</strong><small>{g.adCount} ads</small></span>
                 </button></td>
-                <td>
-                  <select
-                    className="motion-table-creator"
-                    aria-label={`Assign creator to ${g.name || 'creative'}`}
-                    value={g.creatorId || ''}
-                    disabled={!canManageCreators || assigning === g.groupKey}
-                    onChange={event => assignCreator(g, event.target.value ? Number(event.target.value) : null)}
-                  >
-                    <option value="">Unassigned</option>
-                    {creators.map(creator => <option key={creator.id} value={creator.id}>{creator.name}</option>)}
-                  </select>
-                  {!g.creatorId && g.sourceType ? (
-                    <small className="motion-source-tag">{sourceTypeLabel(g.sourceType)} · {g.sourceLabel || 'source tagged'}</small>
-                  ) : null}
-                  {renderSourceControls(g)}
-                  {canManageCreators && !g.creatorId && !g.sourceType && g.suggestedCreatorId ? (
-                    <button className="motion-table-suggestion" title={g.suggestionReason} onClick={() => assignCreator(g, g.suggestedCreatorId)}>
-                      Use {g.suggestedCreatorName}
-                    </button>
-                  ) : null}
-                  {canManageCreators && !g.creatorId && !g.sourceType && !g.suggestedCreatorId && g.suggestedSourceType ? (
-                    <button className="motion-table-suggestion source" title={g.suggestedSourceReason} onClick={() => applySourceSuggestion(g)}>
-                      Mark {sourceTypeLabel(g.suggestedSourceType)}
-                    </button>
-                  ) : null}
-                </td>
+                <td><button className="ca-source" onClick={() => setReviewKey(g.groupKey)}>{g.creatorConflict ? 'Resolve conflict' : g.creatorName || g.sourceLabel || 'Connect creator'}</button></td>
                 <td>{g.firstLaunchDate ? new Date(g.firstLaunchDate).toLocaleDateString() : '—'}</td>
                 <td><span className={`motion-status status-${statusFor(g).toLowerCase().replace(' ', '-')}`}>{statusFor(g)}</span></td>
                 {selectedMetrics.map(key => {
@@ -1824,6 +1670,10 @@ export default function CreativePerformanceWorkspace({
           </table>
         </div>
       )}
+      {workspaceView === 'creatives' && <div className="ca-pagination"><span>{groups.length ? `${(currentPage - 1) * 12 + 1}–${Math.min(currentPage * 12, groups.length)} of ${groups.length}` : 'No creatives match these filters.'}</span><button className="ca-secondary" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</button><span>Page {currentPage} of {pageCount}</span><button className="ca-secondary" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>Next</button></div>}
+      {workspaceView === 'creators' && <div className="ca-creator-list"><div className="ca-section-heading"><div><h2>Creator performance</h2><p>Combined results for connected assets in this reporting window.</p></div><button className="ca-secondary" onClick={() => { setCreatorFilter('Unassigned'); setWorkspaceView('creatives'); }}>Connect unassigned assets</button></div>{creatorRows.map(creator => <article key={creator.id}><div><h3>{creator.name}</h3><p>{creator.groups.length} connected creatives</p></div><dl className="ca-metrics">{['spend','purchaseValue','roas','cpa'].map(key => <div key={key}><dt>{METRICS[key].label}</dt><dd>{METRICS[key].format(creator[key])}</dd></div>)}</dl><div className="ca-action-row"><button className="ca-secondary" onClick={() => { setCreatorFilter(String(creator.id)); setWorkspaceView('creatives'); }}>View assets</button>{onOpenCreator && <button className="ca-secondary" onClick={() => onOpenCreator(creator.id, 'performance')}>Creator profile</button>}</div></article>)}{!creatorRows.length && <p>No connected creators match these filters. Connect an asset to start building a performance history.</p>}</div>}
+      {workspaceView === 'variants' && <CreativeVariantReport canWrite={canWriteAnalytics} windowDays={windowDays} setWindowDays={setWindowDays} />}
+      {reviewGroup && <CreativeAssetReview key={reviewGroup.groupKey} group={reviewGroup} creators={creators} canManage={canManageCreators && !loading} onAssign={onAssignCreator} onNormalizeAsset={onNormalizeAsset} onClose={() => setReviewKey(null)} onAnalysis={openGroupAnalysis} onOpenCreator={onOpenCreator} setActiveTab={setActiveTab} since={creativeTable?.since} until={creativeTable?.until} />}
     </section>
   );
 }

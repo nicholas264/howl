@@ -14,7 +14,6 @@ const ImageAdTool = lazy(() => import("./components/ImageAdTool"));
 const CalloutAdTool = lazy(() => import("./components/CalloutAdTool"));
 const FounderAdTool = lazy(() => import("./components/FounderAdTool"));
 const MetaPublishTool = lazy(() => import("./components/MetaPublishTool"));
-const CreativeVariantReport = lazy(() => import("./components/CreativeVariantReport.jsx"));
 const DashboardTool = lazy(() => import("./components/DashboardTool"));
 const LaunchLogTool = lazy(() => import("./components/LaunchLogTool"));
 const UgcEditorTool = lazy(() => import("./components/UgcEditorTool"));
@@ -411,8 +410,8 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "gallery" && <GalleryTab cart={cart} />}
         {activeTab === "dashboard-cfo" && <DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="cfo" />}
         {activeTab === "map-monitor" && <MapMonitorWorkspace canManage={can('admin.users')} />}
-        {activeTab === "dashboard-creative" && <><CreativeVariantReport canWrite={can('analytics.write')} /><DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="creative" canManageCreators={can('creators.write')} /></>}
-        {activeTab === "creative-analytics" && <><CreativeVariantReport canWrite={can('analytics.write')} /><DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="creative" canManageCreators={can('creators.write')} /></>}
+        {activeTab === "dashboard-creative" && <><DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="creative" onOpenCreator={openPlannedCreator} canManageCreators={can('creators.write')} /></>}
+        {activeTab === "creative-analytics" && <><DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="creative" onOpenCreator={openPlannedCreator} canManageCreators={can('creators.write')} /></>}
         {activeTab === "dashboard-forecast" && <DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="forecast" />}
         {activeTab === "sku-media-pacing" && <SkuMediaPacingTool />}
         {activeTab === "log" && <LaunchLogTool />}
