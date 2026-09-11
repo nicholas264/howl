@@ -10,6 +10,7 @@ import { assertLaunchReady } from './_lib/launch-preflight.js';
 import { bindCreativeContent } from './_lib/creative-receipt.js';
 import { launchEvidenceVerifier } from './_lib/launch-packets.js';
 import { syncCreativeAnalytics } from './_lib/meta/sync.js';
+import { loadCreativePreview } from './_lib/meta/creative-preview.js';
 import { createMetaOperationFetch, digest } from './_lib/operation-journal.js';
 import { canRunMetaAction } from './_lib/meta-permissions.js';
 import { mirrorVideoToBlob } from './_lib/blob/mirror.js';
@@ -1483,6 +1484,11 @@ export default async function handler(req, res) {
         });
       }
 
+      case 'get_creative_preview': {
+        const { neon } = await import('@neondatabase/serverless');
+        const result = await loadCreativePreview(neon(process.env.DATABASE_URL), { BASE, accessToken, adAccountId }, req.body.groupKey);
+        return res.json(result);
+      }
       case 'get_creative_table': {
         if (!process.env.DATABASE_URL) return res.json({ error: 'DATABASE_URL not configured' });
         const { neon } = await import('@neondatabase/serverless');

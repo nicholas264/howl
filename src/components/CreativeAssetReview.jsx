@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { apiJson } from '../lib/api.js';
+import CreativePreviewImage from './CreativePreviewImage.jsx';
 import { buildIteration } from '../lib/creative-analytics-view.js';
 
 export default function CreativeAssetReview({ group, creators, canManage, onAssign, onNormalizeAsset, onClose, onAnalysis, onOpenCreator, setActiveTab, since, until }) {
@@ -48,7 +49,7 @@ export default function CreativeAssetReview({ group, creators, canManage, onAssi
     <div className="ca-review-layout">
       <div>
         <div className="ca-review-player">
-          {group.assetKind === 'video' && group.playableUrl && !mediaFailed ? <video controls playsInline preload="metadata" src={group.playableUrl} poster={group.previewUrl || group.thumbnailUrl} onError={() => setMediaFailed(true)} /> : group.previewUrl || group.thumbnailUrl ? <img src={group.previewUrl || group.thumbnailUrl} alt={group.name} /> : <p>No preview available</p>}
+          {group.assetKind === 'video' && group.playableUrl && !mediaFailed ? <video controls playsInline preload="metadata" src={group.playableUrl} poster={group.previewUrl || group.thumbnailUrl} onError={() => setMediaFailed(true)} /> : <CreativePreviewImage groupKey={group.groupKey} src={group.previewUrl || group.thumbnailUrl} alt={group.name} loading="eager" />}
         </div>
         {group.assetKind === 'video' && (!group.playableUrl || mediaFailed) && <p className="ca-caption">{mediaFailed ? 'The video could not load.' : 'A direct video source is not available.'} {group.playbackEmbedUrl && <a href={group.playbackEmbedUrl} target="_blank" rel="noreferrer">Open Meta preview</a>}</p>}
         {group.assetKind === 'video' && onNormalizeAsset && <button className="ca-secondary" onClick={repairMedia} disabled={busy}>{busy ? 'Working…' : 'Repair video source'}</button>}

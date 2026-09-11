@@ -17,3 +17,4 @@
 @media(max-width:500px){.ca-workspace .motion-card-grid{grid-template-columns:1fr}.ca-tabs{gap:18px}.ca-pagination{flex-wrap:wrap}.ca-heading{align-items:flex-start}.ca-overview{gap:8px 15px}.ca-review-layout{padding:18px}.ca-metrics{gap:18px}}
 @media(prefers-reduced-motion:reduce){.ca-workspace *,.ca-review *{transition:none!important;animation:none!important}}
 .ca-review{margin:auto;inset:0}.ca-review h2,.ca-review h3,.ca-section-heading h2,.ca-creator-list h3{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif}.ca-workspace button:disabled{opacity:.45;cursor:not-allowed}.ca-workspace button:hover:not(:disabled){transform:none}.ca-review [role=status]{font-size:13px;line-height:1.5}
+.ca-preview img{object-fit:contain}.ca-preview img.ca-preview-limited,.ca-review-player img.ca-preview-limited{object-fit:scale-down}
