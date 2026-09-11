@@ -10,6 +10,14 @@ test('upload grants enforce purpose-specific permissions, content and processing
  for(const path of ['other/file','creator-footage/not-an-id/file','creator-contracts/../file','/ugc-source/file','ugc-source//file','ugc-source/','ugc-source/evil\\file','ugc-source/evil\nfile'])assert.throws(()=>uploadPolicy(path));
 });
 
+test('Review Ads and Image Ads backgrounds use the image library policy',()=>{
+ const policy=uploadPolicy('image-library/background-1789146518000.jpg');
+ assert.equal(policy.permission,'assets.write');
+ assert.deepEqual(policy.allowedContentTypes,['image/jpeg','image/png','image/webp']);
+ assert.equal(policy.maximumSizeInBytes,20*1024*1024);
+ for(const path of ['image-library-other/file.jpg','image-library/../file.jpg','image-library/'])assert.throws(()=>uploadPolicy(path));
+});
+
 import {PGlite} from '@electric-sql/pglite';
 import {ensureRateLimits} from '../api/_lib/rate-limit.js';
 import {useTestDatabase} from './neon-test-adapter.mjs';
@@ -28,6 +36,16 @@ test('the real Blob token encodes the selected upload constraints without sessio
   const payload=JSON.parse(Buffer.from(envelope.slice(envelope.indexOf('.')+1),'base64').toString());
   assert.equal(payload.maximumSizeInBytes,20*1024*1024);assert.deepEqual(payload.allowedContentTypes,['application/pdf']);assert.equal(payload.pathname,'creator-contracts/fixture.pdf');assert.deepEqual(JSON.parse(payload.onUploadCompleted.tokenPayload),{v:1,ownerId:'local-dev',scope:'creators'});
   assert.equal(res.body.uploadLimits.maximumSizeInBytes,payload.maximumSizeInBytes);assert.ok(!JSON.stringify(payload).includes('private-session-fixture'));
+  const background=response();
+  await uploadToken({...req,body:{...req.body,payload:{...req.body.payload,pathname:'image-library/background-1789146518000.jpg',multipart:false}}},background);
+  assert.equal(background.statusCode,200);assert.equal(background.body.access,'public');
+  const imageEnvelope=Buffer.from(background.body.clientToken.split('_').slice(4).join('_'),'base64').toString();
+  const imagePayload=JSON.parse(Buffer.from(imageEnvelope.slice(imageEnvelope.indexOf('.')+1),'base64').toString());
+  assert.equal(imagePayload.pathname,'image-library/background-1789146518000.jpg');
+  assert.equal(imagePayload.maximumSizeInBytes,20*1024*1024);
+  assert.deepEqual(imagePayload.allowedContentTypes,['image/jpeg','image/png','image/webp']);
+  assert.deepEqual(JSON.parse(imagePayload.onUploadCompleted.tokenPayload),{v:1,ownerId:'local-dev',scope:'assets'});
+  assert.ok(!JSON.stringify(imagePayload).includes('private-session-fixture'));
   const invalid=response();await uploadToken({...req,body:{...req.body,payload:{...req.body.payload,pathname:'other/file'}}},invalid);assert.equal(invalid.statusCode,400);assert.equal(invalid.body.clientToken,undefined);
  }finally{restore();for(const key of Object.keys(process.env))if(!(key in previous))delete process.env[key];Object.assign(process.env,previous);await db.close();}
 });

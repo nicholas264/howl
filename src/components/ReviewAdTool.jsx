@@ -1,6 +1,9 @@
 import { apiFetch as fetch } from '../lib/apiFetch.js';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import Papa from 'papaparse';
+import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
+import { reviewAdVariants, addReviewAdPairs } from '../lib/review-ad-batch.js';
 import { toPng } from 'html-to-image';
 import { useAuth } from '@clerk/clerk-react';
 import { FORMATS } from '../brand';
@@ -69,13 +72,6 @@ function loadBgImages() {
   } catch { return []; }
 }
 
-function hashString(value) {
-  let hash = 0;
-  const str = String(value || '');
-  for (let i = 0; i < str.length; i++) hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
-  return Math.abs(hash);
-}
-
 export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   const { getToken } = useAuth();
   const [reviews, setReviews] = useState(loadSaved);
@@ -87,7 +83,8 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   const [previewId, setPreviewId] = useState(() => loadSaved()[0]?.id || null);
   const [ratingFilter, setRatingFilter] = useState(5);
   const [productFilter, setProductFilter] = useState('all');
-  const [formatKeys, setFormatKeys] = useState(['square']);
+  const [formatKeys, setFormatKeys] = useState(['square', 'story']);
+  const [previewBackground, setPreviewBackground] = useState(null);
   const [previewMode, setPreviewMode] = useState('single');
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState('');
@@ -139,12 +136,34 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
     }
   };
 
-  const backgroundForReview = useCallback((review, formatKey = '') => {
-    if (!bgImages.length) return null;
-    if (bgMode !== 'rotate') return bgImages[0];
-    const idx = hashString(`${review?.id || 'manual'}:${formatKey}`) % bgImages.length;
-    return bgImages[idx];
-  }, [bgImages, bgMode]);
+  const backgroundForReview = () => bgMode === 'rotate' && bgImages.includes(previewBackground) ? previewBackground : bgImages[0] || null;
+
+  // Mount only the current pair, even when a batch contains thousands of variants.
+  const renderVariant = async (variant, formats = ['square', 'story']) => {
+    const host = document.createElement('div');
+    Object.assign(host.style, { position: 'fixed', left: '-99999px', top: '0' });
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    try {
+      await document.fonts.ready;
+      flushSync(() => root.render(<>{formats.map(fk => (
+        <div key={fk} data-format={fk} style={{ width: FORMATS[fk].width, height: FORMATS[fk].height }}>
+          <UGCTemplate variation={{ headline: variant.review.quote }} format={fk} dimensions={FORMATS[fk]}
+            reviewerName={variant.review.nickname} attribution={verifiedLabel(variant.review.handle)}
+            backgroundImage={variant.backgroundImage} scrimColor={scrimColor} textColor={textColor} />
+        </div>
+      ))}</>));
+      const renders = {};
+      for (const fk of formats) {
+        const el = host.querySelector(`[data-format="${fk}"]`);
+        await waitForImages(el);
+        const options = { width: FORMATS[fk].width, height: FORMATS[fk].height, pixelRatio: 1 };
+        await toPng(el, options);
+        renders[fk] = await toPng(el, options);
+      }
+      return renders;
+    } finally { root.unmount(); host.remove(); }
+  };
 
   const updateReview = (id, patch) => {
     setReviews(prev => {
@@ -174,7 +193,6 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   const [manualReviewer, setManualReviewer] = useState('');
   const [manualFormat, setManualFormat] = useState('square');
 
-  const captureRefs = useRef({});
   const singleCaptureRef = useRef(null);
 
   // Load shared image library on mount.
@@ -292,103 +310,54 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
     finally { setExporting(false); }
   }, [manualQuote, manualFormat]);
 
-  const handleBulkExport = useCallback(async ({ toDrive = false } = {}) => {
-    const toExport = filtered.filter(r => selected.has(r.id));
-    if (toExport.length === 0) return;
+  const handleBulkExport = async ({ toDrive = false } = {}) => {
+    if (!variants.length) return;
     setExporting(true);
     try {
-      await document.fonts.ready;
       let count = 0;
-      const total = toExport.length * formatKeys.length;
-      for (const review of toExport) {
+      const batchId = Date.now();
+      for (const [index, variant] of variants.entries()) {
+        const renders = await renderVariant(variant, formatKeys);
         for (const fk of formatKeys) {
-          count++;
-          setExportProgress(`${count}/${total}`);
-          const el = captureRefs.current[`${review.id}_${fk}`];
-          if (!el) continue;
-          const fmt = FORMATS[fk];
-          await waitForImages(el);
-          await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
-          const dataUrl = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
-          const fileName = `howl_${review.handle || 'review'}_${fmt.label.replace(':', 'x')}_${count}.png`;
+          setExportProgress(`${++count}/${variants.length * formatKeys.length}`);
+          const fileName = `howl_review_${batchId}_${index + 1}_${FORMATS[fk].label.replace(':', 'x')}.png`;
           if (toDrive && driveAuth?.connected) {
-            await driveAuth.uploadFile({ fileName, fileData: dataUrl, mimeType: 'image/png' });
+            await driveAuth.uploadFile({ fileName, fileData: renders[fk], mimeType: 'image/png' });
           } else {
             const a = document.createElement('a');
-            a.download = fileName;
-            a.href = dataUrl; a.click();
+            a.download = fileName; a.href = renders[fk]; a.click();
           }
-          await new Promise(res => setTimeout(res, 250));
+          await new Promise(resolve => setTimeout(resolve, 250));
         }
       }
-    } catch (err) { console.error(err); alert('Export failed. Try a smaller batch.'); }
+    } catch (err) { console.error(err); alert(`Export failed: ${err.message}`); }
     finally { setExporting(false); setExportProgress(''); }
-  }, [reviews, selected, formatKeys, driveAuth]);
+  };
 
-  const handleAddSingleToCart = useCallback(async () => {
-    if (!manualQuote.trim() || !singleCaptureRef.current) return;
+  const handleAddSingleToCart = async () => {
+    if (!manualQuote.trim() || exporting) return;
     setExporting(true);
     try {
-      await document.fonts.ready;
-      const fmt = FORMATS[manualFormat];
-      const el = singleCaptureRef.current;
-      await waitForImages(el);
-      await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
-      const dataUrl = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
-      const monthDay = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      onAddToCart?.({
-        id: Date.now(),
-        type: 'static',
-        squareUrl: manualFormat === 'square' ? dataUrl : null,
-        storyUrl:  manualFormat === 'story'  ? dataUrl : null,
-        name: `HOWL | Review | ${manualQuote.slice(0, 30).trim()} | ${monthDay}`,
-        hook: manualQuote.slice(0, 80).trim(),
-        body: '',
-      });
-    } catch (err) { console.error(err); alert('Failed to add to cart.'); }
+      await addReviewAdPairs(reviewAdVariants([{ id: 'manual', quote: manualQuote, nickname: manualReviewer }], bgImages, bgMode), renderVariant, onAddToCart);
+    } catch (err) { console.error(err); alert(`Failed to add paired ad: ${err.message}`); }
     finally { setExporting(false); }
-  }, [manualQuote, manualFormat, onAddToCart]);
+  };
 
-  const handleBulkAddToCart = useCallback(async () => {
-    const toExport = filtered.filter(r => selected.has(r.id));
-    if (toExport.length === 0) return;
+  const handleBulkAddToCart = async () => {
+    if (!variants.length || exporting) return;
     setExporting(true);
+    let saved = 0;
     try {
-      await document.fonts.ready;
-      let count = 0;
-      setExportProgress(`0/${toExport.length}`);
-      for (const review of toExport) {
-        count++;
-        setExportProgress(`${count}/${toExport.length}`);
-        const renders = {};
-        for (const fk of ['square', 'story']) {
-          const el = captureRefs.current[`${review.id}_${fk}`];
-          if (!el) continue;
-          const fmt = FORMATS[fk];
-          await waitForImages(el);
-          await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
-          renders[fk] = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
-        }
-        if (renders.square || renders.story) {
-          const monthDay = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          const reviewerName = review.nickname || review.handle || 'Customer';
-          onAddToCart?.({
-            id: Date.now() + count,
-            type: 'static',
-            squareUrl: renders.square || null,
-            storyUrl:  renders.story  || null,
-            name: `HOWL | Review | ${reviewerName} | ${monthDay}`,
-            hook: (review.quote || '').slice(0, 80).trim(),
-            body: '',
-          });
-        }
-        await new Promise(res => setTimeout(res, 300));
-      }
-    } catch (err) { console.error(err); alert('Failed. Try a smaller batch.'); }
-    finally { setExporting(false); setExportProgress(''); }
-  }, [reviews, selected, onAddToCart]);
+      await addReviewAdPairs(variants, renderVariant, onAddToCart, (count, total) => {
+        saved = count; setExportProgress(`${count}/${total} pairs saved`);
+      });
+    } catch (err) {
+      console.error(err);
+      alert(`Stopped after ${saved} of ${variants.length} pairs saved. Completed pairs are in the launcher. ${err.message}`);
+    } finally { setExporting(false); setExportProgress(''); }
+  };
 
-  const handleAddCarouselToCart = useCallback(async () => {
+  const handleAddCarouselToCart = async () => {
     const toExport = reviews.filter(r =>
       (ratingFilter === 0 || r.rating === ratingFilter) &&
       (productFilter === 'all' || r.handle === productFilter)
@@ -404,12 +373,8 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
       for (const review of toExport) {
         count++;
         setExportProgress(`${count}/${toExport.length}`);
-        const el = captureRefs.current[`${review.id}_square`];
-        if (!el) continue;
-        const fmt = FORMATS.square;
-        await waitForImages(el);
-        await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
-        const dataUrl = await toPng(el, { width: fmt.width, height: fmt.height, pixelRatio: 1 });
+        const renders = await renderVariant({ review, backgroundImage: backgroundForReview(review) }, ['square']);
+        const dataUrl = renders.square;
         cards.push({
           imageBase64: dataUrl,
           squareUrl: dataUrl,
@@ -421,7 +386,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
       }
       if (cards.length >= 2) {
         const monthDay = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        onAddToCart?.({
+        await onAddToCart?.({
           id: Date.now(),
           type: 'carousel',
           cards,
@@ -433,7 +398,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
       }
     } catch (err) { console.error(err); alert('Failed to create carousel. Try fewer cards.'); }
     finally { setExporting(false); setExportProgress(''); }
-  }, [reviews, selected, ratingFilter, productFilter, onAddToCart]);
+  };
 
   const products = [...new Set(reviews.map(r => r.handle).filter(Boolean))].sort();
   const filtered = reviews.filter(r =>
@@ -443,8 +408,9 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
   const previewReview = reviews.find(r => r.id === previewId) || filtered[0] || null;
   const selectedReviews = filtered.filter(r => selected.has(r.id));
   const selectedCount = filtered.filter(r => selected.has(r.id)).length;
-  const exportTotal = selectedCount * formatKeys.length;
-  const bulkPreviewReviews = selectedReviews.slice(0, 80);
+  const variants = reviewAdVariants(selectedReviews, bgImages, bgMode);
+  const exportTotal = variants.length * formatKeys.length;
+  const bulkPreviewVariants = variants.slice(0, 40);
 
   const toggleFormat = (key) => setFormatKeys(prev =>
     prev.includes(key) ? (prev.length > 1 ? prev.filter(k => k !== key) : prev) : [...prev, key]
@@ -517,7 +483,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
               style={{ ...S.exportBtn(exporting || !manualQuote.trim()), background: (exporting || !manualQuote.trim()) ? '#dedbd3' : '#6e40c9', marginTop: 6 }}
               title={!manualQuote.trim() ? 'Enter review text before adding to cart.' : ''}
             >
-              {exporting ? 'Rendering...' : 'Add to Cart'}
+              {exporting ? 'Rendering...' : 'Add paired ads to Cart'}
             </button>
           )}
         </div>
@@ -642,6 +608,10 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
           </div>
           <BgImagePicker bgImages={bgImages} bgMode={bgMode} savedImages={savedImages} onModeChange={handleBgModeChange} onSelect={selectBgImage} onUpload={handleBgFiles} onClear={clearBg} fileRef={bgFileRef} scrimColor={scrimColor} onScrimChange={handleScrimChange} uploading={bgUploading} />
           <TextColorPicker textColor={textColor} onChange={handleTextColorChange} />
+          <div style={{ fontSize: 11, color: '#77746f', lineHeight: 1.5 }}>
+            {selectedCount} reviews × {bgMode === 'rotate' ? Math.max(1, bgImages.length) : 1} images = {variants.length} paired ads.
+            Cart always includes matching 4:5 + 9:16. Format buttons control previews and PNG exports.
+          </div>
           <button
             onClick={() => handleBulkExport()}
             disabled={exporting || selectedCount === 0}
@@ -660,7 +630,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
               style={{ ...S.exportBtn(exporting || selectedCount === 0), background: (exporting || selectedCount === 0) ? '#dedbd3' : '#6e40c9', marginTop: 4 }}
               title={selectedCount === 0 ? 'Select at least one review before adding to cart.' : ''}
             >
-              {exporting ? `Rendering ${exportProgress}...` : selectedCount === 0 ? 'Select reviews' : `Add ${exportTotal} to Cart`}
+              {exporting ? `Rendering ${exportProgress}...` : selectedCount === 0 ? 'Select reviews' : `Add ${variants.length} paired ads to Cart`}
             </button>
           )}
           {onAddToCart && (
@@ -702,13 +672,14 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
           selectedCount > 0 ? (
             <>
               <div style={S.bulkGrid}>
-                {bulkPreviewReviews.flatMap(review => formatKeys.map(fk => {
+                {bulkPreviewVariants.flatMap(variant => formatKeys.map(fk => {
+                  const { review } = variant;
                   const fmt = FORMATS[fk];
                   const scale = fk === 'story' ? 0.11 : 0.14;
                   return (
                     <button
-                      key={`${review.id}_${fk}`}
-                      onClick={() => { setPreviewId(review.id); setPreviewMode('single'); }}
+                      key={`${variant.key}_${fk}`}
+                      onClick={() => { setPreviewId(review.id); setPreviewBackground(variant.backgroundImage); setPreviewMode('single'); }}
                       style={S.bulkCard}
                       title="Open this review"
                     >
@@ -719,22 +690,22 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
                           dimensions={fmt}
                           reviewerName={review.nickname}
                           attribution={verifiedLabel(review.handle)}
-                          backgroundImage={backgroundForReview(review, fk)}
+                          backgroundImage={variant.backgroundImage}
                           scrimColor={scrimColor}
                           textColor={textColor}
                         />
                       </PreviewCard>
                       <div style={S.bulkMeta}>
                         <span>{review.nickname || 'Customer'}</span>
-                        <span>{fmt.label}</span>
+                        <span>Image {variant.imageIndex + 1} · {fmt.label}</span>
                       </div>
                     </button>
                   );
                 }))}
               </div>
-              {selectedReviews.length > bulkPreviewReviews.length && (
+              {variants.length > bulkPreviewVariants.length && (
                 <div style={{ fontSize: 10, color: '#77746f', letterSpacing: 1, textTransform: 'uppercase' }}>
-                  Showing first {bulkPreviewReviews.length} of {selectedReviews.length}
+                  Showing first {bulkPreviewVariants.length} of {variants.length} paired ads
                 </div>
               )}
             </>
@@ -819,22 +790,6 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
         )}
       </div>
 
-      {/* Hidden capture divs */}
-      <div style={{ position: 'fixed', left: -99999, top: 0 }}>
-        {filtered.filter(r => selected.has(r.id)).flatMap(r => {
-          // Always include square for carousel support, plus any selected formats
-          const fks = [...new Set(['square', ...formatKeys])];
-          return fks.map(fk => {
-            const fmt = FORMATS[fk];
-            const key = `${r.id}_${fk}`;
-            return (
-              <div key={key} ref={el => { captureRefs.current[key] = el; }} style={{ width: fmt.width, height: fmt.height }}>
-                <UGCTemplate variation={{ headline: r.quote }} format={fk} dimensions={fmt} reviewerName={r.nickname} attribution={verifiedLabel(r.handle)} backgroundImage={backgroundForReview(r, fk)} scrimColor={scrimColor} textColor={textColor} />
-              </div>
-            );
-          });
-        })}
-      </div>
       </div>
     </div>
   );
@@ -886,7 +841,7 @@ function BgImagePicker({ bgImages, bgMode, savedImages, onModeChange, onSelect, 
       </div>
       <div style={{ display: 'flex', gap: 5 }}>
         <button onClick={() => onModeChange('single')} style={S.miniModeBtn(bgMode !== 'rotate')}>Single</button>
-        <button onClick={() => onModeChange('rotate')} style={S.miniModeBtn(bgMode === 'rotate')}>Mix</button>
+        <button onClick={() => onModeChange('rotate')} style={S.miniModeBtn(bgMode === 'rotate')}>Every image</button>
       </div>
       <input ref={fileRef} type="file" multiple accept="image/*" onChange={e => { onUpload(e.target.files); e.target.value = ''; }} style={{ display: 'none' }} />
       {savedImages.length > 0 ? (
