@@ -1,24 +1,27 @@
+import { requestUploadToken } from '../lib/upload-token-retry.js';
 import { apiFetch as fetch } from '../lib/apiFetch.js';
 export async function uploadPublicBlob(pathname, body, {
   contentType,
   clientPayload,
+  refreshClientPayload,
   handleUploadUrl = '/api/blob/upload-token',
   onUploadProgress,
 } = {}) {
   if (!clientPayload) throw new Error('Not signed in - please reload and sign in again.');
 
-  const tokenRes = await fetch(handleUploadUrl, {
+  let attempt = 0;
+  const tokenRes = await requestUploadToken(async () => fetch(handleUploadUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       type: 'blob.generate-client-token',
       payload: {
         pathname,
-        clientPayload,
+        clientPayload: attempt++ && refreshClientPayload ? await refreshClientPayload() : clientPayload,
         multipart: false,
       },
     }),
-  });
+  }));
 
   if (!tokenRes.ok) {
     const text = await tokenRes.text().catch(() => '');
