@@ -68,6 +68,11 @@ async function fetchStoreAnalytics(store, token) {
     const d = await r.json();
     if (d.errors) {
       const errs = Array.isArray(d.errors) ? d.errors : [];
+      if (errs.some(e => /access denied for shopifyqlQuery/i.test(e.message || ''))) {
+        const err = new Error('Shopify reporting access is missing. Add read_reports to the installed app, release the version, and approve the update in Shopify. ShopifyQL also requires protected customer data access.');
+        err.code = 'SHOPIFY_REPORTS_ACCESS_REQUIRED';
+        throw err;
+      }
       if (errs.some(e => /access denied for (customer|email) field/i.test(e.message || ''))) {
         const err = new Error('missing_scope:read_customers');
         err.code = 'MISSING_CUSTOMER_SCOPE';
@@ -773,10 +778,11 @@ export default async function handler(req, res) {
       if (!ok.length) return res.status(500).json({ error: results.map(r => `${r.role}: ${r.error}`).join(' | ') });
       const merged = mergeStoreResults(ok);
       merged._meta.errors = results
-        .filter(r => r.error && !(r.role === 'dealer' && r.code === 'SHOPIFY_DEALER_RECONNECT_REQUIRED'))
+        .filter(r => r.error)
         .map(r => ({ role: r.role, store: r.store, error: r.error, code: r.code || null }));
       merged._meta.dealerReconnectRequired = results.some(r => r.role === 'dealer' && r.code === 'SHOPIFY_DEALER_RECONNECT_REQUIRED');
       merged._meta.dealerConfigured = ok.some(r => r.role === 'dealer');
+      merged._meta.dealerCredentialsConfigured = dealerConfig.configured;
       merged._meta.dealerStorePresent = !!dealerConfig.store;
       merged._meta.dealerStore = dealerConfig.store || null;
       return res.json(merged);

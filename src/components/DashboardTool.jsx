@@ -1868,12 +1868,17 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
       )}
       {shopifyData && shopifyData?._meta?.dealerStorePresent && (!shopifyData?._meta?.dealerConfigured || shopifyData?._meta?.dealerReconnectRequired) && (
         <div style={{ ...S.err, marginBottom: 20, color: '#b42318', borderColor: 'rgba(248,81,73,0.5)', background: 'rgba(248,81,73,0.1)' }}>
-          Dealer Shopify is disconnected or the app is not installed on the dealer store. Dealer revenue will only include previously imported CSV snapshots until it is reconnected.{' '}
+          {shopifyData._meta.dealerCredentialsConfigured === false
+            ? 'Dealer Shopify needs credentials for the app installed on the dealer store. An administrator must configure the dealer connection.'
+            : 'Dealer Shopify did not sync. Check the error above and the installed app’s permissions.'}{' '}
+          Previously imported dealer snapshots remain available until a sync succeeds.{' '}
           <a
-            href={`/api/shopify-install?shop=${encodeURIComponent(shopifyData._meta.dealerStore)}&role=dealer`}
+            href={`https://admin.shopify.com/store/${encodeURIComponent(shopifyData._meta.dealerStore.replace(/\.myshopify\.com$/, ''))}/settings/apps`}
+            target="_blank"
+            rel="noopener noreferrer"
             style={{ color: '#b42318', fontWeight: 700, textDecoration: 'underline' }}
           >
-            Reconnect dealer Shopify
+            Open dealer Shopify apps
           </a>
         </div>
       )}

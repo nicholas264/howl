@@ -19,7 +19,7 @@ function shopifyTokenExchangeError(role, status, text, data) {
   const title = text.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
   const detail = data.error || data.error_description || stripTags(title || text).slice(0, 300) || 'empty response';
   if (role === 'dealer' && /Oauth error\s+(invalid_request|app_not_installed)|app_not_installed/i.test(detail)) {
-    const error = new Error('Dealer Shopify app is not installed or has not approved this app. Reconnect dealer Shopify.');
+    const error = new Error('The configured dealer Shopify app is not installed or approved on this store. Verify the dealer app credentials and installation.');
     error.code = 'SHOPIFY_DEALER_RECONNECT_REQUIRED';
     return error;
   }
@@ -33,10 +33,10 @@ export function shopifyContentConfig(role = 'primary') {
     : process.env.SHOPIFY_STORE || 'howl-campfires.myshopify.com';
   const token = isDealer ? process.env.SHOPIFY_DEALER_ACCESS_TOKEN : process.env.SHOPIFY_ACCESS_TOKEN;
   const clientId = isDealer
-    ? process.env.SHOPIFY_DEALER_CLIENT_ID || process.env.SHOPIFY_CLIENT_ID
+    ? process.env.SHOPIFY_DEALER_CLIENT_ID
     : process.env.SHOPIFY_CLIENT_ID;
   const clientSecret = isDealer
-    ? process.env.SHOPIFY_DEALER_CLIENT_SECRET || process.env.SHOPIFY_CLIENT_SECRET
+    ? process.env.SHOPIFY_DEALER_CLIENT_SECRET
     : process.env.SHOPIFY_CLIENT_SECRET;
   return {
     role,
