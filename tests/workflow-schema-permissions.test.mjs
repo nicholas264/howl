@@ -43,6 +43,6 @@ test('upload replay, draft revisions, transcription and launch preflight run wit
     assert.equal(await saveTranscription(sql,session.id,source,job,{words:[{word:'hello'}],duration:1,audioUrl:null}),true);
     assert.equal(await saveTranscription(sql,session.id,source,job,{words:[],duration:0,audioUrl:null}),false);
     await assertLaunchReady(sql,{});
-    await assert.rejects(assertLaunchReady(sql,{sourceType:'external_creator'}),/Link the approved creator deliverable/);
+    await assert.rejects(assertLaunchReady(sql,{sourceType:'external_creator'}),/Link a creator record/);
   } finally {await db.close();}
 });

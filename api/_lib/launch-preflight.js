@@ -72,7 +72,21 @@ export async function assertLaunchReady(sql, input, {driveDigest=driveContentDig
   deliverableId ||= matchedDeliverables[0] || null;
   const external = creatorId || input.sourceType === 'external_creator' || input.source_type === 'external_creator';
   if (!external && !deliverableId) return;
-  if (!deliverableId) throw Object.assign(new Error('Link the approved creator deliverable before launching this asset.'), { statusCode: 409 });
+  if (!deliverableId) {
+    if(!creatorId)throw Object.assign(new Error('Link a creator record before reviewing this creative.'),{statusCode:409});
+    if(input.externalApprovalConfirmed !== true)
+      throw Object.assign(new Error('Creator linked, but approval is missing. Select an approved deliverable or confirm that this creative was approved for paid ads outside this tool.'), {statusCode:409});
+    if(input.briefId || input.brief_id)throw Object.assign(new Error('Link the approved deliverable for this managed brief. Outside approval does not replace a managed deliverable.'),{statusCode:409});
+    const [creator]=await sql`SELECT id FROM creators WHERE id=${creatorId}`;
+    if(!creator)throw Object.assign(new Error('Select an existing creator before confirming outside approval.'),{statusCode:409});
+    // This is an operator attestation, not a fabricated deliverable or agreement.
+    // Managed deliverables always follow the existing approval/rights checks below.
+    const driveDigests={};
+    for(const id of media.driveIds)driveDigests[id]=await driveDigest(id);
+    input.creatorId=creatorId;input.sourceType='external_creator';
+    return {driveDigests,externalApproval:{version:1,creator_id:creatorId,
+      basis:'operator_confirmation',statement:'I confirm this creative is approved and we have permission to use it in paid ads outside this tool.'}};
+  }
   const [deliverable] = await sql`
     SELECT d.*, approval.snapshot AS approval_snapshot,
       (approval.snapshot->>'context_version'='1'
@@ -132,6 +146,12 @@ export async function assertLaunchReady(sql, input, {driveDigest=driveContentDig
 }
 
 export function assertApprovalMediaMatches(evidence,media) {
+  if(evidence?.externalApproval){
+    for(const [id,md5] of Object.entries(evidence.driveDigests || {})){
+      if(!md5 || !media.some(asset=>asset.drive_file_id===id && asset.drive_md5===md5))
+        throw Object.assign(new Error('Media changed during outside-approval review. Review the current files again.'),{statusCode:409});
+    }
+  }
   const approvals=evidence?.approval?[evidence.approval]:Object.values(evidence?.pairedApprovals || evidence?.pairedMediaApprovals || {});
   for(const approval of approvals){
     const snapshot=approval.snapshot,url=snapshot.output_url || snapshot.source_url;

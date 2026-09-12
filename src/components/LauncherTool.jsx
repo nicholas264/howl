@@ -415,6 +415,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   const [creators, setCreators] = useState([]);
   const [creatorsError, setCreatorsError] = useState('');
   const [deliverablesByCreator, setDeliverablesByCreator] = useState({});
+  const [deliverableErrors, setDeliverableErrors] = useState({});
   useEffect(() => {
     fetch('/api/creators')
       .then(response => response.ok ? response.json() : Promise.reject(new Error(`Creators failed (${response.status})`)))
@@ -424,17 +425,18 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       })
       .catch(err => setCreatorsError(err.message || 'Creators could not load'));
   }, []);
-  const loadCreatorDeliverables = useCallback(async (creatorId) => {
-    if (!creatorId || deliverablesByCreator[creatorId]) return;
+  const loadCreatorDeliverables = useCallback(async (creatorId, force=false) => {
+    if (!creatorId || (!force && deliverablesByCreator[creatorId])) return;
     try {
       const response = await fetch(`/api/creator-workflow?creator_id=${creatorId}`);
-      if (!response.ok) return;
       const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not load deliverables.');
+      setDeliverableErrors(prev=>({...prev,[creatorId]:''}));
       setDeliverablesByCreator(prev => ({
         ...prev,
-        [creatorId]: (data.deliverables || []).filter(item => !['launched', 'cancelled'].includes(item.status)),
+        [creatorId]: (data.deliverables || []).filter(item => item.status !== 'cancelled'),
       }));
-    } catch { /* optional helper only */ }
+    } catch(error) { setDeliverableErrors(prev=>({...prev,[creatorId]:error.message})); }
   }, [deliverablesByCreator]);
   // ── shared settings ────────────────────────────────────────────────────
   const [config, setConfig] = useState(() => ({ ...DEFAULT_LAUNCHER_CONFIG, ...ls(LS_CONFIG, {}) }));
@@ -602,7 +604,9 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
   // Single state map keyed by unified item id (drive ids are file ids; cart ids prefixed).
   const [meta, setMeta] = useState(() => ls(LS_META, {}));
   useEffect(() => { lsSet(LS_META, meta); }, [meta]);
-  const updateMeta = (id, patch) => setMeta(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  const updateMeta = (id, patch) => setMeta(prev => ({ ...prev, [id]: { ...prev[id], ...patch,
+    ...(('creatorId' in patch && Number(patch.creatorId)!==Number(prev[id]?.creatorId)) || ('deliverableId' in patch && patch.deliverableId) ? {externalApprovalConfirmed:false} : {}),
+  } }));
   const updateProduct = (id, productId) => {
     const productCopy = defaultProductCopy(productId);
     setMeta(prev => {
@@ -893,6 +897,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
     const body = {
       action: 'launch_meta_ad',
       reviewed_plan: options.reviewedPlan,
+      externalApprovalConfirmed: m.externalApprovalConfirmed === true,
       briefId: m.briefId || item.briefId || null,
       deliverableId: m.deliverableId || item.deliverableId || null,
       adsetId,
@@ -994,6 +999,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         const pr = await fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
           action: 'create_paired_image_ad',
           reviewed_plan: options.reviewedPlan,
+          externalApprovalConfirmed: m.externalApprovalConfirmed === true,
           feedImageHash: feedUp.hash,
           storyImageHash: storyUp.hash,
           adName,
@@ -1026,6 +1032,10 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       setStep(id, 'meta_upload', 'running');
       const creativeBody = {
         action: 'create_creative',
+        creatorId: attribution.requiresCreator ? m.creatorId : null,
+        sourceType: attribution.value,
+        deliverableId: m.deliverableId || item.deliverableId || null,
+        externalApprovalConfirmed: m.externalApprovalConfirmed === true,
         adName,
         headline: m.headline,
         primaryText: m.primaryText || m.headline,
@@ -1070,6 +1080,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         body: JSON.stringify({
           action: 'create_ad_from_creative',
           reviewed_plan: options.reviewedPlan,
+          externalApprovalConfirmed: m.externalApprovalConfirmed === true,
           creativeId: cd.creativeId,
           adName,
           adsetId,
@@ -1414,7 +1425,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         const attribution=sourceConfig(m.sourceType || (drive?'external_creator':m.creatorId?'external_creator':'tool_generated'));
         const paired=drive?item.kind==='pair':item.type!=='video'&&!!item.storyUrl;
         const names=buildNamesForItem(item,index+1);
-        const input={action:drive?'launch_meta_ad':paired?'create_paired_image_ad':'create_ad_from_creative',sourceType:attribution.value,
+        const input={action:drive?'launch_meta_ad':paired?'create_paired_image_ad':'create_ad_from_creative',sourceType:attribution.value,externalApprovalConfirmed:m.externalApprovalConfirmed===true,
           creatorId:attribution.requiresCreator?m.creatorId:null,deliverableId:m.deliverableId || item.deliverableId || null,
           briefId:m.briefId || item.briefId || null,sourceVideoUrl:item.sourceVideoUrl || null};
         let media;
@@ -1885,10 +1896,8 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                             <button
                               type="button"
                               disabled={creatingCreatorFor === id}
-                              onMouseDown={e => {
-                                e.preventDefault();
-                                createCreatorFromLauncher(id);
-                              }}
+                              onMouseDown={e => e.preventDefault()}
+                              onClick={() => createCreatorFromLauncher(id)}
                               style={{
                                 width: '100%',
                                 marginTop: 4,
@@ -1925,23 +1934,31 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                     )}
                     {isCreatorLinked && (
                       <div style={{ marginTop: 8 }}>
-                        <label style={S.label}>Deliverable</label>
-                        <select
-                          style={S.select}
-                          value={m.deliverableId || ''}
-                          onFocus={() => loadCreatorDeliverables(m.creatorId)}
-                          onChange={e => updateMeta(id, { deliverableId: e.target.value ? Number(e.target.value) : null })}
-                        >
-                          <option value="">No deliverable selected</option>
-                          {(deliverablesByCreator[m.creatorId] || []).map(deliverable => (
-                            <option key={deliverable.id} value={deliverable.id}>
-                              {deliverable.title} · {deliverable.expected_asset_count || 1} asset{Number(deliverable.expected_asset_count || 1) === 1 ? '' : 's'}{deliverable.due_at ? ` · due ${String(deliverable.due_at).slice(0, 10)}` : ''}
-                            </option>
-                          ))}
-                        </select>
-                        <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, lineHeight: 1.35 }}>
-                          Links this launch back to the creator investment and expected asset.
-                        </div>
+                        {!m.deliverableId && <label style={{display:'flex',gap:8,fontSize:12,lineHeight:1.4,color:'#292724'}}>
+                          <input type="checkbox" checked={m.externalApprovalConfirmed===true} onChange={e=>updateMeta(id,{externalApprovalConfirmed:e.target.checked})}/>
+                          <span>I confirm this creative is approved for paid ads and we have permission to use it.</span>
+                        </label>}
+                        <div style={{fontSize:11,marginTop:5,color:'#666'}}>Creator attribution is linked. No engagement is required for a direct launch.</div>
+                        <details style={{marginTop:8}}>
+                          <summary style={{cursor:'pointer',fontSize:11}}>Deliverable tracking (optional){m.deliverableId ? ' · linked' : ''}</summary>
+                          <select
+                            aria-label="Optional deliverable"
+                            style={{...S.select,marginTop:6}}
+                            value={m.deliverableId || ''}
+                            onFocus={() => loadCreatorDeliverables(m.creatorId)}
+                            onChange={e => updateMeta(id, { deliverableId: e.target.value ? Number(e.target.value) : null })}
+                          >
+                            <option value="">No linked deliverable — direct launch</option>
+                            {(deliverablesByCreator[m.creatorId] || []).map(deliverable => (
+                              <option key={deliverable.id} value={deliverable.id}>
+                                {deliverable.title} · {deliverable.status}
+                              </option>
+                            ))}
+                          </select>
+                          <div style={{fontSize:10,marginTop:5,color:'#666'}}>Assets already managed as deliverables keep their existing approval requirements.</div>
+                          {deliverableErrors[m.creatorId] && <div role="alert" style={{color:'#b42318',fontSize:11}}>{deliverableErrors[m.creatorId]}</div>}
+                          <button type="button" style={{...S.ghost,marginTop:6}} onClick={()=>loadCreatorDeliverables(m.creatorId,true)}>Refresh deliverables</button>
+                        </details>
                       </div>
                     )}
                   </div>
@@ -2135,6 +2152,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                   <p>Media verified for this review:</p>
                   {plan.media.map(asset=><div key={asset.role}>{asset.role}: {asset.drive_file_id || asset.url || 'Local asset'}<br/><small>{asset.drive_md5 || asset.sha256}</small></div>)}
                   {plan.placement_rules && <details><summary>Placement mapping</summary><pre style={{whiteSpace:'pre-wrap',fontSize:11}}>{JSON.stringify(plan.placement_rules,null,2)}</pre></details>}
+                  {approvals.filter(record=>record?.externalApproval).map(record=><p key={`external-${record.externalApproval.creator_id}`}><strong>Approved outside this tool:</strong> {record.externalApproval.statement} Linked creator #{record.externalApproval.creator_id}. Your confirmation and these media fingerprints will be recorded with the launch.</p>)}
                   {launchApprovalRecords(approvals).map(approval=><p key={approval.id}>Deliverable #{approval.deliverable_id} · Approval #{approval.id} · Agreement #{approval.accepted_agreement?.id}</p>)}
                   <details><summary>Creator approval and agreement evidence</summary><pre style={{whiteSpace:'pre-wrap',fontSize:11}}>{approvals.some(Boolean)?JSON.stringify(approvals,null,2):'No external creator approval is associated with this internally attributed asset.'}</pre></details>
                   {warnings.map(warning=><p key={warning} style={{color:'#9f5b12'}}>{warning}</p>)}
