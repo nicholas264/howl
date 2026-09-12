@@ -2,7 +2,7 @@ const FOLDER = 'application/vnd.google-apps.folder';
 const escapeQuery = value => String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
 // Only prune ancestors proven to be below Inbox, and only after the asset moved.
-async function pruneEmptyParents(drive, parentIds, inboxId, protectedIds) {
+async function pruneEmptyParents(drive, parentIds, inboxId, protectedIds, launchedId) {
   for (const parentId of parentIds) {
     const chain = [];
     const seen = new Set();
@@ -10,13 +10,13 @@ async function pruneEmptyParents(drive, parentIds, inboxId, protectedIds) {
     while (id !== inboxId) {
       if (!id || protectedIds.has(id) || seen.has(id)) break;
       seen.add(id);
-      const folder = await drive(`/files/${encodeURIComponent(id)}?fields=id,mimeType,parents,trashed&supportsAllDrives=true`);
+      const folder = await drive(`/files/${encodeURIComponent(id)}?fields=id,mimeType,parents,trashed,capabilities(canTrash)&supportsAllDrives=true`);
       if (folder.trashed || folder.mimeType !== FOLDER || folder.parents?.length !== 1) break;
-      chain.push(id);
+      chain.push({ id, parentId: folder.parents[0], canTrash: folder.capabilities?.canTrash });
       id = folder.parents[0];
     }
     if (id !== inboxId) continue;
-    for (const folderId of chain) {
+    for (const { id: folderId, parentId: sourceParent, canTrash } of chain) {
       const query = new URLSearchParams({
         q: `'${escapeQuery(folderId)}' in parents and trashed=false`,
         fields: 'files(id),nextPageToken,incompleteSearch', pageSize: '1',
@@ -25,9 +25,23 @@ async function pruneEmptyParents(drive, parentIds, inboxId, protectedIds) {
       const children = await drive(`/files?${query}`);
       // Unknown/incomplete listings must never be treated as empty.
       if (!Array.isArray(children.files) || children.files.length || children.nextPageToken || children.incompleteSearch) break;
-      await drive(`/files/${encodeURIComponent(folderId)}?supportsAllDrives=true`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trashed: true }),
+      if (canTrash !== false) {
+        try {
+          await drive(`/files/${encodeURIComponent(folderId)}?supportsAllDrives=true`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trashed: true }),
+          });
+          continue;
+        } catch (err) {
+          if (err.status !== 403) throw err;
+        }
+      }
+      // A writer can move shared folders even when only the owner can trash them.
+      // Keep the empty shell in Launched so it no longer suggests pending work.
+      const moveQuery = new URLSearchParams({ addParents: launchedId, removeParents: sourceParent,
+        fields: 'id,parents', supportsAllDrives: 'true' });
+      await drive(`/files/${encodeURIComponent(folderId)}?${moveQuery}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{}',
       });
     }
   }
@@ -52,7 +66,7 @@ export async function moveLaunchedDriveFile(drive, { fileId, launchedId, name, r
       });
       const inboxes = await drive(`/files?${inboxQuery}`);
       if (inboxes.files?.length === 1 && !inboxes.nextPageToken && !inboxes.incompleteSearch) {
-        await pruneEmptyParents(drive, removed, inboxes.files[0].id, new Set([rootId, launchedId]));
+        await pruneEmptyParents(drive, removed, inboxes.files[0].id, new Set([rootId, launchedId]), launchedId);
       }
     }
   } catch (err) {

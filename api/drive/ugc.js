@@ -46,7 +46,11 @@ async function driveFetch(token, path, init = {}) {
     headers: { Authorization: `Bearer ${token}`, ...(init.headers || {}) },
   });
   const d = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(d.error?.message || `Drive API ${r.status}`);
+  if (!r.ok) {
+    const err = new Error(d.error?.message || `Drive API ${r.status}`);
+    err.status = r.status;
+    throw err;
+  }
   return d;
 }
 

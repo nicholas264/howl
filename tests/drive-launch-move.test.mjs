@@ -98,3 +98,28 @@ test('cyclic or ambiguous ancestry is left untouched', async () => {
     assert.deepEqual(f.trashed, []);
   }
 });
+
+test('shared folders without trash permission move out of Inbox after the last asset', async () => {
+  const f = fixture();
+  for (const id of ['feed', 'story', 'creative']) f.files[id].capabilities = { canTrash: false };
+  await f.move('a');
+  assert.deepEqual(f.files.feed.parents, ['launched']);
+  assert.deepEqual(f.files.creative.parents, ['inbox'], 'remaining story stays in Inbox');
+  await f.move('b');
+  assert.deepEqual(f.files.story.parents, ['launched']);
+  assert.deepEqual(f.files.creative.parents, ['launched']);
+  assert.deepEqual(f.trashed, []);
+  assert.deepEqual(f.warnings, []);
+});
+
+test('a 403 trash response falls back to moving the empty folder', async () => {
+  const f = fixture();
+  const drive = async (path, init) => {
+    if (init?.body && JSON.parse(init.body).trashed) throw Object.assign(new Error('Insufficient permissions'), { status: 403 });
+    return f.drive(path, init);
+  };
+  await moveLaunchedDriveFile(drive, { fileId: 'a', launchedId: 'launched', rootId: 'root', name: 'launched.png' });
+  assert.deepEqual(f.files.feed.parents, ['launched']);
+  assert.deepEqual(f.files.creative.parents, ['inbox']);
+  assert.deepEqual(f.trashed, []);
+});
