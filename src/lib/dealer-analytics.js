@@ -53,6 +53,7 @@ export function buildDealerReport(data, { start, end } = {}) {
         spend: 0,
         outstanding: 0,
         historySpend: 0,
+        historyOutstanding: 0,
       };
       groups.set(c.id, c);
     }
@@ -62,6 +63,7 @@ export function buildDealerReport(data, { start, end } = {}) {
     c.location = o.location;
     c.orders.push(o);
     c.historySpend += o.netSales;
+    c.historyOutstanding += o.outstanding;
     if (o.day < since) continue;
     c.periodOrders.push(o);
     c.spend += o.netSales;
@@ -105,6 +107,7 @@ export function buildDealerReport(data, { start, end } = {}) {
         ...c,
         spend: round(c.spend),
         historySpend: round(c.historySpend),
+        historyOutstanding: round(c.historyOutstanding),
         outstanding: round(c.outstanding),
         firstOrder: dates[0],
         lastOrder: dates.at(-1),
@@ -157,4 +160,47 @@ export function buildDealerReport(data, { start, end } = {}) {
       overdue: customers.filter((c) => c.status === "overdue").length,
     },
   };
+}
+
+// Quote every cell and neutralize spreadsheet formulas in customer-supplied text.
+export function dealerCustomersCsv(customers, { start, end, currency }) {
+  const cell = (value) => {
+    let text = value == null ? "" : String(value);
+    if (/^[\s]*[=+@-]/.test(text) || /^[\t\r\n]/.test(text)) text = "'" + text;
+    return '"' + text.replaceAll('"', '""') + '"';
+  };
+  const rows = [
+    [
+      "Customer",
+      "Location",
+      "Period start",
+      "Period end",
+      "Currency",
+      "Net ordered in period",
+      "Orders in period",
+      "Average order",
+      "Cadence days",
+      "Last order",
+      "Reorder status",
+      "Outstanding all history",
+      "Net ordered all history",
+    ],
+  ];
+  for (const c of customers)
+    rows.push([
+      c.name,
+      c.location,
+      start,
+      end,
+      currency,
+      c.spend.toFixed(2),
+      c.periodOrders.length,
+      c.aov == null ? "" : c.aov.toFixed(2),
+      c.cadence == null ? "" : c.cadence.toFixed(1),
+      c.lastOrder,
+      c.status,
+      c.historyOutstanding.toFixed(2),
+      c.historySpend.toFixed(2),
+    ]);
+  return "\uFEFF" + rows.map((row) => row.map(cell).join(",")).join("\r\n");
 }

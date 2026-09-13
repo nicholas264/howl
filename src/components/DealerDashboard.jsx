@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "../lib/apiFetch.js";
 import {
   buildDealerReport,
+  dealerCustomersCsv,
   dayInZone,
   periodStart,
 } from "../lib/dealer-analytics.js";
@@ -33,6 +34,8 @@ export default function DealerDashboard({ setActiveTab }) {
   const [sort, setSort] = useState({ key: "spend", direction: -1 }),
     [selected, setSelected] = useState(null),
     [limit, setLimit] = useState(25);
+  const [historyView, setHistoryView] = useState("period"),
+    [exportNotice, setExportNotice] = useState("");
   const alive = useRef(true),
     detail = useRef(null),
     request = useRef(0);
@@ -84,6 +87,7 @@ export default function DealerDashboard({ setActiveTab }) {
             .includes(query)
         )
           return false;
+        if (filter === "balance") return c.historyOutstanding > 0;
         if (filter === "active") return c.periodOrders.length > 0;
         if (filter === "repeat")
           return c.periodOrders.length > 0 && c.orders.length > 1;
@@ -107,7 +111,8 @@ export default function DealerDashboard({ setActiveTab }) {
   }, [report, search, filter, sort]);
   useEffect(() => {
     setLimit(25);
-  }, [search, filter, preset]);
+    setExportNotice("");
+  }, [search, filter, preset, sort]);
   const customer = report?.customers.find((c) => c.id === selected);
   const money = (n) =>
     n == null
@@ -124,10 +129,35 @@ export default function DealerDashboard({ setActiveTab }) {
     }).format(n);
   function openCustomer(id) {
     setSelected(id);
+    setHistoryView(filter === "balance" ? "unpaid" : "period");
     requestAnimationFrame(() => {
       detail.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       detail.current?.focus({ preventScroll: true });
     });
+  }
+  const detailOrders = customer
+    ? historyView === "period"
+      ? customer.periodOrders
+      : historyView === "unpaid"
+        ? customer.orders.filter((o) => o.outstanding > 0)
+        : customer.orders
+    : [];
+  function exportCustomers() {
+    const blob = new Blob(
+      [dealerCustomersCsv(rows, { ...report, currency: data.shop.currency })],
+      { type: "text/csv;charset=utf-8;" },
+    );
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `dealer-customers-${report.start}-${report.end}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setExportNotice(
+      `Exported ${rows.length} customers with the current search, filter and sort.`,
+    );
   }
   function sortBy(key) {
     setSort((old) => ({
@@ -366,10 +396,25 @@ export default function DealerDashboard({ setActiveTab }) {
                     <option value="repeat">Repeat customers</option>
                     <option value="new">First-time customers</option>
                     <option value="watch">Due / overdue</option>
+                    <option value="balance">Outstanding balances</option>
                   </select>
                 </label>
               </div>
             </div>
+            <div className="dealer-export-row">
+              <p className="dealer-note">
+                Spend and order counts follow the selected period. Outstanding
+                balances cover all imported history.
+              </p>
+              <button onClick={exportCustomers} disabled={!rows.length}>
+                Export {rows.length} customers
+              </button>
+            </div>
+            {exportNotice && (
+              <p role="status" className="dealer-note">
+                {exportNotice}
+              </p>
+            )}
             <div className="dealer-table-wrap">
               <table>
                 <thead>
@@ -377,6 +422,7 @@ export default function DealerDashboard({ setActiveTab }) {
                     {heading("name", "Customer")}
                     {heading("spend", "Net ordered")}
                     {heading("count", "Orders")}
+                    {heading("historyOutstanding", "Outstanding")}
                     {heading("aov", "Avg order")}
                     {heading("cadence", "Cadence")}
                     {heading("lastOrder", "Last order")}
@@ -400,6 +446,7 @@ export default function DealerDashboard({ setActiveTab }) {
                       </td>
                       <td>{money(c.spend)}</td>
                       <td>{c.periodOrders.length}</td>
+                      <td>{money(c.historyOutstanding)}</td>
                       <td>{money(c.aov)}</td>
                       <td>{days(c.cadence)}</td>
                       <td>{date(c.lastOrder)}</td>
@@ -474,10 +521,31 @@ export default function DealerDashboard({ setActiveTab }) {
               </div>
               <p className="dealer-note">
                 First order {date(customer.firstOrder)} ·{" "}
-                {customer.orders.length} orders across imported history. Sales
-                below follow the selected period; cadence uses all available
-                history.
+                {customer.orders.length} orders across imported history. Cadence
+                uses all available history. Outstanding balance across history:{" "}
+                {exactMoney(customer.historyOutstanding)}.
               </p>
+              <div className="dealer-history-controls">
+                <label>
+                  Show orders{" "}
+                  <select
+                    value={historyView}
+                    onChange={(e) => setHistoryView(e.target.value)}
+                  >
+                    <option value="period">
+                      Selected period ({customer.periodOrders.length})
+                    </option>
+                    <option value="all">
+                      All history ({customer.orders.length})
+                    </option>
+                    <option value="unpaid">
+                      Outstanding only (
+                      {customer.orders.filter((o) => o.outstanding > 0).length})
+                    </option>
+                  </select>
+                </label>
+                <span>{detailOrders.length} orders shown</span>
+              </div>
               <div className="dealer-table-wrap">
                 <table>
                   <thead>
@@ -490,7 +558,7 @@ export default function DealerDashboard({ setActiveTab }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {[...customer.periodOrders].reverse().map((o) => (
+                    {[...detailOrders].reverse().map((o) => (
                       <tr key={o.id}>
                         <td>
                           <a
@@ -510,10 +578,10 @@ export default function DealerDashboard({ setActiveTab }) {
                   </tbody>
                 </table>
               </div>
-              {!customer.periodOrders.length && (
+              {!detailOrders.length && (
                 <p>
-                  No orders in the selected period. Select All history to view
-                  earlier orders.
+                  No orders in this view. Select All history to view earlier
+                  orders.
                 </p>
               )}
             </section>

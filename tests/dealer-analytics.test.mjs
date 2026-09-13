@@ -311,3 +311,36 @@ test("failed refresh returns an error and in-flight imports coalesce", async () 
   assert.equal(r.statusCode, 502);
   assert.match(r.body.error, /partial/);
 });
+
+test("outstanding customer balances include orders before the selected period", () => {
+  const r = buildDealerReport(
+    data([
+      { ...order("old", "2025-12-01"), outstanding: 250 },
+      { ...order("new", "2026-02-01"), outstanding: 50 },
+    ]),
+  );
+  assert.equal(r.customers[0].outstanding, 50);
+  assert.equal(r.customers[0].historyOutstanding, 300);
+  assert.equal(r.summary.outstanding, 50);
+});
+test("CSV exports all filtered rows, exact money, date context and neutralized formulas", async () => {
+  const { dealerCustomersCsv } = await import("../src/lib/dealer-analytics.js");
+  const r = buildDealerReport(data([order("1", "2026-01-01", 75.25)]));
+  const customer = {
+    ...r.customers[0],
+    name: '=HYPERLINK("unsafe")',
+    location: "Town, State",
+  };
+  const csv = dealerCustomersCsv(
+    Array.from({ length: 30 }, () => customer),
+    { ...r, currency: "USD" },
+  );
+  assert.equal(csv.split("\r\n").length, 31);
+  assert.ok(csv.includes('"\'=HYPERLINK(""unsafe"")"'));
+  assert.ok(csv.includes('"Town, State"'));
+  assert.ok(csv.includes('"2026-01-01","2026-09-12","USD","75.25"'));
+  assert.equal(
+    dealerCustomersCsv([], { ...r, currency: "USD" }).split("\r\n").length,
+    1,
+  );
+});

@@ -547,3 +547,40 @@
   background: #285463;
   color: #fff;
 }
+
+.dealer-export-row,
+.dealer-history-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin: 12px 0 18px;
+  font-size: 12px;
+  color: var(--dealer-muted);
+}
+.dealer-export-row .dealer-note {
+  margin: 0;
+  max-width: 650px;
+}
+.dealer-export-row button {
+  white-space: nowrap;
+}
+.dealer-history-controls label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+@media (max-width: 600px) {
+  .dealer-export-row,
+  .dealer-history-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .dealer-history-controls label {
+    align-items: start;
+    flex-direction: column;
+  }
+  .dealer-history-controls select {
+    width: 100%;
+  }
+}
