@@ -14,6 +14,7 @@ const ImageAdTool = lazy(() => import("./components/ImageAdTool"));
 const CalloutAdTool = lazy(() => import("./components/CalloutAdTool"));
 const FounderAdTool = lazy(() => import("./components/FounderAdTool"));
 const MetaPublishTool = lazy(() => import("./components/MetaPublishTool"));
+const DealerDashboard = lazy(() => import("./components/DealerDashboard"));
 const DashboardTool = lazy(() => import("./components/DashboardTool"));
 const LaunchLogTool = lazy(() => import("./components/LaunchLogTool"));
 const UgcEditorTool = lazy(() => import("./components/UgcEditorTool"));
@@ -249,6 +250,7 @@ export default function HowlAdEngine({ appAccess }) {
       label: 'Performance',
       items: [
         { key: 'dashboard-cfo', label: 'Dashboard', permission: 'analytics.read' },
+        { key: 'dashboard-dealers', label: 'Dealers', permission: 'analytics.read' },
         { key: 'dashboard-forecast', label: 'Forecast', permission: 'analytics.read' },
         { key: 'sku-media-pacing', label: 'SKU Pacing', permission: 'analytics.read' },
         { key: 'log', label: 'Launch Log', permission: 'launch.read' },
@@ -409,6 +411,7 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} onAddToCart={addToCart} />}
         {activeTab === "founder" && <FounderAdTool />}
         {activeTab === "gallery" && <GalleryTab cart={cart} />}
+        {activeTab === "dashboard-dealers" && <DealerDashboard setActiveTab={navigate} />}
         {activeTab === "dashboard-cfo" && <DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="cfo" />}
         {activeTab === "map-monitor" && <MapMonitorWorkspace canManage={can('admin.users')} />}
         {activeTab === "dashboard-creative" && <><DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="creative" onOpenCreator={openPlannedCreator} canManageCreators={can('creators.write')} /></>}

@@ -1,6 +1,7 @@
 {
   "framework": "vite",
   "functions": {
+    "api/dealer-analytics.js": { "maxDuration": 120 },
     "api/drive/ugc.js": {
       "maxDuration": 300
     },

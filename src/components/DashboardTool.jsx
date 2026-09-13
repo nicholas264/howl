@@ -222,6 +222,7 @@ const S = {
 
 const DASH_TABS = [
   { key: 'dashboard-cfo',      view: 'cfo',      label: 'CFO' },
+  { key: 'dashboard-dealers', view: 'dealers', label: 'Dealers' },
   { key: 'dashboard-creative', view: 'creative', label: 'Creative' },
   { key: 'dashboard-forecast', view: 'forecast', label: 'Forecast' },
 ];
