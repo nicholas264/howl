@@ -201,7 +201,7 @@ export default function DealerDashboard({ setActiveTab }) {
       <header className="dealer-header">
         <div>
           <p className="dealer-eyebrow">DEALER INTELLIGENCE · SHOPIFY</p>
-          <h1>Know your next order.</h1>
+          <h1>HOWL Dealer Intelligence</h1>
           <p>Customer value, buying rhythm, and the accounts to keep close.</p>
         </div>
         <div className="dealer-controls">
