@@ -7,6 +7,7 @@ import {
   periodStart,
 } from "../lib/dealer-analytics.js";
 import "./DealerDashboard.css";
+import DealerOutreachQueue from "./DealerOutreachQueue.jsx";
 
 const labels = {
   learning: "Building history",
@@ -207,6 +208,9 @@ export default function DealerDashboard({ setActiveTab }) {
           <p>Customer value, buying rhythm, and the accounts to keep close.</p>
         </div>
         <div className="dealer-controls">
+          <a className="dealer-queue-shortcut" href="#roy-outreach">
+            Roy’s queue ↓
+          </a>
           <label>
             Period
             <select value={preset} onChange={(e) => setPreset(e.target.value)}>
@@ -368,6 +372,12 @@ export default function DealerDashboard({ setActiveTab }) {
               </p>
             </section>
           </div>
+          <DealerOutreachQueue
+            customers={report.customers}
+            shop={data.shop}
+            asOf={data.asOf}
+            onOpen={openCustomer}
+          />
           <section className="dealer-customers">
             <div className="dealer-section-head">
               <div>

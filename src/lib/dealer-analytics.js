@@ -60,6 +60,8 @@ export function buildDealerReport(data, { start, end } = {}) {
     const repeat = c.orders.length > 0;
     c.name = o.customerName;
     c.contactName = o.contactName;
+    c.contactEmail = o.contactEmail || c.contactEmail || "";
+    c.contactPhone = o.contactPhone || c.contactPhone || "";
     c.location = o.location;
     c.orders.push(o);
     c.historySpend += o.netSales;
@@ -202,5 +204,113 @@ export function dealerCustomersCsv(customers, { start, end, currency }) {
       c.historyOutstanding.toFixed(2),
       c.historySpend.toFixed(2),
     ]);
+  return "\uFEFF" + rows.map((row) => row.map(cell).join(",")).join("\r\n");
+}
+
+export function buildDealerOutreachQueue(
+  customers,
+  { cutoff = "smart", search = "", sort = "value" } = {},
+) {
+  const query = search.trim().toLowerCase();
+  return customers
+    .flatMap((c) => {
+      const established = c.gaps >= 2 && c.cadence > 0;
+      const threshold =
+        cutoff === "smart"
+          ? established
+            ? Math.max(30, Math.ceil(c.cadence * 1.5))
+            : 60
+          : Number(cutoff);
+      if (
+        !Number.isFinite(threshold) ||
+        threshold < 1 ||
+        c.sinceLast < threshold ||
+        c.historySpend <= 0
+      )
+        return [];
+      if (
+        query &&
+        ![c.name, c.contactName, c.contactEmail, c.location]
+          .join(" ")
+          .toLowerCase()
+          .includes(query)
+      )
+        return [];
+      const reason =
+        c.orders.length === 1
+          ? "First order, no repeat purchase"
+          : established
+            ? "Past usual reorder window"
+            : "Repeat buyer gone quiet";
+      const action =
+        c.historyOutstanding > 0
+          ? "Confirm the open balance and current inventory, then discuss replenishment."
+          : c.orders.length === 1
+            ? "Ask how the first order sold through and offer help with the next order."
+            : "Check inventory and sell-through; discuss the next replenishment order.";
+      return [{ ...c, threshold, reason, action }];
+    })
+    .sort((a, b) =>
+      sort === "quiet"
+        ? b.sinceLast - a.sinceLast ||
+          b.historySpend - a.historySpend ||
+          a.name.localeCompare(b.name)
+        : b.historySpend - a.historySpend ||
+          b.sinceLast - a.sinceLast ||
+          a.name.localeCompare(b.name),
+    );
+}
+export function dealerOutreachCsv(queue, { asOf, currency }) {
+  const cell = (value) => {
+    let text = String(value ?? "");
+    if (/^\s*[=+@-]/.test(text) || /^[\t\r\n]/.test(text)) text = "'" + text;
+    return '"' + text.replaceAll('"', '""') + '"';
+  };
+  const rows = [
+    [
+      "Priority",
+      "Customer",
+      "Contact",
+      "Email",
+      "Phone",
+      "Location",
+      "Last order",
+      "Days since order",
+      "Usual gap days",
+      "Historical net ordered",
+      "Currency",
+      "Outstanding balance",
+      "Reason",
+      "Suggested conversation",
+      "Data as of",
+      "Contacted on",
+      "Outcome",
+      "Next follow-up",
+      "Roy notes",
+    ],
+  ];
+  queue.forEach((c, i) =>
+    rows.push([
+      i + 1,
+      c.name,
+      c.contactName,
+      c.contactEmail,
+      c.contactPhone,
+      c.location,
+      c.lastOrder,
+      c.sinceLast,
+      c.cadence == null ? "" : c.cadence.toFixed(1),
+      c.historySpend.toFixed(2),
+      currency,
+      c.historyOutstanding.toFixed(2),
+      c.reason,
+      c.action,
+      asOf,
+      "",
+      "",
+      "",
+      "",
+    ]),
+  );
   return "\uFEFF" + rows.map((row) => row.map(cell).join(",")).join("\r\n");
 }

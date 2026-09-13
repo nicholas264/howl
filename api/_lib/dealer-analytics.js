@@ -44,6 +44,9 @@ export function normalizeDealerOrders(orders, shop) {
           address?.name ||
           "Unidentified customer",
         contactName: o.customer?.displayName || "",
+        contactEmail:
+          o.customer?.defaultEmailAddress?.emailAddress || o.email || "",
+        contactPhone: o.customer?.defaultPhoneNumber?.phoneNumber || "",
         location: [address?.city, address?.provinceCode, address?.countryCodeV2]
           .filter(Boolean)
           .join(", "),
@@ -124,7 +127,7 @@ export async function fetchDealerOrders({
           id name createdAt cancelledAt test displayFinancialStatus email taxesIncluded
           currentSubtotalPriceSet { shopMoney { amount } }
           totalOutstandingSet { shopMoney { amount } }
-          customer { id displayName defaultAddress { company city provinceCode countryCodeV2 } }
+          customer { id displayName defaultEmailAddress { emailAddress } defaultPhoneNumber { phoneNumber } defaultAddress { company city provinceCode countryCodeV2 } }
           billingAddress { company name city provinceCode countryCodeV2 }
           shippingAddress { company name city provinceCode countryCodeV2 }
         }

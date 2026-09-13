@@ -136,7 +136,8 @@ test("customer IDs take precedence; guest email matching is normalized and anony
   assert.notEqual(rows[2].customerKey, rows[3].customerKey);
   assert.equal(rows[4].customerKey, "customer:42");
   assert.equal(rows[4].customerName, "Dealer Co");
-  assert.ok(!JSON.stringify(rows).includes("a@example.com"));
+  assert.ok(!rows[0].customerKey.includes("a@example.com"));
+  assert.equal(rows[1].contactEmail, "a@example.com");
 });
 const metadata = {
   shop: {
@@ -343,4 +344,87 @@ test("CSV exports all filtered rows, exact money, date context and neutralized f
     dealerCustomersCsv([], { ...r, currency: "USD" }).split("\r\n").length,
     1,
   );
+});
+
+test("outreach includes quiet one-time buyers and uses established cadence with a minimum gap", async () => {
+  const { buildDealerOutreachQueue } = await import(
+    "../src/lib/dealer-analytics.js"
+  );
+  const base = {
+    name: "Dealer",
+    contactName: "",
+    location: "",
+    historySpend: 100,
+    historyOutstanding: 0,
+    orders: [{}],
+    gaps: 0,
+    cadence: null,
+    sinceLast: 60,
+  };
+  const q = buildDealerOutreachQueue([
+    { ...base, id: "one" },
+    { ...base, id: "recent", sinceLast: 59 },
+    { ...base, id: "fast", gaps: 2, cadence: 5, sinceLast: 29 },
+    { ...base, id: "slow", gaps: 2, cadence: 60, sinceLast: 89 },
+    { ...base, id: "due", gaps: 2, cadence: 60, sinceLast: 90 },
+    { ...base, id: "zero", historySpend: 0 },
+  ]);
+  assert.deepEqual(
+    q.map((c) => c.id),
+    ["due", "one"],
+  );
+  assert.equal(q[1].reason, "First order, no repeat purchase");
+  assert.equal(q[0].threshold, 90);
+});
+test("outreach sorting, fixed cutoffs, searching and balance guidance are deterministic", async () => {
+  const { buildDealerOutreachQueue } = await import(
+    "../src/lib/dealer-analytics.js"
+  );
+  const base = {
+    contactName: "",
+    contactEmail: "",
+    location: "",
+    orders: [{}, {}],
+    gaps: 1,
+    cadence: 45,
+    historyOutstanding: 0,
+  };
+  const rows = [
+    { ...base, id: "a", name: "Valuable", sinceLast: 90, historySpend: 1000 },
+    {
+      ...base,
+      id: "b",
+      name: "Quiet",
+      sinceLast: 180,
+      historySpend: 100,
+      historyOutstanding: 50,
+    },
+  ];
+  assert.equal(buildDealerOutreachQueue(rows)[0].id, "a");
+  assert.equal(buildDealerOutreachQueue(rows, { sort: "quiet" })[0].id, "b");
+  assert.equal(buildDealerOutreachQueue(rows, { cutoff: "180" }).length, 1);
+  assert.match(
+    buildDealerOutreachQueue(rows, { search: "quiet" })[0].action,
+    /open balance/,
+  );
+});
+test("outreach export includes contacts and blank follow-up columns without spreadsheet formulas", async () => {
+  const { dealerOutreachCsv } = await import("../src/lib/dealer-analytics.js");
+  const csv = dealerOutreachCsv(
+    [
+      {
+        name: "=unsafe",
+        contactEmail: "roy@example.com",
+        contactPhone: "+15555550123",
+        historySpend: 100,
+        historyOutstanding: 0,
+        cadence: null,
+      },
+    ],
+    { asOf: "2026-09-13", currency: "USD" },
+  );
+  assert.ok(csv.includes('"\'=unsafe"'));
+  assert.ok(csv.includes("roy@example.com"));
+  assert.ok(csv.includes('"Roy notes"'));
+  assert.ok(csv.endsWith(',"","","",""'));
 });
