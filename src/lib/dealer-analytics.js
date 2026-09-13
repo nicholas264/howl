@@ -36,7 +36,6 @@ export function buildDealerReport(data, { start, end } = {}) {
   const groups = new Map(),
     monthly = new Map();
   let netSales = 0,
-    outstanding = 0,
     periodOrders = 0,
     repeatSales = 0;
   for (const o of history) {
@@ -51,9 +50,7 @@ export function buildDealerReport(data, { start, end } = {}) {
         orders: [],
         periodOrders: [],
         spend: 0,
-        outstanding: 0,
         historySpend: 0,
-        historyOutstanding: 0,
       };
       groups.set(c.id, c);
     }
@@ -65,13 +62,10 @@ export function buildDealerReport(data, { start, end } = {}) {
     c.location = o.location;
     c.orders.push(o);
     c.historySpend += o.netSales;
-    c.historyOutstanding += o.outstanding;
     if (o.day < since) continue;
     c.periodOrders.push(o);
     c.spend += o.netSales;
-    c.outstanding += o.outstanding;
     netSales += o.netSales;
-    outstanding += o.outstanding;
     periodOrders++;
     if (repeat) repeatSales += o.netSales;
     const month = o.day.slice(0, 7);
@@ -109,12 +103,16 @@ export function buildDealerReport(data, { start, end } = {}) {
         ...c,
         spend: round(c.spend),
         historySpend: round(c.historySpend),
-        historyOutstanding: round(c.historyOutstanding),
-        outstanding: round(c.outstanding),
         firstOrder: dates[0],
         lastOrder: dates.at(-1),
         cadence,
         gaps: gaps.length,
+        orderDates: dates,
+        orderGaps: gaps.map((days, i) => ({
+          from: dates[i],
+          to: dates[i + 1],
+          days,
+        })),
         sinceLast,
         status,
         nextOrder,
@@ -142,7 +140,6 @@ export function buildDealerReport(data, { start, end } = {}) {
     months,
     summary: {
       netSales: round(netSales),
-      outstanding: round(outstanding),
       orders: periodOrders,
       activeCustomers: active.length,
       newCustomers: active.filter((c) => c.firstOrder >= since).length,
@@ -184,7 +181,6 @@ export function dealerCustomersCsv(customers, { start, end, currency }) {
       "Cadence days",
       "Last order",
       "Reorder status",
-      "Outstanding all history",
       "Net ordered all history",
     ],
   ];
@@ -201,7 +197,6 @@ export function dealerCustomersCsv(customers, { start, end, currency }) {
       c.cadence == null ? "" : c.cadence.toFixed(1),
       c.lastOrder,
       c.status,
-      c.historyOutstanding.toFixed(2),
       c.historySpend.toFixed(2),
     ]);
   return "\uFEFF" + rows.map((row) => row.map(cell).join(",")).join("\r\n");
@@ -243,11 +238,9 @@ export function buildDealerOutreachQueue(
             ? "Past usual reorder window"
             : "Repeat buyer gone quiet";
       const action =
-        c.historyOutstanding > 0
-          ? "Confirm the open balance and current inventory, then discuss replenishment."
-          : c.orders.length === 1
-            ? "Ask how the first order sold through and offer help with the next order."
-            : "Check inventory and sell-through; discuss the next replenishment order.";
+        c.orders.length === 1
+          ? "Ask how the first order sold through and offer help with the next order."
+          : "Check inventory and sell-through; discuss the next replenishment order.";
       return [{ ...c, threshold, reason, action }];
     })
     .sort((a, b) =>
@@ -279,7 +272,6 @@ export function dealerOutreachCsv(queue, { asOf, currency }) {
       "Usual gap days",
       "Historical net ordered",
       "Currency",
-      "Outstanding balance",
       "Reason",
       "Suggested conversation",
       "Data as of",
@@ -302,7 +294,6 @@ export function dealerOutreachCsv(queue, { asOf, currency }) {
       c.cadence == null ? "" : c.cadence.toFixed(1),
       c.historySpend.toFixed(2),
       currency,
-      c.historyOutstanding.toFixed(2),
       c.reason,
       c.action,
       asOf,

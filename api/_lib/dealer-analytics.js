@@ -52,8 +52,6 @@ export function normalizeDealerOrders(orders, shop) {
           .join(", "),
         netSales: Number(o.currentSubtotalPriceSet.shopMoney.amount),
         taxesIncluded: o.taxesIncluded === true,
-        outstanding: Number(o.totalOutstandingSet.shopMoney.amount),
-        status: o.displayFinancialStatus,
       };
     });
 }
@@ -126,7 +124,6 @@ export async function fetchDealerOrders({
         nodes {
           id name createdAt cancelledAt test displayFinancialStatus email taxesIncluded
           currentSubtotalPriceSet { shopMoney { amount } }
-          totalOutstandingSet { shopMoney { amount } }
           customer { id displayName defaultEmailAddress { emailAddress } defaultPhoneNumber { phoneNumber } defaultAddress { company city provinceCode countryCodeV2 } }
           billingAddress { company name city provinceCode countryCodeV2 }
           shippingAddress { company name city provinceCode countryCodeV2 }

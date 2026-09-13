@@ -88,7 +88,6 @@ export default function DealerDashboard({ setActiveTab }) {
             .includes(query)
         )
           return false;
-        if (filter === "balance") return c.historyOutstanding > 0;
         if (filter === "active") return c.periodOrders.length > 0;
         if (filter === "repeat")
           return c.periodOrders.length > 0 && c.orders.length > 1;
@@ -130,7 +129,7 @@ export default function DealerDashboard({ setActiveTab }) {
     }).format(n);
   function openCustomer(id) {
     setSelected(id);
-    setHistoryView(filter === "balance" ? "unpaid" : "period");
+    setHistoryView("period");
     requestAnimationFrame(() => {
       detail.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       detail.current?.focus({ preventScroll: true });
@@ -139,9 +138,7 @@ export default function DealerDashboard({ setActiveTab }) {
   const detailOrders = customer
     ? historyView === "period"
       ? customer.periodOrders
-      : historyView === "unpaid"
-        ? customer.orders.filter((o) => o.outstanding > 0)
-        : customer.orders
+      : customer.orders
     : [];
   function exportCustomers() {
     const blob = new Blob(
@@ -328,9 +325,6 @@ export default function DealerDashboard({ setActiveTab }) {
                 <span>
                   Top 5 customers <b>{percent(s.topFiveShare)}</b> of net orders
                 </span>
-                <span>
-                  Outstanding balance <b>{money(s.outstanding)}</b>
-                </span>
               </div>
             </section>
             <section className="dealer-watch">
@@ -406,15 +400,14 @@ export default function DealerDashboard({ setActiveTab }) {
                     <option value="repeat">Repeat customers</option>
                     <option value="new">First-time customers</option>
                     <option value="watch">Due / overdue</option>
-                    <option value="balance">Outstanding balances</option>
                   </select>
                 </label>
               </div>
             </div>
             <div className="dealer-export-row">
               <p className="dealer-note">
-                Spend and order counts follow the selected period. Outstanding
-                balances cover all imported history.
+                Spend and order counts follow the selected period. Cadence uses
+                the full imported order history.
               </p>
               <button onClick={exportCustomers} disabled={!rows.length}>
                 Export {rows.length} customers
@@ -432,7 +425,6 @@ export default function DealerDashboard({ setActiveTab }) {
                     {heading("name", "Customer")}
                     {heading("spend", "Net ordered")}
                     {heading("count", "Orders")}
-                    {heading("historyOutstanding", "Outstanding")}
                     {heading("aov", "Avg order")}
                     {heading("cadence", "Cadence")}
                     {heading("lastOrder", "Last order")}
@@ -456,7 +448,6 @@ export default function DealerDashboard({ setActiveTab }) {
                       </td>
                       <td>{money(c.spend)}</td>
                       <td>{c.periodOrders.length}</td>
-                      <td>{money(c.historyOutstanding)}</td>
                       <td>{money(c.aov)}</td>
                       <td>{days(c.cadence)}</td>
                       <td>{date(c.lastOrder)}</td>
@@ -531,10 +522,69 @@ export default function DealerDashboard({ setActiveTab }) {
               </div>
               <p className="dealer-note">
                 First order {date(customer.firstOrder)} ·{" "}
-                {customer.orders.length} orders across imported history. Cadence
-                uses all available history. Outstanding balance across history:{" "}
-                {exactMoney(customer.historyOutstanding)}.
+                {customer.orders.length} orders across imported history. Last
+                order {date(customer.lastOrder)} ({customer.sinceLast} days
+                ago).
               </p>
+              <details className="dealer-cadence-proof" open>
+                <summary>Verify this customer’s ordering cadence</summary>
+                <p>
+                  Source: Shopify order creation dates, converted to{" "}
+                  {data.shop.timeZone}. Last order:{" "}
+                  <b>{date(customer.lastOrder)}</b>. Same-day orders count as
+                  one purchase date.
+                </p>
+                {customer.cadence == null ? (
+                  <p>
+                    Only one distinct order date is available, so there is no
+                    cadence estimate yet.
+                  </p>
+                ) : (
+                  <>
+                    <p>
+                      <b>
+                        {customer.orderGaps.reduce(
+                          (sum, gap) => sum + gap.days,
+                          0,
+                        )}{" "}
+                        days ÷ {customer.gaps} intervals ={" "}
+                        {customer.cadence.toFixed(1)} days average
+                      </b>{" "}
+                      (rounded to {Math.round(customer.cadence)} days
+                      elsewhere). Observed gaps range from{" "}
+                      {Math.min(...customer.orderGaps.map((g) => g.days))} to{" "}
+                      {Math.max(...customer.orderGaps.map((g) => g.days))} days.
+                      This is a historical average, not a promised reorder date.
+                    </p>
+                    <div className="dealer-table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Earlier order date</th>
+                            <th>Next order date</th>
+                            <th>Gap</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {customer.orderGaps.map((gap) => (
+                            <tr key={gap.to}>
+                              <td>{date(gap.from)}</td>
+                              <td>{date(gap.to)}</td>
+                              <td>{gap.days} days</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+                <p>
+                  Open the Shopify orders below to check the source records.
+                  Cancelled, test, voided and expired orders are excluded. The
+                  current gap since the last order is shown separately; it is
+                  not added to the historical average.
+                </p>
+              </details>
               <div className="dealer-history-controls">
                 <label>
                   Show orders{" "}
@@ -548,10 +598,6 @@ export default function DealerDashboard({ setActiveTab }) {
                     <option value="all">
                       All history ({customer.orders.length})
                     </option>
-                    <option value="unpaid">
-                      Outstanding only (
-                      {customer.orders.filter((o) => o.outstanding > 0).length})
-                    </option>
                   </select>
                 </label>
                 <span>{detailOrders.length} orders shown</span>
@@ -563,8 +609,6 @@ export default function DealerDashboard({ setActiveTab }) {
                       <th>Order</th>
                       <th>Date</th>
                       <th>Net ordered</th>
-                      <th>Outstanding</th>
-                      <th>Payment status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -581,8 +625,6 @@ export default function DealerDashboard({ setActiveTab }) {
                         </td>
                         <td>{date(o.day)}</td>
                         <td>{exactMoney(o.netSales)}</td>
-                        <td>{exactMoney(o.outstanding)}</td>
-                        <td>{o.status.toLowerCase().replaceAll("_", " ")}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -602,11 +644,11 @@ export default function DealerDashboard({ setActiveTab }) {
               Net ordered uses each order’s current merchandise subtotal after
               discounts and refunds. Shipping is excluded; tax is excluded
               unless Shopify includes it in the merchandise price. Cancelled,
-              test, voided and expired orders are excluded. Unpaid orders are
-              included; outstanding balances include tax and shipping. Refunds
-              adjust the original order date, so totals can differ from the
-              CFO’s Shopify sales reports, which recognize adjustments on their
-              reporting dates.
+              test, voided and expired orders are excluded. Order dates count
+              purchases regardless of payment status. Refunds adjust the
+              original order date, so totals can differ from the CFO’s Shopify
+              sales reports, which recognize adjustments on their reporting
+              dates.
             </p>
             <p>
               Customers are grouped by Shopify customer ID, or an email

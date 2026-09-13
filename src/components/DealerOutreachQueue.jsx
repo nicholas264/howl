@@ -123,7 +123,7 @@ export default function DealerOutreachQueue({ customers, shop, asOf, onOpen }) {
               <th>Priority / customer</th>
               <th>Contact in Shopify</th>
               <th>Last order / usual gap</th>
-              <th>Past spend / balance</th>
+              <th>Historical spend</th>
               <th>Why now / conversation</th>
             </tr>
           </thead>
@@ -167,7 +167,6 @@ export default function DealerOutreachQueue({ customers, shop, asOf, onOpen }) {
                 <td>
                   <b>{money(c.historySpend)}</b>
                   <small>{c.orders.length} historical orders</small>
-                  <small>{money(c.historyOutstanding)} outstanding</small>
                 </td>
                 <td className="dealer-conversation">
                   <b>{c.reason}</b>

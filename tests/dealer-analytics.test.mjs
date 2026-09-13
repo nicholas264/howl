@@ -22,7 +22,6 @@ const order = (id, day, amount = 100, key = "a") => ({
   day,
   createdAt: `${day}T12:00:00Z`,
   netSales: amount,
-  outstanding: 0,
   customerKey: key,
   customerName: key,
   contactName: key,
@@ -114,7 +113,7 @@ test("normalization excludes cancelled/test/voided and deduplicates, retaining n
   assert.equal(rows.length, 3);
   assert.equal(rows[0].day, "2025-12-31");
   assert.equal(rows[0].netSales, 75.25);
-  assert.equal(rows[1].outstanding, 20);
+  assert.equal(rows[1].outstanding, undefined);
   assert.equal(rows[2].netSales, 0);
 });
 test("customer IDs take precedence; guest email matching is normalized and anonymous orders stay separate", () => {
@@ -313,17 +312,6 @@ test("failed refresh returns an error and in-flight imports coalesce", async () 
   assert.match(r.body.error, /partial/);
 });
 
-test("outstanding customer balances include orders before the selected period", () => {
-  const r = buildDealerReport(
-    data([
-      { ...order("old", "2025-12-01"), outstanding: 250 },
-      { ...order("new", "2026-02-01"), outstanding: 50 },
-    ]),
-  );
-  assert.equal(r.customers[0].outstanding, 50);
-  assert.equal(r.customers[0].historyOutstanding, 300);
-  assert.equal(r.summary.outstanding, 50);
-});
 test("CSV exports all filtered rows, exact money, date context and neutralized formulas", async () => {
   const { dealerCustomersCsv } = await import("../src/lib/dealer-analytics.js");
   const r = buildDealerReport(data([order("1", "2026-01-01", 75.25)]));
@@ -355,7 +343,6 @@ test("outreach includes quiet one-time buyers and uses established cadence with 
     contactName: "",
     location: "",
     historySpend: 100,
-    historyOutstanding: 0,
     orders: [{}],
     gaps: 0,
     cadence: null,
@@ -376,7 +363,7 @@ test("outreach includes quiet one-time buyers and uses established cadence with 
   assert.equal(q[1].reason, "First order, no repeat purchase");
   assert.equal(q[0].threshold, 90);
 });
-test("outreach sorting, fixed cutoffs, searching and balance guidance are deterministic", async () => {
+test("outreach sorting, fixed cutoffs, searching and replenishment guidance are deterministic", async () => {
   const { buildDealerOutreachQueue } = await import(
     "../src/lib/dealer-analytics.js"
   );
@@ -387,7 +374,6 @@ test("outreach sorting, fixed cutoffs, searching and balance guidance are determ
     orders: [{}, {}],
     gaps: 1,
     cadence: 45,
-    historyOutstanding: 0,
   };
   const rows = [
     { ...base, id: "a", name: "Valuable", sinceLast: 90, historySpend: 1000 },
@@ -397,7 +383,6 @@ test("outreach sorting, fixed cutoffs, searching and balance guidance are determ
       name: "Quiet",
       sinceLast: 180,
       historySpend: 100,
-      historyOutstanding: 50,
     },
   ];
   assert.equal(buildDealerOutreachQueue(rows)[0].id, "a");
@@ -405,7 +390,7 @@ test("outreach sorting, fixed cutoffs, searching and balance guidance are determ
   assert.equal(buildDealerOutreachQueue(rows, { cutoff: "180" }).length, 1);
   assert.match(
     buildDealerOutreachQueue(rows, { search: "quiet" })[0].action,
-    /open balance/,
+    /inventory and sell-through/,
   );
 });
 test("outreach export includes contacts and blank follow-up columns without spreadsheet formulas", async () => {
@@ -417,7 +402,6 @@ test("outreach export includes contacts and blank follow-up columns without spre
         contactEmail: "roy@example.com",
         contactPhone: "+15555550123",
         historySpend: 100,
-        historyOutstanding: 0,
         cadence: null,
       },
     ],
@@ -427,4 +411,41 @@ test("outreach export includes contacts and blank follow-up columns without spre
   assert.ok(csv.includes("roy@example.com"));
   assert.ok(csv.includes('"Roy notes"'));
   assert.ok(csv.endsWith(',"","","",""'));
+});
+
+test("cadence exposes the exact dates and completed gaps, independently of period and current inactivity", () => {
+  const r = buildDealerReport(
+    data([
+      order("3", "2026-02-10"),
+      order("1", "2026-01-01"),
+      order("2", "2026-01-11"),
+      order("4", "2026-02-10"),
+    ]),
+    { start: "2026-02-01" },
+  );
+  const c = r.customers[0];
+  assert.deepEqual(c.orderDates, ["2026-01-01", "2026-01-11", "2026-02-10"]);
+  assert.deepEqual(c.orderGaps, [
+    { from: "2026-01-01", to: "2026-01-11", days: 10 },
+    { from: "2026-01-11", to: "2026-02-10", days: 30 },
+  ]);
+  assert.equal(c.cadence, 20);
+  assert.equal(c.lastOrder, "2026-02-10");
+  assert.equal(c.sinceLast, 214);
+  assert.equal(c.historyOutstanding, undefined);
+  assert.equal(r.summary.outstanding, undefined);
+});
+test("dealer exports contain no outstanding-balance columns", async () => {
+  const { dealerCustomersCsv, dealerOutreachCsv } = await import(
+    "../src/lib/dealer-analytics.js"
+  );
+  const r = buildDealerReport(data([order("1", "2026-01-01")]));
+  assert.doesNotMatch(
+    dealerCustomersCsv(r.customers, { ...r, currency: "USD" }),
+    /outstanding|balance/i,
+  );
+  assert.doesNotMatch(
+    dealerOutreachCsv(r.customers, { asOf: "2026-09-12", currency: "USD" }),
+    /outstanding|balance/i,
+  );
 });

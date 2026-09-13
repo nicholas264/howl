@@ -657,3 +657,23 @@
     width: 100%;
   }
 }
+
+.dealer-cadence-proof {
+  margin-top: 20px;
+  padding: 16px;
+  background: #f5f8f6;
+  border: 1px solid var(--dealer-line);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.dealer-cadence-proof summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.dealer-cadence-proof .dealer-table-wrap {
+  max-height: 260px;
+}
+.dealer-cadence-proof p {
+  max-width: 850px;
+}
