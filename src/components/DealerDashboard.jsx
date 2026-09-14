@@ -25,6 +25,11 @@ const date = (value) =>
 const days = (value) => (value == null ? "—" : `${Math.round(value)} days`);
 const percent = (value) =>
   value == null ? "—" : `${Math.round(value * 100)}%`;
+const mixPercent = (share, other = false) => {
+  if (share == null) return "—";
+  const tenths = Math.round(share * 1000);
+  return `${((other ? 1000 - tenths : tenths) / 10).toFixed(1)}%`;
+};
 export default function DealerDashboard({ setActiveTab }) {
   const [data, setData] = useState(null),
     [loading, setLoading] = useState(true),
@@ -32,6 +37,7 @@ export default function DealerDashboard({ setActiveTab }) {
   const [preset, setPreset] = useState("ytd"),
     [search, setSearch] = useState(""),
     [filter, setFilter] = useState("active");
+  const [chartView, setChartView] = useState("share");
   const [sort, setSort] = useState({ key: "spend", direction: -1 }),
     [selected, setSelected] = useState(null),
     [limit, setLimit] = useState(25);
@@ -282,14 +288,23 @@ export default function DealerDashboard({ setActiveTab }) {
               <div className="dealer-section-head">
                 <div>
                   <p className="dealer-eyebrow">THE ORDER BOOK</p>
-                  <h2>Net orders by month</h2>
+                  <h2>Dealer revenue by month</h2>
                 </div>
                 <span>{percent(s.repeatSalesShare)} from repeat orders</span>
               </div>
+              <div className="dealer-mix-controls" aria-label="Revenue chart view">
+                <button aria-pressed={chartView === "share"} onClick={() => setChartView("share")}>% of total</button>
+                <button aria-pressed={chartView === "revenue"} onClick={() => setChartView("revenue")}>Revenue</button>
+              </div>
+              <div className="dealer-mix-legend">
+                <span><i className="dealer-scheels" />Scheels <b>{mixPercent(s.scheelsShare)}</b> · {money(s.scheelsSales)}</span>
+                <span><i className="dealer-other" />Other dealers <b>{mixPercent(s.scheelsShare, true)}</b> · {money(s.otherDealerSales)}</span>
+              </div>
+              <p className="dealer-mix-note">Share of net dealer sales · selected period above, monthly split below</p>
               <div
                 className="dealer-bars"
                 role="list"
-                aria-label="Monthly net order sales"
+                aria-label="Monthly dealer revenue: Scheels versus other dealers"
               >
                 {report.months.map((m) => (
                   <div
@@ -297,15 +312,22 @@ export default function DealerDashboard({ setActiveTab }) {
                     role="listitem"
                     key={m.month}
                     tabIndex={0}
-                    aria-label={`${m.month}: ${exactMoney(m.netSales)}, ${m.orders} orders`}
+                    aria-label={`${m.month}: ${exactMoney(m.netSales)} total, Scheels ${exactMoney(m.scheelsSales)} (${mixPercent(m.scheelsShare)}), other dealers ${exactMoney(m.otherDealerSales)} (${mixPercent(m.scheelsShare, true)}), ${m.orders} orders`}
                   >
                     <div className="dealer-bar-track">
                       <div
                         className="dealer-bar"
                         style={{
-                          height: `${Math.max(m.netSales > 0 ? 2 : 0, (m.netSales / Math.max(1, ...report.months.map((x) => x.netSales))) * 100)}%`,
+                          height: `${chartView === "share" ? (m.netSales > 0 ? 100 : 0) : Math.max(m.netSales > 0 ? 2 : 0, (m.netSales / Math.max(1, ...report.months.map((x) => x.netSales))) * 100)}%`,
                         }}
-                      />
+                      >
+                        <div className="dealer-scheels" style={{ height: `${(m.scheelsShare || 0) * 100}%` }}>
+                          {chartView === "share" && m.scheelsShare >= 0.15 && <span>{mixPercent(m.scheelsShare)}</span>}
+                        </div>
+                        <div className="dealer-other" style={{ height: `${(m.otherDealerShare || 0) * 100}%` }}>
+                          {chartView === "share" && m.otherDealerShare >= 0.15 && <span>{mixPercent(m.scheelsShare, true)}</span>}
+                        </div>
+                      </div>
                     </div>
                     <span>
                       {new Date(`${m.month}-01T12:00:00Z`).toLocaleDateString(
@@ -315,6 +337,10 @@ export default function DealerDashboard({ setActiveTab }) {
                     </span>
                     <div className="dealer-tooltip">
                       {exactMoney(m.netSales)}
+                      <br />
+                      Scheels: {exactMoney(m.scheelsSales)} ({mixPercent(m.scheelsShare)})
+                      <br />
+                      Other dealers: {exactMoney(m.otherDealerSales)} ({mixPercent(m.scheelsShare, true)})
                       <br />
                       {m.orders} orders
                     </div>

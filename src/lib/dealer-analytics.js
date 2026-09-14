@@ -1,4 +1,13 @@
 const DAY = 86400000;
+const isScheels = (name) => /\bscheel['’]?s\b/i.test(name || "");
+function revenueMix(netSales, scheelsSales) {
+  return {
+    scheelsSales: round(scheelsSales),
+    otherDealerSales: round(netSales - scheelsSales),
+    scheelsShare: netSales > 0 ? scheelsSales / netSales : null,
+    otherDealerShare: netSales > 0 ? (netSales - scheelsSales) / netSales : null,
+  };
+}
 const round = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 const daysBetween = (a, b) =>
   Math.round(
@@ -36,6 +45,7 @@ export function buildDealerReport(data, { start, end } = {}) {
   const groups = new Map(),
     monthly = new Map();
   let netSales = 0,
+    scheelsSales = 0,
     periodOrders = 0,
     repeatSales = 0;
   for (const o of history) {
@@ -66,12 +76,15 @@ export function buildDealerReport(data, { start, end } = {}) {
     c.periodOrders.push(o);
     c.spend += o.netSales;
     netSales += o.netSales;
+    const scheels = isScheels(o.customerName);
+    if (scheels) scheelsSales += o.netSales;
     periodOrders++;
     if (repeat) repeatSales += o.netSales;
     const month = o.day.slice(0, 7);
     if (!monthly.has(month))
-      monthly.set(month, { month, netSales: 0, orders: 0 });
+      monthly.set(month, { month, netSales: 0, orders: 0, scheelsSales: 0 });
     monthly.get(month).netSales += o.netSales;
+    if (scheels) monthly.get(month).scheelsSales += o.netSales;
     monthly.get(month).orders++;
   }
   const customers = [...groups.values()]
@@ -130,7 +143,8 @@ export function buildDealerReport(data, { start, end } = {}) {
     months.length < 240
   ) {
     const month = cursor.toISOString().slice(0, 7);
-    months.push(monthly.get(month) || { month, netSales: 0, orders: 0 });
+    const row = monthly.get(month) || { month, netSales: 0, orders: 0, scheelsSales: 0 };
+    months.push({ ...row, ...revenueMix(row.netSales, row.scheelsSales) });
     cursor.setUTCMonth(cursor.getUTCMonth() + 1);
   }
   return {
@@ -140,6 +154,7 @@ export function buildDealerReport(data, { start, end } = {}) {
     months,
     summary: {
       netSales: round(netSales),
+      ...revenueMix(netSales, scheelsSales),
       orders: periodOrders,
       activeCustomers: active.length,
       newCustomers: active.filter((c) => c.firstOrder >= since).length,

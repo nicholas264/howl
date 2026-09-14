@@ -30,6 +30,35 @@ const order = (id, day, amount = 100, key = "a") => ({
   status: "PAID",
 });
 const data = (orders) => ({ shop, asOf: "2026-09-12T20:00:00Z", orders });
+test("revenue mix combines Scheels locations and respects the selected period", () => {
+  const r = buildDealerReport(data([
+    order("old", "2025-12-01", 9000, "Scheels Fargo"),
+    order("1", "2026-01-01", 100, "SCHEELS Fargo"),
+    order("2", "2026-01-02", 200, "Scheel’s Sandy"),
+    order("3", "2026-01-03", 100, "Other shop"),
+    order("4", "2026-02-01", 600, "Other shop"),
+    order("5", "2026-02-02", 0, "Scheel's Meridian"),
+    order("future", "2026-12-01", 9000, "Scheels Fargo"),
+  ]));
+  assert.equal(r.summary.scheelsSales, 300);
+  assert.equal(r.summary.otherDealerSales, 700);
+  assert.equal(r.summary.scheelsShare, 0.3);
+  assert.equal(r.summary.otherDealerShare, 0.7);
+  assert.equal(r.months[0].scheelsShare, 0.75);
+  assert.equal(r.months[1].otherDealerShare, 1);
+  assert.equal(r.months[2].scheelsShare, null);
+  for (const m of r.months) {
+    assert.equal(m.scheelsSales + m.otherDealerSales, m.netSales);
+  }
+});
+test("Scheels-only and empty periods do not invent other revenue or percentages", () => {
+  const r = buildDealerReport(data([order("1", "2026-01-01", 42, "Scheel's Meridian")]));
+  assert.equal(r.summary.scheelsShare, 1);
+  assert.equal(r.summary.otherDealerShare, 0);
+  const empty = buildDealerReport(data([]));
+  assert.equal(empty.summary.scheelsShare, null);
+  assert.equal(empty.summary.otherDealerSales, 0);
+});
 test("store dates and inclusive presets respect timezone and leap boundaries", () => {
   assert.equal(dayInZone("2026-01-01T01:00:00Z", shop.timeZone), "2025-12-31");
   assert.equal(periodStart("90d", "2026-09-12"), "2026-06-15");

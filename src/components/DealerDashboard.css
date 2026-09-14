@@ -226,11 +226,24 @@
   background: #366472;
   border-radius: 3px 3px 0 0;
   min-width: 12px;
+  display: flex;
+  flex-direction: column-reverse;
+  overflow: hidden;
 }
 .dealer-bar-column:hover .dealer-bar,
 .dealer-bar-column:focus .dealer-bar {
-  background: #d77a3a;
+  filter: brightness(1.12);
 }
+.dealer-scheels { background: #8d481d; }
+.dealer-other { background: #366472; }
+.dealer-bar > div { display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: white; font-size: 10px; font-weight: 600; }
+.dealer-mix-controls { display: flex; gap: 6px; margin: 12px 0; }
+.dealer-dashboard .dealer-mix-controls button { padding: 6px 10px; border: 1px solid var(--dealer-line); border-radius: 6px; background: transparent; color: var(--dealer-ink); font-size: 11px; cursor: pointer; }
+.dealer-dashboard .dealer-mix-controls button[aria-pressed="true"] { background: #183b47; color: white; }
+.dealer-mix-legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 12px; }
+.dealer-mix-legend span { display: flex; align-items: center; gap: 5px; }
+.dealer-mix-legend i { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.dealer-mix-note { color: var(--dealer-muted); font-size: 11px; margin: 8px 0 0; }
 .dealer-bar-column > span {
   font-size: 9px;
   color: var(--dealer-muted);
