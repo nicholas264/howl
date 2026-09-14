@@ -358,15 +358,16 @@ export default async function handler(req, res) {
           rollup.last_launch_at,
       COALESCE((
         SELECT json_build_object(
-          'spend', COALESCE(sum(i.spend), 0),
-          'revenue', COALESCE(sum(i.purchase_value), 0),
-          'purchases', COALESCE(sum(i.purchases), 0),
-          'impressions', COALESCE(sum(i.impressions), 0)
+          'spend', COALESCE(sum(i.spend) FILTER (WHERE i.date >= current_date - interval '90 days'), 0),
+          'fullRevenue', COALESCE(sum(i.purchase_value), 0),
+          'historyStart', min(i.date),
+          'revenue', COALESCE(sum(i.purchase_value) FILTER (WHERE i.date >= current_date - interval '90 days'), 0),
+          'purchases', COALESCE(sum(i.purchases) FILTER (WHERE i.date >= current_date - interval '90 days'), 0),
+          'impressions', COALESCE(sum(i.impressions) FILTER (WHERE i.date >= current_date - interval '90 days'), 0)
         )
         FROM creative_performance cp
         JOIN creative_insights_daily i ON i.ad_id = cp.ad_id
-        WHERE i.date >= current_date - interval '90 days'
-          AND (
+        WHERE (
             EXISTS (
               SELECT 1 FROM creative_creator_assignments a
               WHERE a.group_key = cp.group_key AND a.creator_id = c.id

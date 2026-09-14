@@ -8,7 +8,7 @@ test('creator list GMV matches profile revenue without double-counting attributi
   const expressions = [...source.matchAll(/COALESCE\(\(\s*SELECT json_build_object\(\s*'spend'[\s\S]*?AS performance,/g)];
   // List expression ends immediately before FROM creators rather than with a comma.
   const list = source.split('rollup.last_launch_at,')[1].split('FROM creators c')[0].trim();
-  assert.equal(list, expressions[0][0].slice(0, -1));
+  const profile = expressions[0][0].slice(0, -1);
   const db = new PGlite();
   try {
     await db.exec(`
@@ -30,7 +30,13 @@ test('creator list GMV matches profile revenue without double-counting attributi
         ('ad-2', current_date, 5, 9999, 1, 50);
     `);
     const { rows } = await db.query(`SELECT c.id, ${list} FROM creators c ORDER BY c.id`);
+    const profileResult = await db.query(`SELECT c.id, ${profile} FROM creators c ORDER BY c.id`);
+    assert.equal(rows[0].performance.revenue, profileResult.rows[0].performance.revenue);
     assert.equal(rows[0].performance.revenue, 1334.56);
+    assert.equal(rows[0].performance.fullRevenue, 11333.56);
+    assert.ok(rows[0].performance.historyStart);
+    assert.equal(rows[1].performance.fullRevenue, 0);
+    assert.equal(rows[1].performance.historyStart, null);
     assert.equal(rows[0].performance.spend, 15);
     assert.equal(rows[1].performance.revenue, 0);
   } finally { await db.close(); }

@@ -1269,6 +1269,7 @@ export default function CreatorWorkspace({
             <span>Location</span>
             <span>Output</span>
             <span className="creator-gmv-heading" title="Attributed purchase revenue from linked creator ads over the last 90 days">GMV · 90d</span>
+            <span className="creator-gmv-heading" title="Attributed purchase revenue across all synced ad history; unsynced history is not included">Full GMV</span>
           </div>
           {!loading && creators.length === 0 && (
             <div className="creator-empty">
@@ -1328,6 +1329,10 @@ export default function CreatorWorkspace({
                 <span className="creator-gmv" title="Attributed purchase revenue from linked creator ads over the last 90 days">
                   <strong>{creator.performance?.revenue == null ? '—' : Number(creator.performance.revenue).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}</strong>
                   <small>90-day GMV</small>
+                </span>
+                <span className="creator-gmv" title={`Attributed purchase revenue across all synced ad history${creator.performance?.historyStart ? `, starting ${creator.performance.historyStart}` : ''}. Unsynced history is not included.`}>
+                  <strong>{creator.performance?.fullRevenue == null ? '—' : Number(creator.performance.fullRevenue).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}</strong>
+                  <small>All synced history</small>
                 </span>
               </button>
             );
