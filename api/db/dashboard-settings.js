@@ -13,6 +13,7 @@ const DEFAULTS = {
   opexByMonth: {},           // YYYY-MM → dollar opex from P&L; falls back to monthlyOpex
   dealerRevenueByMonth: {},  // YYYY-MM → dealer revenue override; replaces an incomplete dealer snapshot for that month
   dealerOrdersByMonth: {},   // YYYY-MM → dealer order override
+  deferredRevenue2025ByMonth: {}, // YYYY-MM → 2025 deferred revenue recognized in that month
   offPlatformRevenueByMonth: {}, // YYYY-MM → revenue outside either Shopify store
   offPlatformOrdersByMonth: {},  // YYYY-MM → orders outside either Shopify store
   revenueAddByMonth: {},     // Legacy field retained for backwards-compatible settings reads; no longer included in totals
@@ -66,6 +67,10 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
 
       const incoming = req.body?.settings || {};
+      const deferred = incoming.deferredRevenue2025ByMonth;
+      if (deferred != null && (typeof deferred !== 'object' || Array.isArray(deferred) || Object.entries(deferred).some(([month, amount]) =>
+        !/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0
+      ))) return res.status(400).json({ error: 'Deferred revenue requires valid months and non-negative dollar amounts.' });
       const merged = normalizeSettings(incoming);
       await sql`
         INSERT INTO dashboard_settings (key, value, updated_at)

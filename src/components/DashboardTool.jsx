@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import TrendLineChart from './TrendLineChart';
+import DeferredRevenueInput from './DeferredRevenueInput';
 import DealerCsvImport from './DealerCsvImport';
 import CreativePerformanceWorkspace from './CreativePerformanceWorkspace';
 import { apiJson } from '../lib/api';
@@ -598,7 +599,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
     grossMarginPct: 60, dealerWholesaleRetailPct: 70, paymentFeePct: 2.9, paymentFeeFixed: 0.30,
     shippingCostPerOrder: 8, fulfillmentCostPerOrder: 3, monthlyOpex: 50000,
     googleSpend: {}, opexByMonth: {}, dealerRevenueByMonth: {}, dealerOrdersByMonth: {},
-    offPlatformRevenueByMonth: {}, offPlatformOrdersByMonth: {}, cfoStartMonth: '2026-01',
+    deferredRevenue2025ByMonth: {}, offPlatformRevenueByMonth: {}, offPlatformOrdersByMonth: {}, cfoStartMonth: '2026-01',
     annualRevenueTargetBase: 13000000, annualRevenueTargetStretch: 15000000,
     annualRevenueCurveBase: [
       262703.68, 467165.64, 443833.8, 489500,
@@ -1977,6 +1978,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
         const opexByMonth = s.opexByMonth || {};
         const dealerRevenueByMonth = s.dealerRevenueByMonth || {};
         const dealerOrdersByMonth = s.dealerOrdersByMonth || {};
+        const deferredRevenue2025ByMonth = s.deferredRevenue2025ByMonth || {};
         const offPlatformRevenueByMonth = s.offPlatformRevenueByMonth || {};
         const offPlatformOrdersByMonth = s.offPlatformOrdersByMonth || {};
         const newCustomersAddByMonth = s.newCustomersAddByMonth || {};
@@ -1991,6 +1993,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
           ...Object.keys(dealerRevenueByMonth),
           ...Object.keys(dealerOrdersByMonth),
           ...Object.keys(offPlatformRevenueByMonth),
+          ...Object.keys(deferredRevenue2025ByMonth),
           ...Object.keys(offPlatformOrdersByMonth),
           ...Object.keys(googleByMonth),
           ...Object.keys(snapshotKlaviyoByMonth),
@@ -2036,6 +2039,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
             ? Number(dealerRevenueByMonth[mk] || 0)
             : netRevenueFor(dealer);
           const dealerAcquisitionRevenue = acquisitionRevenueFor(dealer, dealerRevenue);
+          const deferredRevenue = Number(deferredRevenue2025ByMonth[mk] || 0);
           const offPlatformRevenue = Number(offPlatformRevenueByMonth[mk] || 0);
           const dtcOrders = Number(dtc.orders || 0);
           const dealerOrders = hasDealerOrdersOverride
@@ -2044,8 +2048,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
           const offPlatformOrders = Number(offPlatformOrdersByMonth[mk] || 0);
           const addNewCust = Number(newCustomersAddByMonth[mk] || 0);
           const addReturningCust = Number(returningCustomersAddByMonth[mk] || 0);
-          const revenue = dtcRevenue + dealerRevenue + offPlatformRevenue;
-          const netRevenue = dtcNetRevenue + dealerRevenue + offPlatformRevenue;
+          const revenue = dtcRevenue + dealerRevenue + offPlatformRevenue + deferredRevenue;
+          const netRevenue = dtcNetRevenue + dealerRevenue + offPlatformRevenue + deferredRevenue;
           const orders = dtcOrders + dealerOrders + offPlatformOrders;
           const shopifyOrders = Number(sh.orders || 0);
           const sessions = Number(sh.sessions || 0);
@@ -2059,7 +2063,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
           const cogs = dtcCogs + dealerCogs + offPlatformCogs;
           const costedRevenue = Number(dtc.costedRevenue || 0) + Number(dealerCogsSource.costedRevenue || 0);
           const cogsActualPct = netRevenue > 0 ? costedRevenue / netRevenue : 0; // 1.0 = 100% real, 0 = all fallback
-          const paymentFees = netRevenue * (paymentFeePct / 100) + orders * paymentFeeFixed;
+          const paymentFees = (netRevenue - deferredRevenue) * (paymentFeePct / 100) + orders * paymentFeeFixed;
           const shipCost = orders * shippingCostPerOrder;
           const fulfill = orders * fulfillmentCostPerOrder;
           const metaSpend = meta.spend || 0;
@@ -2107,7 +2111,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
           const smsClickRate = smsSends > 0 ? smsClicks / smsSends : null;
           const smsUnsubscribeRate = smsSends > 0 ? smsUnsubscribes / smsSends : null;
           const isCurrent = mk === currentMonthKey;
-          const projectedCm3 = isCurrent ? cm3 * paceFactor : cm3;
+          const projectedCm3 = isCurrent ? (cm3 - deferredRevenue) * paceFactor + deferredRevenue : cm3;
           const mtdOpex = isCurrent ? opexThis / paceFactor : opexThis;
           const opexCoverage = mtdOpex > 0 ? cm3 / mtdOpex : null;
           const netProfit = cm3 - mtdOpex;
@@ -2115,7 +2119,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
           const newCustomers = classifiedNewCustomers;
           const returningCustomers = Number(sh.returningCustomers || 0) + addReturningCust;
           return {
-            month: mk, revenue, netRevenue, dtcRevenue, dtcNetRevenue, dealerRevenue, offPlatformRevenue,
+            month: mk, revenue, netRevenue, dtcRevenue, dtcNetRevenue, dealerRevenue, offPlatformRevenue, deferredRevenue,
             dtcGrossRevenue: dtcRevenue,
             orders, shopifyOrders, sessions, cvr, dtcOrders, dealerOrders, offPlatformOrders, newCustomers, returningCustomers,
             customers: dtc.customers || 0,
@@ -2144,15 +2148,15 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
         // Current-month pace projection (last row if it's the current month)
         const currentRow = rows.find(r => r.isCurrent);
         const pace = currentRow ? {
-          revenue: currentRow.revenue * paceFactor,
+          revenue: (currentRow.revenue - currentRow.deferredRevenue) * paceFactor + currentRow.deferredRevenue,
           adSpend: currentRow.adSpend * paceFactor,
           newCustomers: Math.round(currentRow.newCustomers * paceFactor),
           returningCustomers: Math.round(currentRow.returningCustomers * paceFactor),
-          cm3: currentRow.cm3 * paceFactor,
-          netProfit: currentRow.cm3 * paceFactor - currentRow.monthlyOpexBudget,
+          cm3: ((currentRow.cm3 - currentRow.deferredRevenue) * paceFactor + currentRow.deferredRevenue),
+          netProfit: ((currentRow.cm3 - currentRow.deferredRevenue) * paceFactor + currentRow.deferredRevenue) - currentRow.monthlyOpexBudget,
           mtdOpex: currentRow.opex,
           opex: currentRow.monthlyOpexBudget,
-          opexCoverage: currentRow.monthlyOpexBudget > 0 ? (currentRow.cm3 * paceFactor) / currentRow.monthlyOpexBudget : null,
+          opexCoverage: currentRow.monthlyOpexBudget > 0 ? (((currentRow.cm3 - currentRow.deferredRevenue) * paceFactor + currentRow.deferredRevenue)) / currentRow.monthlyOpexBudget : null,
           ncac: currentRow.newCustomers > 0 ? currentRow.adSpend / currentRow.newCustomers : null,
         } : null;
 
@@ -2164,6 +2168,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
           dtcGrossRevenue: a.dtcGrossRevenue + r.dtcGrossRevenue,
           dealerRevenue: a.dealerRevenue + r.dealerRevenue,
           offPlatformRevenue: a.offPlatformRevenue + r.offPlatformRevenue,
+          deferredRevenue: a.deferredRevenue + r.deferredRevenue,
           orders: a.orders + r.orders,
           shopifyOrders: a.shopifyOrders + r.shopifyOrders,
           sessions: a.sessions + r.sessions,
@@ -2191,7 +2196,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
           smsSends: a.smsSends + r.smsSends,
           smsClicks: a.smsClicks + r.smsClicks,
           smsUnsubscribes: a.smsUnsubscribes + r.smsUnsubscribes,
-        }), { revenue: 0, netRevenue: 0, dtcRevenue: 0, dtcNetRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, orders: 0, shopifyOrders: 0, sessions: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, netProfit: 0, projectedNetProfit: 0, newRevenue: 0, opex: 0, monthlyOpexBudget: 0, klaviyoRevenue: 0, klaviyoOrders: 0, klaviyoFlowRevenue: 0, klaviyoCampaignRevenue: 0, emailSends: 0, emailOpens: 0, emailClicks: 0, emailUnsubscribes: 0, smsSends: 0, smsClicks: 0, smsUnsubscribes: 0 });
+        }), { revenue: 0, netRevenue: 0, dtcRevenue: 0, dtcNetRevenue: 0, dtcGrossRevenue: 0, dealerRevenue: 0, offPlatformRevenue: 0, deferredRevenue: 0, orders: 0, shopifyOrders: 0, sessions: 0, newCustomers: 0, returningCustomers: 0, metaSpend: 0, googleSpend: 0, adSpend: 0, metaPurchaseValue: 0, googleConvValue: 0, cm3: 0, netProfit: 0, projectedNetProfit: 0, newRevenue: 0, opex: 0, monthlyOpexBudget: 0, klaviyoRevenue: 0, klaviyoOrders: 0, klaviyoFlowRevenue: 0, klaviyoCampaignRevenue: 0, emailSends: 0, emailOpens: 0, emailClicks: 0, emailUnsubscribes: 0, smsSends: 0, smsClicks: 0, smsUnsubscribes: 0 });
         const priorClosedNetProfit = rollupRows
           .filter(r => !r.isCurrent)
           .reduce((sum, r) => sum + r.netProfit, 0);
@@ -2714,6 +2719,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
               </button>
             </div>
 
+            <DeferredRevenueInput settings={settings} onSave={saveSettings} saving={savingSettings} />
+
             {hasLegacyCustomerMonths && (
               <div style={{ ...S.err, marginBottom: 16, color: '#9a6a0a', borderColor: 'rgba(245,166,35,0.4)', background: 'rgba(245,166,35,0.1)' }}>
                 Some {summaryYear} customer snapshots predate unique-customer tracking. Sync Dashboard to refresh the year and replace legacy summed customer counts.
@@ -2821,8 +2828,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                 {/* Calendar-year KPI strip */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 12 }}>
                   {[
-                    { label: `${summaryYear} YTD Gross Sales`, value: fmt$(ltm.revenue), sub: 'DTC total sales + dealer + off-platform' },
-                    { label: `${summaryYear} YTD Net Revenue`, value: fmt$(ltm.netRevenue), sub: 'DTC net sales + dealer + off-platform' },
+                    { label: `${summaryYear} YTD Gross Sales`, value: fmt$(ltm.revenue), sub: 'DTC total sales + dealer + off-platform + deferred' },
+                    { label: `${summaryYear} YTD Net Revenue`, value: fmt$(ltm.netRevenue), sub: 'DTC net sales + dealer + off-platform + deferred' },
                     { label: `${summaryYear} DTC Gross Sales`, value: fmt$(ltm.dtcRevenue), sub: fmtPct(ltm.dtcRevenue / Math.max(ltm.revenue, 1)) + ' of gross' },
                     { label: `${summaryYear} DTC Net Sales`, value: fmt$(ltm.dtcNetRevenue), sub: fmtPct(ltm.dtcNetRevenue / Math.max(ltm.netRevenue, 1)) + ' of net' },
                     { label: `${summaryYear} Dealer Revenue`, value: fmt$(ltm.dealerRevenue), sub: fmtPct(ltm.dealerRevenue / Math.max(ltm.revenue, 1)) + ' of total' },
@@ -2881,7 +2888,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                       const barHeight = Math.max(8, (r.revenue / maxYtdMonthlyRevenue) * 168);
                       const dtcPct = r.revenue > 0 ? (r.dtcGrossRevenue / r.revenue) * 100 : 0;
                       const dealerPct = r.revenue > 0 ? (r.dealerRevenue / r.revenue) * 100 : 0;
-                      const otherPct = r.revenue > 0 ? Math.max(0, 100 - dtcPct - dealerPct) : 0;
+                      const otherPct = r.revenue > 0 ? (r.offPlatformRevenue / r.revenue) * 100 : 0;
                       return (
                         <div key={r.month} style={{ display: 'grid', gridTemplateRows: 'auto 1fr auto auto', gap: 6, minWidth: 0, alignItems: 'end' }}>
                           <div style={{ fontSize: 10, color: r.isCurrent ? '#d84a17' : '#171717', textAlign: 'center', fontWeight: 800, lineHeight: 1 }}>
@@ -2889,12 +2896,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                           </div>
                           <div style={{ height: 168, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
                             <div
-                              title={`${fmtMo(r.month)} revenue: ${fmt$(r.revenue)} | DTC ${fmt$(r.dtcGrossRevenue)} | Dealer ${fmt$(r.dealerRevenue)} | Other ${fmt$(r.offPlatformRevenue)}`}
+                              title={`${fmtMo(r.month)} revenue: ${fmt$(r.revenue)} | DTC ${fmt$(r.dtcGrossRevenue)} | Dealer ${fmt$(r.dealerRevenue)} | Other ${fmt$(r.offPlatformRevenue)} | 2025 deferred ${fmt$(r.deferredRevenue)}`}
                               style={{ width: '100%', maxWidth: 54, height: barHeight, display: 'flex', flexDirection: 'column-reverse', background: '#f4f1ea', border: '1px solid #dedbd3', borderRadius: 5, overflow: 'hidden' }}
                             >
                               {r.dtcGrossRevenue > 0 && <div style={{ height: `${dtcPct}%`, background: '#d84a17' }} />}
                               {r.dealerRevenue > 0 && <div style={{ height: `${dealerPct}%`, background: '#9a6a0a' }} />}
                               {r.offPlatformRevenue > 0 && <div style={{ height: `${otherPct}%`, background: '#315f91' }} />}
+                              {r.deferredRevenue > 0 && <div style={{ height: `${r.deferredRevenue / r.revenue * 100}%`, background: '#7861a8' }} />}
                             </div>
                           </div>
                           <div style={{ fontSize: 9, color: r.isCurrent ? '#d84a17' : '#77746f', textAlign: 'center', fontWeight: r.isCurrent ? 800 : 700, letterSpacing: 1 }}>
@@ -2911,6 +2919,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#d84a17' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>DTC Gross</span></div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#9a6a0a' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Dealer</span></div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#315f91' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Other</span></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#7861a8' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>2025 Deferred</span></div>
                   </div>
                 </div>
 
@@ -2919,7 +2928,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                   <div style={{ ...S.card, marginBottom: 20, borderColor: '#d84a17' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
                       <span style={S.label}>{fmtMo(currentMonthKey)} Pace — Day {dayOfMonth} of {daysInCurrentMonth}</span>
-                      <span style={{ fontSize: 9, color: '#88857f', letterSpacing: 1 }}>(MTD × {paceFactor.toFixed(2)})</span>
+                      <span style={{ fontSize: 9, color: '#88857f', letterSpacing: 1 }}>(Sales pace × {paceFactor.toFixed(2)}; deferred amount added once)</span>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
                       {[
@@ -3196,7 +3205,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                     <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 8, minWidth: 1160 }}>
                       <thead>
                         <tr>
-                          {['Month', 'DTC', 'Dealer', 'Other', 'Total', 'Orders', 'New', 'Ret', 'Meta', 'Google', 'NCAC', '1st Pay', 'COGS', 'Fees', 'Ship', 'Pick', 'CM3', 'CM%', 'OpEx', 'OpEx Cov', 'Net Profit', 'ROAS'].map(h => (
+                          {['Month', 'DTC', 'Dealer', 'Other', '2025 Deferred', 'Total', 'Orders', 'New', 'Ret', 'Meta', 'Google', 'NCAC', '1st Pay', 'COGS', 'Fees', 'Ship', 'Pick', 'CM3', 'CM%', 'OpEx', 'OpEx Cov', 'Net Profit', 'ROAS'].map(h => (
                             <th key={h} style={{ fontSize: 8, letterSpacing: 1, color: '#88857f', textAlign: h === 'Month' ? 'left' : 'right', padding: '4px 6px 8px 0', textTransform: 'uppercase', fontWeight: 600 }}>{h}</th>
                           ))}
                         </tr>
@@ -3210,6 +3219,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#171717', textAlign: 'right' }}>{fmt$(r.dtcRevenue)}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#9a6a0a', textAlign: 'right' }}>{r.dealerRevenue ? fmt$(r.dealerRevenue) : '—'}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#77746f', textAlign: 'right' }}>{r.offPlatformRevenue ? fmt$(r.offPlatformRevenue) : '—'}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#77746f', textAlign: 'right' }}>{r.deferredRevenue ? fmt$(r.deferredRevenue) : '—'}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#171717', textAlign: 'right', fontWeight: 600 }}>{fmt$(r.revenue)}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.orders < (r.newCustomers + r.returningCustomers) ? '#b42318' : '#343330', textAlign: 'right' }} title={r.orders < (r.newCustomers + r.returningCustomers) ? `Orders (${r.orders}) < customers (${r.newCustomers + r.returningCustomers}) — data inconsistency` : ''}>{r.orders || '—'}{r.orders < (r.newCustomers + r.returningCustomers) ? '⚠' : ''}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#d84a17', textAlign: 'right', fontWeight: 600 }}>{r.newCustomers || '—'}</td>
@@ -3238,6 +3248,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#171717', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.dtcRevenue)}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#9a6a0a', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.dealerRevenue)}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#77746f', textAlign: 'right', fontWeight: 700 }}>{ltm.offPlatformRevenue ? fmt$(ltm.offPlatformRevenue) : '—'}</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#77746f', textAlign: 'right', fontWeight: 700 }}>{ltm.deferredRevenue ? fmt$(ltm.deferredRevenue) : '—'}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#171717', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.revenue)}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#343330', textAlign: 'right' }}>{ltm.orders.toLocaleString()}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#d84a17', textAlign: 'right', fontWeight: 700 }}>{ltm.newCustomers.toLocaleString()}</td>
@@ -3257,7 +3268,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                     </table>
                   </div>
                   <div style={{ fontSize: 9, color: '#88857f', marginTop: 8, letterSpacing: 1 }}>
-                    CM3 = Net Revenue − COGS − Payment Fees − Shipping − Pick/Pack − (Meta + Google) Spend. Estimated net profit = CM3 − OpEx. COGS uses Shopify per-unit cost when set, GM% assumption otherwise. Dealer COGS uses the wholesale margin assumption. NCAC = (Meta + Google) spend ÷ new lifetime customers. OpEx column = monthly P&L override or default; current month is prorated MTD. Bold OpEx = override set; dim = default.
+                    2025 deferred revenue is a revenue-only recognition adjustment; no additional costs or payment fees are assumed. CM3 = Net Revenue − COGS − Payment Fees − Shipping − Pick/Pack − (Meta + Google) Spend. Estimated net profit = CM3 − OpEx. COGS uses Shopify per-unit cost when set, GM% assumption otherwise. Dealer COGS uses the wholesale margin assumption. NCAC = (Meta + Google) spend ÷ new lifetime customers. OpEx column = monthly P&L override or default; current month is prorated MTD. Bold OpEx = override set; dim = default.
                   </div>
                 </div>
               </>
@@ -3369,6 +3380,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
         const opexByMonth = settings?.opexByMonth || {};
         const dealerRevenueByMonth = settings?.dealerRevenueByMonth || {};
         const dealerOrdersByMonth = settings?.dealerOrdersByMonth || {};
+        const deferredRevenue2025ByMonth = settings?.deferredRevenue2025ByMonth || {};
         const offPlatformRevenueByMonth = settings?.offPlatformRevenueByMonth || {};
         const offPlatformOrdersByMonth = settings?.offPlatformOrdersByMonth || {};
         const defaultOpex = assumptionNumber(settings?.monthlyOpex, 0);
@@ -3412,10 +3424,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
           const dealerOrders = hasDealerOrdersOverride
             ? Number(dealerOrdersByMonth[f.month] || 0)
             : Number(dealer.orders || 0);
+          const deferredRevenue = Number(deferredRevenue2025ByMonth[f.month] || 0);
           const offPlatformRevenue = Number(offPlatformRevenueByMonth[f.month] || 0);
           const offPlatformOrders = Number(offPlatformOrdersByMonth[f.month] || 0);
-          const actRevenue = grossRevenueFor(dtc) + dealerRevenue + offPlatformRevenue;
-          const actNetRevenue = netRevenueFor(dtc) + dealerRevenue + offPlatformRevenue;
+          const actRevenue = grossRevenueFor(dtc) + dealerRevenue + offPlatformRevenue + deferredRevenue;
+          const actNetRevenue = netRevenueFor(dtc) + dealerRevenue + offPlatformRevenue + deferredRevenue;
           const orders = Number(dtc.orders || 0) + dealerOrders + offPlatformOrders;
           const dealerCogsSource = hasDealerRevenueOverride ? {} : dealer;
           const actCogs = estimatedCogsFor(dtc, netRevenueFor(dtc), grossMarginPct)
@@ -3425,7 +3438,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
           const actGoogleSpend = Number(googleByMonth[f.month] || 0);
           const actCac = actMetaSpend + actGoogleSpend;
           const actOpex = opexForMonth(f.month);
-          const actFees = actNetRevenue * (paymentFeePct / 100) + orders * paymentFeeFixed;
+          const actFees = (actNetRevenue - deferredRevenue) * (paymentFeePct / 100) + orders * paymentFeeFixed;
           const actShip = orders * shippingCostPerOrder;
           const actPick = orders * fulfillmentCostPerOrder;
           const actCm3 = actNetRevenue - actCogs - actFees - actShip - actPick - actCac;
@@ -3436,9 +3449,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
 
           // Project current-month actual to full month.
           const paceFactor = isCurrent ? daysInMonth / Math.max(dayOfMonth, 1) : 1;
-          const projRevenue = isCurrent ? actRevenue * paceFactor : actRevenue;
+          const projRevenue = isCurrent ? (actRevenue - deferredRevenue) * paceFactor + deferredRevenue : actRevenue;
           const projCac = isCurrent ? actCac * paceFactor : actCac;
-          const projCm3 = isCurrent ? actCm3 * paceFactor : actCm3;
+          const projCm3 = isCurrent ? (actCm3 - deferredRevenue) * paceFactor + deferredRevenue : actCm3;
 
           // Targets pace against gross sales/topline revenue for the CFO view.
           const tgtRevenue = f.totalRevenue ?? f.netRevenue ?? f.dtcRevenue ?? 0;
