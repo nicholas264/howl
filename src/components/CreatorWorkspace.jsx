@@ -1268,6 +1268,7 @@ export default function CreatorWorkspace({
             <span>Product</span>
             <span>Location</span>
             <span>Output</span>
+            <span className="creator-gmv-heading" title="Attributed purchase revenue from linked creator ads over the last 90 days">GMV · 90d</span>
           </div>
           {!loading && creators.length === 0 && (
             <div className="creator-empty">
@@ -1323,6 +1324,10 @@ export default function CreatorWorkspace({
                 <span className="creator-launches">
                   <strong>{creator.launch_count || 0}</strong>
                   <small>{creator.last_launch_at ? `Last ${new Date(creator.last_launch_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : 'launches'}</small>
+                </span>
+                <span className="creator-gmv" title="Attributed purchase revenue from linked creator ads over the last 90 days">
+                  <strong>{creator.performance?.revenue == null ? '—' : Number(creator.performance.revenue).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}</strong>
+                  <small>90-day GMV</small>
                 </span>
               </button>
             );
