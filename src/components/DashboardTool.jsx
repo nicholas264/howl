@@ -2825,6 +2825,32 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
 
             {dataReady && (
               <>
+                <section aria-label="YTD cash and accrual sales" style={{ ...S.card, marginBottom: 20 }}>
+                  <h2 style={{ margin: '0 0 6px', fontSize: 17 }}>{summaryYear} YTD Sales</h2>
+                  <div style={{ color: DASH.muted, fontSize: 12, marginBottom: 16 }}>
+                    January through {fmtMo(currentMonthKey)} · current month to date · no pace projection
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 16 }}>
+                    {[
+                      { label: 'YTD Cash Sales', qualifier: 'Sales proxy · excludes deferred', gross: ltm.revenue - ltm.deferredRevenue, net: ltm.netRevenue - ltm.deferredRevenue, color: DASH.text },
+                      { label: 'YTD Accrual Sales', qualifier: 'Includes recognized 2025 deferred revenue', gross: ltm.revenue, net: ltm.netRevenue, color: DASH.success },
+                    ].map(({ label, qualifier, gross, net, color }) => (
+                      <div key={label} style={{ padding: 18, background: DASH.surface2, borderRadius: 6 }}>
+                        <h3 style={{ margin: '0 0 6px', fontSize: 13 }}>{label}</h3>
+                        <div style={{ fontSize: 12, color: DASH.muted }}>{qualifier}</div>
+                        <div style={{ margin: '10px 0 6px', fontSize: 'clamp(24px, 3vw, 36px)', fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{fmt$(gross)}</div>
+                        <div style={{ fontSize: 12, color: DASH.text2 }}>Net sales: {fmt$(net)}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 14, fontSize: 13, color: DASH.text2 }}>
+                    Deferred revenue recognized YTD: <strong>{fmt$(ltm.deferredRevenue)}</strong> · added once to the accrual view.
+                  </div>
+                  <p style={{ margin: '8px 0 0', fontSize: 12, lineHeight: 1.6, color: DASH.muted }}>
+                    Cash sales is a sales-based proxy, not verified cash collected. Headline amounts use the dashboard’s gross-sales basis (DTC total sales + dealer net sales + off-platform sales).
+                    {' '}The accrual view adds only the recorded 2025 deferred recognition adjustment; it is not a full accounting reconciliation.
+                  </p>
+                </section>
                 {/* Calendar-year KPI strip */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 12 }}>
                   {[
