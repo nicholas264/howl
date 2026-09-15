@@ -9,7 +9,8 @@ try {
   const files=readdirSync('tests').filter(name=>name.endsWith('.test.mjs')).sort().map(name=>join('tests',name));
   if(!files.length)throw new Error('No regression tests found');
   const result=spawnSync(process.execPath,['--test',...files],{
-    stdio:'inherit',env:testEnvironment(process.env,home),timeout:120000,
+    // Database fixtures can exceed two minutes on shared CI builders.
+    stdio:'inherit',env:testEnvironment(process.env,home),timeout:300000,
   });
   if(result.error)console.error('Regression test process failed:',result.error.code || 'unknown');
   process.exitCode=result.status ?? 1;
