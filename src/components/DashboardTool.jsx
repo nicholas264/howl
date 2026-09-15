@@ -2719,8 +2719,6 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
               </button>
             </div>
 
-            <DeferredRevenueInput settings={settings} onSave={saveSettings} saving={savingSettings} />
-
             {hasLegacyCustomerMonths && (
               <div style={{ ...S.err, marginBottom: 16, color: '#9a6a0a', borderColor: 'rgba(245,166,35,0.4)', background: 'rgba(245,166,35,0.1)' }}>
                 Some {summaryYear} customer snapshots predate unique-customer tracking. Sync Dashboard to refresh the year and replace legacy summed customer counts.
@@ -2729,6 +2727,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
 
             {showAssumptions && settings && (
               <div style={{ ...S.card, marginBottom: 16 }}>
+                <DeferredRevenueInput settings={settings} onSave={saveSettings} saving={savingSettings} />
                 <span style={S.label}>Assumptions (used for COGS, fees, CM3)</span>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginTop: 10 }}>
 	                  {[
