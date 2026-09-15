@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiJson } from '../lib/api';
+import { modelSku, sumRows, allocateCoreMedia, coreCostCap } from '../lib/sku-media-pacing.js';
 import {
   SKU_MEDIA_FORECAST,
   SKU_MEDIA_FORECAST_SOURCE,
@@ -7,7 +8,6 @@ import {
 } from '../data/skuMediaForecast';
 
 const STORAGE_KEY = 'howl_sku_media_pacing_assumptions_v3';
-const CORE_UNIT_SKUS = new Set(['R1 Campfire', 'R3 Campfire', 'R4 Campfire']);
 
 const DEFAULT_GLOBALS = {
   discountPct: 0,
@@ -138,115 +138,6 @@ function historicalFromRows(rows = []) {
       return t > latest ? t : latest;
     }, 0),
   };
-}
-
-function modelSku(item, assumption, monthIndex, monthReturningRevenue, monthRevenue, monthPacing, metaSpend = 0, shopifyUnits = null) {
-  const forecastUnits = Number(item.units[monthIndex]) || 0;
-  const override = assumption.unitOverride === '' ? null : Number(assumption.unitOverride);
-  const plannedUnits = Math.max(0, override ?? forecastUnits * ((Number(assumption.unitMultiplier) || 0) / 100));
-  const soldUnits = plannedUnits * (1 - (Number(assumption.returnRate) || 0) / 100);
-  const realizedPrice = Math.max(0, Number(assumption.price) || 0) * (1 - (Number(assumption.discountPct) || 0) / 100);
-  const revenue = soldUnits * realizedPrice;
-  const returningPctOverride = assumption.returningRevenuePct === '' ? null : clamp(assumption.returningRevenuePct, 0, 75) / 100;
-  const revenueShare = monthRevenue > 0 ? revenue / monthRevenue : 0;
-  const returningRevenue = Math.min(revenue, returningPctOverride == null
-    ? monthReturningRevenue * revenueShare
-    : revenue * returningPctOverride);
-  const newRevenue = Math.max(0, revenue - returningRevenue);
-  const acquiredUnits = realizedPrice > 0 ? newRevenue / realizedPrice : 0;
-  const cogs = revenue * ((Number(assumption.cogsPct) || 0) / 100);
-  const variableCost = revenue * ((Number(assumption.variablePct) || 0) / 100);
-  const fulfillment = soldUnits * (Number(assumption.fulfillment) || 0);
-  const contributionBeforeMedia = revenue - cogs - variableCost - fulfillment;
-  const targetContribution = revenue * (clamp(assumption.targetCmPct, 35, 80) / 100);
-  const mediaBudget = Math.max(0, contributionBeforeMedia - targetContribution);
-  const costCap = acquiredUnits > 0 ? mediaBudget / acquiredUnits : 0;
-  const spendOverride = assumption.spendToDate === '' ? null : Math.max(0, Number(assumption.spendToDate) || 0);
-  const spendToDate = spendOverride ?? Math.max(0, Number(metaSpend) || 0);
-  const orderedUnits = Math.max(0, Number(shopifyUnits?.units || 0));
-  const orderedRevenue = Math.max(0, Number(shopifyUnits?.revenue || 0));
-  const unitTargetToDate = monthPacing.daysInMonth > 0
-    ? plannedUnits * (monthPacing.elapsedDays / monthPacing.daysInMonth)
-    : 0;
-  const projectedUnits = monthPacing.elapsedDays > 0
-    ? orderedUnits * (monthPacing.daysInMonth / monthPacing.elapsedDays)
-    : orderedUnits;
-  const unitGap = projectedUnits - plannedUnits;
-  const unitPaceDelta = orderedUnits - unitTargetToDate;
-  const dailyTarget = monthPacing.daysInMonth > 0 ? mediaBudget / monthPacing.daysInMonth : 0;
-  const paceTargetToDate = dailyTarget * monthPacing.elapsedDays;
-  const remainingSpend = Math.max(0, mediaBudget - spendToDate);
-  const requiredDaily = monthPacing.remainingDays > 0 ? remainingSpend / monthPacing.remainingDays : 0;
-  const paceDelta = spendToDate - paceTargetToDate;
-  const paceRatio = paceTargetToDate > 0 ? spendToDate / paceTargetToDate : null;
-  const postMediaContribution = revenue - cogs - variableCost - fulfillment - mediaBudget;
-  const cmPct = revenue > 0 ? postMediaContribution / revenue : 0;
-
-  return {
-    sku: item.sku,
-    forecastUnits,
-    plannedUnits,
-    acquiredUnits,
-    returningUnits: Math.max(0, plannedUnits - acquiredUnits),
-    revenue,
-    newRevenue,
-    returningRevenue,
-    mediaBudget,
-    metaSpend,
-    spendOverride,
-    orderedUnits,
-    orderedRevenue,
-    projectedUnits,
-    unitTargetToDate,
-    unitGap,
-    unitPaceDelta,
-    costCap,
-    spendToDate,
-    dailyTarget,
-    paceTargetToDate,
-    remainingSpend,
-    requiredDaily,
-    paceDelta,
-    paceRatio,
-    postMediaContribution,
-    cmPct,
-  };
-}
-
-function sumRows(rows) {
-  return rows.reduce((acc, row) => ({
-    plannedUnits: acc.plannedUnits + row.plannedUnits,
-    acquiredUnits: acc.acquiredUnits + row.acquiredUnits,
-    returningUnits: acc.returningUnits + row.returningUnits,
-    revenue: acc.revenue + row.revenue,
-    newRevenue: acc.newRevenue + row.newRevenue,
-    returningRevenue: acc.returningRevenue + row.returningRevenue,
-    mediaBudget: acc.mediaBudget + row.mediaBudget,
-    spendToDate: acc.spendToDate + row.spendToDate,
-    orderedUnits: acc.orderedUnits + row.orderedUnits,
-    orderedRevenue: acc.orderedRevenue + row.orderedRevenue,
-    projectedUnits: acc.projectedUnits + row.projectedUnits,
-    unitTargetToDate: acc.unitTargetToDate + row.unitTargetToDate,
-    paceTargetToDate: acc.paceTargetToDate + row.paceTargetToDate,
-    remainingSpend: acc.remainingSpend + row.remainingSpend,
-    postMediaContribution: acc.postMediaContribution + row.postMediaContribution,
-  }), {
-    plannedUnits: 0,
-    acquiredUnits: 0,
-    returningUnits: 0,
-    revenue: 0,
-    newRevenue: 0,
-    returningRevenue: 0,
-    mediaBudget: 0,
-    spendToDate: 0,
-    orderedUnits: 0,
-    orderedRevenue: 0,
-    projectedUnits: 0,
-    unitTargetToDate: 0,
-    paceTargetToDate: 0,
-    remainingSpend: 0,
-    postMediaContribution: 0,
-  });
 }
 
 export default function SkuMediaPacingTool() {
@@ -387,35 +278,28 @@ export default function SkuMediaPacingTool() {
       monthReturningRevenue,
       monthRevenue,
       monthPacing,
-      metaMonth?.bySku?.[item.sku] || 0,
-      shopifyMonth?.bySku?.[item.sku] || null,
+      metaMonth ? (metaMonth.bySku?.[item.sku] || 0) : null,
+      shopifyMonth ? (shopifyMonth.bySku?.[item.sku] || { units: 0, revenue: 0 }) : null,
     ));
-    const coreOrderedUnits = modeledRows.reduce(
-      (sum, row) => sum + (CORE_UNIT_SKUS.has(row.sku) ? row.orderedUnits : 0),
-      0,
-    );
-    const rows = modeledRows.map(row => ({
-      ...row,
-      coreOrderedUnits,
-      productMix: coreOrderedUnits > 0 ? row.orderedUnits / coreOrderedUnits : 0,
-    }));
+    const rows = allocateCoreMedia(modeledRows, monthPacing);
     return { month, key: monthKey, meta: metaMonth, shopify: shopifyMonth, returnPct, pacing: monthPacing, rows, totals: sumRows(rows) };
   }), [history, metaSpend.byMonth, shopifyUnits.byMonth, state.globals.returningRevenueOverride, state.globals.returningRevenuePct, state.skus, useSeasonalReturnCurve]);
 
   const selected = rowsByMonth[monthIndex];
   const selectedRows = [...selected.rows]
-    .filter(row => row.plannedUnits > 0 || row.forecastUnits > 0)
+    .filter(row => row.plannedUnits > 0 || row.forecastUnits > 0 || row.orderedUnits > 0 || row.spendToDate > 0)
     .sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
   const totalCmPct = selected.totals.revenue > 0
     ? selected.totals.postMediaContribution / selected.totals.revenue
     : 0;
-  const blendedCostCap = selected.totals.acquiredUnits > 0
-    ? selected.totals.mediaBudget / selected.totals.acquiredUnits
-    : 0;
+  const blendedCostCap = coreCostCap(selected.rows);
+  const hasCoreSpendData = selected.rows.filter(row => row.isCoreProduct).every(row => row.hasSpendData);
   const requiredDailyTotal = selected.pacing.remainingDays > 0
     ? selected.totals.remainingSpend / selected.pacing.remainingDays
     : 0;
-  const returnSource = history.months.length
+  const returnSource = state.globals.returningRevenueOverride !== ''
+    ? 'Manual returning revenue assumption'
+    : history.months.length
     ? `${history.months.length} Shopify snapshot months`
     : 'manual fallback';
   const latestHistory = history.latestSnapshotAt
@@ -427,7 +311,7 @@ export default function SkuMediaPacingTool() {
     ? Math.max(0, Number(selectedMeta.totalSpend || 0) - Number(selectedMeta.mappedSpend || 0))
     : 0;
   const unmappedShopifyUnits = selectedShopify
-    ? selectedShopify.unmapped.reduce((sum, row) => sum + Number(row.quantity || 0), 0)
+    ? (selectedShopify.unmapped || []).reduce((sum, row) => sum + Number(row.quantity || 0), 0)
     : 0;
   const metaSpendSource = selectedMeta
     ? `${fmtMoney(selectedMeta.mappedSpend)} mapped${unmappedMetaSpend ? ` / ${fmtMoney(unmappedMetaSpend)} unmapped` : ''}`
@@ -437,28 +321,28 @@ export default function SkuMediaPacingTool() {
     : (shopifyUnits.loading ? 'Loading Shopify' : 'No Shopify units loaded');
 
   const exportCsv = () => {
-    const headings = ['Month', 'SKU', 'Planned units', 'Ordered units', 'MTD product mix %', 'Core ordered units', 'Projected EOM units', 'Unit pace delta', 'Unit gap', 'New units', 'Returning units', 'Revenue', 'New revenue', 'Returning revenue', 'Cost cap', 'Monthly paid media', 'Daily target', 'Spend to date', 'Pace target to date', 'Required daily', 'Post-media CM %'];
+    const headings = ['Month', 'SKU', 'Planned units', 'Ordered units', 'MTD core mix %', 'Core ordered units', 'Projected EOM units', 'Unit pace delta', 'Unit gap', 'New units', 'Returning units', 'Revenue', 'New revenue', 'Returning revenue', 'Cost cap', 'Monthly paid media', 'Daily target', 'Spend to date', 'Pace target to date', 'Required daily', 'Post-media CM %'];
     const lines = rowsByMonth.flatMap(month => month.rows.map(row => [
       month.month,
       row.sku,
       row.plannedUnits.toFixed(2),
-      row.orderedUnits.toFixed(2),
-      (row.productMix * 100).toFixed(2),
-      row.coreOrderedUnits.toFixed(2),
-      row.projectedUnits.toFixed(2),
-      row.unitPaceDelta.toFixed(2),
-      row.unitGap.toFixed(2),
+      row.hasUnitData ? row.orderedUnits.toFixed(2) : '',
+      (!row.hasUnitData || row.productMix == null) ? '' : (row.productMix * 100).toFixed(2),
+      row.hasUnitData ? row.coreOrderedUnits.toFixed(2) : '',
+      row.hasUnitData ? row.projectedUnits.toFixed(2) : '',
+      row.hasUnitData ? row.unitPaceDelta.toFixed(2) : '',
+      row.hasUnitData ? row.unitGap.toFixed(2) : '',
       row.acquiredUnits.toFixed(2),
       row.returningUnits.toFixed(2),
       row.revenue.toFixed(2),
       row.newRevenue.toFixed(2),
       row.returningRevenue.toFixed(2),
-      row.costCap.toFixed(2),
-      row.mediaBudget.toFixed(2),
-      row.dailyTarget.toFixed(2),
-      row.spendToDate.toFixed(2),
-      row.paceTargetToDate.toFixed(2),
-      row.requiredDaily.toFixed(2),
+      row.isCoreProduct ? row.costCap.toFixed(2) : '',
+      row.isCoreProduct ? row.mediaBudget.toFixed(2) : '',
+      row.isCoreProduct ? row.dailyTarget.toFixed(2) : '',
+      row.hasSpendData ? row.spendToDate.toFixed(2) : '',
+      row.isCoreProduct ? row.paceTargetToDate.toFixed(2) : '',
+      row.isCoreProduct && row.hasSpendData ? row.requiredDaily.toFixed(2) : '',
       (row.cmPct * 100).toFixed(2),
     ]));
     const csv = [headings, ...lines].map(line => line.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -476,7 +360,7 @@ export default function SkuMediaPacingTool() {
         <div>
           <span className="workspace-kicker">Performance</span>
           <h1>SKU media pacing</h1>
-          <small>{SKU_MEDIA_FORECAST_SOURCE.sheet}</small>
+          <small>{SKU_MEDIA_FORECAST_SOURCE.sheet} · 2026</small>
         </div>
         <div className="sku-pacing-actions">
           <label>
@@ -491,7 +375,7 @@ export default function SkuMediaPacingTool() {
               <option value="mediaBudget">Monthly spend</option>
               <option value="requiredDaily">Required daily</option>
               <option value="unitPaceDelta">Unit pace</option>
-              <option value="productMix">Product mix</option>
+              <option value="productMix">Core mix</option>
               <option value="paceDelta">Pace delta</option>
               <option value="costCap">Cost Cap</option>
               <option value="acquiredUnits">New units</option>
@@ -519,12 +403,13 @@ export default function SkuMediaPacingTool() {
         </div>
         <div>
           <span>Required daily</span>
-          <strong>{fmtMoney(requiredDailyTotal)}</strong>
-          <small>{fmtMoney(selected.totals.remainingSpend)} left</small>
+          <strong>{hasCoreSpendData ? fmtMoney(requiredDailyTotal) : '—'}</strong>
+          <small>{hasCoreSpendData ? `${fmtMoney(selected.totals.remainingSpend)} left` : 'Awaiting Meta spend'}</small>
         </div>
         <div>
           <span>Cost Cap</span>
           <strong>{fmtMoney(blendedCostCap)}</strong>
+          <small>Per new core unit · R1 / R3 / R4</small>
         </div>
         <div>
           <span>Returning</span>
@@ -538,10 +423,12 @@ export default function SkuMediaPacingTool() {
         </div>
       </section>
 
+      {metaSpend.error ? <p className="sku-pacing-error" role="alert">Meta spend could not refresh: {metaSpend.error}</p> : null}
+      {shopifyUnits.error ? <p className="sku-pacing-error" role="alert">Shopify units could not refresh: {shopifyUnits.error}</p> : null}
+      <p className="sku-pacing-source">{shopifyUnitSource}. Meta: {metaSpendSource}. {selectedMeta ? `Through ${selectedMeta.until} (includes that day).` : ''}</p>
+
       {assumptionsOpen ? (
         <section className="sku-pacing-panel">
-          {metaSpend.error ? <p className="sku-pacing-error">{metaSpend.error}</p> : null}
-          {shopifyUnits.error ? <p className="sku-pacing-error">{shopifyUnits.error}</p> : null}
           {historyError ? <p className="sku-pacing-error">{historyError}</p> : null}
           <div className="sku-pacing-panel-head">
             <strong>Global assumptions</strong>
@@ -600,7 +487,8 @@ export default function SkuMediaPacingTool() {
             <span>Unit status</span>
             <span>Target</span>
             <span>Ordered</span>
-            <span>MTD mix</span>
+            <span>Projected</span>
+            <span>Core mix</span>
             <span>Spend to date</span>
             <span>Spend status</span>
             <span>Monthly spend</span>
@@ -618,8 +506,8 @@ export default function SkuMediaPacingTool() {
                     <strong>{row.sku}</strong>
                     <small>{fmtNumber(row.unitTargetToDate)} target to date</small>
                   </span>
-                  <span className={row.unitPaceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
-                    <strong>{fmtPaceStatus(row.unitPaceDelta)}</strong>
+                  <span className={!row.hasUnitData ? 'sku-pacing-status neutral' : row.unitPaceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
+                    <strong>{row.hasUnitData ? fmtPaceStatus(row.unitPaceDelta) : 'Awaiting units'}</strong>
                   </span>
                   <label>
                     <input
@@ -627,24 +515,34 @@ export default function SkuMediaPacingTool() {
                       min="0"
                       step="1"
                       placeholder={fmtNumber(row.forecastUnits, 0)}
+                      aria-label={`${row.sku} target units`}
                       value={assumption.unitOverride}
                       onChange={event => updateSku(row.sku, { unitOverride: event.target.value })}
                     />
                   </label>
-                  <span className={row.unitPaceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
-                    <strong>{fmtNumber(row.orderedUnits)}</strong>
+                  <span className={!row.hasUnitData ? 'sku-pacing-status neutral' : row.unitPaceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
+                    <strong>{row.hasUnitData ? fmtNumber(row.orderedUnits) : '—'}</strong>
                   </span>
-                  <span className="sku-pacing-mix">
-                    <strong>{fmtPct(row.productMix * 100)}</strong>
-                    <small>of core</small>
-                  </span>
-                  <b>{fmtMoney(row.spendToDate)}</b>
-                  <span className={row.paceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
-                    <strong>{fmtMoneyPaceStatus(row.paceDelta)}</strong>
-                  </span>
-                  <b>{fmtMoney(row.mediaBudget)}</b>
-                  <b>{fmtMoney(row.requiredDaily)}</b>
-                  <b>{fmtMoney(row.costCap)}</b>
+                  <b>{row.hasUnitData ? fmtNumber(row.projectedUnits) : '—'}</b>
+                  {(!row.hasUnitData || row.productMix == null) ? (
+                    <span className="sku-pacing-muted">n/a</span>
+                  ) : (
+                    <span className="sku-pacing-mix">
+                      <strong>{fmtPct(row.productMix * 100)}</strong>
+                      <small>of core</small>
+                    </span>
+                  )}
+                  {row.isCoreProduct ? <b>{row.hasSpendData ? fmtMoney(row.spendToDate) : '—'}</b> : <b className="sku-pacing-muted">{row.hasSpendData && row.spendToDate > 0 ? fmtMoney(row.spendToDate) : 'Email/site'}</b>}
+                  {row.isCoreProduct ? (
+                    <span className={!row.hasSpendData ? 'sku-pacing-status neutral' : row.paceDelta < 0 ? 'sku-pacing-status behind' : 'sku-pacing-status ahead'}>
+                      <strong>{row.hasSpendData ? fmtMoneyPaceStatus(row.paceDelta) : 'Awaiting spend'}</strong>
+                    </span>
+                  ) : (
+                    <span className="sku-pacing-muted">No paid budget</span>
+                  )}
+                  {row.isCoreProduct ? <b>{fmtMoney(row.mediaBudget)}</b> : <b className="sku-pacing-muted">n/a</b>}
+                  {row.isCoreProduct ? <b>{row.hasSpendData ? fmtMoney(row.requiredDaily) : '—'}</b> : <b className="sku-pacing-muted">n/a</b>}
+                  {row.isCoreProduct ? <b>{fmtMoney(row.costCap)}</b> : <b className="sku-pacing-muted">n/a</b>}
                   <button
                     type="button"
                     className="sku-pacing-edit"
@@ -655,17 +553,19 @@ export default function SkuMediaPacingTool() {
                 </div>
                 {isEditing ? (
                   <div className="sku-pacing-inline">
-                    <label>
-                      Spend override
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        placeholder={fmtMoney(row.metaSpend || 0)}
-                        value={assumption.spendToDate}
-                        onChange={event => updateSku(row.sku, { spendToDate: event.target.value })}
-                      />
-                    </label>
+                    {row.isCoreProduct ? (
+                      <label>
+                        Spend override
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder={fmtMoney(row.metaSpend || 0)}
+                          value={assumption.spendToDate}
+                          onChange={event => updateSku(row.sku, { spendToDate: event.target.value })}
+                        />
+                      </label>
+                    ) : null}
                     <label>
                       Price
                       <input
@@ -710,7 +610,7 @@ export default function SkuMediaPacingTool() {
                         onChange={event => updateSku(row.sku, { targetCmPct: clamp(event.target.value, 35, 80) })}
                       />
                     </label>
-                    <span>{fmtMoney(row.revenue)} revenue / {fmtPct(row.cmPct * 100)} CM / {fmtMoney(row.metaSpend || 0)} Meta</span>
+                    <span>{fmtMoney(row.revenue)} revenue / {fmtPct(row.cmPct * 100)} CM / {row.isCoreProduct ? `${fmtMoney(row.metaSpend || 0)} Meta` : 'email + cart behavior'}</span>
                   </div>
                 ) : null}
               </div>
