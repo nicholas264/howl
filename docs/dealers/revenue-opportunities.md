@@ -28,9 +28,9 @@ Storage failures hide totals/statuses rather than implying that every dealer is 
 
 ## Release
 
-Production has not been changed. Automatic approval review blocked pulling production configuration because it contains credentials and needs explicit authorization.
+The user authorized production configuration access, the additive contact-tracking migration, and deployment. The production table migration has been applied successfully; release verification is in progress.
 
-After authorization:
+Release procedure:
 1. Pull the existing project's production configuration into a protected, untracked temporary file.
 2. Apply only this additive table migration with `node --env-file=<selected-env-file> scripts/migrate-dealer-outreach.mjs`. Use the migration connection when runtime credentials cannot create schema. The standard migration runner also includes this table for future environments.
 3. Publish the reviewed commit through the project's existing Git/Vercel release process.
