@@ -690,3 +690,27 @@
 .dealer-cadence-proof p {
   max-width: 850px;
 }
+
+.dealer-opportunity-summary { display: grid; grid-template-columns: minmax(220px, 1fr) 2fr; gap: 32px; align-items: center; margin: 24px 0; }
+.dealer-potential-total { display: grid; gap: 8px; }
+.dealer-potential-total > strong { color: var(--dealer-ink); font-size: clamp(36px, 4vw, 56px); line-height: 1.05; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.dealer-potential-total small { color: var(--dealer-muted); }
+.dealer-potential-stages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.dealer-potential-stages button { display: grid; text-align: left; gap: 12px; padding: 18px 14px; min-height: 110px; }
+.dealer-potential-stages button[aria-pressed=true] { background: #e6eeeb; border-color: var(--dealer-ink); }
+.dealer-potential-stages strong { font-size: clamp(22px, 2.5vw, 32px); font-variant-numeric: tabular-nums; }
+.dealer-estimate-method { font-size: 12px; color: var(--dealer-muted); margin: 12px 0 24px; max-width: 90ch; line-height: 1.6; }
+.dealer-estimate-method summary { cursor: pointer; color: var(--dealer-ink); }
+.dealer-opportunity-kind { display: inline-block; margin-top: 9px; font-size: 11px; color: var(--dealer-ink); background: #edf3f1; border-radius: 4px; padding: 4px 7px; }
+.dealer-limited-history, .dealer-followup-due { color: #8b4c10 !important; font-weight: 650; }
+.dealer-saved-notes { max-width: 260px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.5; margin: 8px 0 0; max-height: 90px; overflow: auto; }
+.dealer-contact-editor { padding: 18px; background: #f4f7f5; white-space: normal; }
+.dealer-contact-editor h3 { margin: 0 0 16px; }
+.dealer-contact-editor fieldset { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.dealer-contact-editor label { display: grid; gap: 7px; font-size: 12px; }
+.dealer-contact-editor input, .dealer-contact-editor select, .dealer-contact-editor textarea { width: 100%; min-width: 0; border: 1px solid var(--dealer-line); border-radius: 5px; padding: 10px; background: #fff; color: var(--dealer-ink); font: inherit; }
+.dealer-contact-editor .dealer-editor-notes { grid-column: 1 / -1; }
+.dealer-editor-actions { display: flex; gap: 10px; margin-top: 16px; }
+.dealer-outreach-status { min-width: 170px; }
+@media (max-width: 900px) { .dealer-opportunity-summary { grid-template-columns: 1fr; gap: 20px; } .dealer-contact-editor fieldset { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .dealer-potential-stages { grid-template-columns: 1fr; gap: 7px; } .dealer-potential-stages button { grid-template-columns: 1fr auto; align-items: center; min-height: 64px; } }

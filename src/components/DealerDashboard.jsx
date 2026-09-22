@@ -212,7 +212,7 @@ export default function DealerDashboard({ setActiveTab }) {
         </div>
         <div className="dealer-controls">
           <a className="dealer-queue-shortcut" href="#roy-outreach">
-            Roy’s queue ↓
+            Revenue opportunities ↓
           </a>
           <label>
             Period
@@ -261,6 +261,12 @@ export default function DealerDashboard({ setActiveTab }) {
               {data.orders.length.toLocaleString()} orders in history
             </span>
           </div>
+          <DealerOutreachQueue
+            customers={report.customers}
+            shop={data.shop}
+            asOf={data.asOf}
+            onOpen={openCustomer}
+          />
           <section className="dealer-metrics" aria-label="Dealer performance">
             <div>
               <span>Net ordered</span>
@@ -392,12 +398,6 @@ export default function DealerDashboard({ setActiveTab }) {
               </p>
             </section>
           </div>
-          <DealerOutreachQueue
-            customers={report.customers}
-            shop={data.shop}
-            asOf={data.asOf}
-            onOpen={openCustomer}
-          />
           <section className="dealer-customers">
             <div className="dealer-section-head">
               <div>
