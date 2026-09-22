@@ -10,7 +10,7 @@ const gap = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a
 export const opportunityKey = (customer, anchor) => JSON.stringify([customer, anchor]);
 
 // One reorder per account, never multiplied by the number of missed cycles.
-export function buildDealerOpportunities(customers, records = [], today) {
+export function buildDealerOpportunities(customers, records = [], today, followUpDay = today) {
   const saved = new Map(records.map((r) => [opportunityKey(r.customer_key, r.anchor_order_id), r]));
   const seen = new Set();
   return customers.flatMap((c) => {
@@ -36,7 +36,7 @@ export function buildDealerOpportunities(customers, records = [], today) {
       estimate, sampleSize: recent.length, status, record, threshold,
       kind: orders.length === 1 ? "Second order" : sinceLast >= Math.max(60, threshold * 1.5) ? "Reactivation" : "Replenishment",
       reason: orders.length === 1 ? "First purchase has not repeated" : cadence == null ? "Quiet for 60+ days; limited repeat history" : `${sinceLast} days since order; usual gap ${Math.round(cadence)} days`,
-      followUpDue: status !== "closed" && !!record?.next_follow_up && record.next_follow_up <= today,
+      followUpDue: status !== "closed" && !!record?.next_follow_up && record.next_follow_up <= followUpDay,
     }];
   }).sort((a, b) => b.estimate - a.estimate || b.sinceLast - a.sinceLast || a.name.localeCompare(b.name));
 }

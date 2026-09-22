@@ -55,7 +55,7 @@ export default function DealerOutreachQueue({ customers, shop, asOf, onOpen }) {
   }
   useEffect(() => { load(); return () => { request.current++; }; }, [shop.domain, asOf]);
   useEffect(() => { if (window.location.hash === "#roy-outreach") section.current?.scrollIntoView({ block: "start" }); }, []);
-  const opportunities = useMemo(() => buildDealerOpportunities(customers, tracking?.records || [], today), [customers, tracking, today]);
+  const opportunities = useMemo(() => buildDealerOpportunities(customers, tracking?.records || [], today, contactToday), [customers, tracking, today, contactToday]);
   const summary = useMemo(() => summarizeDealerOpportunities(opportunities), [opportunities]);
   const rows = useMemo(() => {
     const query = search.trim().toLowerCase();

@@ -54,6 +54,16 @@ test('stage totals reconcile, closed is excluded, follow-ups use inclusive date'
   assert.ok(csv.includes('"\'=1+1"'));
   assert.ok(csv.includes('Roy'));
 });
+test('follow-ups use the current day even when the Shopify snapshot is older',()=>{
+  const records = [{customer_key:'customer:1',anchor_order_id:'3',status:'contacted',next_follow_up:'2026-09-23'}];
+  const before = buildDealerOpportunities(customers(),records,today,'2026-09-22');
+  const due = buildDealerOpportunities(customers(),records,today,'2026-09-23');
+  assert.equal(before[0].followUpDue,false);
+  assert.equal(due[0].followUpDue,true);
+  assert.equal(due[0].sinceLast,before[0].sinceLast);
+  assert.equal(due[0].estimate,before[0].estimate);
+  assert.equal(summarizeDealerOpportunities(due).followUps,1);
+});
 test('established accounts enter on cadence boundary with a 30-day floor',()=>{
   const list=[order('1','2026-08-01',100),order('2','2026-08-11',100),order('3','2026-08-21',100)];
   assert.equal(buildDealerOpportunities(customers(list),[],'2026-09-19').length,0);
