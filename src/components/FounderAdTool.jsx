@@ -2,25 +2,27 @@ import { apiFetch as fetch } from '../lib/apiFetch.js';
 import { useState, useCallback } from 'react';
 
 const SCRIPT_TYPES = [
-  { id: 'origin',       label: 'Origin Story',        desc: 'Why four engineers quit to build this' },
+  { id: 'origin',       label: 'Origin Story',        desc: 'The problem that led to HOWL' },
   { id: 'manufacturing',label: 'Made in Colorado',     desc: 'The factory, the process, the materials' },
-  { id: 'burn_ban',     label: 'Burn Ban Explainer',   desc: 'Why HOWL is legal when everything else isn\'t' },
+  { id: 'burn_ban',     label: 'Burn Ban Explainer',   desc: 'Campfires where local rules permit propane' },
   { id: 'vs_wood',      label: 'vs. Wood Fire',        desc: 'Head-to-head: why propane wins' },
   { id: 'tech',         label: 'The Technology',       desc: 'A-Flame®, BarCoal®, how it actually works' },
-  { id: 'cold_weather', label: 'Cold Weather Story',   desc: '0°F fire. The one that ends the cold.' },
+  { id: 'cold_weather', label: 'Cold Weather Story',   desc: 'Choose the right model for the season' },
   { id: 'customer_result', label: 'Customer Result',   desc: 'Real review, told through the founder\'s lens' },
 ];
 
 const PRODUCTS = [
-  { id: 'r1',     label: 'R1 — The Fast & Light ($374)',    short: 'R1' },
-  { id: 'r4mkii', label: 'R4 MKii — The 4-Season ($1,474)', short: 'R4 MKii' },
-  { id: 'both',   label: 'Both Products',                    short: 'R1 + R4 MKii' },
+  { id: 'r1', label: 'R1 — Warm-season portability', short: 'R1' },
+  { id: 'r3', label: 'R3 — Three-season radiant warmth', short: 'R3' },
+  { id: 'r4mkii', label: 'R4 MKii — Four-season radiant warmth', short: 'R4 MKii' },
+  { id: 'both', label: 'R1 + R4 MKii', short: 'R1 + R4 MKii' },
+  { id: 'all', label: 'Compare the lineup', short: 'R1 + R3 + R4 MKii' },
 ];
 
 const LENGTHS = [
-  { id: '30',  label: '30s', words: '~75 words' },
-  { id: '60',  label: '60s', words: '~150 words' },
-  { id: '90',  label: '90s', words: '~225 words' },
+  { id: '30',  label: '30s', words: '~66 words' },
+  { id: '60',  label: '60s', words: '~132 words' },
+  { id: '90',  label: '90s', words: '~198 words' },
 ];
 
 const TONES = [
@@ -29,68 +31,6 @@ const TONES = [
   { id: 'engineer',    label: 'Engineer Nerd' },
   { id: 'fired_up',   label: 'Fired Up / Rally' },
 ];
-
-function buildFounderPrompt(scriptType, product, length, tone, customContext) {
-  const typeMap = {
-    origin: 'Origin story — why four engineers decided propane fire pits suck and built HOWL from scratch in Colorado.',
-    manufacturing: 'Manufacturing story — the Wheat Ridge, CO factory, 292 parts, 304 stainless steel, aircraft aluminum, brass, zero plastic, zero electronics. Made by hand in America.',
-    burn_ban: 'Burn ban explainer — Stage 1 and Stage 2 burn bans are everywhere. Wood fires, charcoal, even most propane fires are banned. HOWL uses A-Flame® technology and is UL Certified legal in Stage II Burn Bans in all 50 states. When everyone else has to put the fire out, HOWL customers still have one.',
-    vs_wood: 'Wood fire vs. HOWL — honest comparison. No smoke in your face, no hauling logs, no fire ban worries, instant on/off, same look and feel of a real fire. Not better in every way. Better in the ways that matter when you\'re out there.',
-    tech: 'Technology deep-dive — A-Flame® burner: 160 precision micro-emitters producing 32-inch flames on the R1. BarCoal® radiant tubes on the R4 MKii hit 1,300°F, throwing heat you can feel from 8 feet. No fans, no batteries, no electronics. Physics does the work.',
-    cold_weather: 'Cold weather performance — the R4 MKii is the "0°F fire." Real radiant heat from BarCoal® tubes. Your thighs get hot before your face does. Made for alpine, high desert, shoulder season, and deep winter.',
-    customer_result: 'Real customer result through the founder lens — pick one of these real quotes and build the script around it: "My wife had to back her chair up. That\'s never happened with a propane fire." / "Still had a campfire at 6 degrees." / "Rain. Wind. Altitude. Burn ban. Nothing stops this thing." / "The YETI of campfires exists and it\'s made in Colorado."',
-  };
-
-  const productMap = {
-    r1: 'R1 ($374) — 11 lbs, shoebox-sized, 32-inch flames, 8 hours on a 20lb tank, 800°F. "Your 40°F Fire." The world\'s most portable campfire.',
-    r4mkii: 'R4 MKii ($1,474) — 27 lbs, 1,300+°F, BarCoal® radiant heaters, EchoHeat Reflector Shields. "Your 0°F Fire." The world\'s hottest propane fire pit.',
-    both: 'R1 ($374) — the fast-and-light 40°F fire. R4 MKii ($1,474) — the 4-season 0°F fire. Two products, two missions, one brand.',
-  };
-
-  const toneMap = {
-    direct: 'Direct and punchy. Short sentences. No fluff. Dan Kennedy meets a Colorado engineer.',
-    storyteller: 'Warm and personal. Like the founder is sitting across a campfire telling you the story. Pauses. Real moments.',
-    engineer: 'Nerdy and specific. Lean into the specs, the process, the "why does this work" details. The audience respects technical honesty.',
-    fired_up: 'High energy, rallying. This is a battle cry for people who refuse to camp without a real fire. Passionate and direct.',
-  };
-
-  const wordTarget = { '30': 75, '60': 150, '90': 225 }[length];
-
-  return `You are writing a founder-style video ad script for HOWL Campfires. The founder delivers this directly to camera — raw, honest, no production notes.
-
-BRAND FACTS:
-- Founded by four engineers who decided propane fire pits suck
-- All manufacturing in Wheat Ridge, Colorado (Front Range)
-- 938 verified reviews, 90.4% are 5-star
-- UL Certified, legal in Stage II Burn Bans in all 50 states
-- No plastic. No electronics. No fans. No batteries.
-- Materials: 304 stainless steel, aircraft aluminum, brass
-- Proprietary tech: BarCoal® (radiant tube heater), A-Flame® (most fuel-efficient flame on earth)
-- Brand voice: "More heat. More light. More freedom."
-- NEVER use em dashes. Use periods, commas, or ellipses instead.
-
-SCRIPT TYPE: ${typeMap[scriptType]}
-
-PRODUCT FOCUS: ${productMap[product]}
-
-TONE: ${toneMap[tone]}
-
-TARGET LENGTH: ~${wordTarget} words (${length} second ad)
-
-${customContext ? `ADDITIONAL CONTEXT FROM FOUNDER:\n${customContext}\n` : ''}
-
-Write the script as pure spoken word — exactly what the founder says on camera. No production notes, no visual cues, no [B-ROLL] tags, no scene directions. Just the words, spoken naturally.
-
-Structure the script with these labeled sections:
-HOOK: (first 1-2 sentences — stop the scroll, create pattern interrupt)
-STORY: (the setup, the problem, the why)
-PROOF: (the evidence — specs, reviews, real results)
-CTA: (close — direct, specific, no "check us out")
-
-Keep each section tight. The whole script should feel like one continuous, natural piece of speech when read aloud.
-
-Respond with ONLY the script. No preamble, no explanation, no markdown formatting other than the section labels.`;
-}
 
 export default function FounderAdTool() {
   const [scriptType, setScriptType] = useState('origin');
@@ -116,17 +56,19 @@ export default function FounderAdTool() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           max_tokens: 1024,
-          system: 'You are an elite direct-response copywriter specializing in founder-style video ad scripts for DTC brands.',
-          messages: [{ role: 'user', content: buildFounderPrompt(scriptType, product, length, tone, customContext) }],
+          task: 'founder_script',
+          brief: { scriptType, product, length, tone, customContext },
         }),
       });
       const data = await response.json();
+      if (!response.ok || data.error) throw new Error(data.error?.message || data.error || 'Generation failed. Try again.');
       const text = data.content?.filter(b => b.type === 'text').map(b => b.text).join('') || '';
+      if (!text.trim()) throw new Error('No script was returned. Try again.');
       setScript(text.trim());
-    } catch {
-      setError('Generation failed. Try again.');
+    } catch (err) {
+      setError(err.message || 'Generation failed. Try again.');
     } finally {
       setLoading(false);
     }
@@ -233,6 +175,7 @@ export default function FounderAdTool() {
             onChange={e => setCustomContext(e.target.value)}
             placeholder="Add specific talking points, a story, a customer quote you want included, a promotion, etc."
             rows={4}
+            maxLength={6000}
             style={S.textarea}
           />
         </div>

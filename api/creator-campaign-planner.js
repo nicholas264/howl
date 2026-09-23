@@ -1,3 +1,4 @@
+import { withHowlScriptwriting } from './_lib/howl-scriptwriting.js';
 import { requirePermission } from './_lib/app-access.js';
 import { loadBrandGuidelines, validateBrandCopy } from './_lib/brand-guardrails.js';
 
@@ -258,7 +259,7 @@ async function generatePlan(sql, access, input) {
     ...netNewCreators.sort((a, b) => b.score - a.score).slice(0, Math.max(netNewSlots * 3, 8)),
   ];
 
-  const system = `You are HOWL's senior performance creative strategist and direct-response UGC director.
+  const system = withHowlScriptwriting(`You are HOWL's senior performance creative strategist and direct-response UGC director.
 Build a portfolio, not a pile of similar scripts. Match creators to concepts using only the supplied profile and account evidence.
 
 Creative quality rules:
@@ -274,7 +275,7 @@ Creative quality rules:
 - Every assignment must include creator_fit_signals: short bullets that explain why this creator should be matched to this concept.
 - Preserve proven mechanisms while allocating net-new slots to genuinely informative tests.
 - Treat the supplied brand guidelines as hard constraints. Never use prohibited language or unsupported claims.
-- Return only valid JSON.`;
+- Return only valid JSON.`);
 
   const prompt = `Build a ${assetCount}-asset creator campaign plan.
 
@@ -314,9 +315,9 @@ Return:
     "evidence": ["metric statement with timeframe and sample size"],
     "opening_visual": "exact first 0-3 second visual",
     "hooks": ["3 distinct but strategically consistent spoken hooks"],
-    "body_beats": ["ordered argument beat 1", "beat 2", "proof", "objection handling"],
+    "body_beats": ["chosen onramp and why", "product intro linked to problem", "mechanism/proof", "relevant objection and outcome"],
     "full_script": "natural 25-50 second script including visual direction in brackets",
-    "shot_list": ["specific shot"],
+    "shot_list": ["approximate time, specific filmable action, concise on-screen text and attention focus"],
     "ctas": ["2 CTA options"],
     "guardrails": ["claim or execution to avoid"]
   }]

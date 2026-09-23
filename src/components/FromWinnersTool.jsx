@@ -10,6 +10,7 @@ const STRATEGIES = [
 const PRODUCTS = [
   { key: 'mixed', label: 'Mixed products' },
   { key: 'r1', label: 'R1' },
+  { key: 'r3', label: 'R3' },
   { key: 'r4mkii', label: 'R4 MKii' },
 ];
 
@@ -182,7 +183,7 @@ export default function FromWinnersTool({ setActiveTab, setVariations, onOpenCre
 
     const system = `You are HOWL Campfires' senior performance creative strategist. You turn observed ad performance into disciplined, shootable test concepts.
 
-HOWL sells portable propane fire pits, primarily R1 and R4 MKii. The voice is direct, practical, specific, outdoor-literate, and confident without macho filler.
+HOWL sells portable propane fire pits, R1, R3 and R4 MKii. The voice is direct, practical, specific, outdoor-literate, and confident without macho filler.
 
 Your job is not to paraphrase winning scripts. Your job is to identify the mechanism that likely drove performance and design distinct tests that can teach the team something.
 
@@ -200,7 +201,7 @@ Rules:
 Return ONLY a JSON array with this exact shape:
 {
   "concept_name": "short memorable name",
-  "product": "r1 | r4mkii",
+  "product": "r1 | r3 | r4mkii",
   "format": "ugc-demo | founder-demo | comparison | problem-solution | customer-story | static | montage",
   "angle": "specific persuasion angle",
   "inspired_by": ["winner name"],
@@ -211,7 +212,7 @@ Return ONLY a JSON array with this exact shape:
   "hook": "spoken or on-screen opening line",
   "proof_sequence": ["specific proof beat 1", "beat 2", "beat 3"],
   "script": "complete spoken script, approximately 20-35 seconds",
-  "shot_list": ["shot 1", "shot 2", "shot 3", "shot 4"],
+  "shot_list": ["approximate time, filmable action, concise on-screen text and attention focus for each shot"],
   "cta": "specific CTA",
   "why_new": "how this differs from the references",
   "risk": "what could make the test fail"
@@ -223,7 +224,7 @@ BUSINESS OBJECTIVE:
 ${objective}
 
 PRODUCT DIRECTION:
-${product === 'mixed' ? 'Use both R1 and R4 MKii across the set when relevant.' : `Focus on ${product}.`}
+${product === 'mixed' ? 'Use R1, R3 and R4 MKii across the set when relevant.' : `Focus on ${product}.`}
 
 MUST INCLUDE:
 ${mustInclude || 'No additional requirement.'}
@@ -241,7 +242,8 @@ ${references}`;
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
+          task: 'winner_concepts',
           max_tokens: 12000,
           system,
           messages: [{ role: 'user', content: user }],

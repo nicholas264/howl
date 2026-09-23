@@ -1,3 +1,4 @@
+import { withHowlScriptwriting } from './_lib/howl-scriptwriting.js';
 import { captureApprovalEvidence } from './_lib/approval-evidence.js';
 import { approveDeliverable } from './_lib/approval-snapshots.js';
 import { requirePermission } from './_lib/app-access.js';
@@ -463,10 +464,10 @@ async function generateBrief(sql, creatorId, input) {
   if (!creator) throw new Error('Creator not found');
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
 
-  const system = `You are the creator strategist for HOWL Campfires. Write practical, filmable UGC briefs and scripts.
+  const system = withHowlScriptwriting(`You are the creator strategist for HOWL Campfires. Write practical, filmable UGC briefs and scripts.
 Use the creator's real activities, audience, and history. Do not invent personal facts. Keep the concept direct and product-grounded.
 Treat the supplied brand guidelines as hard constraints. Never use prohibited language, unsupported claims, or missing required disclosures.
-Return only valid JSON with: title, product, objective, angle, format, creator_fit, performance_logic, hypothesis, opening_visual, hook, hooks (array), body_beats (array), brief, script, shot_list (array), cta, ctas (array), deliverables (array), guardrails (array).`;
+Return only valid JSON with: title, product, objective, angle, format, creator_fit, performance_logic, hypothesis, opening_visual, hook, hooks (array), body_beats (array), brief, script, shot_list (array), cta, ctas (array), deliverables (array), guardrails (array).`);
   const prompt = `CREATOR
 ${JSON.stringify(creator, null, 2)}
 
@@ -482,7 +483,7 @@ Strategy mode: ${input.strategy_mode === 'net_new' ? 'NET NEW - build a fresh co
 
 The brief must explain the premise, filming environment, hook, proof, product moments, CTA, exact deliverables, and what to avoid.
 The script should sound natural for this creator and be usable as a shot-by-shot production guide.
-Return at least 3 hook options, 4 body beats, 4 shots, and 2 CTA options.`;
+Return at least 3 compatible hook options (each with a connecting next sentence), 4 body beats, 4 shots, and 2 CTA options. Use the existing brief and body_beats fields to explain the onramp choice, problem/solution mechanism, and relevant objection. Use shot_list for approximate timing, action and concise on-screen text. Keep unsupported proof needs in guardrails.`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -547,7 +548,7 @@ async function generateConceptSet(sql, creatorId, input) {
       model: 'claude-sonnet-4-6',
       max_tokens: 10000,
       temperature: 0.65,
-      system: `You are HOWL Campfires' senior creator strategist. Build distinct, filmable direct-response UGC concepts grounded in the creator's real niche, strengths, audience demographics, audience psychographics, activities, social metrics, and performance history. Never invent personal facts or product claims. Treat the supplied brand guidelines as hard constraints. Return only a valid JSON array.`,
+      system: withHowlScriptwriting(`You are HOWL Campfires' senior creator strategist. Build distinct, filmable direct-response UGC concepts grounded in the creator's real niche, strengths, audience demographics, audience psychographics, activities, social metrics, and performance history. Never invent personal facts or product claims. Treat the supplied brand guidelines as hard constraints. Return only a valid JSON array.`),
       messages: [{
         role: 'user',
         content: `Create exactly ${count} net-new UGC video concepts for this creator.
@@ -583,9 +584,9 @@ Return an array where each item has exactly:
   "opening_visual": "frame 0-3 seconds",
   "hook": "spoken opening",
   "proof_sequence": ["beat 1", "beat 2", "beat 3"],
-  "brief": "production-ready creative brief with premise, environment, product moments, proof, CTA, and guardrails",
+  "brief": "production-ready brief with buyer motive, onramp choice, problem and solution mechanism when relevant, environment, product moments, proof, key objection, CTA and missing evidence",
   "script": "complete natural 20-45 second spoken script",
-  "shot_list": ["shot 1", "shot 2", "shot 3", "shot 4"],
+  "shot_list": ["approximate time, filmable action, concise on-screen text and attention focus for each shot"],
   "deliverables": ["deliverable 1"],
   "cta": "specific CTA"
 }`,

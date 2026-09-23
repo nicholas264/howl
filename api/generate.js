@@ -1,3 +1,4 @@
+import { scriptwritingRequest, SCRIPTWRITING_VERSION } from './_lib/howl-scriptwriting.js';
 import { meteredFetch } from './_lib/metered-fetch.js';
 import { checkWorkLimit } from './_lib/work-limits.js';
 // Hardened proxy to Anthropic. The browser cannot pass arbitrary fields:
@@ -33,22 +34,27 @@ export default async function handler(req, res) {
     ? Math.min(reqTokens, MAX_TOKENS_CAP)
     : 1024;
 
-  if (!Array.isArray(body.messages) || !body.messages.length) {
-    return res.status(400).json({ error: 'messages[] required' });
-  }
   if (body.system && typeof body.system !== 'string') {
     return res.status(400).json({ error: 'system must be a string' });
   }
 
-  if (JSON.stringify(body.messages).length + (body.system?.length || 0) > 200000) return res.status(413).json({error:'Generation input exceeds the 200,000-character limit.'});
+  if (JSON.stringify(body).length > 200000) return res.status(413).json({error:'Generation input exceeds the 200,000-character limit.'});
+
+  let generation;
+  try { generation = scriptwritingRequest(body); }
+  catch (error) { return res.status(400).json({ error: error.message }); }
+  if (!Array.isArray(generation.messages) || !generation.messages.length) {
+    return res.status(400).json({ error: 'messages[] required' });
+  }
+  if (body.task) res.setHeader('X-HOWL-Scriptwriting-Version', SCRIPTWRITING_VERSION);
 
   // Server-controlled allowlist. Browser-supplied tools / tool_choice /
   // anthropic_version / metadata / etc are dropped here on purpose.
   const safeBody = {
     model,
     max_tokens,
-    messages: body.messages,
-    ...(body.system ? { system: body.system } : {}),
+    messages: generation.messages,
+    ...(generation.system ? { system: generation.system } : {}),
     ...(typeof body.temperature === 'number' ? { temperature: Math.max(0, Math.min(1, body.temperature)) } : {}),
   };
 
