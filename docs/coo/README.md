@@ -24,7 +24,7 @@ Campfire's `?tab=coo` workspace connects company planning, department scorecards
 
 ## Sharing and data sources
 
-The feature uses existing `analytics.read` and `analytics.write` permissions. Owner/admin/strategist access follows Campfire's existing role map. Read-only users can inspect and export, but the server rejects mutations. Owners are free-text accountable names; assignment does not send notifications or create accounts.
+The initial rollout is restricted to the authenticated `owner` role. The sidebar, performance hub, and direct-tab rendering hide the workspace from every other role, and the API rejects both reads and writes before querying COO data. Admin, strategist, analyst, and viewer roles have no access, even with analytics permissions. Existing `analytics.read` / `analytics.write` checks also remain in place. Owners are free-text accountable names; assignment does not send notifications or create accounts.
 
 Actuals are manual. The overview links to Campfire's business dashboard, dealer reporting, and SKU media pacing as report sources. These links do not automatically synchronize measurements. There are no supplier, manufacturing, inventory, or HR data connectors in this release.
 
@@ -40,7 +40,7 @@ Before deployment:
 
 1. Run `npm run check` with the repository's isolated test runner.
 2. Select the intended database explicitly and run the existing `npm run db:migrate` migration workflow. It includes `ensureCooWorkspace` and runtime grants.
-3. Deploy through the normal Campfire release process, then verify authenticated read/write and read-only roles against the selected environment.
+3. Deploy through the normal Campfire release process, then verify owner access and rejection of all non-owner roles against the selected environment.
 
 No production migration or deployment has been run for this feature.
 

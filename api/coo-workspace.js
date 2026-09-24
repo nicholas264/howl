@@ -1,4 +1,5 @@
 import { requirePermission, hasPermission } from './_lib/app-access.js';
+import { canAccessCoo } from '../src/lib/coo-access.js';
 import { applyCooCommand } from './_lib/coo.js';
 import { emptyWorkspace } from '../src/lib/coo.js';
 export function createCooHandler({authorize=requirePermission}={}) {
@@ -7,6 +8,7 @@ export function createCooHandler({authorize=requirePermission}={}) {
     if(!['GET','POST'].includes(req.method)) return res.status(405).json({error:'Method not allowed'});
     const access=await authorize(req,res,req.method==='GET'?'analytics.read':'analytics.write');
     if(!access) return;
+    if(!canAccessCoo(access)) return res.status(403).json({error:'The COO workspace is currently restricted to the owner.'});
     try {
       const {sql,userId}=access;
       const [row]=await sql`SELECT data, revision, updated_at, updated_by FROM coo_workspace WHERE id = 'company'`;

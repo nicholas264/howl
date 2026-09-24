@@ -92,14 +92,14 @@ test('API persists across reads, enforces permissions and detects stale writes u
   try {
     const sql=neon('postgres://test:test@localhost/test');await ensureCooWorkspace(sql);
     let write=true;const permissions=[];
-    const handler=createCooHandler({authorize:async(req,res,p)=>{permissions.push(p);if(p==='analytics.write'&&!write){res.status(403).json({error:'Forbidden'});return null;}return {sql,userId:'coo',permissions:write?['analytics.read','analytics.write']:['analytics.read']};}});
+    const handler=createCooHandler({authorize:async(req,res,p)=>{permissions.push(p);if(p==='analytics.write'&&!write){res.status(403).json({error:'Forbidden'});return null;}return {sql,userId:'coo',role:write?'owner':'viewer',permissions:write?['analytics.read','analytics.write']:['analytics.read']};}});
     const call=async(method,body)=>{const res=response();await handler({method,body},res);return res;};
     const initial=await call('GET');assert.deepEqual(initial.body.state,emptyWorkspace());assert.equal(initial.body.revision,0);
     const saved=await call('POST',{revision:0,command:{action:'setup'}});assert.equal(saved.statusCode,200);assert.equal(saved.body.revision,1);
     assert.equal((await call('GET')).body.state.departments.length,3);
     assert.equal((await call('POST',{revision:0,command:{action:'setup'}})).statusCode,409);
     assert.equal((await call('POST',{revision:1,command:{action:'save',kind:'metric',values:{}}})).statusCode,400);
-    write=false;assert.equal((await call('GET')).body.canWrite,false);assert.equal((await call('POST',{revision:1,command:{action:'setup'}})).statusCode,403);
+    write=false;assert.equal((await call('GET')).statusCode,403);assert.equal((await call('POST',{revision:1,command:{action:'setup'}})).statusCode,403);
     assert.equal((await call('DELETE')).statusCode,405);assert.ok(permissions.includes('analytics.write'));
     assert.equal((await call('GET')).headers['Cache-Control'],'private, no-store');
   }finally{restore();await db.close();}
@@ -117,7 +117,7 @@ test('concurrent writes race at the SQL boundary without losing the winning upda
   const restore=useTestDatabase(db,async(query)=>{if(query.startsWith('SELECT data')){reads++;if(reads===2)release();await gate;}});
   try{
     const sql=neon('postgres://test:test@localhost/test');await ensureCooWorkspace(sql);
-    const handler=createCooHandler({authorize:async()=>({sql,userId:'coo',permissions:['*']})});
+    const handler=createCooHandler({authorize:async()=>({sql,userId:'coo',role:'owner',permissions:['*']})});
     const call=async()=>{const res=response();await handler({method:'POST',body:{revision:0,command:{action:'setup'}}},res);return res;};
     const results=await Promise.all([call(),call()]);assert.deepEqual(results.map(r=>r.statusCode).sort(),[200,409]);
     const rows=await sql`SELECT revision,data FROM coo_workspace WHERE id='company'`;assert.equal(rows[0].revision,1);assert.equal(rows[0].data.departments.length,3);
@@ -139,4 +139,19 @@ test('refreshing workspace revision cannot silently overwrite a newer version of
   const s=command(f.state,'metric',old.id,{...old,owner:'New owner'});
   assert.equal(s.metrics[0].version,2);
   assert.throws(()=>applyCooCommand(s,{action:'save',kind:'metric',id:old.id,expectedVersion:old.version,values:{...old,title:'Stale title'}},'coo',now),/record changed/);
+});
+
+test('COO access requires owner role, even with wildcard or analytics/admin permissions',async()=>{
+  const {canAccessCoo}=await import('../src/lib/coo-access.js');
+  assert.equal(canAccessCoo({role:'owner'}),true);
+  for(const role of ['admin','strategist','producer','launcher','analyst','viewer','uninvited',undefined]) {
+    assert.equal(canAccessCoo({role,permissions:['*']}),false);
+    for(const method of ['GET','POST']) {
+      let queried=false;
+      const handler=createCooHandler({authorize:async()=>({role,userId:'not-owner',permissions:['*','analytics.read','analytics.write','admin.users'],sql:()=>{queried=true;throw Error('Must not query COO data');}})});
+      const res=response();await handler({method,body:{revision:0,command:{action:'setup'}}},res);
+      assert.equal(res.statusCode,403,`${role}: ${method}`);assert.equal(queried,false);
+      assert.equal(res.body.state,undefined);
+    }
+  }
 });

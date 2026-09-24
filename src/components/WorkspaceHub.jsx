@@ -1,3 +1,4 @@
+import { canAccessCoo } from '../lib/coo-access.js';
 const CREATIVE_TOOLS = [
   { tab: 'static-studio', permission: 'assets.write', label: 'Static Studio', description: 'Turn approved product photography into art-directed feed and story campaigns.' },
   { tab: 'from-winners', permission: 'briefs.write', label: 'Concept Studio', description: 'Turn proven creative patterns into grounded concepts and scripts.' },
@@ -11,17 +12,17 @@ const CREATIVE_TOOLS = [
 ];
 
 const PERFORMANCE_TOOLS = [
-  { tab: 'coo', permission: 'analytics.read', label: 'COO Workspace', description: 'Plan company objectives, monitor department scorecards, and run operating reviews.' },
+  { tab: 'coo', ownerOnly: true, permission: 'analytics.read', label: 'COO Workspace', description: 'Plan company objectives, monitor department scorecards, and run operating reviews.' },
   { tab: 'creative-analytics', permission: 'analytics.read', label: 'Creative Analytics', description: 'See winners, performance signals, transcripts, and Creative DNA.' },
   { tab: 'dashboard-cfo', permission: 'analytics.read', label: 'Business Dashboard', description: 'Revenue pace, contribution margin, forecasts, and operating context.' },
   { tab: 'sku-media-pacing', permission: 'analytics.read', label: 'SKU Media Pacing', description: 'Plan monthly paid media budgets and account Cost Cap targets from DTC SKU units.' },
   { tab: 'log', permission: 'launch.read', label: 'Launch Log', description: 'Audit what launched, when, by whom, and with which source asset.' },
 ];
 
-export default function WorkspaceHub({ type, setActiveTab, can = () => true }) {
+export default function WorkspaceHub({ type, setActiveTab, can = () => true, appAccess }) {
   const isCreative = type === 'creative';
   const tools = (isCreative ? CREATIVE_TOOLS : PERFORMANCE_TOOLS)
-    .filter(tool => can(tool.permission));
+    .filter(tool => (!tool.ownerOnly || canAccessCoo(appAccess)) && can(tool.permission));
   return (
     <div className="workspace-page">
       <header className="workspace-head">

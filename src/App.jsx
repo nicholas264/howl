@@ -1,3 +1,4 @@
+import { canAccessCoo } from './lib/coo-access.js';
 import ToolErrorBoundary from './components/ToolErrorBoundary.jsx';
 import React, { useState, useCallback, useEffect, useMemo, useRef, Suspense, lazy } from "react";
 import { UserButton } from "@clerk/clerk-react";
@@ -204,7 +205,7 @@ export default function HowlAdEngine({ appAccess }) {
   }, [activeTab, refreshUgcCount]);
 
   const NAV_SECTIONS = [
-    { label: 'Company', items: [{ key: 'coo', label: 'COO Workspace', permission: 'analytics.read' }] },
+    { label: 'Company', items: [{ key: 'coo', label: 'COO Workspace', permission: 'analytics.read', ownerOnly: true }] },
     {
       label: 'Policy',
       items: [
@@ -266,7 +267,7 @@ export default function HowlAdEngine({ appAccess }) {
     },
   ].map(section => ({
     ...section,
-    items: section.items.filter(item => !item.permission || can(item.permission)),
+    items: section.items.filter(item => (!item.ownerOnly || canAccessCoo(appAccess)) && (!item.permission || can(item.permission))),
   })).filter(section => section.items.length);
 
   const allowedTabs = useMemo(() => {
@@ -402,7 +403,7 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "seeding-ledger" && <SeedingLedger canManage={can('creators.write')} onOpenCreator={openPlannedCreator} />}
         {activeTab === "creative-plan" && <CreativePlanningWorkspace onOpenCreator={openPlannedCreator} setActiveTab={navigate} />}
         {activeTab === "creative" && <WorkspaceHub type="creative" setActiveTab={navigate} can={can} />}
-        {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={navigate} can={can} />}
+        {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={navigate} can={can} appAccess={appAccess} />}
         {activeTab === "admin" && can('admin.users') && <AdminWorkspace onOpenEditor={openEditorSession} />}
         {activeTab === "from-winners" && <FromWinnersTool setActiveTab={navigate} setVariations={setVariations} onOpenCreator={openPlannedCreator} />}
         {activeTab === "content-studio" && <ContentStudio canPublish={can('content.publish')} />}
@@ -414,7 +415,7 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "founder" && <FounderAdTool />}
         {activeTab === "gallery" && <GalleryTab cart={cart} />}
         {activeTab === "dashboard-dealers" && <DealerDashboard setActiveTab={navigate} />}
-        {activeTab === "coo" && <CooWorkspace setActiveTab={navigate} />}
+        {activeTab === "coo" && canAccessCoo(appAccess) && <CooWorkspace setActiveTab={navigate} />}
         {activeTab === "dashboard-cfo" && <DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="cfo" />}
         {activeTab === "map-monitor" && <MapMonitorWorkspace canManage={can('admin.users')} />}
         {activeTab === "dashboard-creative" && <><DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="creative" onOpenCreator={openPlannedCreator} canManageCreators={can('creators.write')} /></>}

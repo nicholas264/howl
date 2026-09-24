@@ -34,3 +34,7 @@ Native date entry was exercised using the date control's keyboard interaction; s
 ## Release boundary
 
 This verifies the local implementation and database semantics. Hosted auth, production runtime grants, and the new production table must be verified during the normal release workflow. Actuals remain manual; existing Campfire reports are linked as sources, not automatically synchronized.
+
+## Owner-only rollout update
+
+The subsequent owner-only change passed `npm run check`: 234 tests, no failures, backend syntax checks, and production build. Tests explicitly reject GET and POST for every non-owner role, including a non-owner with wildcard/admin/analytics permissions, before any COO data query. The sidebar, performance-hub link, and direct COO component rendering use the same role predicate. This replaces the initial broader analytics-role access described in the original test run.
