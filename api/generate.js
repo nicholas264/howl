@@ -1,4 +1,4 @@
-import { studioRequest, validateStudioBrief, parseStudioOutput, STUDIO_OUTPUT_CONFIG } from './_lib/script-studio.js';
+import { studioRequest, validateStudioBrief, parseStudioOutput, STUDIO_OUTPUT_CONFIG, breakdownRequest, parseBreakdown, BREAKDOWN_SCHEMA } from './_lib/script-studio.js';
 import { loadBrandGuidelines, validateBrandCopy } from './_lib/brand-guardrails.js';
 import { scriptwritingRequest, SCRIPTWRITING_VERSION } from './_lib/howl-scriptwriting.js';
 import { meteredFetch } from './_lib/metered-fetch.js';
@@ -44,7 +44,9 @@ export default async function handler(req, res) {
 
   let generation, studioGuidelines;
   try {
-    if (body.task === 'script_studio') {
+    if (body.task === 'script_studio_breakdown') {
+      generation = breakdownRequest(body.script);
+    } else if (body.task === 'script_studio') {
       const brief = validateStudioBrief(body.brief);
       let creator = null;
       if (brief.creatorId) {
@@ -63,9 +65,9 @@ export default async function handler(req, res) {
   // Server-controlled allowlist. Browser-supplied tools / tool_choice /
   // anthropic_version / metadata / etc are dropped here on purpose.
   const safeBody = {
-    model: body.task === 'script_studio' ? DEFAULT_MODEL : model,
+    model: ['script_studio', 'script_studio_breakdown'].includes(body.task) ? DEFAULT_MODEL : model,
     max_tokens,
-    ...(body.task === 'script_studio' ? { output_config: STUDIO_OUTPUT_CONFIG } : {}),
+    ...(body.task === 'script_studio' ? { output_config: STUDIO_OUTPUT_CONFIG } : body.task === 'script_studio_breakdown' ? { output_config: { format: { type: 'json_schema', schema: BREAKDOWN_SCHEMA } } } : {}),
     messages: generation.messages,
     ...(generation.system ? { system: generation.system } : {}),
     ...(typeof body.temperature === 'number' ? { temperature: Math.max(0, Math.min(1, body.temperature)) } : {}),
@@ -82,9 +84,15 @@ export default async function handler(req, res) {
       body: JSON.stringify(safeBody),
     });
     const data = await r.json();
+    if (body.task === 'script_studio_breakdown' && r.ok) {
+      try {
+        const raw = data.content?.filter(b => b.type === 'text').map(b => b.text).join('') || '';
+        return res.json({ breakdown: parseBreakdown(JSON.parse(raw), body.script), breakdown_script: body.script });
+      } catch (error) { return res.status(502).json({ error: 'Could not label the exact script. Please refresh the breakdown.' }); }
+    }
     if (body.task === 'script_studio' && r.ok) {
       try {
-        const script = parseStudioOutput(data.content?.filter(b => b.type === 'text').map(b => b.text).join('') || '');
+        const script = parseStudioOutput(data.content?.filter(b => b.type === 'text').map(b => b.text).join('') || '', { requireBreakdown: true });
         const violations = validateBrandCopy(JSON.stringify(script), studioGuidelines);
         if (violations.length) return res.status(422).json({ error: `Revise your direction and try again. Brand checks flagged: ${violations.join(', ')}` });
         return res.json({ script, version: SCRIPTWRITING_VERSION });

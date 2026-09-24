@@ -1,3 +1,4 @@
+import { ensureScriptStudio } from '../api/_lib/script-studio-store.js';
 import { ensureDealerOutreach } from '../api/_lib/dealer-outreach.js';
 import {ensureSessionCreation} from '../api/_lib/session-creation.js';
 import { ensureSeedingBudgets } from '../api/_lib/seeding-report.js';
@@ -91,5 +92,6 @@ await ensureSeedingBudgets(sql);
 await ensureSessionCreation(sql);
 await sql`INSERT INTO app_schema_migrations (version) VALUES ('2026-09-09-session-creation') ON CONFLICT DO NOTHING`;
 await ensureDealerOutreach(sql);
+await ensureScriptStudio(sql);
 if (process.env.HOWL_RUNTIME_DB_ROLE) await grantRuntimeAccess(sql,process.env.HOWL_RUNTIME_DB_ROLE);
 console.log('Schema migrations applied.');

@@ -12,4 +12,14 @@ Story: choose a product and starting point in one studio, generate a speaker-app
 - A malformed hook response found in live testing led to server-controlled structured output, with named first/second/third openings normalized to the UI array. See the [provider structured-output documentation](https://platform.claude.com/docs/en/build-with-claude/structured-outputs). No browser-supplied output schema is accepted.
 - Dependency audit: zero vulnerabilities.
 
-Temporary browser fixtures and private model response files are excluded from the release. No schema migration is required. Signed-in production UI verification depends on an available user session; production deployment and HTTP checks are recorded at release time.
+Temporary browser fixtures and private model response files are excluded from the release. The initial release required no schema migration. Signed-in production UI verification depends on an available user session; production deployment and HTTP checks are recorded at release time.
+
+
+## Follow-up verification: labeled output, saves, Docs and results
+- 221 isolated regression tests passed, API syntax and production build passed; dependency audit found zero vulnerabilities.
+- Real R1 founder and R3 voiceover model calls returned all eight breakdown fields with exact source excerpts, three openings and valid shot lists.
+- Real handlers with isolated PostgreSQL verify immutable revisions, idempotent saves, stale-breakdown rejection, ad uniqueness, weighted metrics, date windows, missing-data nulls and duplicate launch records without inflated spend.
+- Google provider mocks verify native-document conversion, escaped content, returned-link validation, read-back on every export, repeated export without duplicate creation, and an uncertain upload held on retry. Production authentication rejects unauthenticated save requests.
+- Browser fixtures exercise labeled display, shared save, Google Doc link, ad linking, metrics and stale-edit refresh. These are fixture-backed UI checks, not evidence that a live Google account created a document.
+- Production database identity was verified and the scoped additive migration applied before deployment. Existing Google connection tables and the canonical OAuth callback were verified.
+- A signed-in production browser session is unavailable. Live Google consent and document creation must therefore be exercised by a connected user; no user credentials were impersonated and no production test scripts or ads were inserted.

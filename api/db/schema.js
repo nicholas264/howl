@@ -1,3 +1,4 @@
+import { ensureScriptStudio } from '../_lib/script-studio-store.js';
 import { ensureSeedingBudgets } from '../_lib/seeding-report.js';
 import { ensureAnalysisSchema } from '../_lib/analysis-schema.js';
 import { ensureCreativeVariants } from '../_lib/creative-variants.js';
@@ -16,6 +17,7 @@ import { ensureCreativeAuditTables } from '../_lib/creative-audit.js';
 import { ensureCreativeEvidenceTaskTables } from '../_lib/creative-evidence-tasks.js';
 
 export async function initializeSchema(sql) {
+    await ensureScriptStudio(sql);
     await ensureSeedingBudgets(sql);
     await ensureSyncState(sql);
     await ensureOperationJournal(sql);

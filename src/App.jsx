@@ -402,7 +402,7 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "creative" && <WorkspaceHub type="creative" setActiveTab={navigate} can={can} />}
         {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={navigate} can={can} />}
         {activeTab === "admin" && can('admin.users') && <AdminWorkspace onOpenEditor={openEditorSession} />}
-        {['script-studio', 'from-winners', 'founder'].includes(activeTab) && <ScriptStudio key={`${activeTab}:${scriptCreatorId || ''}`} initialCreatorId={activeTab === 'script-studio' ? scriptCreatorId : null} initialStartingPoint={activeTab === 'from-winners' ? 'winner' : 'fresh'} setActiveTab={navigate} setVariations={setVariations} onOpenCreator={openPlannedCreator} />}
+        {['script-studio', 'from-winners', 'founder'].includes(activeTab) && <ScriptStudio key={`${activeTab}:${scriptCreatorId || ''}`} initialCreatorId={activeTab === 'script-studio' ? scriptCreatorId : null} initialStartingPoint={activeTab === 'from-winners' ? 'winner' : 'fresh'} canReadPerformance={can('analytics.read')} canLinkAds={can('analytics.write')} setActiveTab={navigate} setVariations={setVariations} onOpenCreator={openPlannedCreator} />}
         {activeTab === "content-studio" && <ContentStudio canPublish={can('content.publish')} />}
         {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} driveAuth={driveAuth} onAddToCart={addToCart} />}
         {activeTab === "static-studio" && <StaticStudio driveAuth={driveAuth} onAddToCart={addToCart} onOpenLauncher={() => navigate("launcher")} />}

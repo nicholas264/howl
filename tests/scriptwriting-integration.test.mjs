@@ -3,7 +3,7 @@ import { ensureWorkControls } from '../api/_lib/work-controls.js';
 import { ensureOperationBudgets } from '../api/_lib/operation-budget.js';
 import { ensureCreatorOpsTables } from '../api/_lib/creator-ops.js';
 import { ensureAnalysisSchema } from '../api/_lib/analysis-schema.js';
-import { studioRequest, validateStudioBrief, parseStudioOutput } from '../api/_lib/script-studio.js';
+import { studioRequest, validateStudioBrief, parseStudioOutput, BREAKDOWN_LABELS } from '../api/_lib/script-studio.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PGlite } from '@electric-sql/pglite';
@@ -89,6 +89,7 @@ test('every script-generating route sends the studied method to the provider and
       assert.match(payload.system, /preserve narrator/);
     }
     const studioOutput = { title: 'Warmth where you sit', angle: 'Radiant warmth at camp', strategy: 'Recognize the cold before explaining the tube.', script: 'Still cold beside the flame? The R3 adds radiant warmth from a BarCoal tube. See the R3.', cta: 'See the R3', hooks: [1,2,3].map(n => ({ spoken: `Opening ${n}`, next_line: 'Meet the R3.', visual: 'Camper outside', on_screen: 'Radiant warmth' })), shot_list: [1,2,3,4].map(n => ({ time: `${n * 5}s`, visual: 'Show the R3 outside', on_screen: 'Camp warmth' })), guardrails: ['Film outside with proper clearances.'] };
+    studioOutput.breakdown = Object.fromEntries(Object.keys(BREAKDOWN_LABELS).map(key => [key, { used: key === 'hook', quote: key === 'hook' ? 'Still cold beside the flame?' : '', purpose: key === 'hook' ? 'Recognize the camper’s problem.' : 'Not needed in this short fixture.' }]));
     for (const delivery of ['founder', 'creator', 'voiceover']) {
       providerResult = studioOutput;
       const studio = await call(generate, { task: 'script_studio', brief: { product: 'r3', delivery, startingPoint: 'fresh', duration: 30, creatorId: creator.id }, max_tokens: 5000 });
@@ -113,6 +114,11 @@ test('every script-generating route sends the studied method to the provider and
     await sql`INSERT INTO brand_guidelines(prohibited_phrases) VALUES (ARRAY['Still cold'])`;
     await call(generate, { task: 'script_studio', brief: { product: 'r3', delivery: 'voiceover', startingPoint: 'fresh', duration: 30 } }, 422);
     await sql`DELETE FROM brand_guidelines`;
+    providerResult = studioOutput.breakdown;
+    const labeled = await call(generate, { task: 'script_studio_breakdown', script: studioOutput.script });
+    assert.equal(labeled.body.breakdown_script, studioOutput.script);
+    providerResult = {...studioOutput.breakdown, hook:{used:true,quote:'Invented words',purpose:'Invalid quote'}};
+    await call(generate, {task:'script_studio_breakdown',script:studioOutput.script}, 502);
     providerResult = 'truncated invalid json';
     await call(generate, { task: 'script_studio', brief: { product: 'r1', delivery: 'founder', startingPoint: 'fresh', duration: 30 } }, 502);
     const beforeInvalid = calls.length;

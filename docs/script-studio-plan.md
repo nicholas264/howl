@@ -18,4 +18,14 @@ Reviewed against the brief: this uses the established Campfire palette, not a se
 3. Replace navigation entries and profile generation form; retain legacy route aliases and access to locally saved Founder Ads.
 4. Exercise request validation, all delivery/starting-point combinations, creator persistence, existing regressions, and responsive UI. Deploy from latest production source and verify the production alias.
 
-No new database schema. Campaign planning remains a separate portfolio workflow using the existing shared method. Local saved drafts remain clearly labeled as browser-local.
+The initial release required no schema changes. Campaign planning remains a separate portfolio workflow using the existing shared method. Local saved drafts remain clearly labeled as browser-local.
+
+
+## Labeled output, shared versions, Docs and measurement
+- Show exact spoken excerpts and a plain-language job for hook, onramp, problem mechanism, product introduction, solution mechanism, proof, objection handling and CTA. Intentionally absent beats explain why. Editing spoken copy invalidates the breakdown until refreshed.
+- Save complete, immutable versions to `script_studio_scripts`. Edits save a child version; identical saves by one user are idempotent. Retain local drafts and creator brief handoff.
+- Export the saved version as a native Google Doc using the current user's Google connection and Drive HTML conversion. Include the spoken script, labeled breakdown, alternate openings, strategy, shots and guardrails. Read back the created file before returning its link. External operation journaling prevents duplicate creation after retries; uncertain writes require operator review. Documents are copies, not a two-way sync.
+- Link known Meta ad IDs explicitly to a saved version and the opening actually filmed. `script_studio_ads` permits one version per ad to prevent double attribution. Aggregate existing daily insights over 7, 30 or 90 days; calculate weighted rates from sums. No data remains null. Show spend, purchases, CPA, ROAS, CTR, hook and hold rates, with opening-level comparisons and last-sync status.
+- Respect `briefs.read/write` for scripts and `analytics.read/write` for results/links. Google Docs consent requests only identity and `drive.file`, with no email scope added by this flow.
+
+Deploy the additive tables before application code with `node scripts/migrate-script-studio.mjs` using the explicitly selected production migration connection. Set `HOWL_RUNTIME_DB_ROLE` when runtime uses a separate restricted role. The full migration also includes these tables. No existing script or ad data is rewritten.
