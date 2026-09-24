@@ -2,7 +2,7 @@ import { requirePermission, hasPermission } from './_lib/app-access.js';
 import { canAccessCoo } from '../src/lib/coo-access.js';
 import { applyCooCommand } from './_lib/coo.js';
 import { emptyWorkspace } from '../src/lib/coo.js';
-export function createCooHandler({authorize=requirePermission}={}) {
+export function createCooHandler({authorize=requirePermission, now=()=>new Date()}={}) {
   return async(req,res)=>{
     res.setHeader('Cache-Control','private, no-store');
     if(!['GET','POST'].includes(req.method)) return res.status(405).json({error:'Method not allowed'});
@@ -17,7 +17,7 @@ export function createCooHandler({authorize=requirePermission}={}) {
       if(!b||!Number.isSafeInteger(b.revision)||b.revision<0) return res.status(400).json({error:'A valid workspace revision is required.'});
       if(b.revision!==(row?.revision||0)) return res.status(409).json({error:'Someone updated the workspace. Refresh before saving again. Your open form has been kept.'});
       let state;
-      try {state=applyCooCommand(row?.data,b.command,userId);}
+      try {state=applyCooCommand(row?.data,b.command,userId,now());}
       catch(error){return res.status(400).json({error:error.message});}
       const data=JSON.stringify(state);
       if(Buffer.byteLength(data,'utf8')>2500000) return res.status(413).json({error:'Workspace history has reached its storage capacity. Your changes were not saved. Contact an administrator to extend history storage.'});

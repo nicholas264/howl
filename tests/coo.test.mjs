@@ -40,12 +40,13 @@ test('annual to quarterly alignment, metric history, review snapshot and assigne
 test('status handles decrease targets, zero targets, missing values, stale values, future cycles and historical cutoff',()=>{
   const f=fixture();assert.equal(metricHealth(f.state,f.state.metrics[0],'2026-09-23').status,'no-data');
   assert.equal(metricProgress(f.metric,6),.5);assert.equal(metricProgress({...f.metric,baseline:10,target:0},0),1);
-  let s=command(f.state,'metric',f.metricId,{date:'2026-09-23',value:2},'checkin');
+  let s=command(f.state,'metric',f.metricId,{date:'2026-09-23',value:2,forecast:2},'checkin');
+  s.metrics[0].plan=[{date:'2026-09-23',value:2},{date:'2026-09-30',value:2}];
   assert.equal(metricHealth(s,s.metrics[0],'2026-09-23').status,'on-track');
   assert.equal(metricHealth(s,s.metrics[0],'2027-01-01').status,'on-track');
   assert.equal(metricHealth(s,s.metrics[0],'2026-06-01').status,'not-started');
   s.checkins[0].date='2026-09-01';assert.equal(metricHealth(s,s.metrics[0],'2026-09-23').status,'stale');
-  const kpi={...f.metric,kind:'kpi',baseline:0,target:0};s.metrics[0]=kpi;s.checkins[0].date='2026-09-23';s.checkins[0].value=0;kpi.id=f.metricId;
+  const kpi={...f.metric,kind:'kpi',baseline:0,target:0};s.metrics[0]=kpi;s.checkins[0].date='2026-09-23';s.checkins[0].value=0;kpi.id=f.metricId;kpi.plan=[{date:'2026-09-23',value:0},{date:'2026-09-30',value:0}];s.checkins[0].forecast=0;
   assert.equal(metricHealth(s,kpi,'2026-09-23').status,'on-track');s.checkins[0].value=1;assert.equal(metricHealth(s,kpi,'2026-09-23').status,'off-track');
 });
 test('objective progress counts only key results and missing results are explicit',()=>{
@@ -117,7 +118,7 @@ test('concurrent writes race at the SQL boundary without losing the winning upda
   const restore=useTestDatabase(db,async(query)=>{if(query.startsWith('SELECT data')){reads++;if(reads===2)release();await gate;}});
   try{
     const sql=neon('postgres://test:test@localhost/test');await ensureCooWorkspace(sql);
-    const handler=createCooHandler({authorize:async()=>({sql,userId:'coo',role:'owner',permissions:['*']})});
+    const handler=createCooHandler({authorize:async()=>({sql,userId:'coo',role:'owner',permissions:['*']}),now:()=>now});
     const call=async()=>{const res=response();await handler({method:'POST',body:{revision:0,command:{action:'setup'}}},res);return res;};
     const results=await Promise.all([call(),call()]);assert.deepEqual(results.map(r=>r.statusCode).sort(),[200,409]);
     const rows=await sql`SELECT revision,data FROM coo_workspace WHERE id='company'`;assert.equal(rows[0].revision,1);assert.equal(rows[0].data.departments.length,3);
@@ -154,4 +155,76 @@ test('COO access requires owner role, even with wildcard or analytics/admin perm
       assert.equal(res.body.state,undefined);
     }
   }
+});
+
+test('checkpoint pace uses the reporting date, preserves seasonal jumps, and separates forecast from goal',()=>{
+  const f=fixture();let s=command(f.state,'metric',f.metricId,{...f.metric,baseline:0,target:1000,unit:'units',direction:'increase',tolerance:25,plan:[{date:'2026-07-31',value:100},{date:'2026-08-31',value:400},{date:'2026-09-30',value:1000}]});
+  s=command(s,'metric',f.metricId,{date:'2026-09-23',value:320,forecast:800},'checkin');
+  const h=metricHealth(s,s.metrics[0],'2026-09-23');
+  assert.equal(h.planned,400);assert.equal(h.forecast,800);assert.equal(h.variance,-80);assert.equal(h.forecastGap,-200);assert.equal(h.planStatus,'off-track');assert.equal(h.forecastStatus,'off-track');
+  assert.equal(s.metrics[0].target,1000);
+  s=command(s,'metric',f.metricId,{date:'2026-09-23',value:450,forecast:800},'checkin');
+  const later=metricHealth(s,s.metrics[0],'2026-09-23');assert.equal(later.planStatus,'on-track');assert.equal(later.forecastStatus,'off-track');assert.equal(later.status,'off-track');
+  s.checkins.at(-1).date='2026-08-30';s.checkins[0].date='2026-08-29';
+  const stale=metricHealth(s,s.metrics[0],'2026-09-23');assert.equal(stale.planned,100);assert.equal(stale.plannedNow,400);assert.equal(stale.status,'stale');
+});
+test('missing plan and forecast are explicit; tolerance supports lower-is-better and zero expected finish',()=>{
+  const f=fixture();let s=command(f.state,'metric',f.metricId,{date:'2026-09-23',value:5},'checkin');
+  assert.equal(metricHealth(s,s.metrics[0],'2026-09-23').status,'no-plan');
+  s=command(s,'metric',f.metricId,{...s.metrics[0],tolerance:.5,plan:[{date:'2026-07-01',value:5},{date:'2026-09-30',value:2}]});
+  assert.equal(metricHealth(s,s.metrics[0],'2026-09-23').status,'no-forecast');
+  s=command(s,'metric',f.metricId,{date:'2026-09-23',value:5.3,forecast:0},'checkin');
+  const h=metricHealth(s,s.metrics[0],'2026-09-23');assert.equal(h.planStatus,'at-risk');assert.equal(h.forecastStatus,'on-track');assert.equal(h.forecast,0);
+});
+test('agreed checkpoints and goal remain locked while forecast revisions remain in history',()=>{
+  const f=fixture();let s=command(f.state,'metric',f.metricId,{...f.metric,plan:[{date:'2026-09-30',value:2}]});
+  assert.throws(()=>command(s,'metric',f.metricId,{...s.metrics[0],plan:[{date:'2026-09-29',value:2},{date:'2026-09-30',value:2}]}),/locked/);
+  assert.throws(()=>command(s,'metric',f.metricId,{...s.metrics[0],target:1,plan:[{date:'2026-09-30',value:1}]}),/locked/);
+  s=command(s,'metric',f.metricId,{date:'2026-09-22',value:5,forecast:4},'checkin');
+  s=command(s,'metric',f.metricId,{date:'2026-09-23',value:4,forecast:3},'checkin');
+  assert.deepEqual(s.checkins.map(c=>c.forecast),[4,3]);assert.equal(s.metrics[0].target,2);
+  for(const plan of [[{date:'2026-09-30',value:9}],[{date:'2026-09-29',value:2}],[{date:'2026-09-30',value:2},{date:'2026-09-30',value:2}],[{date:'2026-02-30',value:2}]])assert.throws(()=>command(f.state,'metric',undefined,{...f.metric,plan}));
+});
+test('one constraint spans departments, links actions, and has its own resolution history',async()=>{
+  const {constraintsForMetric,constraintHealth}=await import('../src/lib/coo.js');
+  const f=fixture();let s=command(f.state,'metric',undefined,{...f.metric,kind:'kpi',objectiveId:'',title:'Revenue at risk',departmentId:f.state.departments[1].id});const second=s.metrics.at(-1);
+  s=command(s,'constraint',undefined,{title:'Missing component',owner:'Sourcing lead',departmentId:f.state.departments[2].id,cycleId:f.cycleId,metricIds:[f.metricId,second.id],objectiveIds:[],dueDate:'2026-09-29',impact:'Production and sales at risk',decision:'Approve expedited freight'});const constraint=s.constraints[0];
+  assert.equal(constraintsForMetric(s,s.metrics[0])[0].id,constraint.id);assert.equal(constraintsForMetric(s,second)[0].id,constraint.id);
+  s=command(s,'metric',f.metricId,{date:'2026-09-23',value:4,forecast:3,constraintUpdate:{id:constraint.id,status:'in-progress',note:'Samples received'},followUp:{title:'Inspect samples',owner:'QA lead',dueDate:'2026-09-25'}},'checkin');
+  assert.equal(s.initiatives.at(-1).constraintId,constraint.id);assert.equal(constraintHealth(s,constraint,'2026-09-23').reportedStatus,'in-progress');
+  s=command(s,'review',undefined,{title:'Review',owner:'COO',cycleId:f.cycleId,departmentId:f.departmentId,date:'2026-09-23'});
+  assert.equal(s.reviews[0].constraintSnapshot.length,1);assert.equal(s.reviews[0].snapshot[0].forecast,3);
+  s=command(s,'constraint',constraint.id,{date:'2026-09-23',status:'resolved',note:'Approved'},'checkin');
+  assert.equal(constraintHealth(s,constraint,'2026-09-23').reportedStatus,'resolved');assert.equal(s.reviews[0].constraintSnapshot[0].reportedStatus,'in-progress');
+  assert.throws(()=>command(s,'metric',f.metricId,{},'archive'),/linked/);
+});
+test('combined progress creates a constraint and action in one save, with all-or-nothing PostgreSQL persistence',async()=>{
+  const f=fixture();const db=new PGlite(),restore=useTestDatabase(db);
+  try {
+    const sql=neon('postgres://test:test@localhost/test');await ensureCooWorkspace(sql);await sql`INSERT INTO coo_workspace(id,data,updated_by) VALUES('company',${JSON.stringify(f.state)}::jsonb,'coo')`;
+    const handler=createCooHandler({authorize:async()=>({sql,userId:'coo',role:'owner',permissions:['*']}),now:()=>now});
+    const values={date:'2026-09-23',value:5,forecast:4,constraintUpdate:{title:'Material shortage',owner:'Buyer',dueDate:'2026-09-28',status:'blocked',note:'Need replacement material'},followUp:{title:'Order material',owner:'Buyer',dueDate:'2026-10-01'}};
+    const call=async(v)=>{const res=response();await handler({method:'POST',body:{revision:1,command:{action:'checkin',kind:'metric',id:f.metricId,values:v}}},res);return res;};
+    assert.equal((await call(values)).statusCode,400);
+    let [row]=await sql`SELECT data,revision FROM coo_workspace WHERE id='company'`;assert.equal(row.revision,1);assert.equal(row.data.checkins.length,0);assert.equal(row.data.constraints.length,0);
+    const result=await call({...values,followUp:{...values.followUp,dueDate:'2026-09-28'}});assert.equal(result.statusCode,200);
+    [row]=await sql`SELECT data,revision FROM coo_workspace WHERE id='company'`;assert.equal(row.revision,2);assert.equal(row.data.checkins.length,2);assert.equal(row.data.constraints.length,1);assert.equal(row.data.initiatives.at(-1).constraintId,row.data.constraints[0].id);
+  }finally{restore();await db.close();}
+});
+test('monthly financial import is cumulative, excludes ratios, and fails on missing, duplicate or partial periods',async()=>{
+  const {forecastPlan}=await import('../src/lib/coo.js');const cycle={start:'2026-07-01',end:'2026-09-30'};
+  const forecast={months:[{month:'2026-07',netRevenue:100},{month:'2026-08',netRevenue:200},{month:'2026-09',netRevenue:700}]};
+  const result=forecastPlan(forecast,'netRevenue',cycle);assert.equal(result.target,1000);assert.deepEqual(result.plan.map(p=>p.value),[100,300,1000]);assert.equal(result.plan.at(-1).date,cycle.end);
+  assert.throws(()=>forecastPlan(forecast,'grossMarginPct',cycle));
+  assert.throws(()=>forecastPlan({months:forecast.months.slice(1)},'netRevenue',cycle),/Missing/);
+  assert.throws(()=>forecastPlan({months:[...forecast.months,forecast.months[0]]},'netRevenue',cycle),/ambiguous/);
+  assert.throws(()=>forecastPlan(forecast,'netRevenue',{...cycle,start:'2026-07-15'}),/whole/);
+});
+
+test('quick-update actions use the constraint resolution department and clearing a decision is logged',()=>{
+  const f=fixture();let s=command(f.state,'constraint',undefined,{title:'Supplier delay',owner:'Buyer',departmentId:f.state.departments[2].id,cycleId:f.cycleId,dueDate:'2026-09-29',metricIds:[f.metricId],objectiveIds:[],decision:'Approve freight'});
+  const c=s.constraints[0];
+  s=command(s,'metric',f.metricId,{date:'2026-09-23',value:5,forecast:3,constraintUpdate:{id:c.id,status:'in-progress',decision:'',note:'Freight approved'},followUp:{title:'Place order',owner:'Buyer',dueDate:'2026-09-25'}},'checkin');
+  assert.equal(s.initiatives.at(-1).departmentId,c.departmentId);assert.equal(s.initiatives.at(-1).constraintId,c.id);assert.equal(s.initiatives.at(-1).objectiveId,'');
+  assert.equal(s.constraints[0].decision,'');assert.equal(s.checkins.at(-1).decision,'');assert.equal(s.constraints[0].version,2);
 });

@@ -38,3 +38,18 @@ This verifies the local implementation and database semantics. Hosted auth, prod
 ## Owner-only rollout update
 
 The subsequent owner-only change passed `npm run check`: 234 tests, no failures, backend syntax checks, and production build. Tests explicitly reject GET and POST for every non-owner role, including a non-owner with wildcard/admin/analytics permissions, before any COO data query. The sidebar, performance-hub link, and direct COO component rendering use the same role predicate. This replaces the initial broader analytics-role access described in the original test run.
+
+## Connected workflow refinement
+
+The final `npm run check` passed with 241 tests, zero failures, backend syntax checks, and a production build. The 23 COO tests include checkpoint and reporting-date comparisons, independent forecast status, missing data, decreasing measures and tolerance, locked plans, shared constraints, immutable snapshots, atomic combined updates, resolution-department assignment, decision history, and financial import validation. Existing owner-only API rejection and concurrency tests still pass.
+
+Browser verification against the real handler and isolated PGlite database confirmed:
+
+- One production update saved actual 450 and forecast 1,000 against the unchanged 1,000 goal, updated the shared constraint, and assigned an action.
+- The shared constraint remained visible under Sales & Marketing and linked all three departments without duplication.
+- The earlier review retained production actual 320, forecast 800, and the original blocked constraint status.
+- Monthly financial import produced three cumulative checkpoints and a 2.4M goal from the demo financial forecast. Saved plan values and the goal became locked while owner remained editable.
+- A resolution update persisted Resolved and cleared the pending decision.
+- A 390px mobile viewport showed no horizontal page overflow.
+
+The preview financial source is a labeled fixture. Live provider imports, hosted authentication, runtime grants, production migration, and deployment are outside this local verification. No production writes were performed.
