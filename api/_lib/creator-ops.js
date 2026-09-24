@@ -441,6 +441,7 @@ async function createCreatorOpsTables(sql) {
       updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+  await sql`ALTER TABLE creator_seeding_log ADD COLUMN IF NOT EXISTS engagement_id BIGINT REFERENCES creator_engagements(id) ON DELETE SET NULL`;
   await sql`ALTER TABLE creator_seeding_log ADD COLUMN IF NOT EXISTS seeding_status TEXT NOT NULL DEFAULT 'planned'`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_seeding_log_creator ON creator_seeding_log(creator_id, seeded_on DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_creator_seeding_log_seeded ON creator_seeding_log(seeded_on DESC)`;

@@ -1,3 +1,4 @@
+import CreatorTagInput from './CreatorTagInput.jsx';
 import SeedingBudgetDashboard from './SeedingBudgetDashboard.jsx';
 import { apiFetch as fetch } from '../lib/apiFetch.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -131,7 +132,7 @@ function IntakeSelect({ label, className = '', children, ...props }) {
   );
 }
 
-export default function SeedingLedger({ canManage = false }) {
+export default function SeedingLedger({ canManage = false, onOpenCreator }) {
   const { getToken } = useAuth();
   const [data, setData] = useState(null);
   const [creators, setCreators] = useState([]);
@@ -210,9 +211,9 @@ export default function SeedingLedger({ canManage = false }) {
   const openFeeIntents = fees?.intents?.filter(i => !i.converted) || [];
 
   const months = useMemo(() => {
-    const set = new Set([filters.month, ...rows.map(r => monthKey(r.seeded_on))].filter(m => m && m !== 'all'));
+    const set = new Set([filters.month, ...rows.map(r => monthKey(r.seeded_on)), ...(data?.report?.commitments || []).map(r => r.month)].filter(m => m && m !== 'all'));
     return [...set].sort((a, b) => b.localeCompare(a));
-  }, [rows, filters.month]);
+  }, [rows, filters.month, data?.report?.commitments]);
 
   const filteredRows = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
@@ -346,23 +347,6 @@ export default function SeedingLedger({ canManage = false }) {
         ? current.seed_items.filter((_, itemIndex) => itemIndex !== index)
         : [{ ...EMPTY_SEED_ITEM }],
     }));
-  }
-
-  function toggleNicheTag(tag) {
-    setForm(current => {
-      const active = new Set(current.niche_tags || []);
-      if (active.has(tag)) active.delete(tag);
-      else active.add(tag);
-      return { ...current, niche_tags: [...active], niche: [...active].join(', ') };
-    });
-  }
-
-  function addNicheTag(tag) {
-    if (!tag) return;
-    setForm(current => {
-      const next = [...new Set([...(current.niche_tags || []), tag])];
-      return { ...current, niche_tags: next, niche: next.join(', ') };
-    });
   }
 
   function safeFileName(name) {
@@ -520,18 +504,8 @@ export default function SeedingLedger({ canManage = false }) {
             <IntakeInput label="Contact" placeholder="Email or DM contact" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
             <IntakeInput label="Location" placeholder="City, state" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} />
             <IntakeInput label="Product owned" list="seed-product-types" placeholder="R1, R3, R4 MKii..." value={form.product_type} onChange={e => setForm({ ...form, product_type: e.target.value })} />
-            <div className="niche-tag-select span-2">
-              <IntakeSelect label="Creator tags" value="" onChange={e => addNicheTag(e.target.value)}>
-                <option value="">Add category</option>
-                {NICHE_OPTIONS.filter(tag => !(form.niche_tags || []).includes(tag)).map(tag => (
-                  <option key={tag} value={tag}>{tag}</option>
-                ))}
-              </IntakeSelect>
-              <div className="niche-selected-tags">
-                {(form.niche_tags || []).length ? (form.niche_tags || []).map(tag => (
-                  <button key={tag} type="button" onClick={() => toggleNicheTag(tag)}>{tag}</button>
-                )) : <span>No tags selected</span>}
-              </div>
+            <div className="span-2">
+              <CreatorTagInput value={form.niche_tags} suggestions={NICHE_OPTIONS} onChange={tags => setForm(current => ({ ...current, niche_tags: tags, niche: tags.join(', ') }))} />
             </div>
           </section>
 
@@ -695,7 +669,10 @@ export default function SeedingLedger({ canManage = false }) {
                   <tr key={r.id}>
                     <td><span className={`seed-status ${status}`}>{labelForStatus(status)}</span></td>
                     <td>{r.seeded_on ? String(r.seeded_on).slice(0, 10) : '-'}</td>
-                    <td className="seed-creator">{r.creator_name}</td>
+                    <td className="seed-creator">
+                      {onOpenCreator ? <button type="button" className="seed-profile-link" onClick={() => onOpenCreator(r.creator_id)} aria-label={`Open ${r.creator_name} profile`}>{r.creator_name}</button> : r.creator_name}
+                      {r.creator_tags?.length > 0 && <div className="seed-creator-tags">{r.creator_tags.map(tag => <span key={tag}>{tag}</span>)}</div>}
+                    </td>
                     <td>{r.product_label || '-'}</td>
                     <td>{r.unit_type ? <span className="seed-unit-pill">{r.unit_type}</span> : '-'}</td>
                     <td className="num">{r.quantity}</td>
@@ -721,6 +698,18 @@ export default function SeedingLedger({ canManage = false }) {
           </table>
         </div>
       </section>
+
+      {data?.report?.commitments?.some(item => filters.month === 'all' || item.month === filters.month) && <section className="seed-section">
+        <div className="seed-section-label">Creator fee commitments · included in monthly budgets</div>
+        <div className="seed-table-wrap"><table className="seed-table">
+          <thead><tr><th>Month</th><th>Creator</th><th>Agreement</th><th className="num">Fee</th><th className="num">Additional reserved</th></tr></thead>
+          <tbody>{data.report.commitments.filter(item => (filters.month === 'all' || item.month === filters.month) && (!filters.search.trim() || String(item.creator_name || '').toLowerCase().includes(filters.search.trim().toLowerCase()))).map(item => <tr key={`${item.engagement_id}-${item.month}`}>
+            <td>{fmtMo(item.month)}</td><td>{onOpenCreator ? <button type="button" className="seed-profile-link" onClick={() => onOpenCreator(item.creator_id)}>{item.creator_name}</button> : item.creator_name}</td>
+            <td>{item.engagement_type === 'retainer' ? 'Monthly retainer' : 'One-off'}</td><td className="num">{fmt$(item.amount)}</td><td className="num">{fmt$(item.additional)}</td>
+          </tr>)}</tbody>
+        </table></div>
+        <p className="seed-budget-note">Additional reserved is the agreement fee less linked fees already recorded in the ledger.</p>
+      </section>}
 
       {fees?.intents?.length > 0 && (
         <section className="seed-section">

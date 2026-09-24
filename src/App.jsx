@@ -397,7 +397,7 @@ export default function HowlAdEngine({ appAccess }) {
         )}
         {activeTab === "creative-flow" && <CreativeFlowBoard setActiveTab={navigate} onOpenCreator={openPlannedCreator} canManage={can('creators.write')} />}
         {activeTab === "creative-pipeline" && <CreatorPipelineFunnel />}
-        {activeTab === "seeding-ledger" && <SeedingLedger canManage={can('creators.write')} />}
+        {activeTab === "seeding-ledger" && <SeedingLedger canManage={can('creators.write')} onOpenCreator={openPlannedCreator} />}
         {activeTab === "creative-plan" && <CreativePlanningWorkspace onOpenCreator={openPlannedCreator} setActiveTab={navigate} />}
         {activeTab === "creative" && <WorkspaceHub type="creative" setActiveTab={navigate} can={can} />}
         {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={navigate} can={can} />}

@@ -1,0 +1,15 @@
+.creator-tag-field { display: grid; gap: 8px; min-width: 0; }
+.creator-tag-field > label { font-size: 12px; color: var(--muted); }
+.creator-tag-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.creator-tag-editor:focus-within { border-color: var(--flame); outline: 2px solid var(--flame-dim); }
+.creator-tag-field .creator-tag-editor > input,
+.creator-tag-field .creator-tag-editor > input:focus { flex: 1 1 150px; width: 150px; min-width: 0; height: 30px; border: 0; box-shadow: none; outline: none; padding: 6px; background: transparent; }
+.creator-tag-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; overflow-wrap: anywhere; padding: 4px 8px; border-radius: 5px; background: var(--flame-dim); color: var(--text); font-size: 12px; }
+.creator-tag-field .creator-tag-chip > button { padding: 0 3px; border: 0; background: transparent; color: var(--muted); font-size: 17px; cursor: pointer; }
+.creator-tag-field > small { color: var(--muted); font-size: 11px; }
+.creator-tag-suggestions { display: flex; flex-wrap: wrap; gap: 6px; }
+.creator-tag-suggestions > button { background: transparent; border: 1px solid var(--border); border-radius: 5px; padding: 5px 8px; font-size: 11px; color: var(--muted); cursor: pointer; }
+.creator-tag-field button:focus-visible, .seed-profile-link:focus-visible { outline: 2px solid var(--flame); outline-offset: 2px; }
+.seed-profile-link { border: 0; padding: 0; background: transparent; color: var(--flame); font: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.seed-creator-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.seed-creator-tags span { border-radius: 4px; padding: 2px 5px; background: var(--surface2); font-size: 10px; font-weight: 400; }

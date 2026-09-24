@@ -23,7 +23,7 @@ function status(value) {
 // Cost of a ledger row = unit COGS × qty + shipping + fee, computed on read.
 function fetchRow(sql, id) {
   return sql`
-    SELECT l.*, c.name AS creator_name,
+    SELECT l.*, c.name AS creator_name, c.tags AS creator_tags,
       (l.unit_cogs * l.quantity)::float AS cogs_total,
       (l.unit_cogs * l.quantity + l.shipping_cost + l.creator_fee)::float AS total_cost
     FROM creator_seeding_log l JOIN creators c ON c.id = l.creator_id
@@ -41,7 +41,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const units = await sql`SELECT unit_type, cogs::float AS cogs, active FROM seeding_units ORDER BY cogs DESC`;
       const rows = await sql`
-        SELECT l.*, c.name AS creator_name,
+        SELECT l.*, c.name AS creator_name, c.tags AS creator_tags,
           (l.unit_cogs * l.quantity)::float AS cogs_total,
           (l.unit_cogs * l.quantity + l.shipping_cost + l.creator_fee)::float AS total_cost
         FROM creator_seeding_log l

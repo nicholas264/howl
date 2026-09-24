@@ -318,11 +318,11 @@ export default async function handler(req, res) {
         const rowFee = index === 0 ? (feeAmount || 0) : 0;
         const [row] = await sql`
           INSERT INTO creator_seeding_log (
-            creator_id, seeded_on, product_label, unit_type, quantity, unit_cogs,
+            creator_id, engagement_id, seeded_on, product_label, unit_type, quantity, unit_cogs,
             shipping_cost, creator_fee, seeding_status, agreed_deliverables,
             deliverable_due, usage_rights, notes, source, created_by
           ) VALUES (
-            ${updatedCreator.id}, ${dateOrNull(body.seeded_on)}, ${item.product_label},
+            ${updatedCreator.id}, ${engagement?.id || null}, ${dateOrNull(body.seeded_on)}, ${item.product_label},
             ${item.unit_type}, ${item.quantity}, ${unitCogs},
             ${rowShipping}, ${rowFee}, ${seedingStatus(body.seeding_status)},
             ${index === 0 ? (assetCommitment || null) : null}, ${index === 0 ? dateOrNull(body.deliverable_due) : null},

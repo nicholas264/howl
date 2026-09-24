@@ -1,3 +1,4 @@
+import CreatorTagInput from './CreatorTagInput.jsx';
 import { pendingSeedRequest } from '../lib/seedRequest.js';
 import { apiFetch as fetch } from '../lib/apiFetch.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -1488,7 +1489,7 @@ export default function CreatorWorkspace({
                 <label className="wide">Audience<textarea disabled={!canManageCreators} rows="3" value={creatorIntel.audience_demographics} onChange={event => setCreatorIntel({ ...creatorIntel, audience_demographics: event.target.value })} /></label>
                 <label className="wide">Psychographics<textarea disabled={!canManageCreators} rows="3" value={creatorIntel.audience_psychographics} onChange={event => setCreatorIntel({ ...creatorIntel, audience_psychographics: event.target.value })} /></label>
                 <label>Activities<input disabled={!canManageCreators} placeholder="Overland, MTB, Ski" value={creatorIntel.activities} onChange={event => setCreatorIntel({ ...creatorIntel, activities: event.target.value })} /></label>
-                <label>Tags<input disabled={!canManageCreators} placeholder="Creator tags" value={creatorIntel.tags} onChange={event => setCreatorIntel({ ...creatorIntel, tags: event.target.value })} /></label>
+                <CreatorTagInput key={selected.id} disabled={!canManageCreators} value={String(creatorIntel.tags || '').split(',')} onChange={tags => setCreatorIntel(current => ({ ...current, tags: tags.join(', ') }))} />
                 <label>Rate notes<input disabled={!canManageCreators} value={creatorIntel.rate_notes} onChange={event => setCreatorIntel({ ...creatorIntel, rate_notes: event.target.value })} /></label>
                 <label className="wide">Bio<textarea disabled={!canManageCreators} rows="3" value={creatorIntel.bio} onChange={event => setCreatorIntel({ ...creatorIntel, bio: event.target.value })} /></label>
                 <label className="wide">Shipping address<input disabled={!canManageCreators} value={creatorIntel.shipping_address1} onChange={event => setCreatorIntel({ ...creatorIntel, shipping_address1: event.target.value })} /></label>
