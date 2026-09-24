@@ -23,6 +23,34 @@ preparation record, not a submitted assessment or a statement of approval.
 - Draft also records the accounting business use, broader app AI functionality,
   no QuickBooks data used for model training, server-only credential storage,
   and use of Intuit data only for the original customer's benefit.
+- Further draft answers saved: private internal app; custom implementation;
+  server-side web app; read-only Intuit data usage; connecting-company-admin
+  access; on-demand Accounting API calls; other platforms and AI use explained;
+  token refresh within two minutes of expiry on sync; no automatic auth retries;
+  reconnect guidance and OAuth error handling; no OAuth Playground dependency;
+  no QuickBooks webhooks or CDC; no special multicurrency/sales-tax features.
+- Error-handling draft answers reflect tested error paths and the existing
+  feedback widget. Trace-ID capture and complete error logs are honestly marked
+  absent. These recommendations have not been implemented yet.
+
+## Live sandbox verification setup
+
+Development credentials are available. A protected temporary configuration
+outside the repository supplies the local test runner; no credentials are
+committed or printed. The registered development callback is
+`http://localhost:5196/api/quickbooks-callback`.
+
+`node scripts/verify-finance-sandbox.mjs /path/to/private-config.json` runs the
+real OAuth and finance handlers against Intuit's sandbox with an isolated
+in-memory PostgreSQL database. It rejects production mode and unexpected
+callback URLs. Local host and cross-origin-write rejection were verified.
+The app is intentionally unauthenticated only in this loopback-only sandbox
+harness; do not deploy the harness or give it production credentials.
+
+The OAuth flow reached consent for `Sandbox Company US a843`. Owner consent is
+pending; no real sandbox report sync or connect/disconnect/reconnect result is
+claimed yet. Stop the runner after verification and remove its temporary
+configuration. Production server configuration remains unchanged.
 
 Production credentials are locked pending Intuit's requirements. The portal also
 blocks editing production redirect URIs until those requirements are complete.
