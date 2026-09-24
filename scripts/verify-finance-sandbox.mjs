@@ -5,7 +5,7 @@ import { createServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import { PGlite } from '@electric-sql/pglite';
 import { neon } from '@neondatabase/serverless';
-import { readFile, stat, mkdtemp } from 'node:fs/promises';
+import { readFile, stat, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { useTestDatabase } from '../tests/neon-test-adapter.mjs';
@@ -23,7 +23,19 @@ const db=new PGlite();useTestDatabase(db);const sql=neon('postgres://test:test@l
 await ensureFinance(sql);
 await sql`CREATE TABLE app_users(user_id TEXT PRIMARY KEY,role TEXT,status TEXT)`;
 await sql`INSERT INTO app_users VALUES ('sandbox-owner','owner','active')`;
-const handler=createFinanceHandler({authorize:async()=>({sql,userId:'sandbox-owner',role:'owner'}),env});
+const reportDirectory=await mkdtemp(join(tmpdir(),'campfire-intuit-reports-'));
+console.log('Sandbox report diagnostics:',reportDirectory);
+const sandboxFetch=async(url,options)=>{
+ const response=await fetch(url,options);
+ if(new URL(url).hostname==='sandbox-quickbooks.api.intuit.com'&&response.ok){
+  const report=await response.clone().json();
+  const requested=new URL(url),name=requested.pathname.split('/').at(-1),start=requested.searchParams.get('start_date');
+  if(['ProfitAndLoss','BalanceSheet'].includes(name)&&/^\d{4}-\d{2}-\d{2}$/.test(start))await writeFile(join(reportDirectory,`${name}-${start}.json`),JSON.stringify(report,null,2),{mode:0o600});
+  console.log('Sandbox report layout',JSON.stringify({header:report.Header,columns:report.Columns,rowCount:report.Rows?.Row?.length}));
+ }
+ return response;
+};
+const handler=createFinanceHandler({authorize:async()=>({sql,userId:'sandbox-owner',role:'owner'}),env,fetcher:sandboxFetch});
 const callback=createQuickBooksCallback({getSql:()=>sql,env});
 const envDir=await mkdtemp(join(tmpdir(),'campfire-sandbox-vite-'));
 const server=await createServer({configFile:false,root:process.cwd(),envDir,

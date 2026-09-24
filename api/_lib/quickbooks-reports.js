@@ -2,9 +2,21 @@
 // single-period total reports are accepted; unknown layouts fail closed.
 function amount(v){if(v==='')return 0;if(typeof v!=='string'||!/^[-+]?\d+(\.\d+)?$/.test(v)||!Number.isFinite(Number(v)))throw new Error('A QuickBooks report contains a missing or invalid amount.');return Number(v);}
 function value(c){if(!Array.isArray(c)||c.length!==2)throw new Error('QuickBooks returned an unsupported report layout.');return amount(c[1]?.value);}
-const noData=report=>report?.Header?.Option?.some(o=>o.Name==='NoReportData'&&o.Value==='true')&&!(report.Rows?.Row?.length);
+function noData(report){
+ if(!report?.Header?.Option?.some(o=>o.Name==='NoReportData'&&o.Value==='true'))return false;
+ const rows=report.Rows?.Row||[];
+ if(!Array.isArray(rows))return false;
+ if(!rows.length)return true;
+ // Intuit's empty-month response retains label-only section summaries and
+ // omits the money column. Never treat actual account rows as an empty report.
+ if(report.Columns?.Column?.length!==1||report.Columns.Column[0].ColType!=='Account')return false;
+ const labelOnly=cols=>cols===undefined||(Array.isArray(cols)&&cols.length===1&&!cols[0].id&&typeof cols[0].value==='string');
+ const empty=items=>Array.isArray(items)&&items.every(r=>r.type==='Section'&&!r.ColData&&labelOnly(r.Header?.ColData)&&labelOnly(r.Summary?.ColData)&&(!r.Rows||empty(r.Rows.Row)));
+ return empty(rows);
+}
 function inspect(report,name,start,end,basis){
- if(report?.Header?.ReportName!==name||report.Header.StartPeriod!==start||report.Header.EndPeriod!==end||report.Header.ReportBasis!==basis||!report.Header.Currency||report.Columns?.Column?.length!==2||(!Array.isArray(report.Rows?.Row)&&!noData(report)))throw new Error('QuickBooks report period, basis, currency, or columns did not match the request.');
+ const empty=noData(report),columns=report?.Columns?.Column;
+ if(report?.Header?.ReportName!==name||report.Header.StartPeriod!==start||report.Header.EndPeriod!==end||report.Header.ReportBasis!==basis||!report.Header.Currency||!(columns?.length===2||(empty&&columns?.length===1&&columns[0].ColType==='Account'))||(!Array.isArray(report.Rows?.Row)&&!empty))throw new Error('QuickBooks report period, basis, currency, or columns did not match the request.');
  const groups=new Map();function walk(rows){for(const r of rows){if(r.group){if(groups.has(r.group))throw new Error('Duplicate report group.');groups.set(r.group,r);}if(r.Rows?.Row)walk(r.Rows.Row);}}walk(report.Rows?.Row||[]);return groups;
 }
 const total=(groups,key,required=true)=>{const r=groups.get(key);if(!r){if(required)throw new Error(`QuickBooks report is missing ${key}.`);return null;}return value(r.Summary?.ColData||r.ColData);};
@@ -24,6 +36,7 @@ export function parseProfitLoss(report,start,end,basis){
 }
 export function parseBalanceSheet(report,start,end,basis){
  const g=inspect(report,'BalanceSheet',start,end,basis);
+ if(noData(report))return {currency:report.Header.Currency,asOf:end,currentAssets:null,currentLiabilities:null,cash:null,receivables:null,totalLiabilities:null,equity:null};
  return {currency:report.Header.Currency,asOf:end,currentAssets:total(g,'CurrentAssets',false),currentLiabilities:total(g,'CurrentLiabilities',false),cash:total(g,'BankAccounts',false),receivables:total(g,'AR',false),totalLiabilities:total(g,'Liabilities',false),equity:total(g,'Equity',false)};
 }
 export function combineAccounts(months){const map=new Map();for(const m of months)for(const a of m.accounts){if(!map.has(a.id))map.set(a.id,{id:a.id,name:a.name,group:a.group,values:{}});const t=map.get(a.id);t.values[m.month]=(t.values[m.month]||0)+a.amount;}return [...map.values()];}

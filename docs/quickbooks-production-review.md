@@ -49,10 +49,15 @@ callback URLs. Local host and cross-origin-write rejection were verified.
 The app is intentionally unauthenticated only in this loopback-only sandbox
 harness; do not deploy the harness or give it production credentials.
 
-The OAuth flow reached consent for `Sandbox Company US a843`. Owner consent is
-pending; no real sandbox report sync or connect/disconnect/reconnect result is
-claimed yet. Stop the runner after verification and remove its temporary
-configuration. Production server configuration remains unchanged.
+Owner accepted consent for `Sandbox Company US a843`. The expired state was
+replaced through the normal Connect flow, which reused the existing grant.
+Live sandbox connect, disconnect and reconnect succeeded. Eight monthly P&L
+reports (January–August 2026) and an August 31 balance sheet imported after fixing
+Intuit's empty-month format: one account column with label-only summary rows.
+The captured empty response is a regression fixture; 13 finance tests pass.
+This is real Intuit sandbox data, not HOWL production books. No production
+credentials have been installed. Stop the runner and delete temporary credentials
+and diagnostic report files after verification.
 
 Production credentials are locked pending Intuit's requirements. The portal also
 blocks editing production redirect URIs until those requirements are complete.
@@ -105,9 +110,12 @@ The callback to register is
   `/legal/terms` and `/legal/privacy`. Both were deployed, returned HTTP 200
   without sign-in, and were saved in Intuit App terms of service settings.
   The unauthenticated financial API continues to return HTTP 401.
-- Review the actual Intuit security requirements before making any compliance
-  commitment. Clerk authentication alone does not establish that MFA or CAPTCHA
-  is enabled for this deployment.
+- Reviewed Intuit's security requirements. The owner's compliance commitment
+  remains unanswered; do not invent that declaration. Verified the Clerk
+  production instance is for `welcometothecampfire.io`: all MFA methods and
+  required MFA are off; Cloudflare Turnstile bot sign-up protection is enabled.
+  Saved MFA No, CAPTCHA Yes, WebSocket No, trace-ID capture Yes, and sandbox
+  connect/disconnect/reconnect testing Yes in the questionnaire.
 - Geolocation saved as United States with no fixed outbound IP. Verified the
   linked Vercel project's `serverlessFunctionRegion` and default function region
   are both `iad1` (US). Intuit explicitly permits serverless platforms to omit
@@ -133,10 +141,10 @@ cost accounts and enter the owner's revenue targets. See
 
 ## Current handoff
 
-Sandbox accounting-access consent remains unanswered after repeated goal turns.
-Do not interpret automatic goal continuations as consent. Browser tab listing
-still showed the original Intuit consent page, but page reads and dialog access
-timed out repeatedly after reconnecting; no consent was clicked and no assessment
-was submitted. Resume with a functioning browser and explicit owner consent.
-The local OAuth state may have expired; start a fresh Connect flow if necessary.
-Production credentials and real-report reconciliation remain incomplete.
+Owner explicitly wants the real company connected now. Production keys remain
+locked: App details 83%, Compliance 10%. The remaining profile section requires
+email verification, phone and business address; owner has been asked to complete
+it in the open Intuit tab. Clerk sign-in is complete and its settings verified.
+Remaining questionnaire gaps include the compliance commitment and QBO edition
+scope. No assessment has been submitted. Production authorization and real-HOWL
+report reconciliation remain incomplete.

@@ -118,3 +118,12 @@ test('a pre-revenue month with reconciled expenses remains a valid accounting mo
  for(const row of r.Rows.Row){if(row.group==='GrossProfit')row.Summary.ColData[1].value='0';if(['NetIncome','NetOperatingIncome'].includes(row.group))row.Summary.ColData[1].value='-40000';}
  const parsed=parseProfitLoss(r,'2026-01-01','2026-01-31','Accrual');assert.equal(parsed.revenue,0);assert.equal(parsed.expenses,40000);assert.equal(parsed.netIncome,-40000);
 });
+test('live Intuit empty-month layout accepts label-only summaries without hiding real data',async()=>{
+ const {readFile}=await import('node:fs/promises');
+ const r=JSON.parse(await readFile(new URL('./fixtures/intuit-empty-profit-loss.json',import.meta.url),'utf8'));
+ assert.deepEqual(parseProfitLoss(r,'2026-01-01','2026-01-31','Accrual'),{month:'2026-01',revenue:0,cogs:0,expenses:0,netIncome:0,accounts:[],currency:'USD'});
+ for(const change of [x=>{x.Header.Option=[];},x=>{x.Rows.Row[0].type='Data';},x=>{x.Rows.Row[0].Summary.ColData.push({value:'100'});},x=>{x.Header.EndPeriod='2026-02-28';}]){
+  const malformed=structuredClone(r);change(malformed);assert.throws(()=>parseProfitLoss(malformed,'2026-01-01','2026-01-31','Accrual'));
+ }
+ const balance=structuredClone(r);balance.Header.ReportName='BalanceSheet';assert.equal(parseBalanceSheet(balance,'2026-01-01','2026-01-31','Accrual').currentAssets,null);
+});
