@@ -30,10 +30,15 @@ preparation record, not a submitted assessment or a statement of approval.
   reconnect guidance and OAuth error handling; no OAuth Playground dependency;
   no QuickBooks webhooks or CDC; no special multicurrency/sales-tax features.
 - Error-handling draft answers reflect tested error paths and the existing
-  feedback widget. Trace-ID capture and complete error logs are honestly marked
-  absent in the saved questionnaire draft. The deployed code now captures bounded
-  Intuit trace IDs for failed token/report HTTP responses; the portal trace-ID
-  answer still needs updating. Support instructions are saved.
+  feedback widget. Trace-ID capture is Yes; complete error logs are No.
+  The deployed code captures bounded Intuit trace IDs for failed token/report
+  HTTP responses without logging report bodies. Support instructions are saved.
+- Accounting scope saved: Simple Start, Essentials, Plus and Advanced. Intuit's
+  report availability documentation lists standard P&L and Balance Sheet across
+  those editions. The app avoids edition-specific transaction features, rejects
+  invalid/partial imports, preserves prior snapshots on provider errors and
+  leaves unavailable balance-sheet components unset. This is design scope, not
+  a claim of live testing on every subscription tier.
 
 ## Live sandbox verification setup
 
@@ -55,6 +60,11 @@ Live sandbox connect, disconnect and reconnect succeeded. Eight monthly P&L
 reports (January–August 2026) and an August 31 balance sheet imported after fixing
 Intuit's empty-month format: one account column with label-only summary rows.
 The captured empty response is a regression fixture; 13 finance tests pass.
+Independent aggregation of the captured sandbox report summaries reconciled
+January–August revenue of $10,200.77, COGS of $405 and net income of $1,777.81
+with the displayed rounded revenue, 96.0% gross margin and 17.4% net margin.
+Current assets of $10,841.29 / current liabilities of $6,895.98 reconcile to the
+displayed 1.57 current ratio. These are sandbox figures only.
 This is real Intuit sandbox data, not HOWL production books. No production
 credentials have been installed. Stop the runner and delete temporary credentials
 and diagnostic report files after verification.
@@ -120,8 +130,8 @@ The callback to register is
   linked Vercel project's `serverlessFunctionRegion` and default function region
   are both `iad1` (US). Intuit explicitly permits serverless platforms to omit
   the IP address. This records app hosting, not a blanket data-residency claim.
-- Run connect, disconnect, reconnect and report retrieval against a real Intuit
-  sandbox company. Production use additionally needs owner authorization of the
+- Connect, disconnect, reconnect and report retrieval passed against a real Intuit
+  sandbox company. Production use still needs owner authorization of the
   intended live company and matching-date/basis report reconciliation.
 - Deployed provider diagnostics now capture operation, HTTP status and a validated
   `intuit_tid` for failed HTTP responses. Regression tests verify that credentials,
@@ -129,8 +139,8 @@ The callback to register is
   are discarded. All 265 deployment tests pass, including 12 finance tests;
   production build and dependency audit passed (zero vulnerabilities). Deployment
   `dpl_HRxCNnBvwqvupVr3SDWhphwRqBP9`, commit `47b5558`, reached Ready.
-  Update the portal's trace-ID answer; complete provider payload logging remains
-  intentionally absent. The local sandbox harness is excluded from deployments.
+  The portal's trace-ID answer is now updated; complete provider payload logging
+  remains intentionally absent. The local sandbox harness is excluded from deployments.
 - Confirm the in-app support contact, app logo, profile/email verification and
   any additional production requirements shown by Intuit.
 
@@ -145,6 +155,6 @@ Owner explicitly wants the real company connected now. Production keys remain
 locked: App details 83%, Compliance 10%. The remaining profile section requires
 email verification, phone and business address; owner has been asked to complete
 it in the open Intuit tab. Clerk sign-in is complete and its settings verified.
-Remaining questionnaire gaps include the compliance commitment and QBO edition
-scope. No assessment has been submitted. Production authorization and real-HOWL
+The remaining questionnaire gap is the owner's compliance commitment; QBO edition
+scope is saved. No assessment has been submitted. Production authorization and real-HOWL
 report reconciliation remain incomplete.
