@@ -66,17 +66,15 @@ January–August revenue of $10,200.77, COGS of $405 and net income of $1,777.81
 with the displayed rounded revenue, 96.0% gross margin and 17.4% net margin.
 Current assets of $10,841.29 / current liabilities of $6,895.98 reconcile to the
 displayed 1.57 current ratio. These are sandbox figures only.
-This is real Intuit sandbox data, not HOWL production books. No production
-credentials have been installed. The runner was stopped and its temporary
+This is real Intuit sandbox data, not HOWL production books. The runner was stopped and its temporary
 credential file and captured diagnostic report directories were removed.
 The empty-month fix (`5ba26a7`) deployed successfully as
 `dpl_E1v1xuCDerNqRfv64PydFEBMnx29`: all 266 tests passed, production build
 passed and dependency audit reported zero vulnerabilities. The live finance
 endpoint still returns HTTP 401 with `private, no-store` without authentication.
 
-Production credentials are locked pending Intuit's requirements. The portal also
-blocks editing production redirect URIs until those requirements are complete.
-The callback to register is
+Production credentials are unlocked and installed as sensitive server-only Vercel
+variables. The temporary credential file was removed. The registered production callback is
 `https://welcometothecampfire.io/api/quickbooks-callback`.
 
 ## Answers supported by the implementation
@@ -149,18 +147,24 @@ The callback to register is
 - Confirm the in-app support contact, app logo, profile/email verification and
   any additional production requirements shown by Intuit.
 
-Only after production credentials are available: install the matching client ID
-and secret securely, redeploy, complete owner consent, sync, reconcile, classify
-cost accounts and enter the owner's revenue targets. See
+Remaining: restore database availability, complete owner consent, sync, reconcile,
+classify cost accounts and enter the owner's revenue targets. See
 [the operating guide](quickbooks-financials.md) for definitions and safeguards.
 
 ## Current handoff
 
-Owner explicitly wants the real company connected now. Production keys remain
-locked: App details 83%, Compliance 100%. Email verification is confirmed; the
-profile still needs business contact email, phone and mailing address. The owner
-has been asked to complete those fields and click Next. The assessment is submitted,
-read-only and Approved. Submission validation caught an API-frequency selection
-that had not persisted; it was corrected to on-demand customer interactions before
-successful submission. Clerk settings are verified. Production authorization and
-real-HOWL report reconciliation remain incomplete.
+Intuit profile and assessment are complete; the assessment is Approved. Production
+client ID and secret are installed and the callback is registered. Deployment
+`dpl_D48Duu5EnhYqQZCZRXpLADz4uYwp` is READY with production credentials, tests
+and build passing, and zero dependency vulnerabilities.
+
+Live owner access is blocked by Neon HTTP 402: monthly compute allowance exhausted.
+Neon project `withered-truth-55297470` (`howl-ad-engine`) shows endpoint inactive,
+110.02 CU-hours used, Free plan, billing period Sep 1–Oct 1, 2026. Vercel shows
+100 CU-hours included. The existing Neon installation has two databases.
+
+The Launch upgrade confirmation is prepared, not applied: $0.106/CU-hour and
+$0.35/GB-month plus applicable taxes/fees, covering the whole installation. Owner
+approval is pending because this creates usage-based charges. No plan change or
+real-company OAuth authorization has occurred. Real-HOWL report reconciliation,
+cost classification and targets remain incomplete.
