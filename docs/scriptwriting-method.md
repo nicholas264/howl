@@ -4,6 +4,10 @@ The shared server module `api/_lib/howl-scriptwriting.js` contains the runtime m
 
 The method guides qualified hooks, connecting second lines, awareness-based onramps, problem and solution mechanisms, relevant sales-sequence questions, objection handling, filmable execution, and controlled creative iteration. It distinguishes R1, R3 and R4 MKii and requires evidence for testimonials and mutable claims.
 
+## Script Studio
+
+The unified Script Studio replaces the separate Founder Ads and Concept Studio screens. It sends a validated `script_studio` brief to `/api/generate`, loads creator context server-side, and returns a checked JSON script with three alternate openings and a shot list. Users can edit spoken copy, download the complete brief, save locally, send to Results, or save creator work to briefs and the Creative Board. Older screen URLs remain aliases. Browser-local Founder Ads saves remain readable.
+
 ## Integration
 
 - Founder Ads: `/api/generate`, `task: founder_script`; the server builds the prompt from the structured brief and preserves HOOK/STORY/PROOF/CTA spoken output.

@@ -114,7 +114,7 @@ export default function ResultsPanel({
 
       <div style={{ marginTop: 28, display: "flex", gap: 10 }}>
         <button className="xbtn" onClick={exportCSV}>Export CSV</button>
-        <button className="xbtn" onClick={() => setActiveTab("from-winners")}>← Concept Studio</button>
+        <button className="xbtn" onClick={() => setActiveTab("script-studio")}>← Script Studio</button>
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import { ensureWorkControls } from '../api/_lib/work-controls.js';
 import { ensureOperationBudgets } from '../api/_lib/operation-budget.js';
 import { ensureCreatorOpsTables } from '../api/_lib/creator-ops.js';
 import { ensureAnalysisSchema } from '../api/_lib/analysis-schema.js';
+import { studioRequest, validateStudioBrief, parseStudioOutput } from '../api/_lib/script-studio.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PGlite } from '@electric-sql/pglite';
@@ -87,6 +88,36 @@ test('every script-generating route sends the studied method to the provider and
       assert.match(payload.system, /INDEPENDENT heat\/flame controls/);
       assert.match(payload.system, /preserve narrator/);
     }
+    const studioOutput = { title: 'Warmth where you sit', angle: 'Radiant warmth at camp', strategy: 'Recognize the cold before explaining the tube.', script: 'Still cold beside the flame? The R3 adds radiant warmth from a BarCoal tube. See the R3.', cta: 'See the R3', hooks: [1,2,3].map(n => ({ spoken: `Opening ${n}`, next_line: 'Meet the R3.', visual: 'Camper outside', on_screen: 'Radiant warmth' })), shot_list: [1,2,3,4].map(n => ({ time: `${n * 5}s`, visual: 'Show the R3 outside', on_screen: 'Camp warmth' })), guardrails: ['Film outside with proper clearances.'] };
+    for (const delivery of ['founder', 'creator', 'voiceover']) {
+      providerResult = studioOutput;
+      const studio = await call(generate, { task: 'script_studio', brief: { product: 'r3', delivery, startingPoint: 'fresh', duration: 30, creatorId: creator.id }, max_tokens: 5000 });
+      assert.equal(studio.body.script.script, studioOutput.script);
+      assert.equal(calls.at(-1).output_config.format.type, 'json_schema');
+      assert.deepEqual(calls.at(-1).output_config.format.schema.properties.hooks.required, ['first', 'second', 'third']);
+      const context = JSON.parse(calls.at(-1).messages[0].content);
+      assert.equal(context.delivery, delivery);
+      assert.equal(context.creator?.name || null, delivery === 'creator' ? 'Script fixture' : null);
+      assert.match(calls.at(-1).system, /ONRAMP AND INTRODUCTION/);
+    }
+    const savedStudio = await call(workflow, { action: 'save_studio_script', creator_id: creator.id, product: 'r3', script: studioOutput }, 201);
+    assert.equal(savedStudio.body.brief.script, studioOutput.script);
+    assert.equal(savedStudio.body.brief.generation_source, 'script_studio');
+    assert.match(savedStudio.body.brief.brief, /Visual: Camper outside/);
+    const cards = await sql`SELECT id FROM flow_cards WHERE creator_id = ${creator.id} AND title = ${studioOutput.title}`;
+    assert.ok(cards.length, 'saved studio script appears on the Creative Board');
+    await call(workflow, { action: 'save_studio_script', creator_id: creator.id, product: 'r3', script: {} }, 400);
+    providerResult = { ...studioOutput, hooks: { first: studioOutput.hooks[0], second: studioOutput.hooks[1], third: studioOutput.hooks[2] } };
+    const normalized = await call(generate, { task: 'script_studio', brief: { product: 'r3', delivery: 'voiceover', startingPoint: 'fresh', duration: 30 } });
+    assert.equal(normalized.body.script.hooks.length, 3);
+    await sql`INSERT INTO brand_guidelines(prohibited_phrases) VALUES (ARRAY['Still cold'])`;
+    await call(generate, { task: 'script_studio', brief: { product: 'r3', delivery: 'voiceover', startingPoint: 'fresh', duration: 30 } }, 422);
+    await sql`DELETE FROM brand_guidelines`;
+    providerResult = 'truncated invalid json';
+    await call(generate, { task: 'script_studio', brief: { product: 'r1', delivery: 'founder', startingPoint: 'fresh', duration: 30 } }, 502);
+    const beforeInvalid = calls.length;
+    await call(generate, { task: 'script_studio', brief: { product: 'r3', delivery: 'creator', creatorId: 999999, startingPoint: 'fresh', duration: 30 } }, 400);
+    assert.equal(calls.length, beforeInvalid, 'missing creator never reaches provider');
     providerResult = 'Existing non-script response';
     await call(generate, { system: 'Overlay task', messages: [{ role: 'user', content: 'One overlay' }] });
     assert.equal(calls.at(-1).system, 'Overlay task', 'non-script callers retain their contract');
@@ -108,4 +139,16 @@ test('founder variants support all models and keep the four-section spoken outpu
     assert.match(request.messages[0].content, /132 spoken words/);
   }
   assert.throws(() => buildFounderScriptRequest({ scriptType: 'tech', product: 'r1', length: '60', tone: 'direct', customContext: 'x'.repeat(6001) }), /6,000/);
+});
+
+
+test('studio routes every product and starting point through the shared method with validated briefs', () => {
+  for (const product of ['r1', 'r3', 'r4mkii', 'all']) for (const startingPoint of ['fresh', 'winner', 'brief']) {
+    const request = studioRequest({ product, startingPoint, delivery: 'voiceover', duration: 60, notes: 'Real campaign brief', references: 'Observed ad and results' });
+    assert.match(request.system, /132 words/);
+    assert.equal(JSON.parse(request.messages[0].content).references, startingPoint === 'winner' ? 'Observed ad and results' : '');
+  }
+  const base = { product: 'r1', startingPoint: 'fresh', delivery: 'founder', duration: 30 };
+  for (const patch of [{ product: 'bad' }, { startingPoint: 'brief' }, { startingPoint: 'winner' }, { delivery: 'creator' }, { duration: 42 }, { notes: 'x'.repeat(6001) }, { references: 'x'.repeat(40001) }]) assert.throws(() => validateStudioBrief({ ...base, ...patch }));
+  assert.throws(() => parseStudioOutput('{}'));
 });

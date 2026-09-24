@@ -1,3 +1,4 @@
+import { parseStudioOutput, STUDIO_PRODUCTS } from './_lib/script-studio.js';
 import { withHowlScriptwriting } from './_lib/howl-scriptwriting.js';
 import { captureApprovalEvidence } from './_lib/approval-evidence.js';
 import { approveDeliverable } from './_lib/approval-snapshots.js';
@@ -679,8 +680,21 @@ export default async function handler(req, res) {
     if (req.method === 'GET') return res.json(await getWorkflow(sql, creatorId));
 
     if (req.method === 'POST') {
-      if (body.action === 'generate_brief') {
-        const generated = await generateBrief(sql, creatorId, body);
+      if (body.action === 'generate_brief' || body.action === 'save_studio_script') {
+        let generated;
+        if (body.action === 'save_studio_script') {
+          if (!Object.hasOwn(STUDIO_PRODUCTS, body.product)) return res.status(400).json({ error: 'Choose a HOWL product.' });
+          const [creator] = await sql`SELECT id FROM creators WHERE id = ${creatorId}`;
+          if (!creator) return res.status(404).json({ error: 'Creator not found.' });
+          let candidate;
+          try { candidate = parseStudioOutput(JSON.stringify(body.script)); }
+          catch (error) { return res.status(400).json({ error: error.message }); }
+          generated = { ...candidate, product: STUDIO_PRODUCTS[body.product], brief: candidate.strategy,
+            hooks: candidate.hooks.map(h => `${h.spoken} ${h.next_line} | Visual: ${h.visual} | Text: ${h.on_screen}`),
+            shot_list: candidate.shot_list.map(s => `${s.time}: ${s.visual} | Text: ${s.on_screen}`),
+            deliverables: ['One video script with alternate hooks and shot list'], format: 'creator video' };
+          assertBriefBrandSafe(generated, await loadBrandGuidelines(sql));
+        } else generated = await generateBrief(sql, creatorId, body);
         const briefText = buildProductionBriefText(generated);
         const [brief] = await sql`
           INSERT INTO creator_briefs (
@@ -690,7 +704,7 @@ export default async function handler(req, res) {
             ${creatorId}, ${clean(generated.title, 300) || 'Creator brief'}, ${clean(generated.product, 300) || clean(body.product, 200)},
             ${clean(generated.objective, 2000)}, ${clean(generated.angle, 1000)},
             ${JSON.stringify(Array.isArray(generated.deliverables) ? generated.deliverables : [])}::jsonb,
-            ${clean(briefText) || clean(generated.brief)}, ${clean(generated.script)}, 'draft', 'ai_creator_context', ${access.userId}
+            ${clean(briefText) || clean(generated.brief)}, ${clean(generated.script)}, 'draft', ${body.action === 'save_studio_script' ? 'script_studio' : 'ai_creator_context'}, ${access.userId}
           )
           RETURNING *
         `;

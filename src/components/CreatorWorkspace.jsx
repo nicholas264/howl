@@ -134,6 +134,7 @@ export default function CreatorWorkspace({
   canWriteBriefs = false,
   canWriteAssets = false,
   onOpenEditor,
+  onOpenScriptStudio,
   initialCreatorId,
   initialCreatorTab,
   initialWorkspaceView,
@@ -165,7 +166,6 @@ export default function CreatorWorkspace({
     briefs: [], outreach: [], engagements: [], agreements: [], deliverables: [],
     submission_links: [], production_summary: {}, guidance: { milestones: [], next_action: null },
   });
-  const [briefForm, setBriefForm] = useState({ product: '', objective: '', angle: '', direction: '', strategy_mode: 'past_performers' });
   const [briefDraft, setBriefDraft] = useState(null);
   const [briefDueDates, setBriefDueDates] = useState({});
   const [outreach, setOutreach] = useState({
@@ -425,27 +425,6 @@ export default function CreatorWorkspace({
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Could not load creator workflow');
     setWorkflow(data);
-  };
-
-  const generateBrief = async (event) => {
-    event.preventDefault();
-    setSaving(true);
-    setError('');
-    try {
-      const response = await fetch('/api/creator-workflow', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'generate_brief', creator_id: selected.id, ...briefForm }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Could not generate brief');
-      setWorkflow(data.workflow);
-      setDetailTab('briefs');
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
   };
 
   const saveOutreach = async (event) => {
@@ -1725,18 +1704,10 @@ export default function CreatorWorkspace({
             {detailTab === 'briefs' && (
               <section className="creator-detail-section workflow-section">
                 {canWriteBriefs && (
-                  <form className="workflow-form" onSubmit={generateBrief}>
-                    <div className="detail-section-head"><span>Generate from creator context</span><small>AI grounded in this profile and launch history</small></div>
-                    <input required placeholder="Product" value={briefForm.product} onChange={event => setBriefForm({ ...briefForm, product: event.target.value })} />
-                    <input placeholder="Objective" value={briefForm.objective} onChange={event => setBriefForm({ ...briefForm, objective: event.target.value })} />
-                    <input placeholder="Angle or leave open" value={briefForm.angle} onChange={event => setBriefForm({ ...briefForm, angle: event.target.value })} />
-                    <select value={briefForm.strategy_mode} onChange={event => setBriefForm({ ...briefForm, strategy_mode: event.target.value })}>
-                      <option value="past_performers">Use past performers</option>
-                      <option value="net_new">Build net new</option>
-                    </select>
-                    <textarea rows="3" placeholder="Additional direction" value={briefForm.direction} onChange={event => setBriefForm({ ...briefForm, direction: event.target.value })} />
-                    <button className="primary-action" disabled={saving}>{saving ? 'Building brief...' : 'Generate brief + script'}</button>
-                  </form>
+                  <div className="workflow-form">
+                    <div className="detail-section-head"><span>Write for this creator</span><small>Use their profile in Script Studio</small></div>
+                    <button className="primary-action" type="button" onClick={() => onOpenScriptStudio?.(selected.id)}>Open Script Studio</button>
+                  </div>
                 )}
                 <div className="workflow-list">
                   {workflow.briefs.map(brief => (
