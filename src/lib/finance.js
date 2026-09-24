@@ -77,6 +77,8 @@ export function financialTrends(periods,months,accounts,settings){
   if(!report)return {month};
   const costs=Array.isArray(settings.sellingAccountIds)?sellingContribution(accounts,settings.sellingAccountIds,[month]):null;
   return {month,grossMargin:ratio(report.revenue-report.cogs,report.revenue),
+   operatingMargin:ratio(report.revenue-report.cogs-report.expenses,report.revenue),
+   netMargin:ratio(report.netIncome,report.revenue),
    totalOpex:report.expenses,sellingExpenses:costs?.sellingExpenses??null,
    operatingBudget:costs?.fixedCosts??null};
  });
