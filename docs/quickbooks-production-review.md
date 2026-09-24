@@ -63,7 +63,9 @@ The callback to register is
 - Internal-use terms and a Financials privacy supplement are maintained in
   `campfire-internal-terms.md` and `campfire-financials-privacy.md`.
   Owner approved publication on September 24, 2026. Public routes are
-  `/legal/terms` and `/legal/privacy`. Intuit registration remains pending.
+  `/legal/terms` and `/legal/privacy`. Both were deployed, returned HTTP 200
+  without sign-in, and were saved in Intuit App terms of service settings.
+  The unauthenticated financial API continues to return HTTP 401.
 - Review the actual Intuit security requirements before making any compliance
   commitment. Clerk authentication alone does not establish that MFA or CAPTCHA
   is enabled for this deployment.
