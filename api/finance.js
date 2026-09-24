@@ -1,6 +1,6 @@
 import { requirePermission } from './_lib/app-access.js';
 import { canAccessFinance,fiscalMonths } from '../src/lib/finance.js';
-import { defaultSettings,validateSettings,setup,nonce,hash,acquireConnection,releaseConnection,provider,monthEnd,closedThrough } from './_lib/finance.js';
+import { defaultSettings,validateSettings,setup,nonce,hash,acquireConnection,releaseConnection,provider,monthEnd,closedThrough,protectRealm } from './_lib/finance.js';
 import { parseProfitLoss,parseBalanceSheet,combineAccounts } from './_lib/quickbooks-reports.js';
 export function createFinanceHandler({authorize=requirePermission,env=process.env,fetcher=fetch,now=()=>new Date()}={}){return async(req,res)=>{
  res.setHeader('Cache-Control','private, no-store');
@@ -9,7 +9,12 @@ export function createFinanceHandler({authorize=requirePermission,env=process.en
  const {sql,userId}=access;
  try{
  const [row]=await sql`SELECT * FROM finance_workspace WHERE id='company'`;
- const [connection]=await sql`SELECT realm,environment FROM finance_connection WHERE id='company'`;
+ const [storedConnection]=await sql`SELECT realm,environment FROM finance_connection WHERE id='company'`;
+ const connection=req.method==='GET'?await protectRealm(sql,storedConnection,env):null;
+ if(req.method==='GET'&&row?.snapshot&&Object.hasOwn(row.snapshot,'realm')){
+ await sql`UPDATE finance_workspace SET snapshot=snapshot-'realm' WHERE id='company' AND snapshot ? 'realm'`;
+ delete row.snapshot.realm;
+ }
  if(req.method==='GET')return res.json({settings:row?.settings||defaultSettings(),revision:row?.revision||0,snapshot:row?.snapshot||null,connection:connection||null,setup:setup(env)});
  const b=req.body;if(!b||JSON.stringify(b).length>200000)return res.status(400).json({error:'Invalid request.'});
  if(b.action==='connect'){
@@ -44,7 +49,7 @@ export function createFinanceHandler({authorize=requirePermission,env=process.en
  const start=`${settings.start}-01`,end=monthEnd(periods.at(-1)),q=new URLSearchParams({start_date:start,end_date:end,accounting_method:settings.basis,summarize_column_by:'Total'});
  const balance=parseBalanceSheet(await provider(`reports/BalanceSheet?${q}`,c.access,c.realm,env,fetcher),start,end,settings.basis);
  if(months.some(m=>m.currency!==settings.currency)||balance.currency!==settings.currency)throw new Error('Report currency differs from your plan. Update the plan currency and sync again.');
- const snapshot={months:months.map(({accounts,...m})=>m),accounts:combineAccounts(months),balance,closedThrough:periods.at(-1),syncedAt:now().toISOString(),realm:c.realm,environment:c.environment,basis:settings.basis,currency:settings.currency};
+ const snapshot={months:months.map(({accounts,...m})=>m),accounts:combineAccounts(months),balance,closedThrough:periods.at(-1),syncedAt:now().toISOString(),environment:c.environment,basis:settings.basis,currency:settings.currency};
  const saved=await sql`UPDATE finance_workspace SET snapshot=${JSON.stringify(snapshot)}::jsonb WHERE id='company' AND revision=${row.revision} AND EXISTS(SELECT 1 FROM finance_connection WHERE id='company' AND version=${c.version}) RETURNING id`;
  if(!saved.length)throw new Error('Settings or connection changed during sync. Sync again.');return res.json({ok:true});
  }finally{await releaseConnection(sql,c.version);}

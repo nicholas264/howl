@@ -76,6 +76,13 @@ The callback to register is
 - No OAuth Playground or manually supplied access/refresh tokens are required.
 - Client credentials belong in server-only environment variables. Refresh and
   access tokens are encrypted with AES-256-GCM before database storage.
+- Company identifiers now use the same authenticated encryption on new
+  connections. Owner reads and syncs upgrade legacy identifiers with a
+  compare-and-set write; owner reads remove redundant identifiers from old
+  report snapshots. New snapshots omit them. The owner-only connection response
+  still identifies the connected company. Invalid ciphertext blocks reads/sync
+  while disconnect remains available. This hardening is tested locally and is
+  awaiting deployment.
 - Financial endpoints enforce authenticated active-owner authorization.
 - Automated tests cover provider failures, malformed reports, callback state
   binding/replay, refresh, reconnect and disconnect using controlled fixtures.

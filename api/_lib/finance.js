@@ -27,6 +27,18 @@ export function setup(env=process.env){
 function key(env){if((env.QUICKBOOKS_TOKEN_ENCRYPTION_KEY?.length||0)<32)throw new Error('Token encryption is not configured.');return createHash('sha256').update(env.QUICKBOOKS_TOKEN_ENCRYPTION_KEY).digest();}
 export function encrypt(value,env=process.env){const iv=randomBytes(12),cipher=createCipheriv('aes-256-gcm',key(env),iv),data=Buffer.concat([cipher.update(JSON.stringify(value),'utf8'),cipher.final()]);return ['v1',iv.toString('base64url'),cipher.getAuthTag().toString('base64url'),data.toString('base64url')].join('.');}
 export function decrypt(value,env=process.env){const [version,iv,tag,data]=value.split('.');if(version!=='v1')throw new Error('Invalid credential version.');const c=createDecipheriv('aes-256-gcm',key(env),Buffer.from(iv,'base64url'));c.setAuthTag(Buffer.from(tag,'base64url'));return JSON.parse(Buffer.concat([c.update(Buffer.from(data,'base64url')),c.final()]).toString());}
+export function readRealm(value,env=process.env){
+ const realm=/^\d{1,40}$/.test(value)?value:decrypt(value,env);
+ if(typeof realm!=='string'||!/^\d{1,40}$/.test(realm))throw new Error('Invalid QuickBooks company identity. Reconnect QuickBooks.');
+ return realm;
+}
+export async function protectRealm(sql,connection,env=process.env){
+ if(!connection)return null;
+ const realm=readRealm(connection.realm,env);
+ // Upgrade older rows without changing or overwriting a concurrently connected company.
+ if(connection.realm===realm){const encrypted=encrypt(realm,env);await sql`UPDATE finance_connection SET realm=${encrypted} WHERE id='company' AND realm=${realm}`;}
+ return {...connection,realm};
+}
 // Provider bodies, URLs, credentials and company identifiers must never enter
 // diagnostics. Intuit trace IDs contain hexadecimal characters and hyphens.
 function recordProviderFailure(response,operation){
@@ -50,7 +62,7 @@ export async function acquireConnection(sql,env=process.env,fetcher=fetch){
  if(!c)throw new Error('Connect QuickBooks first, or wait for the current sync to finish.');
  try{if(c.environment!==env.QUICKBOOKS_ENVIRONMENT)throw new Error('Environment changed. Reconnect QuickBooks.');let tokens=decrypt(c.tokens,env);
  if(new Date(c.expires_at).getTime()<Date.now()+120000){tokens=await exchange({grant_type:'refresh_token',refresh_token:tokens.refresh_token},env,fetcher);const encrypted=encrypt(tokens,env),expiry=new Date(Date.now()+tokens.expires_in*1000).toISOString();const saved=await sql`UPDATE finance_connection SET tokens=${encrypted},expires_at=${expiry} WHERE id='company' AND version=${c.version} RETURNING id`;if(!saved.length)throw new Error('Connection changed. Sync again.');}
- return {...c,access:tokens.access_token};
+ const connection=await protectRealm(sql,c,env);return {...connection,access:tokens.access_token};
  }catch(error){await releaseConnection(sql,c.version);throw error;}
 }
 export async function releaseConnection(sql,version){await sql`UPDATE finance_connection SET lease_until=NULL WHERE id='company' AND version=${version}`;}

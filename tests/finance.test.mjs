@@ -4,7 +4,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { neon } from '@neondatabase/serverless';
 import { useTestDatabase } from './neon-test-adapter.mjs';
 import { financialRatios,targetPacing,classifyCosts,fiscalMonths,readFinanceWorkspace } from '../src/lib/finance.js';
-import { ensureFinance,encrypt,decrypt,setup,validateSettings,acquireConnection,releaseConnection,nonce,provider,exchange } from '../api/_lib/finance.js';
+import { ensureFinance,encrypt,decrypt,setup,validateSettings,acquireConnection,releaseConnection,nonce,provider,exchange,readRealm } from '../api/_lib/finance.js';
 import { parseProfitLoss,parseBalanceSheet } from '../api/_lib/quickbooks-reports.js';
 import { createFinanceHandler } from '../api/finance.js';
 import { createQuickBooksCallback } from '../api/quickbooks-callback.js';
@@ -51,6 +51,8 @@ test('settings, callback configuration, and authenticated token encryption fail 
  assert.equal(setup(env).ready,true);assert.equal(setup({...env,QUICKBOOKS_TOKEN_ENCRYPTION_KEY:'short'}).ready,false);assert.equal(setup({...env,NODE_ENV:'production',QUICKBOOKS_REDIRECT_URI:'http://localhost/api/quickbooks-callback'}).ready,false);
  assert.throws(()=>validateSettings({...plan,mapping:{x:{variablePct:101}}}));assert.throws(()=>validateSettings({...plan,targets:{'2027-01':5}}));assert.throws(()=>validateSettings({...plan,targets:{'2026-01':NaN}}));
  const token={refresh_token:'never-plaintext'},cipher=encrypt(token,env);assert.ok(!cipher.includes(token.refresh_token));assert.deepEqual(decrypt(cipher,env),token);assert.notEqual(cipher,encrypt(token,env));assert.throws(()=>decrypt(cipher,{...env,QUICKBOOKS_TOKEN_ENCRYPTION_KEY:'wrong-but-long-enough-key-1234567890'}));
+ assert.equal(readRealm(encrypt('123',env),env),'123');
+ for(const identity of [encrypt({realm:'123'},env),encrypt('../other-company',env),'v1.invalid'])assert.throws(()=>readRealm(identity,env));
 });
 test('owner guard runs before all financial queries and actions',async()=>{
  for(const role of ['admin','viewer','analyst','strategist',undefined])for(const method of ['GET','POST']){const r=res();await createFinanceHandler({authorize:async()=>({role,sql:()=>assert.fail('must not query')})})({method},r);assert.equal(r.statusCode,403);}
@@ -66,13 +68,26 @@ test('real SQL: OAuth binding, replay, owner recheck, CAS, sync atomicity, refre
  assert.equal((await call('POST',{action:'save',settings:plan,revision:0})).statusCode,200);assert.equal((await call('POST',{action:'save',settings:plan,revision:0})).statusCode,409);
  assert.match((await connect('qb_oauth='+nonce())).reply.url,/invalid_state/);assert.equal(refreshes,0);
  const c=await connect();assert.match(c.reply.url,/connected/);assert.equal(refreshes,1);
+ const [storedIdentity]=await sql`SELECT realm FROM finance_connection`;
+ assert.notEqual(storedIdentity.realm,'123');assert.equal(decrypt(storedIdentity.realm,env),'123');
  const replay=res();await callback({method:'GET',headers:{cookie:c.cookie},query:{state:c.state,code:'fixture-code',realmId:'123'}},replay);assert.match(replay.url,/invalid_state/);assert.equal(refreshes,1);
  const safe=await call('GET');assert.ok(!JSON.stringify(safe.body).includes('fixture-access'));assert.ok(!JSON.stringify(safe.body).includes('fixture-secret'));
+ assert.equal(safe.body.connection.realm,'123');
  assert.equal((await call('POST',{action:'sync'})).statusCode,200);let saved=(await call('GET')).body.snapshot;assert.equal(saved.months.length,2);assert.equal(saved.accounts.length,3);
+ assert.equal(Object.hasOwn(saved,'realm'),false);
+ await sql`UPDATE finance_connection SET realm='123'`;
+ await sql`UPDATE finance_workspace SET snapshot=jsonb_set(snapshot,'{realm}','"123"'::jsonb)`;
+ const upgraded=await call('GET');assert.equal(upgraded.body.connection.realm,'123');
+ assert.equal(Object.hasOwn(upgraded.body.snapshot,'realm'),false);
+ const [upgradedIdentity]=await sql`SELECT realm FROM finance_connection`;
+ assert.notEqual(upgradedIdentity.realm,'123');assert.equal(decrypt(upgradedIdentity.realm,env),'123');
+ assert.equal(Object.hasOwn((await sql`SELECT snapshot FROM finance_workspace`)[0].snapshot,'realm'),false);
  failSync=true;assert.equal((await call('POST',{action:'sync'})).statusCode,503);assert.deepEqual((await call('GET')).body.snapshot,saved);failSync=false;
  await sql`UPDATE finance_connection SET expires_at=now()-interval '1 hour'`;const lease=await acquireConnection(sql,env,fetcher);assert.equal(refreshes,2);await assert.rejects(acquireConnection(sql,env,fetcher),/current sync/);await releaseConnection(sql,lease.version);
  await sql`UPDATE app_users SET role='admin'`;assert.match((await connect()).reply.url,/access_denied/);assert.equal(refreshes,2);
  await sql`UPDATE app_users SET role='owner'`;const current=(await call('GET')).body;assert.equal((await call('POST',{action:'save',revision:current.revision,settings:{...plan,basis:'Cash'}})).statusCode,200);assert.equal((await call('GET')).body.snapshot,null);
+ await sql`UPDATE finance_connection SET realm='v1.invalid'`;
+ assert.equal((await call('GET')).statusCode,503);
  assert.equal((await call('POST',{action:'disconnect'})).statusCode,200);assert.equal((await call('GET')).body.connection,null);assert.equal((await sql`SELECT * FROM finance_oauth`).length,0);
  }finally{restore();await db.close();}
 });
