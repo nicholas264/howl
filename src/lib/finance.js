@@ -57,3 +57,27 @@ export function sellingContribution(accounts,sellingAccountIds,months){
  }
  return {method:'selling',cogs,sellingExpenses,variableCosts:cogs+sellingExpenses,fixedCosts,unclassified:[]};
 }
+
+// Keep the observed YTD selling margin, but cover the latest reported month's
+// operating budget. Do not average away a recent change in overhead.
+export function latestOperatingBreakEven(months,accounts,settings,contributionMargin){
+ const latest=months.reduce((last,m)=>!last||m.month>last.month?m:last,null);
+ if(!latest)return {month:null,revenue:null,operatingBudget:null,sales:null};
+ const costs=Array.isArray(settings.sellingAccountIds)
+  ?sellingContribution(accounts,settings.sellingAccountIds,[latest.month])
+  :classifyCosts(accounts,settings.mapping,[latest.month]);
+ const operatingBudget=costs.fixedCosts;
+ return {month:latest.month,revenue:latest.revenue,operatingBudget,
+ sales:Number.isFinite(operatingBudget)&&operatingBudget>=0&&Number.isFinite(contributionMargin)&&contributionMargin>0?operatingBudget/contributionMargin:null};
+}
+
+export function financialTrends(periods,months,accounts,settings){
+ return periods.map(month=>{
+  const report=months.find(m=>m.month===month);
+  if(!report)return {month};
+  const costs=Array.isArray(settings.sellingAccountIds)?sellingContribution(accounts,settings.sellingAccountIds,[month]):null;
+  return {month,grossMargin:ratio(report.revenue-report.cogs,report.revenue),
+   totalOpex:report.expenses,sellingExpenses:costs?.sellingExpenses??null,
+   operatingBudget:costs?.fixedCosts??null};
+ });
+}

@@ -154,3 +154,24 @@ test('selling contribution deducts COGS and selling section once and covers rema
  assert.deepEqual(validateSettings({...plan,sellingAccountIds:['Expenses:2','Expenses:2']}).sellingAccountIds,['Expenses:2']);
  assert.throws(()=>validateSettings({...plan,sellingAccountIds:['COGS:1']}));
 });
+
+test('break-even covers latest month operating budget using YTD margin, not average overhead',async()=>{
+ const {latestOperatingBreakEven}=await import('../src/lib/finance.js');
+ const months=[{month:'2026-08',revenue:150},{month:'2026-01',revenue:100}];
+ const accounts=[{id:'Expenses:1',group:'Expenses',values:{'2026-01':10,'2026-08':30}},{id:'Expenses:2',group:'Expenses',values:{'2026-01':20,'2026-08':80}},{id:'COGS:3',group:'COGS',values:{'2026-08':40}}];
+ const settings={sellingAccountIds:['Expenses:1']};
+ assert.deepEqual(latestOperatingBreakEven(months,accounts,settings,.4),{month:'2026-08',revenue:150,operatingBudget:80,sales:200});
+ for(const margin of [0,-.2,null,NaN])assert.equal(latestOperatingBreakEven(months,accounts,settings,margin).sales,null);
+ assert.equal(latestOperatingBreakEven([],accounts,settings,.4).sales,null);
+ assert.equal(latestOperatingBreakEven(months,accounts,{mapping:{}},.4).sales,null);
+});
+
+test('monthly financial trends preserve missing months, negative margins, and the selling split',async()=>{
+ const {financialTrends}=await import('../src/lib/finance.js');
+ const periods=['2026-01','2026-02','2026-03'];
+ const months=[{month:'2026-01',revenue:100,cogs:120,expenses:50},{month:'2026-02',revenue:0,cogs:10,expenses:20}];
+ const accounts=[{id:'Expenses:1',group:'Expenses',values:{'2026-01':20,'2026-02':5}},{id:'Expenses:2',group:'Expenses',values:{'2026-01':30,'2026-02':15}}];
+ const rows=financialTrends(periods,months,accounts,{sellingAccountIds:['Expenses:1']});
+ assert.equal(rows[0].grossMargin,-.2);assert.equal(rows[0].operatingBudget,30);assert.equal(rows[0].sellingExpenses,20);assert.equal(rows[0].totalOpex,50);
+ assert.equal(rows[1].grossMargin,null);assert.deepEqual(rows[2],{month:'2026-03'});
+});
