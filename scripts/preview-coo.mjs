@@ -1,3 +1,5 @@
+import { ensureOrganization } from '../api/_lib/organization.js';
+import { createOrganizationHandler } from '../api/organization.js';
 // Local-only preview. Real COO handler and PostgreSQL semantics; no provider calls or production credentials.
 import { createServer } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -11,7 +13,7 @@ import { ensureCooWorkspace, applyCooCommand } from '../api/_lib/coo.js';
 import { createCooHandler } from '../api/coo-workspace.js';
 import { dayString } from '../src/lib/coo.js';
 const db=new PGlite();useTestDatabase(db);
-const sql=neon('postgres://test:test@localhost/test');await ensureCooWorkspace(sql);
+const sql=neon('postgres://test:test@localhost/test');await ensureCooWorkspace(sql);await ensureOrganization(sql);
 const now=new Date(),today=dayString(now),year=now.getFullYear(),quarter=Math.floor(now.getMonth()/3),start=dayString(new Date(year,quarter*3,1)),end=dayString(new Date(year,quarter*3+3,0));
 let state=applyCooCommand(null,{action:'setup'},'Demo COO',now);
 const save=(kind,values)=>{state=applyCooCommand(state,{action:'save',kind,values},'Demo COO',now);return state[{cycle:'cycles',objective:'objectives',metric:'metrics',initiative:'initiatives',review:'reviews',constraint:'constraints'}[kind]].at(-1);};
@@ -38,12 +40,13 @@ const review=save('review',{title:'Weekly operating review',owner:'Demo COO',dep
 save('initiative',{title:'Approve the alternate supplier sample',owner:'Morgan',departmentId:state.departments[2].id,cycleId:cycle.id,dueDate:end,type:'action',constraintId:constraint.id,reviewId:review.id,description:'Demo follow-up from the operating review.'});
 await sql`INSERT INTO coo_workspace(id,data,updated_by) VALUES ('company',${JSON.stringify(state)}::jsonb,'demo')`;
 const handler=createCooHandler({authorize:async(req,res,p)=>{const viewer=req.headers['x-coo-preview-role']==='viewer';if(viewer&&p==='analytics.write'){res.status(403).json({error:'Read-only access'});return null;}return {sql,userId:'Demo COO',role:viewer?'viewer':'owner',permissions:viewer?['analytics.read']:['analytics.read','analytics.write']};}});
+const organizationHandler=createOrganizationHandler({authorize:async(req)=>({sql,userId:'Local owner',role:req.headers['x-coo-preview-role']||'owner',permissions:['*']})});
 const emptyEnv=await mkdtemp(join(tmpdir(),'coo-preview-env-'));
-const server=await createServer({configFile:false,root:process.cwd(),envDir:emptyEnv,define:{'import.meta.env.VITE_AUTH_DISABLED':'"true"'},plugins:[react(),{name:'coo-isolated-preview',transformIndexHtml(html){return html.replace('<body>','<body><div style="padding:8px 20px;background:#eaf2f8;color:#244b68;font:12px Helvetica;text-align:center">COO workspace preview · Demo data only · Changes stay in this temporary local database</div>');},configureServer(s){s.middlewares.use(async(req,res,next)=>{
+const server=await createServer({configFile:false,root:process.cwd(),envDir:emptyEnv,define:{'import.meta.env.VITE_AUTH_DISABLED':'"true"'},plugins:[react(),{name:'coo-isolated-preview',transformIndexHtml(html){return html.replace('<body>','<body><div style="padding:8px 20px;background:#eaf2f8;color:#244b68;font:12px Helvetica;text-align:center">Local preview · COO data is illustrative; organization names are owner-supplied · Changes stay in this temporary database</div>');},configureServer(s){s.middlewares.use(async(req,res,next)=>{
  const url=new URL(req.url,'http://127.0.0.1');if(!url.pathname.startsWith('/api/'))return next();
  res.status=code=>{res.statusCode=code;return res;};res.json=body=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(body));return res;};
  if(url.pathname==='/api/forecast')return res.json({forecast:{sheetName:'Demo financial forecast',months:Array.from({length:12},(_,i)=>({month:`${year}-${String(i+1).padStart(2,'0')}`,netRevenue:(i+1)*100000,units:(i+1)*100}))},updatedAt:now.toISOString()});
- if(url.pathname!=='/api/coo-workspace')return res.json({count:0,records:[],drafts:[]});
- try{let body='';for await(const chunk of req){body+=chunk;if(body.length>100000){res.status(413).json({error:'Request too large'});return;}}req.body=body?JSON.parse(body):null;await handler(req,res);}catch(e){res.status(500).json({error:e.message});}
+ if(!['/api/coo-workspace','/api/organization'].includes(url.pathname))return res.json({count:0,records:[],drafts:[]});
+ try{let body='';for await(const chunk of req){body+=chunk;if(body.length>100000){res.status(413).json({error:'Request too large'});return;}}req.body=body?JSON.parse(body):null;await (url.pathname==='/api/organization'?organizationHandler:handler)(req,res);}catch(e){res.status(500).json({error:e.message});}
  });}}],server:{host:'127.0.0.1',port:5194,strictPort:true}});
 await server.listen();console.log('COO preview: http://127.0.0.1:5194/?tab=coo');

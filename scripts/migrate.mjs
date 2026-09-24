@@ -1,3 +1,4 @@
+import { ensureOrganization } from '../api/_lib/organization.js';
 import { ensureCooWorkspace } from '../api/_lib/coo.js';
 import { ensureDealerOutreach } from '../api/_lib/dealer-outreach.js';
 import {ensureSessionCreation} from '../api/_lib/session-creation.js';
@@ -93,5 +94,6 @@ await ensureSessionCreation(sql);
 await sql`INSERT INTO app_schema_migrations (version) VALUES ('2026-09-09-session-creation') ON CONFLICT DO NOTHING`;
 await ensureDealerOutreach(sql);
 await ensureCooWorkspace(sql);
+await ensureOrganization(sql);
 if (process.env.HOWL_RUNTIME_DB_ROLE) await grantRuntimeAccess(sql,process.env.HOWL_RUNTIME_DB_ROLE);
 console.log('Schema migrations applied.');

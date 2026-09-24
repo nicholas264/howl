@@ -1,3 +1,4 @@
+import { canAccessOrganization } from './lib/organization.js';
 import { canAccessCoo } from './lib/coo-access.js';
 import ToolErrorBoundary from './components/ToolErrorBoundary.jsx';
 import React, { useState, useCallback, useEffect, useMemo, useRef, Suspense, lazy } from "react";
@@ -31,6 +32,7 @@ const CreativePlanningWorkspace = lazy(() => import("./components/CreativePlanni
 const AdminWorkspace = lazy(() => import("./components/AdminWorkspace"));
 const WorkspaceHub = lazy(() => import("./components/WorkspaceHub"));
 const MapMonitorWorkspace = lazy(() => import("./components/MapMonitorWorkspace"));
+const OrganizationWorkspace = lazy(() => import("./components/organization/OrganizationWorkspace.jsx"));
 const CooWorkspace = lazy(() => import("./components/coo/CooWorkspace.jsx"));
 const SkuMediaPacingTool = lazy(() => import("./components/SkuMediaPacingTool"));
 import { useDriveAuth } from "./hooks/useDriveAuth";
@@ -205,7 +207,7 @@ export default function HowlAdEngine({ appAccess }) {
   }, [activeTab, refreshUgcCount]);
 
   const NAV_SECTIONS = [
-    { label: 'Company', items: [{ key: 'coo', label: 'COO Workspace', permission: 'analytics.read', ownerOnly: true }] },
+    { label: 'Company', items: [{ key: 'coo', label: 'COO Workspace', permission: 'analytics.read', ownerOnly: true }, { key: 'organization', label: 'Organization chart', permission: 'admin.users', ownerOnly: true }] },
     {
       label: 'Policy',
       items: [
@@ -415,6 +417,7 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "founder" && <FounderAdTool />}
         {activeTab === "gallery" && <GalleryTab cart={cart} />}
         {activeTab === "dashboard-dealers" && <DealerDashboard setActiveTab={navigate} />}
+        {activeTab === "organization" && canAccessOrganization(appAccess) && <OrganizationWorkspace />}
         {activeTab === "coo" && canAccessCoo(appAccess) && <CooWorkspace setActiveTab={navigate} />}
         {activeTab === "dashboard-cfo" && <DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="cfo" />}
         {activeTab === "map-monitor" && <MapMonitorWorkspace canManage={can('admin.users')} />}
