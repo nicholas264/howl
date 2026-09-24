@@ -81,8 +81,10 @@ The callback to register is
   compare-and-set write; owner reads remove redundant identifiers from old
   report snapshots. New snapshots omit them. The owner-only connection response
   still identifies the connected company. Invalid ciphertext blocks reads/sync
-  while disconnect remains available. This hardening is tested locally and is
-  awaiting deployment.
+  while disconnect remains available. Deployed as commit `b0ba4e6`, deployment
+  `dpl_9c8BXBkQxGyQkgQrxFPmc28opGE1` (Ready). All 265 tests, the production
+  build and dependency audit passed. Live unauthenticated `/api/finance` returns
+  401 with `private, no-store`.
 - Financial endpoints enforce authenticated active-owner authorization.
 - Automated tests cover provider failures, malformed reports, callback state
   binding/replay, refresh, reconnect and disconnect using controlled fixtures.
@@ -128,3 +130,13 @@ Only after production credentials are available: install the matching client ID
 and secret securely, redeploy, complete owner consent, sync, reconcile, classify
 cost accounts and enter the owner's revenue targets. See
 [the operating guide](quickbooks-financials.md) for definitions and safeguards.
+
+## Current handoff
+
+Sandbox accounting-access consent remains unanswered after repeated goal turns.
+Do not interpret automatic goal continuations as consent. Browser tab listing
+still showed the original Intuit consent page, but page reads and dialog access
+timed out repeatedly after reconnecting; no consent was clicked and no assessment
+was submitted. Resume with a functioning browser and explicit owner consent.
+The local OAuth state may have expired; start a fresh Connect flow if necessary.
+Production credentials and real-report reconciliation remain incomplete.
