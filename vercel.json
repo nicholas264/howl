@@ -1,9 +1,15 @@
 {
   "framework": "vite",
   "functions": {
-    "api/generate.js": { "maxDuration": 300 },
-    "api/script-studio.js": { "maxDuration": 120 },
-    "api/dealer-analytics.js": { "maxDuration": 120 },
+    "api/generate.js": {
+      "maxDuration": 300
+    },
+    "api/script-studio.js": {
+      "maxDuration": 120
+    },
+    "api/dealer-analytics.js": {
+      "maxDuration": 120
+    },
     "api/drive/ugc.js": {
       "maxDuration": 300
     },
@@ -54,6 +60,14 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/legal/terms",
+      "destination": "/legal/terms.html"
+    },
+    {
+      "source": "/legal/privacy",
+      "destination": "/legal/privacy.html"
+    },
     {
       "source": "/apply",
       "destination": "/index.html"
