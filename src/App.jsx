@@ -1,3 +1,4 @@
+import { canAccessFinance } from './lib/finance.js';
 import { canAccessOrganization } from './lib/organization.js';
 import { canAccessCoo } from './lib/coo-access.js';
 import ToolErrorBoundary from './components/ToolErrorBoundary.jsx';
@@ -31,6 +32,7 @@ const CreativePlanningWorkspace = lazy(() => import("./components/CreativePlanni
 const AdminWorkspace = lazy(() => import("./components/AdminWorkspace"));
 const WorkspaceHub = lazy(() => import("./components/WorkspaceHub"));
 const MapMonitorWorkspace = lazy(() => import("./components/MapMonitorWorkspace"));
+const FinanceWorkspace = lazy(() => import("./components/finance/FinanceWorkspace.jsx"));
 const OrganizationWorkspace = lazy(() => import("./components/organization/OrganizationWorkspace.jsx"));
 const CooWorkspace = lazy(() => import("./components/coo/CooWorkspace.jsx"));
 const SkuMediaPacingTool = lazy(() => import("./components/SkuMediaPacingTool"));
@@ -207,7 +209,7 @@ export default function HowlAdEngine({ appAccess }) {
   }, [activeTab, refreshUgcCount]);
 
   const NAV_SECTIONS = [
-    { label: 'Company', items: [{ key: 'coo', label: 'COO Workspace', permission: 'analytics.read', ownerOnly: true }, { key: 'organization', label: 'Organization chart', permission: 'admin.users', ownerOnly: true }] },
+    { label: 'Company', items: [{ key: 'coo', label: 'COO Workspace', permission: 'analytics.read', ownerOnly: true }, { key: 'finance', label: 'Financials', permission: 'analytics.read', ownerOnly: true }, { key: 'organization', label: 'Organization chart', permission: 'admin.users', ownerOnly: true }] },
     {
       label: 'Policy',
       items: [
@@ -416,6 +418,7 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} onAddToCart={addToCart} />}
         {activeTab === "gallery" && <GalleryTab cart={cart} />}
         {activeTab === "dashboard-dealers" && <DealerDashboard setActiveTab={navigate} />}
+        {activeTab === "finance" && canAccessFinance(appAccess) && <FinanceWorkspace />}
         {activeTab === "organization" && canAccessOrganization(appAccess) && <OrganizationWorkspace />}
         {activeTab === "coo" && canAccessCoo(appAccess) && <CooWorkspace setActiveTab={navigate} />}
         {activeTab === "dashboard-cfo" && <DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="cfo" />}

@@ -27,6 +27,12 @@
     },
     "api/static-studio.js": {
       "maxDuration": 300
+    },
+    "api/finance.js": {
+      "maxDuration": 300
+    },
+    "api/quickbooks-callback.js": {
+      "maxDuration": 60
     }
   },
   "crons": [

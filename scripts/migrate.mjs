@@ -1,3 +1,4 @@
+import { ensureFinance } from '../api/_lib/finance.js';
 import { ensureOrganization } from '../api/_lib/organization.js';
 import { ensureCooWorkspace } from '../api/_lib/coo.js';
 import { ensureScriptStudio } from '../api/_lib/script-studio-store.js';
@@ -96,6 +97,7 @@ await sql`INSERT INTO app_schema_migrations (version) VALUES ('2026-09-09-sessio
 await ensureDealerOutreach(sql);
 await ensureCooWorkspace(sql);
 await ensureOrganization(sql);
+await ensureFinance(sql);
 await ensureScriptStudio(sql);
 if (process.env.HOWL_RUNTIME_DB_ROLE) await grantRuntimeAccess(sql,process.env.HOWL_RUNTIME_DB_ROLE);
 console.log('Schema migrations applied.');
