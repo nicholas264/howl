@@ -61,6 +61,10 @@
   ],
   "rewrites": [
     {
+      "source": "/dealer-intake",
+      "destination": "/dealer-intake.html"
+    },
+    {
       "source": "/legal/terms",
       "destination": "/legal/terms.html"
     },
