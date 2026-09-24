@@ -4,12 +4,26 @@ import { PGlite } from '@electric-sql/pglite';
 import { neon } from '@neondatabase/serverless';
 import { useTestDatabase } from './neon-test-adapter.mjs';
 import { financialRatios,targetPacing,classifyCosts,fiscalMonths,readFinanceWorkspace } from '../src/lib/finance.js';
-import { ensureFinance,encrypt,decrypt,setup,validateSettings,acquireConnection,releaseConnection,nonce } from '../api/_lib/finance.js';
+import { ensureFinance,encrypt,decrypt,setup,validateSettings,acquireConnection,releaseConnection,nonce,provider,exchange } from '../api/_lib/finance.js';
 import { parseProfitLoss,parseBalanceSheet } from '../api/_lib/quickbooks-reports.js';
 import { createFinanceHandler } from '../api/finance.js';
 import { createQuickBooksCallback } from '../api/quickbooks-callback.js';
 import { env,plan,report,fixtureFetch } from './fixtures/finance.mjs';
 const res=()=>({statusCode:200,headers:{},setHeader(k,v){this.headers[k]=v;},status(c){this.statusCode=c;return this;},json(b){this.body=b;return this;},redirect(c,u){this.statusCode=c;this.url=u;return this;},end(){}});
+test('Intuit failure diagnostics retain trace IDs without credentials, report bodies or company IDs',async t=>{
+ const log=t.mock.method(console,'warn',()=>{});
+ const fail=async()=>new Response('secret financial report body',{status:503,headers:{intuit_tid:'1-abcdef12-123456abcdef'}});
+ await assert.rejects(provider('reports/ProfitAndLoss','sensitive-access','private-company',env,fail),/complete report/);
+ await assert.rejects(exchange({refresh_token:'sensitive-refresh'},env,fail),/Reconnect/);
+ assert.deepEqual(log.mock.calls.map(c=>c.arguments),[
+  ['QuickBooks provider failure',{operation:'report',status:503,intuitTid:'1-abcdef12-123456abcdef'}],
+  ['QuickBooks provider failure',{operation:'token',status:503,intuitTid:'1-abcdef12-123456abcdef'}]
+ ]);
+ for(const trace of ['malicious-content', 'a'.repeat(129)]){
+  await assert.rejects(provider('reports/BalanceSheet','sensitive-access','private-company',env,async()=>new Response('secret',{status:401,headers:{intuit_tid:trace}})),/Reconnect/);
+  assert.deepEqual(log.mock.calls.at(-1).arguments[1],{operation:'report',status:401});
+ }
+});
 test('ratios do not invent break-even or ratios for zero and negative denominators',()=>{
  const r=financialRatios({revenue:100000,variableCosts:60000,fixedCosts:30000,cogs:50000,netIncome:10000,currentAssets:2,currentLiabilities:0,equity:-2,totalLiabilities:3});assert.equal(r.breakEvenSales,75000);assert.equal(r.marginOfSafety,25000);assert.equal(r.netMargin,.1);assert.equal(r.currentRatio,null);assert.equal(r.debtToEquity,null);
  for(const revenue of [0,50000])assert.equal(financialRatios({revenue,variableCosts:60000,fixedCosts:30000}).breakEvenSales,null);

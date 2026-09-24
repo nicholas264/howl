@@ -27,14 +27,21 @@ export function setup(env=process.env){
 function key(env){if((env.QUICKBOOKS_TOKEN_ENCRYPTION_KEY?.length||0)<32)throw new Error('Token encryption is not configured.');return createHash('sha256').update(env.QUICKBOOKS_TOKEN_ENCRYPTION_KEY).digest();}
 export function encrypt(value,env=process.env){const iv=randomBytes(12),cipher=createCipheriv('aes-256-gcm',key(env),iv),data=Buffer.concat([cipher.update(JSON.stringify(value),'utf8'),cipher.final()]);return ['v1',iv.toString('base64url'),cipher.getAuthTag().toString('base64url'),data.toString('base64url')].join('.');}
 export function decrypt(value,env=process.env){const [version,iv,tag,data]=value.split('.');if(version!=='v1')throw new Error('Invalid credential version.');const c=createDecipheriv('aes-256-gcm',key(env),Buffer.from(iv,'base64url'));c.setAuthTag(Buffer.from(tag,'base64url'));return JSON.parse(Buffer.concat([c.update(Buffer.from(data,'base64url')),c.final()]).toString());}
+// Provider bodies, URLs, credentials and company identifiers must never enter
+// diagnostics. Intuit trace IDs contain hexadecimal characters and hyphens.
+function recordProviderFailure(response,operation){
+ const trace=response.headers?.get?.('intuit_tid');
+ console.warn('QuickBooks provider failure',{operation,status:response.status,
+  ...(typeof trace==='string'&&/^[a-f\d-]{1,128}$/i.test(trace)?{intuitTid:trace}:{})});
+}
 export async function exchange(params,env=process.env,fetcher=fetch){
  const response=await fetcher('https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer',{method:'POST',signal:AbortSignal.timeout(15000),headers:{Authorization:`Basic ${Buffer.from(`${env.QUICKBOOKS_CLIENT_ID}:${env.QUICKBOOKS_CLIENT_SECRET}`).toString('base64')}`,'Content-Type':'application/x-www-form-urlencoded',Accept:'application/json'},body:new URLSearchParams(params)});
- if(!response.ok)throw new Error('QuickBooks authorization expired or was declined. Reconnect QuickBooks.');const t=await response.json();if(!t.access_token||!t.refresh_token||!Number.isFinite(t.expires_in)||t.expires_in<=0)throw new Error('QuickBooks returned an incomplete authorization.');return t;
+ if(!response.ok){recordProviderFailure(response,'token');throw new Error('QuickBooks authorization expired or was declined. Reconnect QuickBooks.');}const t=await response.json();if(!t.access_token||!t.refresh_token||!Number.isFinite(t.expires_in)||t.expires_in<=0)throw new Error('QuickBooks returned an incomplete authorization.');return t;
 }
 export async function provider(path,access,realm,env=process.env,fetcher=fetch){
  const base=env.QUICKBOOKS_ENVIRONMENT==='production'?'https://quickbooks.api.intuit.com':'https://sandbox-quickbooks.api.intuit.com';
  const r=await fetcher(`${base}/v3/company/${encodeURIComponent(realm)}/${path}`,{headers:{Authorization:`Bearer ${access}`,Accept:'application/json'},signal:AbortSignal.timeout(15000)});
- if(!r.ok)throw new Error(r.status===401?'QuickBooks authorization expired. Reconnect QuickBooks.':'QuickBooks could not return a complete report. Try syncing again.');return r.json();
+ if(!r.ok){recordProviderFailure(r,'report');throw new Error(r.status===401?'QuickBooks authorization expired. Reconnect QuickBooks.':'QuickBooks could not return a complete report. Try syncing again.');}return r.json();
 }
 // A lease serializes refresh/sync; the version also prevents an old sync from
 // overwriting a new connection. No refresh credential leaves the server.

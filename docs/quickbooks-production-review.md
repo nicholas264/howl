@@ -31,7 +31,9 @@ preparation record, not a submitted assessment or a statement of approval.
   no QuickBooks webhooks or CDC; no special multicurrency/sales-tax features.
 - Error-handling draft answers reflect tested error paths and the existing
   feedback widget. Trace-ID capture and complete error logs are honestly marked
-  absent. These recommendations have not been implemented yet.
+  absent in the deployed version. Local code now captures bounded Intuit trace
+  IDs for failed token/report HTTP responses; the portal answer must remain
+  unchanged until that code is deployed. Support instructions are saved.
 
 ## Live sandbox verification setup
 
@@ -101,9 +103,11 @@ The callback to register is
 - Run connect, disconnect, reconnect and report retrieval against a real Intuit
   sandbox company. Production use additionally needs owner authorization of the
   intended live company and matching-date/basis report reconciliation.
-- Error logs currently contain generic failure codes, not complete provider
-  payloads. `intuit_tid` is not currently captured. Do not claim otherwise in
-  the assessment; avoid logging tokens or financial payloads when improving it.
+- Local provider diagnostics now capture operation, HTTP status and a validated
+  `intuit_tid` for failed HTTP responses. Regression tests verify that credentials,
+  report bodies and company identifiers are excluded and malformed trace IDs
+  are discarded. All 12 finance tests pass. Deploy before updating the portal's
+  trace-ID answer; complete provider payload logging remains intentionally absent.
 - Confirm the in-app support contact, app logo, profile/email verification and
   any additional production requirements shown by Intuit.
 
