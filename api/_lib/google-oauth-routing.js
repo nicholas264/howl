@@ -12,6 +12,7 @@ export function googleCallbackUrl(env, requestOrigin) {
 export function googleReturnPath(purpose,error='') {
   const params=new URLSearchParams();
   if(purpose==='static_studio')params.set('tab','static-studio');
+  if(purpose==='script_studio')params.set('tab','script-studio');
   if(error)params.set('drive_error',error);
   else params.set(purpose==='creator_email'?'gmail_connected':'drive_connected','1');
   return '/?'+params;

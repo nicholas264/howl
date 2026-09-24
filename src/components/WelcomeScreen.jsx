@@ -2,7 +2,7 @@ import { apiFetch as fetch } from '../lib/apiFetch.js';
 import { useEffect, useMemo, useState } from "react";
 
 const QUICK_ACTIONS = [
-  { tab: 'from-winners', permission: 'briefs.write', eyebrow: 'Create', title: 'Concept Studio', sub: 'Build creator-grounded concepts or iterate proven winners.' },
+  { tab: 'script-studio', permission: 'briefs.write', eyebrow: 'Create', title: 'Script Studio', sub: 'Start fresh, use a winning ad, or bring your own brief.' },
   { tab: 'launcher', permission: 'launch.write', eyebrow: 'Launch', title: 'UGC Inbox', sub: 'Whatever the team dropped in Drive, ready to ship.' },
   { tab: 'dashboard-cfo', permission: 'analytics.read', eyebrow: 'Insights', title: 'CFO View', sub: 'NCAC, CM3, OpEx coverage — real numbers.' },
 ];
@@ -29,7 +29,7 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
   const [actionError, setActionError] = useState('');
   const firstName = currentUser?.display_name?.split(' ')?.[0] || currentUser?.email?.split('@')?.[0] || null;
   const availableActions = QUICK_ACTIONS.filter(action => can(action.permission));
-  const primaryAction = availableActions.find(action => action.tab === 'from-winners')
+  const primaryAction = availableActions.find(action => action.tab === 'script-studio')
     || availableActions.find(action => action.tab === 'launcher')
     || availableActions[0];
   const secondaryAction = availableActions.find(action => action.tab === 'dashboard-cfo' && action.tab !== primaryAction?.tab);
@@ -266,7 +266,7 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
                 boxShadow: '0 6px 24px rgba(220,68,10,0.35)',
               }}
             >
-              {primaryAction.tab === 'from-winners' ? 'Strike a spark' : `Open ${primaryAction.title}`}
+              {primaryAction.tab === 'script-studio' ? 'Strike a spark' : `Open ${primaryAction.title}`}
             </button>
           ) : null}
           {secondaryAction ? (

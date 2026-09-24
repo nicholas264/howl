@@ -4,8 +4,8 @@ import { createGoogleOAuthState, getGoogleConnection } from '../_lib/google-user
 
 export default async function handler(req, res) {
   const requestedPurpose=req.body?.purpose || req.query?.purpose;
-  const purpose=['creator_email','static_studio'].includes(requestedPurpose)?requestedPurpose:'drive';
-  const access = await requirePermission(req, res, purpose === 'creator_email' ? 'briefs.write' : 'assets.write');
+  const purpose=['creator_email','static_studio','script_studio'].includes(requestedPurpose)?requestedPurpose:'drive';
+  const access = await requirePermission(req, res, ['creator_email','script_studio'].includes(purpose) ? 'briefs.write' : 'assets.write');
   if (!access) return;
   const { sql } = access;
 
@@ -23,7 +23,7 @@ export default async function handler(req, res) {
     redirect_uri: redirect,
     response_type: 'code',
     include_granted_scopes: 'true',
-    scope: (purpose==='static_studio' ? ['openid','email','https://www.googleapis.com/auth/drive.readonly'] : [
+    scope: (purpose==='script_studio' ? ['openid','email','https://www.googleapis.com/auth/drive.file'] : purpose==='static_studio' ? ['openid','email','https://www.googleapis.com/auth/drive.readonly'] : [
       'openid',
       'email',
       'https://www.googleapis.com/auth/drive.file',

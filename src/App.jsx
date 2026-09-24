@@ -14,14 +14,13 @@ const VideoAdTool = lazy(() => import("./components/VideoAdTool"));
 const StaticStudio = lazy(() => import("./components/static-studio/StaticStudio.jsx"));
 const ImageAdTool = lazy(() => import("./components/ImageAdTool"));
 const CalloutAdTool = lazy(() => import("./components/CalloutAdTool"));
-const FounderAdTool = lazy(() => import("./components/FounderAdTool"));
+const ScriptStudio = lazy(() => import("./components/ScriptStudio"));
 const MetaPublishTool = lazy(() => import("./components/MetaPublishTool"));
 const DealerDashboard = lazy(() => import("./components/DealerDashboard"));
 const DashboardTool = lazy(() => import("./components/DashboardTool"));
 const LaunchLogTool = lazy(() => import("./components/LaunchLogTool"));
 const UgcEditorTool = lazy(() => import("./components/UgcEditorTool"));
 const GalleryTab = lazy(() => import("./components/GalleryTab"));
-const FromWinnersTool = lazy(() => import("./components/FromWinnersTool"));
 const ContentStudio = lazy(() => import("./components/ContentStudio"));
 const LauncherTool = lazy(() => import("./components/LauncherTool"));
 const CreatorWorkspace = lazy(() => import("./components/CreatorWorkspace"));
@@ -67,6 +66,7 @@ export default function HowlAdEngine({ appAccess }) {
   const [imageText, setImageText] = useState(null);
   const [editorSessionId, setEditorSessionId] = useState(null);
   const [plannedCreatorId, setPlannedCreatorId] = useState(null);
+  const [scriptCreatorId, setScriptCreatorId] = useState(null);
   const [plannedCreatorTab, setPlannedCreatorTab] = useState(null);
   const [plannedCreatorView, setPlannedCreatorView] = useState(null);
   const [favorites, setFavorites] = useState(() => {
@@ -228,7 +228,7 @@ export default function HowlAdEngine({ appAccess }) {
         { key: 'seeding-ledger', label: 'Seeding', permission: 'creators.read' },
         { key: 'creative-analytics', label: 'Creative Analytics', permission: 'analytics.read' },
         { key: 'creative-flow', label: 'Creative Board', permission: 'creators.read' },
-        { key: 'from-winners', label: 'Concept Studio', permission: 'briefs.write' },
+        { key: 'script-studio', label: 'Script Studio', permission: 'briefs.write', match: ['script-studio', 'from-winners', 'founder'] },
         { key: 'content-studio', label: 'Blog Studio', permission: 'briefs.write' },
         { key: 'ugc-editor', label: 'UGC Editor', permission: 'assets.write' },
         { key: 'static-studio', label: 'Static Studio', permission: 'assets.write' },
@@ -236,7 +236,6 @@ export default function HowlAdEngine({ appAccess }) {
         { key: 'callout', label: 'Callout Ads', permission: 'assets.write' },
         { key: 'review', label: 'Review Ads', permission: 'assets.write' },
         { key: 'video', label: 'Video Ads', permission: 'assets.write' },
-        { key: 'founder', label: 'Founder Ads', permission: 'assets.write' },
       ],
     },
     {
@@ -280,7 +279,7 @@ export default function HowlAdEngine({ appAccess }) {
     if (can('analytics.read')) tabs.add('dashboard-creative');
     if (can('assets.write')) tabs.add('gallery');
     if (can('launch.write')) tabs.add('publish');
-    if (can('briefs.write')) tabs.add('results');
+    if (can('briefs.write')) { tabs.add('results'); tabs.add('from-winners'); tabs.add('founder'); }
     return tabs;
   }, [NAV_SECTIONS, can, variations.length]);
 
@@ -369,8 +368,8 @@ export default function HowlAdEngine({ appAccess }) {
         ) : (
           <div className="workspace-empty">
             <strong>No generated concepts yet.</strong>
-            <p>Generate concepts from the Concept Studio, then this results workspace will stay available for review, favorites, and exports.</p>
-            <button type="button" className="primary-action" onClick={() => navigate('from-winners')}>Open Concept Studio</button>
+            <p>Generate concepts from the Script Studio, then this results workspace will stay available for review, favorites, and exports.</p>
+            <button type="button" className="primary-action" onClick={() => navigate('script-studio')}>Open Script Studio</button>
           </div>
         )
       )}
@@ -398,6 +397,7 @@ export default function HowlAdEngine({ appAccess }) {
             }}
             onInitialWorkspaceViewLoaded={() => setPlannedCreatorView(null)}
             setActiveTab={navigate}
+            onOpenScriptStudio={creatorId => { setScriptCreatorId(Number(creatorId)); navigate('script-studio'); }}
           />
         )}
         {activeTab === "creative-flow" && <CreativeFlowBoard setActiveTab={navigate} onOpenCreator={openPlannedCreator} canManage={can('creators.write')} />}
@@ -407,14 +407,13 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "creative" && <WorkspaceHub type="creative" setActiveTab={navigate} can={can} />}
         {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={navigate} can={can} appAccess={appAccess} />}
         {activeTab === "admin" && can('admin.users') && <AdminWorkspace onOpenEditor={openEditorSession} />}
-        {activeTab === "from-winners" && <FromWinnersTool setActiveTab={navigate} setVariations={setVariations} onOpenCreator={openPlannedCreator} />}
+        {['script-studio', 'from-winners', 'founder'].includes(activeTab) && <ScriptStudio key={`${activeTab}:${scriptCreatorId || ''}`} initialCreatorId={activeTab === 'script-studio' ? scriptCreatorId : null} initialStartingPoint={activeTab === 'from-winners' ? 'winner' : 'fresh'} canReadPerformance={can('analytics.read')} canLinkAds={can('analytics.write')} setActiveTab={navigate} setVariations={setVariations} onOpenCreator={openPlannedCreator} />}
         {activeTab === "content-studio" && <ContentStudio canPublish={can('content.publish')} />}
         {activeTab === "image" && <ImageAdTool initialText={imageText} onTextConsumed={() => setImageText(null)} driveAuth={driveAuth} onAddToCart={addToCart} />}
         {activeTab === "static-studio" && <StaticStudio driveAuth={driveAuth} onAddToCart={addToCart} onOpenLauncher={() => navigate("launcher")} />}
         {activeTab === "callout" && <CalloutAdTool onAddToCart={addToCart} />}
         {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} onAddToCart={addToCart} />}
         {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} onAddToCart={addToCart} />}
-        {activeTab === "founder" && <FounderAdTool />}
         {activeTab === "gallery" && <GalleryTab cart={cart} />}
         {activeTab === "dashboard-dealers" && <DealerDashboard setActiveTab={navigate} />}
         {activeTab === "organization" && canAccessOrganization(appAccess) && <OrganizationWorkspace />}

@@ -1,14 +1,13 @@
 import { canAccessCoo } from '../lib/coo-access.js';
 const CREATIVE_TOOLS = [
   { tab: 'static-studio', permission: 'assets.write', label: 'Static Studio', description: 'Turn approved product photography into art-directed feed and story campaigns.' },
-  { tab: 'from-winners', permission: 'briefs.write', label: 'Concept Studio', description: 'Turn proven creative patterns into grounded concepts and scripts.' },
+  { tab: 'script-studio', permission: 'briefs.write', label: 'Script Studio', description: 'Write founder, creator, or voiceover scripts for the right product.' },
   { tab: 'content-studio', permission: 'briefs.write', label: 'Blog Studio', description: 'Tell HOWL what the blog is about. It researches the reference library and writes the draft.' },
   { tab: 'ugc-editor', permission: 'assets.write', label: 'UGC Editor', description: 'Edit creator footage, captions, pacing, and exports.' },
   { tab: 'image', permission: 'assets.write', label: 'Image Ads', description: 'Build static creative from product and lifestyle assets.' },
   { tab: 'callout', permission: 'assets.write', label: 'Callout Ads', description: 'Create product feature callouts with precise visual anchors.' },
   { tab: 'review', permission: 'assets.write', label: 'Review Ads', description: 'Convert customer proof into direct-response ads.' },
   { tab: 'video', permission: 'assets.write', label: 'Video Ads', description: 'Build motion creative and text-led video variants.' },
-  { tab: 'founder', permission: 'assets.write', label: 'Founder Ads', description: 'Create founder-led messages and formats.' },
 ];
 
 const PERFORMANCE_TOOLS = [
