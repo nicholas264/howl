@@ -1,4 +1,4 @@
-import { studioRequest, validateStudioBrief, parseStudioOutput, STUDIO_OUTPUT_CONFIG, breakdownRequest, parseBreakdown, BREAKDOWN_SCHEMA } from './_lib/script-studio.js';
+import { studioRequest, validateStudioBrief, parseStudioOutput, STUDIO_OUTPUT_CONFIG, breakdownRequest, parseBreakdown, BREAKDOWN_SCHEMA, STUDIO_MODEL, STUDIO_EFFORT, STUDIO_TOKEN_BUDGET, studioEditorialRequest } from './_lib/script-studio.js';
 import { loadBrandGuidelines, validateBrandCopy } from './_lib/brand-guardrails.js';
 import { scriptwritingRequest, SCRIPTWRITING_VERSION } from './_lib/howl-scriptwriting.js';
 import { meteredFetch } from './_lib/metered-fetch.js';
@@ -22,7 +22,8 @@ export default async function handler(req, res) {
   if (!access) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!(await checkWorkLimit(access, res, 'generation'))) return;
-  const fetch=meteredFetch(access);
+  const isStudio = ['script_studio', 'script_studio_breakdown'].includes(req.body?.task);
+  const fetch=meteredFetch(access, globalThis.fetch, {timeoutMs:isStudio?180000:55000});
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
@@ -65,15 +66,16 @@ export default async function handler(req, res) {
   // Server-controlled allowlist. Browser-supplied tools / tool_choice /
   // anthropic_version / metadata / etc are dropped here on purpose.
   const safeBody = {
-    model: ['script_studio', 'script_studio_breakdown'].includes(body.task) ? DEFAULT_MODEL : model,
-    max_tokens,
-    ...(body.task === 'script_studio' ? { output_config: STUDIO_OUTPUT_CONFIG } : body.task === 'script_studio_breakdown' ? { output_config: { format: { type: 'json_schema', schema: BREAKDOWN_SCHEMA } } } : {}),
+    model: isStudio ? STUDIO_MODEL : model,
+    max_tokens: isStudio ? STUDIO_TOKEN_BUDGET : max_tokens,
+    ...(body.task === 'script_studio' ? { output_config: { ...STUDIO_OUTPUT_CONFIG, effort: STUDIO_EFFORT } } : body.task === 'script_studio_breakdown' ? { output_config: { effort: STUDIO_EFFORT, format: { type: 'json_schema', schema: BREAKDOWN_SCHEMA } } } : {}),
     messages: generation.messages,
     ...(generation.system ? { system: generation.system } : {}),
-    ...(typeof body.temperature === 'number' ? { temperature: Math.max(0, Math.min(1, body.temperature)) } : {}),
+    ...(!isStudio && typeof body.temperature === 'number' ? { temperature: Math.max(0, Math.min(1, body.temperature)) } : {}),
   };
 
   try {
+    const deadline = isStudio ? AbortSignal.timeout(240000) : undefined;
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -82,8 +84,10 @@ export default async function handler(req, res) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify(safeBody),
+      ...(deadline ? {signal:deadline} : {}),
     });
     const data = await r.json();
+    if (isStudio && r.ok && data.stop_reason === 'max_tokens') return res.status(502).json({error:'The writer reached its response limit before finishing. Please generate again.'});
     if (body.task === 'script_studio_breakdown' && r.ok) {
       try {
         const raw = data.content?.filter(b => b.type === 'text').map(b => b.text).join('') || '';
@@ -92,7 +96,16 @@ export default async function handler(req, res) {
     }
     if (body.task === 'script_studio' && r.ok) {
       try {
-        const script = parseStudioOutput(data.content?.filter(b => b.type === 'text').map(b => b.text).join('') || '', { requireBreakdown: true });
+        const draft = parseStudioOutput(data.content?.filter(b => b.type === 'text').map(b => b.text).join('') || '', { requireBreakdown: true });
+        const edit = studioEditorialRequest(generation, draft);
+        const edited = await fetch('https://api.anthropic.com/v1/messages', {
+          method:'POST', headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'},
+          body:JSON.stringify({...safeBody,...edit}), signal:deadline,
+        });
+        const final = await edited.json();
+        if (!edited.ok) return res.status(edited.status).json({error:final.error?.message || 'The editorial pass failed. Please generate again.'});
+        if (final.stop_reason === 'max_tokens') return res.status(502).json({error:'The editorial pass reached its response limit. Please generate again.'});
+        const script = parseStudioOutput(final.content?.filter(b => b.type === 'text').map(b => b.text).join('') || '', {requireBreakdown:true});
         const violations = validateBrandCopy(JSON.stringify(script), studioGuidelines);
         if (violations.length) return res.status(422).json({ error: `Revise your direction and try again. Brand checks flagged: ${violations.join(', ')}` });
         return res.json({ script, version: SCRIPTWRITING_VERSION });

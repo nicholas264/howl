@@ -1,5 +1,9 @@
 import { withHowlScriptwriting } from './howl-scriptwriting.js';
 
+export const STUDIO_MODEL = 'claude-opus-5-5';
+export const STUDIO_EFFORT = 'high';
+export const STUDIO_TOKEN_BUDGET = 16000;
+
 const textField = { type: 'string' };
 const objectSchema = properties => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
 const hookSchema = objectSchema({ spoken: textField, next_line: textField, visual: textField, on_screen: textField });
@@ -56,7 +60,7 @@ export function studioRequest(brief, { creator = null, guidelines = {} } = {}) {
   if (b.delivery === 'creator' && !creator) throw new Error('Creator not found.');
   return {
     system: withHowlScriptwriting(`Write one production-ready direct-response video ad for the selected HOWL product and delivery. Apply the shared method automatically. For founder delivery use a natural direct-to-camera brand voice; no invented biography. For creator delivery use only supplied creator evidence. For voiceover use an observer/brand perspective rather than invented personal testimony.
-Return ONLY a JSON object with exactly these fields:
+Return ONLY a JSON object matching the supplied schema. Write the spoken script first as an ad someone would actually say; label its functions afterward. The labels describe the argument and must not dictate eight mechanical paragraphs. The fields are:
 {"title":"short title","angle":"specific buying motive","strategy":"2-4 sentences explaining the onramp, mechanism and main objection","script":"complete spoken copy including the primary hook and CTA; no headings or stage directions","hooks":{"first":{"spoken":"alternate opening","next_line":"connecting sentence that transitions into the same body","visual":"opening shot","on_screen":"short header"},"second":"same four fields","third":"same four fields"},"shot_list":[{"time":"approximate range","visual":"filmable action","on_screen":"short caption"}],"cta":"closing action","guardrails":["missing evidence or required assets"]}.
 ${breakdownInstructions}
 Include the breakdown object alongside the script. Write three compatible alternate hooks and 4-8 shots. Keep the complete spoken script near ${Math.round(b.duration * 2.2)} words, leaving room for pauses. Product comparison must make an understandable choice, not list every specification. Do not expose internal planning in spoken copy. Use only numerical performance or setup claims established in the supplied product basis or verified brief; never invent a setup time. Keep numerical bounds and units exact: a listed 1,100°F is not over 1,100°F. Do not promise the product fits an unspecified backpack. Default CTA: see the selected model at howlcampfires.com; do not invent a link-in-bio placement or offer. If burn restrictions form any part of the argument, include the local-permission qualification in spoken copy.
@@ -83,4 +87,21 @@ export function parseStudioOutput(raw, { requireBreakdown = false } = {}) {
     result.breakdown_script = value.script;
   }
   return result;
+}
+
+
+export function studioEditorialRequest(generation, draft) {
+  return {
+    system: generation.system + `
+EDITORIAL PASS
+The supplied draft is fallible work to rewrite, not evidence. Deliver a stronger final ad in the same complete JSON schema. Keep the supplied product, buyer, direction and duration. Preserve what works, but rewrite the hook or argument when needed.
+Judge the copy as a skeptical camper would hear it. The opening must earn attention through a specific relevant observation, tension or useful discovery. The onramp must make the product answer feel connected, not merely introduce a lecture. The mechanism must create a reason to believe; the payoff must return to the opening's particular desire. A polished catalogue paragraph is a failed draft.
+Cut gratuitous specifications, hose/package details and trademarks that don't answer the buying objection. Don't replace removed specs with generic slogans. Spend that space on the camper's concrete situation, the actual tradeoff and why this product changes it. Remove unsupported absolutes, broad competitor comparisons, invented time gains such as an extra hour outdoors, and guarantees of fit or comfort. Do not make a hook stronger by making its claim less true. Qualify relevant burn restrictions in speech. Keep units exact if a number survives.
+Use these original HOWL editing examples as calibration for specificity and spoken rhythm, not reusable sentences:
+- Weak R4 argument: "On an ordinary fire, less light means less heat." Better: "You drove out here to see the stars. So why is your campfire the brightest thing you're looking at? The R4 MKii gives the flame and radiant heat separate controls. Turn down the flame. Leave the BarCoal tube running. That's what those two knobs are for." This makes the supported control benefit concrete without claiming wood coals cannot give heat with little flame.
+- Weak packing claim: "The hatch barely shuts, and this is the campfire that still gets to come." Better: "The R1 weighs ten pounds. You're still bringing a propane tank. What you're leaving behind is the firewood." Film the actual packing tradeoff; don't guarantee a fit in the viewer's unknown vehicle.
+Apply the same claim discipline to the alternate hooks as to the body. No "warmest seat," "everyone," "never" or other universal comparison without actual evidence. Do not encourage hands directly over flames or unsafe clearances. A conversational observation can be framed as a possibility or question without pretending every camper has experienced it.
+Make every alternate opening fulfill the same body promise without pretending a fictional personal experience or changing the facts. Fix the next line as needed. Rebuild the breakdown from exact excerpts of YOUR final script, and align the shot list to the revised argument. Return only the final complete object, not scores, critique or the earlier draft.`,
+    messages: [{ role: 'user', content: JSON.stringify({brief:generation.messages[0].content, draft}) }],
+  };
 }

@@ -1,11 +1,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { recordProviderUsage } from './work-controls.js';
 
-export function meteredFetch(access, fetchImpl=globalThis.fetch) {
+export function meteredFetch(access, fetchImpl=globalThis.fetch, {timeoutMs=55000}={}) {
   return async (url,init={}) => {
     const host=new URL(url).hostname;
     if (!['api.anthropic.com','api.openai.com'].includes(host)) return fetchImpl(url,init);
-    const signal=init.signal ? AbortSignal.any([init.signal,AbortSignal.timeout(55000)]) : AbortSignal.timeout(55000);
+    const signal=init.signal ? AbortSignal.any([init.signal,AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs);
     const response=await fetchImpl(url,{...init,signal});
     if (access.workId && response.ok && /json/.test(response.headers.get('content-type') || '')) {
       const data=await response.clone().json();

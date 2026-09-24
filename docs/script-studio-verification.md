@@ -23,3 +23,11 @@ Temporary browser fixtures and private model response files are excluded from th
 - Browser fixtures exercise labeled display, shared save, Google Doc link, ad linking, metrics and stale-edit refresh. These are fixture-backed UI checks, not evidence that a live Google account created a document.
 - Production database identity was verified and the scoped additive migration applied before deployment. Existing Google connection tables and the canonical OAuth callback were verified.
 - A signed-in production browser session is unavailable. Live Google consent and document creation must therefore be exercised by a connected user; no user credentials were impersonated and no production test scripts or ads were inserted.
+
+
+## Opus 5.5 revision verification
+- The configured account's Models API confirms access to `claude-opus-5-5`.
+- Live R1 packing, R3 warmth and R4 MKii stargazing requests exercised structured output, exact-excerpt breakdowns and editorial rewrites. Editorial review identified and tightened specification dumping, invented packing fit, blanket competitor claims and arbitrary time gains. These are original synthetic briefs, not customer testimonials or performance evidence.
+- A real standalone breakdown request returned eight validated fields with Opus 5.5.
+- Integration checks assert the server-selected model and high effort, ignore attempted browser downgrades, omit incompatible temperature settings, accept thinking blocks before text, return the editorial rewrite, regenerate its exact breakdown, reject truncated output and preserve provider failures without fallback.
+- Full regression suite: 221 tests passed; API checks and production build passed. Dependency audit: zero vulnerabilities. Signed-in production generation remains unverified without a user session; direct live provider checks and authenticated-handler fixtures cover the model path.

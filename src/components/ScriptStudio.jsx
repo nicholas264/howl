@@ -132,7 +132,7 @@ export default function ScriptStudio({ initialCreatorId, initialDelivery = 'foun
     <header className="ss-heading"><div><h1>Script Studio</h1><p>One product. One clear reason to care. A script ready to shoot.</p></div><span>HOWL creative</span></header>
     <div className="ss-layout">
       <aside className="ss-brief"><form onSubmit={generate}>
-        <fieldset disabled={busy || saving || refreshingBreakdown}><legend>Your brief</legend>
+        <fieldset disabled={busy || saving || refreshingBreakdown}><legend>Your brief</legend><p className="ss-help">Writer: Claude Opus 5.5 · Draft + editorial rewrite</p>
           <label>Product<select value={brief.product} onChange={e => change('product', e.target.value)}>{PRODUCTS.map(([id, name, hint]) => <option key={id} value={id}>{name} · {hint}</option>)}</select></label>
           <label>Start from<select value={brief.startingPoint} onChange={e => change('startingPoint', e.target.value)}><option value="fresh">A fresh idea</option><option value="winner">A winning ad</option><option value="brief">My own brief</option></select></label>
           {brief.startingPoint === 'winner' && <div className="ss-references">
@@ -159,7 +159,7 @@ export default function ScriptStudio({ initialCreatorId, initialDelivery = 'foun
       </details></aside>
       <section className="ss-output" aria-label="Script workspace" aria-busy={busy}>
         {error && <p className="ss-error" role="alert">{error}</p>}
-        <p className="ss-notice" role="status">{busy ? 'Building the hook, argument, and filming plan…' : notice}</p>
+        <p className="ss-notice" role="status">{busy ? 'Writing and editing your script with Opus 5.5…' : notice}</p>
         {!result ? <div className="ss-empty"><h2>Start with the campfire.</h2><p>Choose a product and the writer will use its actual strengths, the right persuasion structure, and a voice that fits the speaker.</p><ul><li>A complete spoken script</li><li>Three connected alternate openings</li><li>A practical shot list and creative rationale</li></ul></div> : <>
           <div className="ss-result-heading"><div><h2>{result.title}</h2><p>{PRODUCTS.find(p => p[0] === resultBrief.product)?.[1]} · {resultBrief.delivery} · {resultBrief.duration}s target</p></div><span>{wordCount} words · ~{Math.round(wordCount / 2.2)}s read</span></div>
           <label className="ss-script-label">Spoken script<textarea className="ss-script" disabled={busy || saving || refreshingBreakdown} value={result.script} maxLength={12000} onChange={e => { setResult(r => ({ ...r, script: e.target.value })); setSavedBriefId(null); setDocumentLink(null); }} /></label>
