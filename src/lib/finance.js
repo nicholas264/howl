@@ -26,3 +26,15 @@ export function classifyCosts(accounts,mapping,months){
  }
  return {variableCosts:unclassified.length?null:variableCosts,fixedCosts:unclassified.length?null:fixedCosts,unclassified};
 }
+
+// Reject unrelated preview/API payloads before React reads financial settings.
+export function readFinanceWorkspace(payload) {
+ const s=payload?.settings;
+ if(!s || !/^20\d\d-(0[1-9]|1[0-2])$/.test(s.start) || !['Cash','Accrual'].includes(s.basis) || !/^[A-Z]{3}$/.test(s.currency) || !s.targets || typeof s.targets!=='object' || !s.mapping || typeof s.mapping!=='object' || !Number.isSafeInteger(payload.revision) || !Array.isArray(payload.setup?.checks)) {
+  throw new Error('The financial service returned an incomplete response. Check that this server supports Financials, then retry.');
+ }
+ if(payload.snapshot && (!Array.isArray(payload.snapshot.months) || !Array.isArray(payload.snapshot.accounts) || !payload.snapshot.balance)) {
+  throw new Error('The financial report could not be loaded. Retry to retrieve the saved report.');
+ }
+ return payload;
+}

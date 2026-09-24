@@ -1,6 +1,6 @@
 import React,{useEffect,useState} from 'react';
 import { apiJson } from '../../lib/api.js';
-import { fiscalMonths,financialRatios,classifyCosts,targetPacing } from '../../lib/finance.js';
+import { fiscalMonths,financialRatios,classifyCosts,targetPacing,readFinanceWorkspace } from '../../lib/finance.js';
 import './finance.css';
 const percent=n=>Number.isFinite(n)?`${(n*100).toFixed(1)}%`:'—';
 const dateLabel=m=>new Date(`${m}-01T12:00:00Z`).toLocaleDateString('en-US',{month:'short',year:'2-digit',timeZone:'UTC'});
@@ -8,8 +8,8 @@ const outcomes={connected:'QuickBooks connected. Save your settings, then sync r
 function Metric({label,value,note}){return <div className="fin-metric"><span>{label}</span><strong>{value}</strong><small>{note}</small></div>;}
 export default function FinanceWorkspace(){
  const [data,setData]=useState(null),[draft,setDraft]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(()=>outcomes[new URLSearchParams(location.search).get('quickbooks')]||''),[section,setSection]=useState('overview'),[dirty,setDirty]=useState(false),[scenario,setScenario]=useState({sales:'',margin:'',fixed:''});
- const reload=async()=>{const result=await apiJson('/api/finance');setData(result);setDraft(result.settings);setDirty(false);};
- useEffect(()=>{let live=true;apiJson('/api/finance').then(r=>{if(live){setData(r);setDraft(r.settings);}}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[]);
+ const reload=async()=>{const result=readFinanceWorkspace(await apiJson('/api/finance')); setData(result);setDraft(result.settings);setDirty(false);};
+ useEffect(()=>{let live=true;apiJson('/api/finance').then(readFinanceWorkspace).then(r=>{if(live){setData(r);setDraft(r.settings);}}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[]);
  useEffect(()=>{const guard=e=>{if(dirty){e.preventDefault();if(e.type==='beforeunload')e.returnValue='';}};window.addEventListener('beforeunload',guard);window.addEventListener('howl:before-tool-change',guard);return()=>{window.removeEventListener('beforeunload',guard);window.removeEventListener('howl:before-tool-change',guard);};},[dirty]);
  const update=next=>{setDraft(next);setDirty(true);};
  const run=async(action,extra={})=>{setBusy(true);setError('');setNotice('');try{const result=await apiJson('/api/finance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...extra})});if(action==='connect'){location.assign(result.url);return;}await reload();setNotice(action==='sync'?'Reports synced successfully.':action==='save'?'Financial settings saved.':'QuickBooks disconnected from Campfire.');}catch(e){setError(e.message);}finally{setBusy(false);}};

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { PGlite } from '@electric-sql/pglite';
 import { neon } from '@neondatabase/serverless';
 import { useTestDatabase } from './neon-test-adapter.mjs';
-import { financialRatios,targetPacing,classifyCosts,fiscalMonths } from '../src/lib/finance.js';
+import { financialRatios,targetPacing,classifyCosts,fiscalMonths,readFinanceWorkspace } from '../src/lib/finance.js';
 import { ensureFinance,encrypt,decrypt,setup,validateSettings,acquireConnection,releaseConnection,nonce } from '../api/_lib/finance.js';
 import { parseProfitLoss,parseBalanceSheet } from '../api/_lib/quickbooks-reports.js';
 import { createFinanceHandler } from '../api/finance.js';
@@ -61,4 +61,10 @@ test('real SQL: OAuth binding, replay, owner recheck, CAS, sync atomicity, refre
  await sql`UPDATE app_users SET role='owner'`;const current=(await call('GET')).body;assert.equal((await call('POST',{action:'save',revision:current.revision,settings:{...plan,basis:'Cash'}})).statusCode,200);assert.equal((await call('GET')).body.snapshot,null);
  assert.equal((await call('POST',{action:'disconnect'})).statusCode,200);assert.equal((await call('GET')).body.connection,null);assert.equal((await sql`SELECT * FROM finance_oauth`).length,0);
  }finally{restore();await db.close();}
+});
+
+test('unexpected preview API response becomes a recoverable load error before rendering',()=>{
+ for(const payload of [{count:0,records:[],drafts:[]},null,{}, {settings:plan,revision:1,setup:{}}])assert.throws(()=>readFinanceWorkspace(payload),/incomplete response/);
+ const valid={settings:plan,revision:1,setup:{checks:[]},snapshot:null};assert.equal(readFinanceWorkspace(valid),valid);
+ assert.throws(()=>readFinanceWorkspace({...valid,snapshot:{}}),/report could not be loaded/);
 });

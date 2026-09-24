@@ -1,3 +1,7 @@
+import { readFile } from 'node:fs/promises';
+import { ensureFinance,encrypt,nonce } from '../api/_lib/finance.js';
+import { createFinanceHandler } from '../api/finance.js';
+import { env as financeEnv,fixtureFetch } from '../tests/fixtures/finance.mjs';
 import { ensureOrganization } from '../api/_lib/organization.js';
 import { createOrganizationHandler } from '../api/organization.js';
 // Local-only preview. Real COO handler and PostgreSQL semantics; no provider calls or production credentials.
@@ -13,7 +17,7 @@ import { ensureCooWorkspace, applyCooCommand } from '../api/_lib/coo.js';
 import { createCooHandler } from '../api/coo-workspace.js';
 import { dayString } from '../src/lib/coo.js';
 const db=new PGlite();useTestDatabase(db);
-const sql=neon('postgres://test:test@localhost/test');await ensureCooWorkspace(sql);await ensureOrganization(sql);
+const sql=neon('postgres://test:test@localhost/test');await ensureCooWorkspace(sql);await ensureOrganization(sql);await ensureFinance(sql);
 const now=new Date(),today=dayString(now),year=now.getFullYear(),quarter=Math.floor(now.getMonth()/3),start=dayString(new Date(year,quarter*3,1)),end=dayString(new Date(year,quarter*3+3,0));
 let state=applyCooCommand(null,{action:'setup'},'Demo COO',now);
 const save=(kind,values)=>{state=applyCooCommand(state,{action:'save',kind,values},'Demo COO',now);return state[{cycle:'cycles',objective:'objectives',metric:'metrics',initiative:'initiatives',review:'reviews',constraint:'constraints'}[kind]].at(-1);};
@@ -41,12 +45,23 @@ save('initiative',{title:'Approve the alternate supplier sample',owner:'Morgan',
 await sql`INSERT INTO coo_workspace(id,data,updated_by) VALUES ('company',${JSON.stringify(state)}::jsonb,'demo')`;
 const handler=createCooHandler({authorize:async(req,res,p)=>{const viewer=req.headers['x-coo-preview-role']==='viewer';if(viewer&&p==='analytics.write'){res.status(403).json({error:'Read-only access'});return null;}return {sql,userId:'Demo COO',role:viewer?'viewer':'owner',permissions:viewer?['analytics.read']:['analytics.read','analytics.write']};}});
 const organizationHandler=createOrganizationHandler({authorize:async(req)=>({sql,userId:'Local owner',role:req.headers['x-coo-preview-role']||'owner',permissions:['*']})});
+// Restore local work before restarting; never load production credentials.
+const restorePath=process.argv.find(a=>a.startsWith('--restore='))?.slice(10);
+const restored=restorePath?JSON.parse(await readFile(restorePath,'utf8')):{};
+for(const [name,table] of [['coo-workspace','coo_workspace'],['organization','organization_workspace']]){
+ const saved=restored[name];if(!saved)continue;
+ await sql.query(`INSERT INTO ${table}(id,data,revision,updated_by) VALUES ('company',$1::jsonb,$2,'Local preview restore') ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,revision=EXCLUDED.revision`,[JSON.stringify(saved.state),saved.revision]);
+}
+const financeExample=process.argv.includes('--finance-example');
+if(restored.finance){const f=restored.finance;await sql`INSERT INTO finance_workspace(id,settings,revision,snapshot) VALUES ('company',${JSON.stringify(f.settings)}::jsonb,${f.revision},${JSON.stringify(f.snapshot)}::jsonb)`;}
+if(financeExample){await sql`INSERT INTO finance_connection(id,realm,tokens,expires_at,version,environment,connected_by) VALUES ('company','000-example',${encrypt({access_token:'example-access',refresh_token:'example-refresh'},financeEnv)},now()+interval '1 hour',${nonce()},'sandbox','Local owner')`;}
+const financeHandler=createFinanceHandler({authorize:async req=>({sql,userId:'Local owner',role:req.headers['x-coo-preview-role']||'owner'}),env:financeExample?financeEnv:{},fetcher:fixtureFetch});
 const emptyEnv=await mkdtemp(join(tmpdir(),'coo-preview-env-'));
-const server=await createServer({configFile:false,root:process.cwd(),envDir:emptyEnv,define:{'import.meta.env.VITE_AUTH_DISABLED':'"true"'},plugins:[react(),{name:'coo-isolated-preview',transformIndexHtml(html){return html.replace('<body>','<body><div style="padding:8px 20px;background:#eaf2f8;color:#244b68;font:12px Helvetica;text-align:center">Local preview · COO data is illustrative; organization names are owner-supplied · Changes stay in this temporary database</div>');},configureServer(s){s.middlewares.use(async(req,res,next)=>{
+const server=await createServer({configFile:false,root:process.cwd(),envDir:emptyEnv,define:{'import.meta.env.VITE_AUTH_DISABLED':'"true"'},plugins:[react(),{name:'coo-isolated-preview',transformIndexHtml(html){return html.replace('<body>','<body><div style="padding:8px 20px;background:#eaf2f8;color:#244b68;font:12px Helvetica;text-align:center">Local preview · COO and financial figures are illustrative; organization names are owner-supplied · Changes stay in this temporary database</div>');},configureServer(s){s.middlewares.use(async(req,res,next)=>{
  const url=new URL(req.url,'http://127.0.0.1');if(!url.pathname.startsWith('/api/'))return next();
  res.status=code=>{res.statusCode=code;return res;};res.json=body=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(body));return res;};
  if(url.pathname==='/api/forecast')return res.json({forecast:{sheetName:'Demo financial forecast',months:Array.from({length:12},(_,i)=>({month:`${year}-${String(i+1).padStart(2,'0')}`,netRevenue:(i+1)*100000,units:(i+1)*100}))},updatedAt:now.toISOString()});
- if(!['/api/coo-workspace','/api/organization'].includes(url.pathname))return res.json({count:0,records:[],drafts:[]});
- try{let body='';for await(const chunk of req){body+=chunk;if(body.length>100000){res.status(413).json({error:'Request too large'});return;}}req.body=body?JSON.parse(body):null;await (url.pathname==='/api/organization'?organizationHandler:handler)(req,res);}catch(e){res.status(500).json({error:e.message});}
+ if(!['/api/coo-workspace','/api/organization','/api/finance'].includes(url.pathname))return res.json({count:0,records:[],drafts:[]});
+ try{let body='';for await(const chunk of req){body+=chunk;if(body.length>100000){res.status(413).json({error:'Request too large'});return;}}req.body=body?JSON.parse(body):null;if(url.pathname==='/api/finance'&&req.body?.action==='connect')return res.status(400).json({error:'Live QuickBooks authorization is unavailable in this isolated preview.'});await (url.pathname==='/api/finance'?financeHandler:url.pathname==='/api/organization'?organizationHandler:handler)(req,res);}catch(e){res.status(500).json({error:e.message});}
  });}}],server:{host:'127.0.0.1',port:5194,strictPort:true}});
 await server.listen();console.log('COO preview: http://127.0.0.1:5194/?tab=coo');
