@@ -31,9 +31,9 @@ preparation record, not a submitted assessment or a statement of approval.
   no QuickBooks webhooks or CDC; no special multicurrency/sales-tax features.
 - Error-handling draft answers reflect tested error paths and the existing
   feedback widget. Trace-ID capture and complete error logs are honestly marked
-  absent in the deployed version. Local code now captures bounded Intuit trace
-  IDs for failed token/report HTTP responses; the portal answer must remain
-  unchanged until that code is deployed. Support instructions are saved.
+  absent in the saved questionnaire draft. The deployed code now captures bounded
+  Intuit trace IDs for failed token/report HTTP responses; the portal trace-ID
+  answer still needs updating. Support instructions are saved.
 
 ## Live sandbox verification setup
 
@@ -106,11 +106,14 @@ The callback to register is
 - Run connect, disconnect, reconnect and report retrieval against a real Intuit
   sandbox company. Production use additionally needs owner authorization of the
   intended live company and matching-date/basis report reconciliation.
-- Local provider diagnostics now capture operation, HTTP status and a validated
+- Deployed provider diagnostics now capture operation, HTTP status and a validated
   `intuit_tid` for failed HTTP responses. Regression tests verify that credentials,
   report bodies and company identifiers are excluded and malformed trace IDs
-  are discarded. All 12 finance tests pass. Deploy before updating the portal's
-  trace-ID answer; complete provider payload logging remains intentionally absent.
+  are discarded. All 265 deployment tests pass, including 12 finance tests;
+  production build and dependency audit passed (zero vulnerabilities). Deployment
+  `dpl_HRxCNnBvwqvupVr3SDWhphwRqBP9`, commit `47b5558`, reached Ready.
+  Update the portal's trace-ID answer; complete provider payload logging remains
+  intentionally absent. The local sandbox harness is excluded from deployments.
 - Confirm the in-app support contact, app logo, profile/email verification and
   any additional production requirements shown by Intuit.
 
