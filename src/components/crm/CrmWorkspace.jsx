@@ -28,7 +28,7 @@ export default function CrmWorkspace({connectionError}) {
     <div className="crm-breadcrumb"><Icon name="pipeline"/><span>Sales</span><span className="crm-breadcrumb-divider">/</span><strong>Opportunities</strong></div>
     <header className="crm-header">
       <div><h1>Sales pipeline</h1><p>Build relationships. Keep the next step in sight.</p></div>
-      <div className="crm-actions"><button onClick={exportCsv} disabled={!loaded||!filtered.length}><Icon name="download"/>Export</button>{rights.canWrite&&<button className="crm-primary" disabled={busy} onClick={()=>createOpportunity()}><Icon name="plus"/>New opportunity</button>}</div>
+      <div className="crm-actions"><a href="/dealer-intake" target="_blank" rel="noopener noreferrer" style={{color:"inherit",fontSize:13,textDecoration:"none",padding:"8px 12px",border:"1px solid #ddd",borderRadius:6}}>Dealer intake form ↗</a><button onClick={exportCsv} disabled={!loaded||!filtered.length}><Icon name="download"/>Export</button>{rights.canWrite&&<button className="crm-primary" disabled={busy} onClick={()=>createOpportunity()}><Icon name="plus"/>New opportunity</button>}</div>
     </header>
     <div className="crm-summary">
       <div><span>Open pipeline <small>USD</small></span><strong>{money(open.reduce((sum,o)=>sum+o.data.value,0))}</strong></div>
