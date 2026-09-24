@@ -1,7 +1,8 @@
 # Intuit production activation — working review
 
 Status checked in the signed-in Intuit portal on September 24, 2026. This is a
-preparation record, not a submitted assessment or a statement of approval.
+working record. The app assessment has now been submitted and Intuit's portal
+reports Submission status Completed and Results Approved.
 
 ## Portal setup completed
 
@@ -15,7 +16,7 @@ preparation record, not a submitted assessment or a statement of approval.
 - Regulated industries: None of the above. The implemented integration reads
   accounting reports; it does not offer insurance, securities/retirement advice,
   lending, or payment processing.
-- App assessment opened, not submitted.
+- App assessment submitted with explicit owner approval; Intuit reports Approved.
 - Saved questionnaire draft: owner confirmed no regulatory complaints,
   lawsuits or investigative requests; legal-counsel review completed; no
   sanctions exposure; no breach requiring notification; no dedicated security
@@ -124,8 +125,8 @@ The callback to register is
   `/legal/terms` and `/legal/privacy`. Both were deployed, returned HTTP 200
   without sign-in, and were saved in Intuit App terms of service settings.
   The unauthenticated financial API continues to return HTTP 401.
-- Reviewed Intuit's security requirements. The owner's compliance commitment
-  remains unanswered; do not invent that declaration. Verified the Clerk
+- Reviewed Intuit's security requirements. The owner completed the compliance
+  commitment and explicitly authorized submission. Verified the Clerk
   production instance is for `welcometothecampfire.io`: all MFA methods and
   required MFA are off; Cloudflare Turnstile bot sign-up protection is enabled.
   Saved MFA No, CAPTCHA Yes, WebSocket No, trace-ID capture Yes, and sandbox
@@ -156,9 +157,10 @@ cost accounts and enter the owner's revenue targets. See
 ## Current handoff
 
 Owner explicitly wants the real company connected now. Production keys remain
-locked: App details 83%, Compliance 10%. The remaining profile section requires
-email verification, phone and business address; owner has been asked to complete
-it in the open Intuit tab. Clerk sign-in is complete and its settings verified.
-The remaining questionnaire gap is the owner's compliance commitment; QBO edition
-scope is saved. No assessment has been submitted. Production authorization and real-HOWL
-report reconciliation remain incomplete.
+locked: App details 83%, Compliance 100%. Email verification is confirmed; the
+profile still needs business contact email, phone and mailing address. The owner
+has been asked to complete those fields and click Next. The assessment is submitted,
+read-only and Approved. Submission validation caught an API-frequency selection
+that had not persisted; it was corrected to on-demand customer interactions before
+successful submission. Clerk settings are verified. Production authorization and
+real-HOWL report reconciliation remain incomplete.
