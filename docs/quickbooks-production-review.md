@@ -147,7 +147,7 @@ variables. The temporary credential file was removed. The registered production 
 - Confirm the in-app support contact, app logo, profile/email verification and
   any additional production requirements shown by Intuit.
 
-Remaining: complete owner consent, sync, reconcile,
+Remaining:
 classify cost accounts and enter the owner's revenue targets. See
 [the operating guide](quickbooks-financials.md) for definitions and safeguards.
 
@@ -162,8 +162,25 @@ The owner approved the Neon Launch upgrade, and Vercel now confirms Launch activ
 at $0.106/CU-hour and $0.35/GB-month plus applicable taxes/fees. Live Campfire owner
 access is restored. All five QuickBooks server settings show configured.
 
-The production Connect flow successfully reached Intuit consent for the actual
-company Howl Campfires LLC. It grants ongoing accounting-data access; Campfire
-uses this only for P&L and Balance Sheet reads. Final owner consent is pending
-in the open Intuit tab. No real-company reports have been imported yet.
-Real-HOWL report reconciliation, cost classification and targets remain incomplete.
+Owner approved the production grant for Howl Campfires LLC. The expired OAuth
+request was renewed through normal Connect, reusing the granted authorization.
+Eight monthly P&Ls (January–August 2026) and the August 31 balance sheet imported
+successfully using calendar-year, USD, accrual reporting settings. Revenue, COGS,
+operating expenses and net income were reconciled exactly against the same-period
+QuickBooks UI P&L. All balance-sheet inputs to the displayed ratios were likewise
+reconciled against the source report. Private financial amounts are not recorded
+in this public repository.
+
+A later CRM deployment had omitted the newer finance hardening. Merged current
+production main into this branch, passed all 281 checks and published the merged
+commit `ee73d0c` to main while preserving CRM. Production deployment
+`dpl_2YhtDZ2RWPn7QNRVByvD9qU23kLJ` is Ready on welcometothecampfire.io.
+A live owner read migrated the company identifier to encrypted storage and removed
+the redundant snapshot identifier; verified via boolean-only database queries.
+All eight months survived, a subsequent live sync succeeded, and unauthenticated
+finance access returned 401.
+
+Cost classifications and revenue targets remain unset. The owner has been asked
+for annual/monthly targets and how production hourly labor and advertising should
+behave in the break-even model. No invented targets or classification percentages
+have been saved.
