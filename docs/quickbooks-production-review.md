@@ -99,7 +99,10 @@ The callback to register is
 - Review the actual Intuit security requirements before making any compliance
   commitment. Clerk authentication alone does not establish that MFA or CAPTCHA
   is enabled for this deployment.
-- Verify hosting/data residency before completing Geolocation.
+- Geolocation saved as United States with no fixed outbound IP. Verified the
+  linked Vercel project's `serverlessFunctionRegion` and default function region
+  are both `iad1` (US). Intuit explicitly permits serverless platforms to omit
+  the IP address. This records app hosting, not a blanket data-residency claim.
 - Run connect, disconnect, reconnect and report retrieval against a real Intuit
   sandbox company. Production use additionally needs owner authorization of the
   intended live company and matching-date/basis report reconciliation.

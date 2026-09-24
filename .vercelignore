@@ -1,0 +1,2 @@
+# Development-only OAuth harness. Never upload it to a deployment.
+scripts/verify-finance-sandbox.mjs
