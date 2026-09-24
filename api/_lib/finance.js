@@ -4,6 +4,7 @@ export async function ensureFinance(sql){
  await sql`CREATE TABLE IF NOT EXISTS finance_workspace(id TEXT PRIMARY KEY,settings JSONB NOT NULL,revision INTEGER NOT NULL DEFAULT 1,snapshot JSONB,updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
  await sql`CREATE TABLE IF NOT EXISTS finance_connection(id TEXT PRIMARY KEY,realm TEXT NOT NULL,tokens TEXT NOT NULL,expires_at TIMESTAMPTZ NOT NULL,version TEXT NOT NULL,environment TEXT NOT NULL,lease_until TIMESTAMPTZ,connected_by TEXT NOT NULL)`;
  await sql`CREATE TABLE IF NOT EXISTS finance_oauth(state TEXT PRIMARY KEY,binding TEXT NOT NULL,user_id TEXT NOT NULL,expires_at TIMESTAMPTZ NOT NULL)`;
+ await sql`ALTER TABLE finance_oauth ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ`;
 }
 export const hash=value=>createHash('sha256').update(value).digest('hex');
 export const nonce=()=>randomBytes(32).toString('base64url');
@@ -38,7 +39,7 @@ export async function provider(path,access,realm,env=process.env,fetcher=fetch){
 // A lease serializes refresh/sync; the version also prevents an old sync from
 // overwriting a new connection. No refresh credential leaves the server.
 export async function acquireConnection(sql,env=process.env,fetcher=fetch){
- const [c]=await sql`UPDATE finance_connection SET lease_until=now()+interval '5 minutes' WHERE id='company' AND (lease_until IS NULL OR lease_until<now()) RETURNING *`;
+ const [c]=await sql`UPDATE finance_connection SET lease_until=now()+interval '5 minutes',version=${nonce()} WHERE id='company' AND (lease_until IS NULL OR lease_until<now()) RETURNING *`;
  if(!c)throw new Error('Connect QuickBooks first, or wait for the current sync to finish.');
  try{if(c.environment!==env.QUICKBOOKS_ENVIRONMENT)throw new Error('Environment changed. Reconnect QuickBooks.');let tokens=decrypt(c.tokens,env);
  if(new Date(c.expires_at).getTime()<Date.now()+120000){tokens=await exchange({grant_type:'refresh_token',refresh_token:tokens.refresh_token},env,fetcher);const encrypted=encrypt(tokens,env),expiry=new Date(Date.now()+tokens.expires_in*1000).toISOString();const saved=await sql`UPDATE finance_connection SET tokens=${encrypted},expires_at=${expiry} WHERE id='company' AND version=${c.version} RETURNING id`;if(!saved.length)throw new Error('Connection changed. Sync again.');}

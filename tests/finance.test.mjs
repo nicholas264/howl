@@ -68,3 +68,24 @@ test('unexpected preview API response becomes a recoverable load error before re
  const valid={settings:plan,revision:1,setup:{checks:[]},snapshot:null};assert.equal(readFinanceWorkspace(valid),valid);
  assert.throws(()=>readFinanceWorkspace({...valid,snapshot:{}}),/report could not be loaded/);
 });
+test('disconnect during token exchange cancels consent and cannot resurrect credentials',async()=>{
+ const db=new PGlite(),restore=useTestDatabase(db),sql=neon('postgres://test:test@localhost/test');await ensureFinance(sql);await sql`CREATE TABLE app_users(user_id TEXT PRIMARY KEY,role TEXT,status TEXT)`;await sql`INSERT INTO app_users VALUES ('owner','owner','active')`;
+ const handler=createFinanceHandler({authorize:async()=>({sql,userId:'owner',role:'owner'}),env});
+ try{const start=res();await handler({method:'POST',body:{action:'connect'}},start);const state=new URL(start.body.url).searchParams.get('state'),cookie=start.headers['Set-Cookie'].split(';')[0];
+ const callback=createQuickBooksCallback({getSql:()=>sql,env,fetcher:async()=>{const r=res();await handler({method:'POST',body:{action:'disconnect'}},r);assert.equal(r.statusCode,200);return Response.json({access_token:'cancelled',refresh_token:'cancelled-refresh',expires_in:3600});}});
+ const result=res();await callback({method:'GET',headers:{cookie},query:{state,code:'fixture-code',realmId:'123'}},result);assert.match(result.url,/access_denied/);assert.equal((await sql`SELECT id FROM finance_connection`).length,0);
+ }finally{restore();await db.close();}
+});
+test('published Intuit report samples parse without treating nested subtotals as transactions',async()=>{
+ const {readFile}=await import('node:fs/promises');
+ const pnl=JSON.parse(await readFile(new URL('./fixtures/intuit-profit-loss.json',import.meta.url),'utf8'));
+ const balance=JSON.parse(await readFile(new URL('./fixtures/intuit-balance-sheet.json',import.meta.url),'utf8'));
+ const p=parseProfitLoss(pnl,'2015-06-01','2015-06-30','Accrual');assert.equal(p.revenue,325);assert.equal(p.netIncome,325);assert.equal(p.expenses,0);assert.deepEqual(p.accounts,[]);
+ const b=parseBalanceSheet(balance,'2016-01-01','2016-10-31','Accrual');assert.equal(b.currentAssets,11247.44);assert.equal(b.currentLiabilities,6548.42);assert.equal(b.cash,2150.55);assert.equal(b.receivables,6383.12);assert.equal(b.totalLiabilities,31548.42);assert.equal(b.equity,-6805.98);
+});
+
+test('a pre-revenue month with reconciled expenses remains a valid accounting month',()=>{
+ const r=report('ProfitAndLoss','2026-01-01','2026-01-31');r.Rows.Row=r.Rows.Row.filter(x=>!['Income','COGS'].includes(x.group));
+ for(const row of r.Rows.Row){if(row.group==='GrossProfit')row.Summary.ColData[1].value='0';if(['NetIncome','NetOperatingIncome'].includes(row.group))row.Summary.ColData[1].value='-40000';}
+ const parsed=parseProfitLoss(r,'2026-01-01','2026-01-31','Accrual');assert.equal(parsed.revenue,0);assert.equal(parsed.expenses,40000);assert.equal(parsed.netIncome,-40000);
+});

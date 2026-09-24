@@ -11,7 +11,7 @@ const total=(groups,key,required=true)=>{const r=groups.get(key);if(!r){if(requi
 export function parseProfitLoss(report,start,end,basis){
  const groups=inspect(report,'ProfitAndLoss',start,end,basis);
  if(noData(report))return {month:start.slice(0,7),revenue:0,cogs:0,expenses:0,netIncome:0,accounts:[],currency:report.Header.Currency};
- const revenue=total(groups,'Income'),grossProfit=total(groups,'GrossProfit'),operating=total(groups,'NetOperatingIncome'),netIncome=total(groups,'NetIncome');
+ const revenue=total(groups,'Income',false)??0,grossProfit=total(groups,'GrossProfit'),operating=total(groups,'NetOperatingIncome'),netIncome=total(groups,'NetIncome');
  const cogs=total(groups,'COGS',false)??0,expenses=total(groups,'Expenses',false)??0;
  if(Math.abs(revenue-cogs-grossProfit)>.05||Math.abs(grossProfit-expenses-operating)>.05)throw new Error('QuickBooks operating totals did not reconcile.');
  const accounts=[];
