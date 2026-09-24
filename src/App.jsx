@@ -30,6 +30,7 @@ const CreativePlanningWorkspace = lazy(() => import("./components/CreativePlanni
 const AdminWorkspace = lazy(() => import("./components/AdminWorkspace"));
 const WorkspaceHub = lazy(() => import("./components/WorkspaceHub"));
 const MapMonitorWorkspace = lazy(() => import("./components/MapMonitorWorkspace"));
+const CooWorkspace = lazy(() => import("./components/coo/CooWorkspace.jsx"));
 const SkuMediaPacingTool = lazy(() => import("./components/SkuMediaPacingTool"));
 import { useDriveAuth } from "./hooks/useDriveAuth";
 import { cartGetAll } from "./utils/cartDb";
@@ -203,6 +204,7 @@ export default function HowlAdEngine({ appAccess }) {
   }, [activeTab, refreshUgcCount]);
 
   const NAV_SECTIONS = [
+    { label: 'Company', items: [{ key: 'coo', label: 'COO Workspace', permission: 'analytics.read' }] },
     {
       label: 'Policy',
       items: [
@@ -412,6 +414,7 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "founder" && <FounderAdTool />}
         {activeTab === "gallery" && <GalleryTab cart={cart} />}
         {activeTab === "dashboard-dealers" && <DealerDashboard setActiveTab={navigate} />}
+        {activeTab === "coo" && <CooWorkspace setActiveTab={navigate} />}
         {activeTab === "dashboard-cfo" && <DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="cfo" />}
         {activeTab === "map-monitor" && <MapMonitorWorkspace canManage={can('admin.users')} />}
         {activeTab === "dashboard-creative" && <><DashboardTool canRunJobs={can('jobs.run')} canWriteAssets={can('assets.write')} canWriteAnalytics={can('analytics.write')} setActiveTab={navigate} view="creative" onOpenCreator={openPlannedCreator} canManageCreators={can('creators.write')} /></>}

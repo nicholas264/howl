@@ -1,0 +1,51 @@
+# COO workspace
+
+Campfire's `?tab=coo` workspace connects company planning, department scorecards, execution, and operating reviews. Open it from **Company → COO Workspace** or the performance workspace.
+
+## Operating flow
+
+1. Set up Manufacturing, Sales & Marketing, and Sourcing & Parts, or create your own departments. Finance, People, and other teams can be added and renamed. Set an accountable owner and description.
+2. Create an annual planning cycle and quarterly cycles inside it. Cycles use explicit dates rather than hard-coded fiscal quarters.
+3. Define company objectives. Align department objectives to company objectives in the same cycle or its annual parent.
+4. Add KPIs for operating health and key results for improvement goals. Every metric has an owner, department, cycle, baseline, target, unit, target direction, definition, source reference, and update cadence. Key results must link to an objective. Suggested templates contain definitions, not targets or actuals.
+5. Record dated actuals with context, blockers, and next steps. Metrics show trends, target status, and stale or missing updates. Same-date corrections preserve earlier entries and supersede their value.
+6. Create initiatives, milestones, and follow-up actions. Connect them to objectives, assign owners and due dates, and link dependencies. Record status through check-ins. Dependency loops and cross-cycle dependencies are rejected.
+7. Use the review agenda to inspect exceptions. Save a dated operating review with discussion, decisions, and lessons. Its scorecard snapshot is immutable. Assign follow-up actions from the review.
+8. Select earlier cycles to review their results. Use **Plan in another cycle** on a metric, objective, or initiative to reuse its definition with a new cycle and fresh actuals. Relink objectives and dependencies explicitly. Export the filtered scorecard as CSV.
+
+## Calculation rules
+
+- KPIs compare the latest reported period's actual with an at-or-above / at-or-below threshold. Keep reporting periods and definitions consistent; values are not automatically summed.
+- Key result progress is `(actual − baseline) / (target − baseline)`, clamped to 0–100%. Decreasing targets work the same way. Targets must improve from baseline.
+- KR health compares progress with elapsed planning-cycle time: on track at or ahead of time elapsed, at risk at least 80% of expected progress, otherwise off track. At cycle end an unfinished KR is off track. This is linear pacing, not a forecast.
+- An update older than its cadence is marked **Update due**. No actual is **No update**, never zero. Future cycles are **Not started**. Ended cycles are assessed at their end date, so historical results do not degrade with today's date.
+- Objective progress averages its direct key results equally, including unreported results as zero and showing the reported count. Linked department objectives are not automatically rolled up. Archived objectives retain archived key results for historical inspection.
+- Initiative status comes from its latest dated check-in; unfinished commitments past their due date are overdue. Milestones and dependencies are explicit links, not automatic completion rules.
+
+## Sharing and data sources
+
+The feature uses existing `analytics.read` and `analytics.write` permissions. Owner/admin/strategist access follows Campfire's existing role map. Read-only users can inspect and export, but the server rejects mutations. Owners are free-text accountable names; assignment does not send notifications or create accounts.
+
+Actuals are manual. The overview links to Campfire's business dashboard, dealer reporting, and SKU media pacing as report sources. These links do not automatically synchronize measurements. There are no supplier, manufacturing, inventory, or HR data connectors in this release.
+
+## Storage and release
+
+`api/coo-workspace.js` provides GET and POST commands. The additive migration creates `coo_workspace`, containing the single company's shared state and an optimistic concurrency revision. The database is Campfire's existing single-company boundary; there is no client-selectable tenant identifier.
+
+Writes use compare-and-swap SQL to prevent concurrent changes from being lost. Individual record versions also prevent an old edit form from overwriting the same record after refreshing the workspace. Check-ins and reviews preserve history; measurement definitions with observations cannot change target, baseline, unit, direction, department, kind, or cycle. Create a new metric instead.
+
+This first storage implementation loads one bounded company document. It limits each collection to 2,000 records, check-ins to 20,000, and serialized state to 2.5 MB to stay below hosted response limits. A rejected capacity write does not alter data. Larger installations should move history to paginated tables before reaching this limit. Archive hides records without deleting their history or reducing storage size. Parent records with active children cannot be archived.
+
+Before deployment:
+
+1. Run `npm run check` with the repository's isolated test runner.
+2. Select the intended database explicitly and run the existing `npm run db:migrate` migration workflow. It includes `ensureCooWorkspace` and runtime grants.
+3. Deploy through the normal Campfire release process, then verify authenticated read/write and read-only roles against the selected environment.
+
+No production migration or deployment has been run for this feature.
+
+## Isolated preview
+
+Run `node scripts/preview-coo.mjs`, then open `http://127.0.0.1:5194/?tab=coo`.
+
+The preview uses the real COO HTTP handler and an in-memory PostgreSQL database via PGlite. Only authentication is replaced for local testing. Other API routes return inert responses; no business-provider calls or production database credentials are used. Demo data is visibly labeled. Changes survive browser reloads but disappear when the preview process exits. The preview binds only to localhost and is not a production server.

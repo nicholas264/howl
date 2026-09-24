@@ -11,6 +11,7 @@ const CREATIVE_TOOLS = [
 ];
 
 const PERFORMANCE_TOOLS = [
+  { tab: 'coo', permission: 'analytics.read', label: 'COO Workspace', description: 'Plan company objectives, monitor department scorecards, and run operating reviews.' },
   { tab: 'creative-analytics', permission: 'analytics.read', label: 'Creative Analytics', description: 'See winners, performance signals, transcripts, and Creative DNA.' },
   { tab: 'dashboard-cfo', permission: 'analytics.read', label: 'Business Dashboard', description: 'Revenue pace, contribution margin, forecasts, and operating context.' },
   { tab: 'sku-media-pacing', permission: 'analytics.read', label: 'SKU Media Pacing', description: 'Plan monthly paid media budgets and account Cost Cap targets from DTC SKU units.' },
