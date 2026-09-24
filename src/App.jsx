@@ -319,7 +319,7 @@ export default function HowlAdEngine({ appAccess }) {
   }, [navigate]);
 
   return (
-    <div className="app-shell" style={{ minHeight: "100vh", background: "#f7f6f2", color: "#171717", fontFamily: "'Helvetica Neue', Helvetica, sans-serif" }}>
+    <div className={`app-shell${activeTab === 'crm' ? ' crm-shell' : ''}`} style={{ minHeight: "100vh", background: "#f7f6f2", color: "#171717", fontFamily: "'Helvetica Neue', Helvetica, sans-serif" }}>
       <div className="shell">
         <aside className="sidebar">
           <div className="sidebar-top">

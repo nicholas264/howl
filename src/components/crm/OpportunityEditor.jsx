@@ -10,7 +10,7 @@ export default function OpportunityEditor({initial,canWrite,canSend,onUpdate,onC
   const dialog=useRef(null),lock=useRef(false),pending=useRef(null),live=useRef(true);
   const dirty=JSON.stringify(form)!==baseline||!!note||emailDirty;
   const blocked=busy||emailBusy;
-  useEffect(()=>{live.current=true;dialog.current.showModal();return()=>{live.current=false;};},[]);
+  useEffect(()=>{live.current=true;dialog.current.showModal();dialog.current.querySelector('h2').focus({preventScroll:true});dialog.current.scrollTop=0;return()=>{live.current=false;};},[]);
   async function refresh(preserveForm=true) {
     const result=await crmRequest(`/api/crm?id=${initial.id}`);if(!live.current)return;
     setActivity(result.activity);onUpdate(result.opportunity);
@@ -38,7 +38,7 @@ export default function OpportunityEditor({initial,canWrite,canSend,onUpdate,onC
       try{await refresh(false);}catch{setNotice('Saved. Activity history could not refresh; reload it to see the latest entry.');}
     }catch(e){if(live.current)setError(e.message);}finally{lock.current=false;if(live.current)setBusy(false);}
   }
-  return <dialog ref={dialog} className="crm-dialog" aria-labelledby="crm-editor-title" onCancel={e=>{e.preventDefault();close();}}><header className="crm-dialog-header"><div><p>{record.isNew?'New opportunity':record.data?.company}</p><h2 id="crm-editor-title">{record.isNew?'Start a conversation':record.data?.title}</h2></div><button type="button" onClick={close} disabled={blocked} aria-label="Close opportunity">✕</button></header>
+  return <dialog ref={dialog} className="crm-dialog" aria-labelledby="crm-editor-title" onCancel={e=>{e.preventDefault();close();}}><header className="crm-dialog-header"><div><p>{record.isNew?'New opportunity':record.data?.company}</p><h2 id="crm-editor-title" tabIndex={-1}>{record.isNew?'Start a conversation':record.data?.title}</h2></div><button type="button" onClick={close} disabled={blocked} aria-label="Close opportunity">✕</button></header>
     <div className="crm-dialog-body">
       {error&&<div className="crm-alert" role="alert">{error}{!record.isNew&&<button disabled={blocked} onClick={()=>{if(window.confirm('Reload the saved opportunity and discard unsaved opportunity edits?'))refresh(false).then(()=>setError('')).catch(e=>setError(e.message));}}>Reload saved opportunity</button>}</div>}
       {notice&&<p className="crm-notice" role="status">{notice}</p>}
