@@ -83,9 +83,9 @@ export async function disconnectGoogle(sql, userId) {
   await sql`DELETE FROM app_google_connections WHERE user_id = ${userId}`;
 }
 
-export async function getUserGoogleAccessToken(sql, userId) {
+export async function getUserGoogleAccessToken(sql, userId, expectedConnection = null) {
   const [connection] = await sql`
-    SELECT encrypted_refresh_token
+    SELECT encrypted_refresh_token, google_email, updated_at
     FROM app_google_connections
     WHERE user_id = ${userId}
   `;
@@ -93,6 +93,9 @@ export async function getUserGoogleAccessToken(sql, userId) {
     const error = new Error('Google is not connected for this HOWL user');
     error.reconnectRequired = true;
     throw error;
+  }
+  if (expectedConnection && (connection.google_email !== expectedConnection.google_email || new Date(connection.updated_at).getTime() !== new Date(expectedConnection.updated_at).getTime())) {
+    throw Object.assign(new Error('The connected Google account changed. Reload and review the sender before sending.'), { statusCode:409 });
   }
   const response = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',

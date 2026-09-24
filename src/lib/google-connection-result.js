@@ -1,9 +1,9 @@
 const errors={
-  access_denied:'Google access was not granted. Connect again and allow the requested Drive access.',
+  access_denied:'Google access was not granted. Connect again and allow the requested Google access.',
   invalid_state:'The Google connection attempt expired or was already used. Connect again from this app.',
   no_refresh_token:'Google did not provide an offline connection. Connect again and complete Google’s consent screen.',
   token_exchange:'Google could not complete the connection. Start a new connection attempt.',
-  scope_not_granted:'The requested Drive access was not granted. Connect again and select the Drive permission.',
+  scope_not_granted:'The requested Google access was not granted. Connect again and select the requested permission.',
   save_failed:'The app could not save the Google connection. Please retry.',
 };
 export function readGoogleConnectionResult(search) {

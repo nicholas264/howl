@@ -17,6 +17,7 @@ const ImageAdTool = lazy(() => import("./components/ImageAdTool"));
 const CalloutAdTool = lazy(() => import("./components/CalloutAdTool"));
 const ScriptStudio = lazy(() => import("./components/ScriptStudio"));
 const MetaPublishTool = lazy(() => import("./components/MetaPublishTool"));
+const CrmWorkspace = lazy(() => import('./components/crm/CrmWorkspace.jsx'));
 const DealerDashboard = lazy(() => import("./components/DealerDashboard"));
 const DashboardTool = lazy(() => import("./components/DashboardTool"));
 const LaunchLogTool = lazy(() => import("./components/LaunchLogTool"));
@@ -48,10 +49,10 @@ const TabFallback = () => (
 );
 
 export default function HowlAdEngine({ appAccess }) {
-  const driveAuth = useDriveAuth();
+  const driveAuth = useDriveAuth({ enabled: appAccess.permissions?.includes('*') || appAccess.permissions?.includes('assets.write') });
   const initialTab = useMemo(() => {
     try {
-      return new URLSearchParams(window.location.search).get('tab') || 'welcome';
+      return new URLSearchParams(window.location.search).get('tab') || (appAccess.role === 'sales' ? 'crm' : 'welcome');
     } catch {
       return 'welcome';
     }
@@ -88,12 +89,13 @@ export default function HowlAdEngine({ appAccess }) {
   const draftsReady = useRef(false);
   const alive = useRef(true);
   const reloadDrafts = useCallback(async () => {
+    if (!can('assets.read') && !can('launch.read')) return;
     try {
       const items = await loadLaunchDrafts();
       if (!alive.current) return;
       cartRef.current = items; setCart(items); draftsReady.current = true; setDraftError('');
     } catch (error) { if (alive.current) setDraftError(error.message); }
-  }, []);
+  }, [can]);
   useEffect(() => {
     alive.current = true;
     reloadDrafts();
@@ -194,6 +196,7 @@ export default function HowlAdEngine({ appAccess }) {
   // UGC Inbox waiting count — single Drive call, refreshed on app mount and when leaving the UGC tab.
   const [ugcCount, setUgcCount] = useState(0);
   const refreshUgcCount = useCallback(async () => {
+    if (!can('assets.read')) return;
     try {
       const d = await apiJson('/api/drive/ugc', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -201,7 +204,7 @@ export default function HowlAdEngine({ appAccess }) {
       }, 'UGC count failed');
       if (typeof d.count === 'number') setUgcCount(d.count);
     } catch {}
-  }, []);
+  }, [can]);
   useEffect(() => { refreshUgcCount(); }, [refreshUgcCount]);
   useEffect(() => {
     // Refetch when user navigates away from the launcher (likely after launching some files).
@@ -209,6 +212,7 @@ export default function HowlAdEngine({ appAccess }) {
   }, [activeTab, refreshUgcCount]);
 
   const NAV_SECTIONS = [
+    { label: 'Sales', items: [{ key: 'crm', label: 'CRM', permission: 'crm.read' }] },
     { label: 'Company', items: [{ key: 'coo', label: 'COO Workspace', permission: 'analytics.read', ownerOnly: true }, { key: 'finance', label: 'Financials', permission: 'analytics.read', ownerOnly: true }, { key: 'organization', label: 'Organization chart', permission: 'admin.users', ownerOnly: true }] },
     {
       label: 'Policy',
@@ -417,6 +421,7 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} onAddToCart={addToCart} />}
         {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} onAddToCart={addToCart} />}
         {activeTab === "gallery" && <GalleryTab cart={cart} />}
+        {activeTab === 'crm' && <CrmWorkspace connectionError={driveAuth.connectionError} />}
         {activeTab === "dashboard-dealers" && <DealerDashboard setActiveTab={navigate} />}
         {activeTab === "finance" && canAccessFinance(appAccess) && <FinanceWorkspace />}
         {activeTab === "organization" && canAccessOrganization(appAccess) && <OrganizationWorkspace />}
