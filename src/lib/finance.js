@@ -38,3 +38,22 @@ export function readFinanceWorkspace(payload) {
  }
  return payload;
 }
+
+export const ebitdaFields=['interest','incomeTax','depreciation','amortization'];
+export function profitSeries(periods,months,adjustments={}) {
+ return periods.map(month=>{
+  const netIncome=months.find(m=>m.month===month)?.netIncome;
+  const entries=adjustments[month];
+  const complete=Number.isFinite(netIncome)&&ebitdaFields.every(key=>Number.isFinite(entries?.[key]));
+  return {month,netIncome,ebitda:complete?ebitdaFields.reduce((sum,key)=>sum+entries[key],netIncome):null};
+ });
+}
+
+export function sellingContribution(accounts,sellingAccountIds,months){
+ const selling=new Set(sellingAccountIds);let cogs=0,sellingExpenses=0,fixedCosts=0;
+ for(const a of accounts){const value=months.reduce((sum,m)=>sum+(a.values[m]??0),0);
+ if(a.group==='COGS')cogs+=value;
+ else if(a.group==='Expenses'){if(selling.has(a.id))sellingExpenses+=value;else fixedCosts+=value;}
+ }
+ return {method:'selling',cogs,sellingExpenses,variableCosts:cogs+sellingExpenses,fixedCosts,unclassified:[]};
+}

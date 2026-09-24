@@ -11,11 +11,22 @@ export const nonce=()=>randomBytes(32).toString('base64url');
 export const defaultSettings=()=>({start:`${new Date().getUTCFullYear()}-01`,basis:'Accrual',currency:'USD',targets:{},mapping:{}});
 export function validateSettings(s){
  if(!s||!/^20\d\d-(0[1-9]|1[0-2])$/.test(s.start)||!['Cash','Accrual'].includes(s.basis)||!['USD','CAD','GBP','EUR','AUD','NZD'].includes(s.currency))throw new Error('Choose a valid fiscal start, accounting basis, and supported currency.');
- const periods=fiscalMonths(s.start),targets={},mapping={};
+ const periods=fiscalMonths(s.start),targets={},mapping={},ebitdaAdjustments={};
  if(!s.targets||typeof s.targets!=='object'||!s.mapping||typeof s.mapping!=='object'||Object.keys(s.mapping).length>3000)throw new Error('Invalid financial plan.');
  for(const [m,v] of Object.entries(s.targets)){if(!periods.includes(m)||!Number.isFinite(v)||v<0||v>1e12)throw new Error('Targets must be nonnegative numbers within the fiscal year.');targets[m]=v;}
  for(const [id,v] of Object.entries(s.mapping)){if(!/^[\w:.-]{1,100}$/.test(id)||!Number.isFinite(v?.variablePct)||v.variablePct<0||v.variablePct>100)throw new Error('Variable cost percentages must be between 0 and 100.');mapping[id]={variablePct:v.variablePct};}
- return {start:s.start,basis:s.basis,currency:s.currency,targets,mapping};
+ if(s.ebitdaAdjustments!==undefined){
+ if(!s.ebitdaAdjustments||typeof s.ebitdaAdjustments!=='object'||Array.isArray(s.ebitdaAdjustments)||Object.keys(s.ebitdaAdjustments).length>12)throw new Error('Invalid EBITDA adjustments.');
+ for(const [month,entries] of Object.entries(s.ebitdaAdjustments)){
+ if(!periods.includes(month)||!entries||typeof entries!=='object'||Array.isArray(entries))throw new Error('Invalid EBITDA month.');
+ const clean={};for(const [key,v] of Object.entries(entries)){
+ if(!['interest','incomeTax','depreciation','amortization'].includes(key)||!Number.isFinite(v)||Math.abs(v)>1e12)throw new Error('EBITDA adjustments must be valid amounts.');
+ clean[key]=v;
+ }ebitdaAdjustments[month]=clean;
+ }
+ }
+ if(s.sellingAccountIds!==undefined&&(!Array.isArray(s.sellingAccountIds)||s.sellingAccountIds.length>3000||s.sellingAccountIds.some(id=>typeof id!=='string'||!/^Expenses:[\w.-]{1,90}$/.test(id))))throw new Error('Invalid selling expense accounts.');
+ return {start:s.start,basis:s.basis,currency:s.currency,targets,mapping,...(s.sellingAccountIds!==undefined?{sellingAccountIds:[...new Set(s.sellingAccountIds)]}:{}),...(s.ebitdaAdjustments!==undefined?{ebitdaAdjustments}: {})};
 }
 export function setup(env=process.env){
  const keys=['QUICKBOOKS_CLIENT_ID','QUICKBOOKS_CLIENT_SECRET','QUICKBOOKS_REDIRECT_URI','QUICKBOOKS_ENVIRONMENT','QUICKBOOKS_TOKEN_ENCRYPTION_KEY'];

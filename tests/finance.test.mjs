@@ -127,3 +127,30 @@ test('live Intuit empty-month layout accepts label-only summaries without hiding
  }
  const balance=structuredClone(r);balance.Header.ReportName='BalanceSheet';assert.equal(parseBalanceSheet(balance,'2026-01-01','2026-01-31','Accrual').currentAssets,null);
 });
+
+test('EBITDA requires all four reviewed addbacks, preserves losses and gaps',async()=>{
+ const {profitSeries}=await import('../src/lib/finance.js');
+ const periods=['2026-01','2026-02','2026-03'];
+ const months=[{month:'2026-01',netIncome:-100},{month:'2026-02',netIncome:50}];
+ const adjustments={'2026-01':{interest:10,incomeTax:-5,depreciation:20,amortization:0},'2026-02':{interest:0,incomeTax:0,depreciation:0}};
+ assert.deepEqual(profitSeries(periods,months,adjustments).map(r=>r.ebitda),[-75,null,null]);
+ adjustments['2026-02'].amortization=0;
+ assert.equal(profitSeries(periods,months,adjustments)[1].ebitda,50);
+ assert.equal(profitSeries(periods,months)[0].ebitda,null);
+ assert.equal(profitSeries(periods,months,adjustments)[2].netIncome,undefined);
+});
+test('EBITDA settings round trip partial reviews and reject invalid inputs',()=>{
+ const ebitdaAdjustments={'2026-01':{interest:0,incomeTax:-5}};
+ assert.deepEqual(validateSettings({...plan,ebitdaAdjustments}).ebitdaAdjustments,ebitdaAdjustments);
+ for(const bad of [null,[],{'2027-01':{}},{'2026-01':{interest:NaN}},{'2026-01':{interest:'0'}},{'2026-01':{payrollTax:2}}])assert.throws(()=>validateSettings({...plan,ebitdaAdjustments:bad}));
+});
+
+test('selling contribution deducts COGS and selling section once and covers remaining operating budget',async()=>{
+ const {sellingContribution}=await import('../src/lib/finance.js');
+ const accounts=[{id:'COGS:1',group:'COGS',values:{jan:40}},{id:'Expenses:2',group:'Expenses',values:{jan:20}},{id:'Expenses:3',group:'Expenses',values:{jan:30}},{id:'OtherExpense:4',group:'OtherExpense',values:{jan:100}}];
+ const costs=sellingContribution(accounts,['Expenses:2','Expenses:2'],['jan']);
+ const r=financialRatios({revenue:100,...costs});
+ assert.equal(r.contribution,40);assert.equal(r.contributionMargin,.4);assert.equal(r.breakEvenSales,75);assert.equal(r.operatingResult,10);
+ assert.deepEqual(validateSettings({...plan,sellingAccountIds:['Expenses:2','Expenses:2']}).sellingAccountIds,['Expenses:2']);
+ assert.throws(()=>validateSettings({...plan,sellingAccountIds:['COGS:1']}));
+});

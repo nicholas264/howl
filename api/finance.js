@@ -27,7 +27,7 @@ export function createFinanceHandler({authorize=requirePermission,env=process.en
  }
  if(b.action==='disconnect'){
  // Atomic removal also invalidates pending consent and cached company data.
- await sql.transaction([sql`DELETE FROM finance_connection WHERE id='company'`,sql`UPDATE finance_workspace SET snapshot=NULL,settings=jsonb_set(settings,'{mapping}','{}'::jsonb),revision=revision+1 WHERE id='company'`,sql`DELETE FROM finance_oauth WHERE user_id=${userId}`]);return res.json({ok:true});
+ await sql.transaction([sql`DELETE FROM finance_connection WHERE id='company'`,sql`UPDATE finance_workspace SET snapshot=NULL,settings=jsonb_set(settings-'ebitdaAdjustments'-'sellingAccountIds','{mapping}','{}'::jsonb),revision=revision+1 WHERE id='company'`,sql`DELETE FROM finance_oauth WHERE user_id=${userId}`]);return res.json({ok:true});
  }
  if(b.action==='save'){
  let settings;try{settings=validateSettings(b.settings);}catch(e){return res.status(400).json({error:e.message});}
