@@ -66,8 +66,12 @@ with the displayed rounded revenue, 96.0% gross margin and 17.4% net margin.
 Current assets of $10,841.29 / current liabilities of $6,895.98 reconcile to the
 displayed 1.57 current ratio. These are sandbox figures only.
 This is real Intuit sandbox data, not HOWL production books. No production
-credentials have been installed. Stop the runner and delete temporary credentials
-and diagnostic report files after verification.
+credentials have been installed. The runner was stopped and its temporary
+credential file and captured diagnostic report directories were removed.
+The empty-month fix (`5ba26a7`) deployed successfully as
+`dpl_E1v1xuCDerNqRfv64PydFEBMnx29`: all 266 tests passed, production build
+passed and dependency audit reported zero vulnerabilities. The live finance
+endpoint still returns HTTP 401 with `private, no-store` without authentication.
 
 Production credentials are locked pending Intuit's requirements. The portal also
 blocks editing production redirect URIs until those requirements are complete.
