@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 
 const LEGACY_LS_KEY = 'howl_drive_token';
 
-export function useDriveAuth() {
+export function useDriveAuth({ enabled = true } = {}) {
   const [connectionResult]=useState(()=>readGoogleConnectionResult(window.location.search));
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -17,11 +17,12 @@ export function useDriveAuth() {
     }
     // One-time cleanup: legacy token used to live in localStorage. Drop it.
     try { localStorage.removeItem(LEGACY_LS_KEY); } catch {}
+    if (!enabled) return;
     fetch('/api/auth/google')
       .then(response => response.json())
       .then(data => setConnected(Boolean(data.connected)))
       .catch(() => setConnected(false));
-  }, []);
+  }, [enabled]);
 
   const connect = useCallback(async () => {
     setConnecting(true);

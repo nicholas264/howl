@@ -3,9 +3,10 @@ import { requirePermission } from '../_lib/app-access.js';
 import { createGoogleOAuthState, getGoogleConnection } from '../_lib/google-user-oauth.js';
 
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control','private, no-store');
   const requestedPurpose=req.body?.purpose || req.query?.purpose;
-  const purpose=['creator_email','static_studio','script_studio'].includes(requestedPurpose)?requestedPurpose:'drive';
-  const access = await requirePermission(req, res, ['creator_email','script_studio'].includes(purpose) ? 'briefs.write' : 'assets.write');
+  const purpose=['creator_email','static_studio','script_studio','crm_email'].includes(requestedPurpose)?requestedPurpose:'drive';
+  const access = await requirePermission(req, res, purpose==='crm_email' ? 'crm.send' : ['creator_email','script_studio'].includes(purpose) ? 'briefs.write' : 'assets.write');
   if (!access) return;
   const { sql } = access;
 
@@ -23,7 +24,7 @@ export default async function handler(req, res) {
     redirect_uri: redirect,
     response_type: 'code',
     include_granted_scopes: 'true',
-    scope: (purpose==='script_studio' ? ['openid','email','https://www.googleapis.com/auth/drive.file'] : purpose==='static_studio' ? ['openid','email','https://www.googleapis.com/auth/drive.readonly'] : [
+    scope: (purpose==='crm_email' ? ['openid','email','https://www.googleapis.com/auth/gmail.send'] : purpose==='script_studio' ? ['openid','email','https://www.googleapis.com/auth/drive.file'] : purpose==='static_studio' ? ['openid','email','https://www.googleapis.com/auth/drive.readonly'] : [
       'openid',
       'email',
       'https://www.googleapis.com/auth/drive.file',

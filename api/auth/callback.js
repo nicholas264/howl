@@ -23,6 +23,7 @@ export default async function handler(req,res) {
     const scopes=(tokens.scope || '').split(/\s+/).filter(Boolean);
     if(purpose==='script_studio' && !scopes.some(s=>['https://www.googleapis.com/auth/drive.file','https://www.googleapis.com/auth/drive'].includes(s)))return res.redirect(googleReturnPath(purpose,'scope_not_granted'));
     if(purpose==='static_studio' && !scopes.some(s=>['https://www.googleapis.com/auth/drive.readonly','https://www.googleapis.com/auth/drive'].includes(s)))return res.redirect(googleReturnPath(purpose,'scope_not_granted'));
+    if(purpose==='crm_email' && !scopes.some(s=>['https://www.googleapis.com/auth/gmail.send','https://www.googleapis.com/auth/gmail.compose','https://www.googleapis.com/auth/gmail.modify','https://mail.google.com/'].includes(s)))return res.redirect(googleReturnPath(purpose,'scope_not_granted'));
     let googleEmail=null;
     try {
       const response=await fetch('https://www.googleapis.com/oauth2/v2/userinfo',{headers:{Authorization:`Bearer ${tokens.access_token}`},signal:AbortSignal.timeout(10000)});

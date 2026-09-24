@@ -1,3 +1,4 @@
+import { canAccessCrm } from './lib/crm-access.js';
 import { canAccessFinance } from './lib/finance.js';
 import { canAccessOrganization } from './lib/organization.js';
 import { canAccessCoo } from './lib/coo-access.js';
@@ -17,6 +18,7 @@ const ImageAdTool = lazy(() => import("./components/ImageAdTool"));
 const CalloutAdTool = lazy(() => import("./components/CalloutAdTool"));
 const ScriptStudio = lazy(() => import("./components/ScriptStudio"));
 const MetaPublishTool = lazy(() => import("./components/MetaPublishTool"));
+const CrmWorkspace = lazy(() => import('./components/crm/CrmWorkspace.jsx'));
 const DealerDashboard = lazy(() => import("./components/DealerDashboard"));
 const DashboardTool = lazy(() => import("./components/DashboardTool"));
 const LaunchLogTool = lazy(() => import("./components/LaunchLogTool"));
@@ -48,7 +50,7 @@ const TabFallback = () => (
 );
 
 export default function HowlAdEngine({ appAccess }) {
-  const driveAuth = useDriveAuth();
+  const driveAuth = useDriveAuth({ enabled: appAccess.permissions?.includes('*') || appAccess.permissions?.includes('assets.write') });
   const initialTab = useMemo(() => {
     try {
       return new URLSearchParams(window.location.search).get('tab') || 'welcome';
@@ -76,8 +78,8 @@ export default function HowlAdEngine({ appAccess }) {
     catch { return []; }
   });
   const can = useCallback((permission) => (
-    appAccess.permissions?.includes('*') || appAccess.permissions?.includes(permission)
-  ), [appAccess.permissions]);
+    (!permission?.startsWith('crm.') || canAccessCrm(appAccess)) && (appAccess.permissions?.includes('*') || appAccess.permissions?.includes(permission))
+  ), [appAccess.permissions, appAccess.role]);
 
   // Shared durable drafts; revision conflicts are surfaced instead of overwritten.
   const [cart, setCart] = useState([]);
@@ -88,12 +90,13 @@ export default function HowlAdEngine({ appAccess }) {
   const draftsReady = useRef(false);
   const alive = useRef(true);
   const reloadDrafts = useCallback(async () => {
+    if (!can('assets.read') && !can('launch.read')) return;
     try {
       const items = await loadLaunchDrafts();
       if (!alive.current) return;
       cartRef.current = items; setCart(items); draftsReady.current = true; setDraftError('');
     } catch (error) { if (alive.current) setDraftError(error.message); }
-  }, []);
+  }, [can]);
   useEffect(() => {
     alive.current = true;
     reloadDrafts();
@@ -194,6 +197,7 @@ export default function HowlAdEngine({ appAccess }) {
   // UGC Inbox waiting count — single Drive call, refreshed on app mount and when leaving the UGC tab.
   const [ugcCount, setUgcCount] = useState(0);
   const refreshUgcCount = useCallback(async () => {
+    if (!can('assets.read')) return;
     try {
       const d = await apiJson('/api/drive/ugc', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -201,7 +205,7 @@ export default function HowlAdEngine({ appAccess }) {
       }, 'UGC count failed');
       if (typeof d.count === 'number') setUgcCount(d.count);
     } catch {}
-  }, []);
+  }, [can]);
   useEffect(() => { refreshUgcCount(); }, [refreshUgcCount]);
   useEffect(() => {
     // Refetch when user navigates away from the launcher (likely after launching some files).
@@ -209,6 +213,7 @@ export default function HowlAdEngine({ appAccess }) {
   }, [activeTab, refreshUgcCount]);
 
   const NAV_SECTIONS = [
+    { label: 'Sales', items: [{ key: 'crm', label: 'CRM', permission: 'crm.read' }] },
     { label: 'Company', items: [{ key: 'coo', label: 'COO Workspace', permission: 'analytics.read', ownerOnly: true }, { key: 'finance', label: 'Financials', permission: 'analytics.read', ownerOnly: true }, { key: 'organization', label: 'Organization chart', permission: 'admin.users', ownerOnly: true }] },
     {
       label: 'Policy',
@@ -315,7 +320,7 @@ export default function HowlAdEngine({ appAccess }) {
   }, [navigate]);
 
   return (
-    <div className="app-shell" style={{ minHeight: "100vh", background: "#f7f6f2", color: "#171717", fontFamily: "'Helvetica Neue', Helvetica, sans-serif" }}>
+    <div className={`app-shell${activeTab === 'crm' ? ' crm-shell' : ''}`} style={{ minHeight: "100vh", background: "#f7f6f2", color: "#171717", fontFamily: "'Helvetica Neue', Helvetica, sans-serif" }}>
       <div className="shell">
         <aside className="sidebar">
           <div className="sidebar-top">
@@ -417,6 +422,7 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} onAddToCart={addToCart} />}
         {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} onAddToCart={addToCart} />}
         {activeTab === "gallery" && <GalleryTab cart={cart} />}
+        {activeTab === 'crm' && canAccessCrm(appAccess) && <CrmWorkspace connectionError={driveAuth.connectionError} />}
         {activeTab === "dashboard-dealers" && <DealerDashboard setActiveTab={navigate} />}
         {activeTab === "finance" && canAccessFinance(appAccess) && <FinanceWorkspace />}
         {activeTab === "organization" && canAccessOrganization(appAccess) && <OrganizationWorkspace />}

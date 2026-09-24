@@ -1,3 +1,4 @@
+import { canAccessCrm } from '../../src/lib/crm-access.js';
 import { neon } from '@neondatabase/serverless';
 import { requireAuth } from './auth.js';
 
@@ -7,7 +8,9 @@ export const ROLE_PERMISSIONS = {
     'creators.read', 'creators.write', 'briefs.read', 'briefs.write',
     'assets.read', 'assets.write', 'launch.read', 'launch.write',
     'analytics.read', 'analytics.write', 'jobs.run', 'content.publish', 'admin.users', 'shopify.seed',
+    'crm.read', 'crm.write', 'crm.send',
   ],
+  sales: ['crm.read', 'crm.write', 'crm.send'],
   strategist: [
     'creators.read', 'creators.write', 'briefs.read', 'briefs.write',
     'assets.read', 'analytics.read', 'analytics.write', 'jobs.run',
@@ -27,6 +30,7 @@ export const ROLE_PERMISSIONS = {
 export const ROLE_LABELS = {
   owner: 'Owner',
   admin: 'Admin',
+  sales: 'Sales',
   strategist: 'Strategist',
   producer: 'Producer',
   launcher: 'Launcher',
@@ -39,6 +43,7 @@ export function isValidRole(role) {
 }
 
 export function hasPermission(access, permission) {
+  if (permission?.startsWith('crm.') && !canAccessCrm(access)) return false;
   return access?.permissions?.includes('*') || access?.permissions?.includes(permission);
 }
 

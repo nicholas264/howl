@@ -1,3 +1,4 @@
+import { ensureCrm } from '../api/_lib/crm.js';
 import { ensureFinance } from '../api/_lib/finance.js';
 import { ensureOrganization } from '../api/_lib/organization.js';
 import { ensureCooWorkspace } from '../api/_lib/coo.js';
@@ -99,5 +100,6 @@ await ensureCooWorkspace(sql);
 await ensureOrganization(sql);
 await ensureFinance(sql);
 await ensureScriptStudio(sql);
+await ensureCrm(sql);
 if (process.env.HOWL_RUNTIME_DB_ROLE) await grantRuntimeAccess(sql,process.env.HOWL_RUNTIME_DB_ROLE);
 console.log('Schema migrations applied.');

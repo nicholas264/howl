@@ -2,6 +2,7 @@ import { apiFetch as fetch } from '../lib/apiFetch.js';
 import { useEffect, useMemo, useState } from "react";
 
 const QUICK_ACTIONS = [
+  { tab: 'crm', permission: 'crm.read', eyebrow: 'Sales', title: 'Sales pipeline', sub: 'Track opportunities, send email, and stay on top of follow-ups.' },
   { tab: 'script-studio', permission: 'briefs.write', eyebrow: 'Create', title: 'Script Studio', sub: 'Start fresh, use a winning ad, or bring your own brief.' },
   { tab: 'launcher', permission: 'launch.write', eyebrow: 'Launch', title: 'UGC Inbox', sub: 'Whatever the team dropped in Drive, ready to ship.' },
   { tab: 'dashboard-cfo', permission: 'analytics.read', eyebrow: 'Insights', title: 'CFO View', sub: 'NCAC, CM3, OpEx coverage — real numbers.' },
