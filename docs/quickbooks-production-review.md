@@ -147,7 +147,7 @@ variables. The temporary credential file was removed. The registered production 
 - Confirm the in-app support contact, app logo, profile/email verification and
   any additional production requirements shown by Intuit.
 
-Remaining: restore database availability, complete owner consent, sync, reconcile,
+Remaining: complete owner consent, sync, reconcile,
 classify cost accounts and enter the owner's revenue targets. See
 [the operating guide](quickbooks-financials.md) for definitions and safeguards.
 
@@ -158,13 +158,12 @@ client ID and secret are installed and the callback is registered. Deployment
 `dpl_D48Duu5EnhYqQZCZRXpLADz4uYwp` is READY with production credentials, tests
 and build passing, and zero dependency vulnerabilities.
 
-Live owner access is blocked by Neon HTTP 402: monthly compute allowance exhausted.
-Neon project `withered-truth-55297470` (`howl-ad-engine`) shows endpoint inactive,
-110.02 CU-hours used, Free plan, billing period Sep 1–Oct 1, 2026. Vercel shows
-100 CU-hours included. The existing Neon installation has two databases.
+The owner approved the Neon Launch upgrade, and Vercel now confirms Launch active
+at $0.106/CU-hour and $0.35/GB-month plus applicable taxes/fees. Live Campfire owner
+access is restored. All five QuickBooks server settings show configured.
 
-The Launch upgrade confirmation is prepared, not applied: $0.106/CU-hour and
-$0.35/GB-month plus applicable taxes/fees, covering the whole installation. Owner
-approval is pending because this creates usage-based charges. No plan change or
-real-company OAuth authorization has occurred. Real-HOWL report reconciliation,
-cost classification and targets remain incomplete.
+The production Connect flow successfully reached Intuit consent for the actual
+company Howl Campfires LLC. It grants ongoing accounting-data access; Campfire
+uses this only for P&L and Balance Sheet reads. Final owner consent is pending
+in the open Intuit tab. No real-company reports have been imported yet.
+Real-HOWL report reconciliation, cost classification and targets remain incomplete.
