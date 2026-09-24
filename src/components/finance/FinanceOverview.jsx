@@ -1,3 +1,4 @@
+import ChartHoverLayer from './ChartHoverLayer.jsx';
 import React,{useState} from 'react';
 const pct=n=>Number.isFinite(n)?`${(n*100).toFixed(1)}%`:'—';
 const monthLabel=m=>new Date(`${m}-01T12:00:00Z`).toLocaleDateString('en-US',{month:'short',timeZone:'UTC'});
@@ -9,11 +10,12 @@ function RevenueChart({periods,months,targets,money,demo}){
  const line=key=>rows.map((r,i)=>Number.isFinite(r[key])?`${i===0||!Number.isFinite(rows[i-1][key])?'M':'L'}${x(i)},${y(r[key])}`:'').join(' ');
  const chosen=rows[selected??Math.max(0,months.length-1)];
  return <div className="fin-revenue-chart"><div className="fin-chart-readout" aria-live="polite"><span>{monthLabel(chosen.month)} <strong>{money(chosen.actual)}</strong></span><span>Target <strong>{money(chosen.target)}</strong></span></div>
- <svg viewBox="0 0 760 226" role="img" aria-label={`${demo?'Sample':'Booked'} monthly revenue against targets. Select a month below for values.`}>
+ <svg viewBox="0 0 760 226" role="group" aria-label={`${demo?'Sample':'Booked'} monthly revenue against targets. Hover a dot or select a month for values.`}>
  {[0,1,2,3].map(i=>{const v=low+(high-low)*i/3;return <g key={i}><line x1="64" x2="736" y1={y(v)} y2={y(v)} stroke="#edf0f6"/><text x="54" y={y(v)+4} textAnchor="end" fill="#7b8598" fontSize="11">{new Intl.NumberFormat('en',{notation:'compact',maximumFractionDigits:1}).format(v)}</text></g>;})}
  <path d={line('target')} fill="none" stroke="#a5adc2" strokeWidth="2" strokeDasharray="5 5"/>
  <path d={line('actual')} fill="none" stroke="#635bce" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
- {rows.map((r,i)=><g key={r.month}>{Number.isFinite(r.actual)&&<circle cx={x(i)} cy={y(r.actual)} r={selected===i?6:3.5} fill="#635bce" stroke="white" strokeWidth="2"/>}</g>)}
+ {rows.map((r,i)=><g key={r.month}>{Number.isFinite(r.target)&&<circle cx={x(i)} cy={y(r.target)} r={selected===i?4:2.5} fill="#a5adc2" stroke="white" strokeWidth="1.5"/>}{Number.isFinite(r.actual)&&<circle cx={x(i)} cy={y(r.actual)} r={selected===i?6:3.5} fill="#635bce" stroke="white" strokeWidth="2"/>}</g>)}
+ <ChartHoverLayer rows={rows} series={[{key:'actual',label:demo?'Sample revenue':'Booked revenue',color:'#635bce'},{key:'target',label:'Revenue target',color:'#a5adc2'}]} x={x} y={y} format={money} onSelect={setSelected}/>
  </svg><div className="fin-month-selector" aria-label="Inspect month">{rows.map((r,i)=><button key={r.month} aria-label={`Inspect ${r.month}`} aria-pressed={selected===i} onClick={()=>setSelected(i)} onFocus={()=>setSelected(i)}>{monthLabel(r.month)}</button>)}</div>
  <div className="fin-plot-key"><span><i/>{demo?'Sample revenue':'Booked revenue'}</span><span><i/>Revenue target</span></div></div>;
 }

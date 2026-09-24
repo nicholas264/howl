@@ -1,3 +1,4 @@
+import ChartHoverLayer from './ChartHoverLayer.jsx';
 import React, { useState } from 'react';
 import { profitSeries, ebitdaFields } from '../../lib/finance.js';
 
@@ -29,10 +30,11 @@ export default function ProfitChart({ periods, months, adjustments, draft, updat
   <div className="fin-profit-totals">{series.map(s => <div key={s.key}><span>{s.label} · fiscal year to date</span><strong>{money(s.key === 'ebitda' ? complete ? total(s.key) : null : actuals.length ? total(s.key) : null)}</strong></div>)}</div>
   <div className="fin-revenue-chart">
    <div className="fin-chart-readout" aria-live="polite"><span>{monthLabel(active.month)}</span>{series.map(s => <span key={s.key}>{s.label} <strong>{money(active[s.key])}</strong></span>)}</div>
-   <svg viewBox="0 0 760 226" role="img" aria-label={`${demo ? 'Sample' : 'QuickBooks'} monthly net income and reconciled EBITDA. Select a month below for values.`}>
+   <svg viewBox="0 0 760 226" role="group" aria-label={`${demo ? 'Sample' : 'QuickBooks'} monthly net income and reconciled EBITDA. Hover a dot or select a month for values.`}>
     {[0, 1, 2, 3].map(i => { const v = low + (high - low) * i / 3; return <g key={i}><line x1="64" x2="736" y1={y(v)} y2={y(v)} stroke="#edf0f6"/><text x="54" y={y(v) + 4} textAnchor="end" fill="#7b8598" fontSize="11">{new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(v)}</text></g>; })}
     {min < 0 && <line x1="64" x2="736" y1={y(0)} y2={y(0)} stroke="#adb6c8" strokeDasharray="3 4"/>}
     {series.map(s => <g key={s.key}><path d={line(s.key)} fill="none" stroke={s.color} strokeWidth="3" strokeDasharray={s.key === 'ebitda' ? '7 4' : undefined} strokeLinecap="round" strokeLinejoin="round"/>{rows.map((r, i) => Number.isFinite(r[s.key]) ? <circle key={r.month} cx={x(i)} cy={y(r[s.key])} r={active.month === r.month ? 5 : 3} fill={s.color} stroke="white" strokeWidth="1.5"/> : null)}</g>)}
+    <ChartHoverLayer rows={rows} series={series} x={x} y={y} format={money} onSelect={index => setSelected(rows[index].month)}/>
    </svg>
    <div className="fin-month-selector" aria-label="Inspect profitability month">{rows.map(r => <button key={r.month} aria-label={`Inspect profit ${r.month}`} aria-pressed={active.month === r.month} onClick={() => setSelected(r.month)} onFocus={() => setSelected(r.month)}>{monthLabel(r.month)}</button>)}</div>
    <div className="fin-plot-key">{series.map(s => <span key={s.key}><i style={{ background: s.color }}/>{s.label}</span>)}</div>

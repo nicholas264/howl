@@ -1,3 +1,4 @@
+import ChartHoverLayer from './ChartHoverLayer.jsx';
 import React, { useState } from 'react';
 import { financialTrends, ratio } from '../../lib/finance.js';
 const monthLabel = month => new Date(`${month}-01T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
@@ -16,10 +17,11 @@ function TrendChart({ title, note, rows, series, format }) {
   <p className="fin-trend-note">{note}</p>
   <div className="fin-revenue-chart">
    <div className="fin-chart-readout" aria-live="polite"><span>{monthLabel(active.month)}</span>{series.map(s => <span key={s.key}>{s.label} <strong>{format(active[s.key])}</strong></span>)}</div>
-   <svg viewBox="0 0 760 226" role="img" aria-label={`${title}. Select a month below for values.`}>
+   <svg viewBox="0 0 760 226" role="group" aria-label={`${title}. Hover a dot or select a month for values.`}>
     {[0, 1, 2, 3].map(i => { const value = low + (high - low) * i / 3; return <g key={i}><line x1="64" x2="736" y1={y(value)} y2={y(value)} stroke="#edf0f6"/><text x="54" y={y(value) + 4} textAnchor="end" fill="#7b8598" fontSize="11">{format(value, true)}</text></g>; })}
     {min < 0 && <line x1="64" x2="736" y1={y(0)} y2={y(0)} stroke="#adb6c8" strokeDasharray="3 4"/>}
     {series.map((s, index) => <g key={s.key}><path d={path(s.key)} fill="none" stroke={s.color} strokeWidth="3" strokeDasharray={index === 2 ? '2 4' : index === 1 ? '7 4' : undefined} strokeLinecap="round" strokeLinejoin="round"/>{rows.map((r, i) => Number.isFinite(r[s.key]) ? <circle key={r.month} cx={x(i)} cy={y(r[s.key])} r={r.month === active.month ? 5 : 3} fill={s.color} stroke="white" strokeWidth="1.5"/> : null)}</g>)}
+    <ChartHoverLayer rows={rows} series={series} x={x} y={y} format={format} onSelect={index => setSelected(rows[index].month)}/>
    </svg>
    <div className="fin-month-selector" aria-label={`Inspect ${title}`}>{rows.map(r => <button key={r.month} aria-label={`${title}: ${r.month}`} aria-pressed={r.month === active.month} onClick={() => setSelected(r.month)} onFocus={() => setSelected(r.month)}>{monthLabel(r.month)}</button>)}</div>
    <div className="fin-plot-key">{series.map(s => <span key={s.key}><i style={{ background: s.color }}/>{s.label}</span>)}</div>
