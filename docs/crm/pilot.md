@@ -9,7 +9,7 @@ A focused sales workspace for Roy, available at `/?tab=crm`. This branch is a re
 - Follow-up queue, search, owner filter, CSV export, archive and restore.
 - Versioned changes with transactional activity history; stale edits fail instead of overwriting another writer.
 - Durable private email drafts, explicit sender/message review, send-only Gmail permission. Sent messages are shared with CRM readers; unrelated inbox mail is never fetched.
-- Dedicated Sales role (`crm.read`, `crm.write`, `crm.send`); owners and admins also have access. Sales users open directly into CRM and do not fetch creative-workspace drafts.
+- Initial rollout is owner-only. Sales, admins, and every other non-owner role are denied CRM UI, data, and Gmail actions, even with explicit CRM or wildcard permissions. The Sales role is reserved for a later rollout.
 
 Companies and contacts currently live on each opportunity. There is no global account/contact directory, cross-opportunity deduplication, Shopify import, bulk outreach, automated follow-up, attachments, rich-text email, or reply sync. Follow-ups are visible in the app, not emailed/pushed as reminders. Owner is a display field, not an access-control boundary; authorized CRM users share the pipeline.
 
@@ -35,8 +35,8 @@ The sender reviewed in the composer must match the connected account at send tim
 2. Select the intended database explicitly. Run the existing `npm run db:migrate` release step with the migration credential. It adds `crm_opportunities`, `crm_activity`, and `crm_emails`, their indexes, and runtime grants. Request handlers never perform DDL. Do not point the local preview script at a real database.
 3. Verify the production database backup/PITR retention and perform a restore rehearsal into an isolated database. CSV is an operational export, not a complete backup of history or emails.
 4. Verify the existing Google client/callback/encryption configuration for the production domain, Gmail API activation, and the appropriate Google internal-use/verification configuration. Roy connects his own Google account; no one enters his password or tokens into Campfire.
-5. An administrator assigns Roy the Sales role using his confirmed Campfire account. No user invitation or role change is performed by this implementation.
-6. In the deployed environment, verify Roy's access and that unrelated users are denied, confirm the sender, and send one explicitly approved test message to an internal address. Check Sent and the CRM activity. Test reconnect and uncertain-state instructions.
+5. Keep CRM restricted to the owner for now. Roy must not receive access until the owner explicitly authorizes a later rollout and its access policy is updated.
+6. In the deployed environment, verify the owner's access and that unrelated users are denied, confirm the sender, and send one explicitly approved test message to an internal address. Check Sent and the CRM activity. Test reconnect and uncertain-state instructions.
 7. Pilot with a small set of real opportunities. Confirm save reliability, follow-up usability, exports, and archive/restore before adopting as the sole system. Assign an operational owner for errors, database capacity, and connection support.
 
 ## Verification

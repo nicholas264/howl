@@ -22,7 +22,7 @@ globalThis.fetch=async()=>{throw new Error('External requests are disabled in th
 const directory=await mkdtemp(join(tmpdir(),'campfire-crm-preview-'));
 const db=new PGlite(directory);useTestDatabase(db);const sql=neon(process.env.DATABASE_URL);
 await initializeSchema(sql);await ensureCrm(sql);await ensureGoogleOAuthTables(sql);await ensureLaunchDrafts(sql);
-const authorize=async()=>({sql,userId:'local-dev',role:'sales',permissions:ROLE_PERMISSIONS.sales});
+const authorize=async()=>({sql,userId:'local-dev',role:'owner',permissions:ROLE_PERMISSIONS.owner});
 const crm=createCrmHandler({authorize});
 for(const [company,title,stage,value,nextAction] of [['Sample Outdoor Co.','Opening assortment','new',2400,'Introduce the HOWL lineup'],['Sample Trail Supply','Fall restock','contacted',5600,'Call the store buyer'],['Sample Camp Store','Holiday floor display','qualified',8200,'Confirm display space'],['Sample Outfitters','Three-store rollout','proposal',12500,'Review the proposal'],['Sample Basecamp','First order','won',3600,'']]) {
  const id=randomUUID();await crm({method:'POST',body:{action:'create',id,requestId:randomUUID(),data:{company,title,stage,value,nextAction,owner:'Roy',followUp:stage==='won'?'':'2026-09-24',closeDate:'',contacts:[{name:'Sample buyer',email:'buyer@example.com',phone:''}],notes:'Synthetic preview record.'}}},{setHeader(){},status(){return this;},json(){}});

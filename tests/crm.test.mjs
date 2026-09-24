@@ -14,7 +14,7 @@ const values={title:'Opening order',company:'Test retailer',stage:'new',value:24
 const message={to:'buyer@example.com',subject:'Opening assortment',body:'Hello — here are the details.\nThanks!'};
 const response=()=>({statusCode:200,headers:{},setHeader(k,v){this.headers[k]=v;},status(code){this.statusCode=code;return this;},json(body){this.body=body;return this;}});
 async function call(handler,body,query){const r=response();await handler({method:body?'POST':'GET',body,query},r);return r;}
-async function fixture(work){const db=new PGlite();const restore=useTestDatabase(db);const sql=neon('postgres://test:test@localhost/test');await ensureCrm(sql);let actor='roy';const authorize=async(_req,_res,permission)=>({sql,userId:actor,permissions:ROLE_PERMISSIONS.sales});const crm=createCrmHandler({authorize});const id=randomUUID();const created=await call(crm,{action:'create',id,requestId:randomUUID(),data:values});assert.equal(created.statusCode,200,JSON.stringify(created.body));try{await work({db,sql,authorize,crm,id,actor:v=>{actor=v;}});}finally{restore();await db.close();}}
+async function fixture(work){const db=new PGlite();const restore=useTestDatabase(db);const sql=neon('postgres://test:test@localhost/test');await ensureCrm(sql);let actor='roy';const authorize=async(_req,_res,permission)=>({sql,userId:actor,role:"owner",permissions:ROLE_PERMISSIONS.owner});const crm=createCrmHandler({authorize});const id=randomUUID();const created=await call(crm,{action:'create',id,requestId:randomUUID(),data:values});assert.equal(created.statusCode,200,JSON.stringify(created.body));try{await work({db,sql,authorize,crm,id,actor:v=>{actor=v;}});}finally{restore();await db.close();}}
 const connection={google_email:'roy@example.com',scopes:['https://www.googleapis.com/auth/gmail.send']};
 function mailHandler(authorize,fetchImpl,getToken=async()=>'test-only-token'){return createCrmEmailHandler({authorize,fetchImpl,getToken,getConnection:async()=>connection});}
 async function draft(handler,opportunityId,data=message){const id=randomUUID();const r=await call(handler,{action:'save',id,opportunityId,revision:0,data});assert.equal(r.statusCode,200,JSON.stringify(r.body));return r.body.email;}
@@ -28,10 +28,15 @@ test('validation requires next actions; rejects invalid dates, values, contact d
   const mime=gmailMime(message,randomUUID());assert.match(mime,/Content-Transfer-Encoding: base64/);assert.match(mime,/Subject: =\?UTF-8\?B\?/);
   assert.equal(hash({b:1,a:2}),hash({a:2,b:1}));
 });
-test('sales access is narrowly scoped and Gmail return routing requests CRM',()=>{
+test('CRM permissions are owner-only and Gmail return routing requests CRM',()=>{
   assert.deepEqual(ROLE_PERMISSIONS.sales,['crm.read','crm.write','crm.send']);
   assert.equal(hasPermission({permissions:ROLE_PERMISSIONS.viewer},'crm.read'),false);
-  assert.equal(hasPermission({permissions:ROLE_PERMISSIONS.admin},'crm.send'),true);
+  for(const role of Object.keys(ROLE_PERMISSIONS)){
+    for(const permission of ['crm.read','crm.write','crm.send']){
+      assert.equal(hasPermission({role,permissions:ROLE_PERMISSIONS[role]},permission),role==='owner');
+      assert.equal(hasPermission({role,permissions:['*']},permission),role==='owner');
+    }
+  }
   assert.equal(canSendGmail(connection),true);assert.equal(canSendGmail({...connection,scopes:[]}),false);
   assert.equal(googleReturnPath('crm_email'),'/?tab=crm&gmail_connected=1');
 });
@@ -116,3 +121,14 @@ test('sending requires the exact Gmail account the user reviewed',()=>fixture(as
   let sends=0;const handler=mailHandler(authorize,async()=>{sends++;return Response.json({id:'wrong'});});const d=await draft(handler,id);
   const r=await call(handler,{action:'send',sender:'someone-else@example.com',id:d.id,opportunityId:id,revision:1});assert.equal(r.statusCode,409);assert.equal(sends,0);
 }));
+
+ test('all non-owner roles are denied CRM APIs even with wildcard grants',async()=>{
+  for(const role of [...Object.keys(ROLE_PERMISSIONS).filter(r=>r!=='owner'),undefined]){
+    const forbidden=()=>{throw Error('Non-owner must not access storage or Google');};
+    const authorize=async()=>({role,permissions:['*','crm.read','crm.write','crm.send'],sql:forbidden,userId:'other'});
+    for(const handler of [createCrmHandler({authorize}),createCrmEmailHandler({authorize,getConnection:forbidden,getToken:forbidden,fetchImpl:forbidden})]){
+      assert.equal((await call(handler)).statusCode,403);
+      assert.equal((await call(handler,{action:'send'})).statusCode,403);
+    }
+  }
+});

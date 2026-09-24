@@ -1,3 +1,4 @@
+import { canAccessCrm } from './lib/crm-access.js';
 import { canAccessFinance } from './lib/finance.js';
 import { canAccessOrganization } from './lib/organization.js';
 import { canAccessCoo } from './lib/coo-access.js';
@@ -52,7 +53,7 @@ export default function HowlAdEngine({ appAccess }) {
   const driveAuth = useDriveAuth({ enabled: appAccess.permissions?.includes('*') || appAccess.permissions?.includes('assets.write') });
   const initialTab = useMemo(() => {
     try {
-      return new URLSearchParams(window.location.search).get('tab') || (appAccess.role === 'sales' ? 'crm' : 'welcome');
+      return new URLSearchParams(window.location.search).get('tab') || 'welcome';
     } catch {
       return 'welcome';
     }
@@ -77,8 +78,8 @@ export default function HowlAdEngine({ appAccess }) {
     catch { return []; }
   });
   const can = useCallback((permission) => (
-    appAccess.permissions?.includes('*') || appAccess.permissions?.includes(permission)
-  ), [appAccess.permissions]);
+    (!permission?.startsWith('crm.') || canAccessCrm(appAccess)) && (appAccess.permissions?.includes('*') || appAccess.permissions?.includes(permission))
+  ), [appAccess.permissions, appAccess.role]);
 
   // Shared durable drafts; revision conflicts are surfaced instead of overwritten.
   const [cart, setCart] = useState([]);
@@ -421,7 +422,7 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "review" && <ReviewAdTool driveAuth={driveAuth} onAddToCart={addToCart} />}
         {activeTab === "video" && <VideoAdTool initialText={videoText} onTextConsumed={() => setVideoText(null)} onAddToCart={addToCart} />}
         {activeTab === "gallery" && <GalleryTab cart={cart} />}
-        {activeTab === 'crm' && <CrmWorkspace connectionError={driveAuth.connectionError} />}
+        {activeTab === 'crm' && canAccessCrm(appAccess) && <CrmWorkspace connectionError={driveAuth.connectionError} />}
         {activeTab === "dashboard-dealers" && <DealerDashboard setActiveTab={navigate} />}
         {activeTab === "finance" && canAccessFinance(appAccess) && <FinanceWorkspace />}
         {activeTab === "organization" && canAccessOrganization(appAccess) && <OrganizationWorkspace />}

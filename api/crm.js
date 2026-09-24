@@ -1,3 +1,4 @@
+import { canAccessCrm } from '../src/lib/crm-access.js';
 import { randomUUID } from 'node:crypto';
 import { requirePermission, hasPermission } from './_lib/app-access.js';
 import { opportunityData, crmError, uuid, hash, text } from './_lib/crm.js';
@@ -7,6 +8,7 @@ export function createCrmHandler({authorize=requirePermission}={}) {
     res.setHeader('Cache-Control','private, no-store');
     if(!['GET','POST'].includes(req.method))return res.status(405).json({error:'Method not allowed'});
     const access=await authorize(req,res,req.method==='GET'?'crm.read':'crm.write');if(!access)return;
+    if(!canAccessCrm(access))return res.status(403).json({error:'CRM is currently restricted to the workspace owner.'});
     const {sql,userId}=access;
     try {
       if(req.method==='GET') {

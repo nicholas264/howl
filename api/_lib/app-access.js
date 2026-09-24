@@ -1,3 +1,4 @@
+import { canAccessCrm } from '../../src/lib/crm-access.js';
 import { neon } from '@neondatabase/serverless';
 import { requireAuth } from './auth.js';
 
@@ -42,6 +43,7 @@ export function isValidRole(role) {
 }
 
 export function hasPermission(access, permission) {
+  if (permission?.startsWith('crm.') && !canAccessCrm(access)) return false;
   return access?.permissions?.includes('*') || access?.permissions?.includes(permission);
 }
 

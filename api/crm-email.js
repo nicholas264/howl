@@ -1,3 +1,4 @@
+import { canAccessCrm } from '../src/lib/crm-access.js';
 import { randomUUID } from 'node:crypto';
 import { requirePermission } from './_lib/app-access.js';
 import { getGoogleConnection, getUserGoogleAccessToken } from './_lib/google-user-oauth.js';
@@ -12,6 +13,7 @@ export function createCrmEmailHandler({authorize=requirePermission,getConnection
     res.setHeader('Cache-Control','private, no-store');
     if(!['GET','POST'].includes(req.method))return res.status(405).json({error:'Method not allowed'});
     const access=await authorize(req,res,req.method==='GET'?'crm.read':'crm.send');if(!access)return;
+    if(!canAccessCrm(access))return res.status(403).json({error:'CRM is currently restricted to the workspace owner.'});
     const {sql,userId}=access;
     try {
       if(req.method==='GET') {
