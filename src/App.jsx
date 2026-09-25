@@ -215,7 +215,7 @@ export default function HowlAdEngine({ appAccess }) {
 
   const NAV_SECTIONS = [
     { label: 'Sales', items: [{ key: 'crm', label: 'CRM', permission: 'crm.read' }] },
-    { label: 'Company', items: [{ key: 'coo', label: 'COO Workspace', permission: 'analytics.read', ownerOnly: true }, { key: 'finance', label: 'Financials', permission: 'analytics.read', ownerOnly: true }, { key: 'organization', label: 'Organization chart', permission: 'admin.users', ownerOnly: true }] },
+    { label: 'Company', items: [{ key: 'coo', label: 'COO Workspace', permission: 'analytics.read', ownerOnly: true }, { key: 'finance', label: 'Financials', permission: 'analytics.read', ownerOnly: true }, { key: 'organization', label: 'Organizational Chart', permission: 'admin.users', ownerOnly: true }] },
     {
       label: 'Policy',
       items: [
