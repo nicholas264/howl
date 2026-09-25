@@ -5,13 +5,13 @@ import {PGlite} from '@electric-sql/pglite';
 import {neon} from '@neondatabase/serverless';
 import {useTestDatabase} from './neon-test-adapter.mjs';
 import {ensureCrm} from '../api/_lib/crm.js';
-import {ensureDealerIntake,intakeData,nextBusinessDay} from '../api/_lib/dealer-intake.js';
+import {ensureDealerIntake,intakeData,intakeOpportunity,nextBusinessDay} from '../api/_lib/dealer-intake.js';
 import {createDealerIntakeHandler} from '../api/dealer-intake.js';
 const input={firstName:'Jane',lastName:'Buyer',email:'BUYER@example.com',phone:'555-0100',company:'Example Outdoor',website:'example.com',address:'100 Example Street',message:'We sell outdoor equipment.',requestId:randomUUID()};
 const response=()=>({statusCode:200,headers:{},setHeader(k,v){this.headers[k]=v;},status(v){this.statusCode=v;return this;},json(v){this.body=v;return this;},end(){return this;}});
 async function call(handler,body=input,headers={},method='POST'){const res=response();await handler({method,body,headers:{origin:'https://welcometothecampfire.io','content-type':'application/json',...headers}},res);return res;}
 test('dealer form validation preserves fields and enforces bounded safe input',()=>{
- assert.equal(intakeData(input).email,'buyer@example.com');assert.equal(intakeData(input).website,'https://example.com/');
+ assert.equal(intakeData(input).email,'buyer@example.com');assert.equal(intakeOpportunity(intakeData(input)).title,input.company);assert.equal(intakeOpportunity(intakeData(input)).company,input.company);assert.equal(intakeData(input).website,'https://example.com/');
  for(const extra of [{firstName:''},{email:'invalid'},{company:'x'.repeat(201)},{message:''},{website:'javascript:alert(1)'},{website:'https://user:secret@example.com'},{phone:null}])assert.throws(()=>intakeData({...input,...extra}));
  assert.equal(nextBusinessDay(new Date('2026-09-25T17:00:00Z')),'2026-09-28');
  assert.equal(nextBusinessDay(new Date('2026-09-26T02:00:00Z')),'2026-09-28');

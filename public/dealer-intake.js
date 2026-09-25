@@ -28,7 +28,7 @@
    try{
     const response=await fetch(api,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'omit',body:JSON.stringify({...data,requestId}),signal:AbortSignal.timeout(25000)});
     const result=await response.json();if(!response.ok||result.ok!==true)throw new Error(result.error||'We could not confirm your inquiry. Please try again.');
-    form.hidden=true;success.hidden=false;success.focus();
+    form.hidden=true;document.querySelectorAll('[data-dealer-intake-intro]').forEach(intro=>{intro.hidden=true;});document.title='Thank you | HOWL Campfires';success.hidden=false;success.focus();
    }catch(e){error.textContent=e.name==='TimeoutError'||e.name==='TypeError'?'We could not confirm your inquiry. Your details are still here. Please try again; repeat submissions will not create duplicate inquiries.':e.message;error.hidden=false;}
    finally{busy=false;fieldset.disabled=false;button.textContent='Send dealer inquiry';}
   });

@@ -10,7 +10,7 @@ export function nextBusinessDay(now=new Date()) {
   const date=new Date(`${today}T12:00:00Z`);do{date.setUTCDate(date.getUTCDate()+1);}while([0,6].includes(date.getUTCDay()));return date.toISOString().slice(0,10);
 }
 export function intakeOpportunity(data,now) {
-  return opportunityData({title:'Dealer inquiry',company:data.company,stage:'new',value:0,owner:'Nicholas',nextAction:'Review dealer inquiry and contact the buyer',followUp:nextBusinessDay(now),closeDate:'',contacts:[{name:`${data.firstName} ${data.lastName}`,email:data.email,phone:data.phone}],notes:[`Campfire dealer inquiry`,`Source: https://welcometothecampfire.io/dealer-intake`,data.website&&`Website: ${data.website}`,data.address&&`Address: ${data.address}`,'',data.message].filter(v=>v!==false).join('\n')});
+  return opportunityData({title:data.company,company:data.company,stage:'new',value:0,owner:'Nicholas',nextAction:'Review dealer inquiry and contact the buyer',followUp:nextBusinessDay(now),closeDate:'',contacts:[{name:`${data.firstName} ${data.lastName}`,email:data.email,phone:data.phone}],notes:[`Campfire dealer inquiry`,`Source: https://welcometothecampfire.io/dealer-intake`,data.website&&`Website: ${data.website}`,data.address&&`Address: ${data.address}`,'',data.message].filter(v=>v!==false).join('\n')});
 }
 export async function ensureDealerIntake(sql) {
   await sql`CREATE TABLE IF NOT EXISTS crm_intake_submissions (id UUID PRIMARY KEY, fingerprint TEXT NOT NULL UNIQUE, opportunity_id UUID NOT NULL UNIQUE REFERENCES crm_opportunities(id) DEFERRABLE INITIALLY DEFERRED, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
