@@ -7,17 +7,6 @@ const EMPTY_QUALIFICATION = {
   name: '', email: '', location: '', niche: '', strengths: '',
   product_type: '', audience_description: '', audience_psychographics: '', rate_expectations: '', activities: '', fit_notes: '',
 };
-const EMPTY_SCORECARD = {
-  brand_fit: '', creative_quality: '', audience_fit: '', reliability: '', economics: '',
-  recommendation: '', rationale: '',
-};
-const SCORE_SIGNALS = [
-  ['brand_fit', 'Brand fit'],
-  ['creative_quality', 'Creative'],
-  ['audience_fit', 'Audience'],
-  ['reliability', 'Production'],
-  ['economics', 'Economics'],
-];
 const PRODUCT_TYPE_OPTIONS = ['R1', 'R3', 'R4 MKii', 'R1 HaulBag', 'R3 HaulBag', 'Accessory', 'No product needed'];
 
 function denialTemplate(record = {}) {
@@ -51,57 +40,12 @@ function socialUrl(account) {
   return null;
 }
 
-function readiness(record) {
-  const social = socialLine(record);
-  const checks = record.application_code ? [
-    ['Identity', record.name],
-    ['Contact', record.email],
-    ['Social profile', social?.handle],
-    ['Product', record.product_type],
-    ['Rates', record.rate_expectations],
-    ['Turnaround', record.availability],
-    ['Product terms', record.open_to_product_for_content !== null && record.open_to_product_for_content !== undefined],
-    ['Whitelisting', record.open_to_whitelisting !== null && record.open_to_whitelisting !== undefined],
-  ] : [
-    ['Identity', record.name],
-    ['Contact', record.email],
-    ['Social profile', social?.handle],
-    ['Niche', record.niche],
-    ['Product', record.product_type],
-    ['Strengths', record.strengths],
-    ['Audience', record.audience_description],
-    ['Audience mindset', record.audience_psychographics],
-    ['Rates', record.rate_expectations],
-    ['Proof of work', record.sample_urls?.length || record.creator_experience || record.enrichment?.biography],
-  ];
-  const complete = checks.filter(([, value]) => Boolean(value)).length;
-  return {
-    score: Math.round((complete / checks.length) * 100),
-    missing: checks.filter(([, value]) => !value).map(([label]) => label),
-  };
-}
-
-function fitAssessment(record) {
-  const scorecard = record.review_scorecard || {};
-  const scores = SCORE_SIGNALS.map(([key]) => Number(scorecard[key]))
-    .filter(score => score >= 1 && score <= 5);
-  return {
-    overall: scores.length
-      ? Math.round((scores.reduce((sum, score) => sum + score, 0) / (scores.length * 5)) * 100)
-      : 0,
-    complete: scores.length === SCORE_SIGNALS.length,
-    recommendation: scorecard.recommendation || '',
-  };
-}
-
 function AvatarFallback({ src, name }) {
   return <CreatorAvatarImage src={src}>{(name || '?').slice(0, 1)}</CreatorAvatarImage>;
 }
 
 function CandidateCard({ record, type, selected, onSelect }) {
   const social = socialLine(record);
-  const quality = readiness(record);
-  const fit = fitAssessment(record);
   return (
     <button type="button" className={`talent-card ${selected ? 'selected' : ''}`} onClick={() => onSelect(record)}>
       <span className="talent-avatar">
@@ -109,7 +53,7 @@ function CandidateCard({ record, type, selected, onSelect }) {
       </span>
       <span>
         <strong>{record.name || social?.handle || 'Unnamed prospect'}</strong>
-        <small>{type === 'application' ? record.application_code : record.source?.replaceAll('_', ' ')} · {fit.complete ? `${fit.overall}% fit` : `${quality.score}% ready`}</small>
+        <small>{type === 'application' ? record.application_code : record.source?.replaceAll('_', ' ')}</small>
       </span>
       <span className={`talent-status status-${record.status}`}>{record.status}</span>
       <span className="talent-reach">{social?.followers ? compact.format(Number(social.followers)) : '—'}<small>{social?.handle ? `@${social.handle.replace(/^@/, '')}` : 'followers'}</small></span>
@@ -126,7 +70,6 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
   const [discover, setDiscover] = useState({ handle: '', niche: '', fit_notes: '' });
   const [notes, setNotes] = useState('');
   const [qualification, setQualification] = useState(EMPTY_QUALIFICATION);
-  const [scorecard, setScorecard] = useState(EMPTY_SCORECARD);
   const [denialEmail, setDenialEmail] = useState(() => denialTemplate());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -157,7 +100,6 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
     setSelected(null);
     setNotes('');
     setQualification(EMPTY_QUALIFICATION);
-    setScorecard(EMPTY_SCORECARD);
     setDenialEmail(denialTemplate());
     setSearch('');
     setQueueFilter('active');
@@ -177,35 +119,22 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
       activities: Array.isArray(selected.activities) ? selected.activities.join(', ') : '',
       fit_notes: selected.fit_notes || '',
     });
-    setScorecard({ ...EMPTY_SCORECARD, ...(selected.review_scorecard || {}) });
     setDenialEmail(denialTemplate(selected));
   }, [selected?.id]);
 
   const records = mode === 'applications' ? data.applications : data.candidates;
-  const draftFit = fitAssessment({ review_scorecard: scorecard });
-  const canPromote = draftFit.complete && ['strong_fit', 'potential'].includes(scorecard.recommendation);
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return records.filter(item => {
-      const quality = readiness(item);
-      const fit = fitAssessment(item);
       const active = !['approved', 'declined', 'denied', 'archived'].includes(item.status);
       const filterMatch = queueFilter === 'all'
         || (queueFilter === 'active' && active)
-        || item.status === queueFilter
-        || (queueFilter === 'ready' && active && quality.score >= 75)
-        || (queueFilter === 'high_fit' && active && fit.complete && fit.overall >= 80);
+        || item.status === queueFilter;
       if (!filterMatch) return false;
       if (!needle) return true;
       const social = socialLine(item);
       return [item.name, item.email, item.location, item.niche, item.product_type, social?.handle]
         .some(value => value?.toLowerCase().includes(needle));
-    }).sort((left, right) => {
-      const leftFit = fitAssessment(left);
-      const rightFit = fitAssessment(right);
-      if (rightFit.complete !== leftFit.complete) return Number(rightFit.complete) - Number(leftFit.complete);
-      if (rightFit.overall !== leftFit.overall) return rightFit.overall - leftFit.overall;
-      return readiness(right).score - readiness(left).score;
     });
   }, [records, queueFilter, search]);
 
@@ -214,11 +143,6 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
     return {
       active: active.length,
       new: active.filter(item => item.status === 'new').length,
-      ready: active.filter(item => readiness(item).score >= 75).length,
-      highFit: active.filter(item => {
-        const fit = fitAssessment(item);
-        return fit.complete && fit.overall >= 80;
-      }).length,
       needsEnrichment: mode === 'applications'
         ? Number(data.counts?.applications_needing_enrichment || 0)
         : active.filter(item => !item.enrichment?.instagram_enriched_at && socialLine(item)?.platform === 'instagram').length,
@@ -283,7 +207,6 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
           id: selected.id,
           status,
           review_notes: notes || selected.review_notes,
-          review_scorecard: scorecard,
           ...qualification,
         }),
       });
@@ -297,7 +220,7 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
     }
   };
 
-  const denyApplication = async (sendEmail = true) => {
+  const denyApplication = async () => {
     if (!selected) return;
     setSaving(true);
     setError('');
@@ -311,17 +234,16 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
           type: 'application',
           id: selected.id,
           status: 'denied',
-          send_email: sendEmail,
+          send_email: true,
           denial_subject: denialEmail.subject,
           denial_body: denialEmail.body,
           review_notes: notes || selected.review_notes,
-          review_scorecard: scorecard,
           ...qualification,
         }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Could not deny application');
-      setNotice(sendEmail ? `Denied and emailed ${result.email?.to || qualification.email}.` : 'Application marked denied.');
+      setNotice(`Denied and emailed ${result.email?.to || qualification.email}.`);
       await load();
     } catch (err) {
       setError(err.message);
@@ -368,12 +290,13 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
           type: mode === 'applications' ? 'application' : 'candidate',
           id: selected.id,
           review_notes: notes || selected.review_notes,
-          review_scorecard: scorecard,
           ...qualification,
         }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Could not promote creator');
+      setNotice(`${result.creator.name} promoted to pipeline.`);
+      await load();
       onPromoted?.(result.creator);
     } catch (err) {
       setError(err.message);
@@ -403,8 +326,6 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
         <div><span>In review</span><strong>{queueSummary.active}</strong><small>new and reviewing</small></div>
         <div><span>New</span><strong>{queueSummary.new}</strong><small>untouched records</small></div>
         <div className={queueSummary.needsEnrichment ? 'attention' : ''}><span>Needs enrichment</span><strong>{queueSummary.needsEnrichment}</strong><small>Instagram data missing</small></div>
-        <div className={queueSummary.ready ? 'ready' : ''}><span>Ready to decide</span><strong>{queueSummary.ready}</strong><small>75%+ profile readiness</small></div>
-        <div className={queueSummary.highFit ? 'strong' : ''}><span>High fit</span><strong>{queueSummary.highFit}</strong><small>fully scored at 80%+</small></div>
       </div>
 
       <div className="talent-queue-tools">
@@ -415,8 +336,6 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
             ['new', 'New'],
             ['reviewing', 'Reviewing'],
             ['denied', 'Denied'],
-            ['ready', 'Ready'],
-            ['high_fit', 'High fit'],
             ['all', 'All'],
           ].map(([key, label]) => (
             <button key={key} className={queueFilter === key ? 'active' : ''} onClick={() => setQueueFilter(key)}>{label}</button>
@@ -473,38 +392,27 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
             <span className="workspace-kicker">{mode === 'applications' ? 'Creator application' : 'Discovery profile'}</span>
             <h2>{selected.name || socialLine(selected)?.handle}</h2>
             <p>{selected.location || selected.email || selected.source?.replaceAll('_', ' ')}</p>
-            {(() => {
-              const quality = readiness(selected);
-              return (
-                <div className="talent-readiness">
-                  <div>
-                    <span>Profile readiness</span>
-                    <strong>{quality.score}%</strong>
-                  </div>
-                  <i><b style={{ width: `${quality.score}%` }} /></i>
-                  <small>{quality.missing.length ? `Missing: ${quality.missing.join(', ')}` : 'Ready for a grounded brief and outreach.'}</small>
-                </div>
-              );
-            })()}
+            {canManage && (
+              <div className="talent-actions">
+                {mode === 'applications' ? (
+                  <button
+                    type="button"
+                    onClick={denyApplication}
+                    disabled={saving || !(qualification.email || selected.email) || !denialEmail.subject.trim() || !denialEmail.body.trim()}
+                  >
+                    Deny and send email
+                  </button>
+                ) : <button type="button" onClick={() => update('denied')} disabled={saving}>Deny</button>}
+                <button type="button" className="primary-action" onClick={promote} disabled={saving}>
+                  Promote to pipeline
+                </button>
+              </div>
+            )}
             <div className="talent-detail-stats">
               <div><span>Audience</span><strong>{socialLine(selected)?.followers ? compact.format(Number(socialLine(selected).followers)) : '—'}</strong></div>
               <div><span>Engagement</span><strong>{socialLine(selected)?.engagement_rate ? `${Number(socialLine(selected).engagement_rate).toFixed(1)}%` : '—'}</strong></div>
               <div><span>Status</span><strong>{selected.status}</strong></div>
             </div>
-            {(() => {
-              const fit = fitAssessment(selected);
-              return (
-                <section className={`talent-fit-summary ${fit.complete ? 'complete' : ''}`}>
-                  <div>
-                    <span>Reviewer fit</span>
-                    <strong>{fit.complete ? `${fit.overall}%` : 'Unscored'}</strong>
-                  </div>
-                  <small>{fit.recommendation
-                    ? fit.recommendation.replace('_', ' ')
-                    : 'Complete the five-signal review before making a final decision.'}</small>
-                </section>
-              );
-            })()}
             <dl className="talent-facts">
               <div><dt>Niche</dt><dd>{selected.niche || 'Not provided'}</dd></div>
               <div><dt>Product</dt><dd>{selected.product_type || 'Not provided'}</dd></div>
@@ -537,8 +445,8 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
             )}
             {canManage && (
               <>
-                <details className="talent-qualification" defaultOpen={readiness(selected).score < 75}>
-                  <summary>Qualification details</summary>
+                <details className="talent-qualification">
+                  <summary>Edit profile (optional)</summary>
                   <div>
                     <label>Name<input value={qualification.name} onChange={event => setQualification({ ...qualification, name: event.target.value })} /></label>
                     <label>Email<input type="email" value={qualification.email} onChange={event => setQualification({ ...qualification, email: event.target.value })} /></label>
@@ -552,7 +460,7 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
                     <label className="wide">Rate expectations<input value={qualification.rate_expectations} onChange={event => setQualification({ ...qualification, rate_expectations: event.target.value })} /></label>
                     {mode === 'discovery' && <label className="wide">Scout note<textarea rows="2" value={qualification.fit_notes} onChange={event => setQualification({ ...qualification, fit_notes: event.target.value })} /></label>}
                   </div>
-                  <button onClick={() => update('reviewing')} disabled={saving}>Save qualification</button>
+                  <button onClick={() => update('reviewing')} disabled={saving}>Save profile</button>
                 </details>
                 {socialLine(selected)?.platform === 'instagram' && (
                   <button className="talent-enrich" onClick={enrichInstagram} disabled={saving}>
@@ -560,39 +468,10 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
                     <small>Followers, engagement, bio, recent media</small>
                   </button>
                 )}
-                <section className="talent-scorecard">
-                  <header>
-                    <span>Fit scorecard</span>
-                    <small>1 weak · 5 exceptional</small>
-                  </header>
-                  <div>
-                    {SCORE_SIGNALS.map(([key, label]) => (
-                      <label key={key}>
-                        <span>{label}</span>
-                        <select value={scorecard[key]} onChange={event => setScorecard(current => ({ ...current, [key]: event.target.value }))}>
-                          <option value="">—</option>
-                          {[1, 2, 3, 4, 5].map(score => <option key={score} value={score}>{score}</option>)}
-                        </select>
-                      </label>
-                    ))}
-                  </div>
-                  <label>
-                    Recommendation
-                    <select value={scorecard.recommendation} onChange={event => setScorecard(current => ({ ...current, recommendation: event.target.value }))}>
-                      <option value="">Select</option>
-                      <option value="strong_fit">Strong fit</option>
-                      <option value="potential">Potential</option>
-                      <option value="pass">Pass</option>
-                    </select>
-                  </label>
-                  <label>
-                    Decision rationale
-                    <textarea rows="3" value={scorecard.rationale} onChange={event => setScorecard(current => ({ ...current, rationale: event.target.value }))} placeholder="What makes this creator right or wrong for HOWL?" />
-                  </label>
-                </section>
-                <label className="talent-notes">Internal review note<textarea rows="4" value={notes} onChange={event => setNotes(event.target.value)} /></label>
+                <label className="talent-notes">Internal note (optional)<textarea rows="4" value={notes} onChange={event => setNotes(event.target.value)} /></label>
                 {mode === 'applications' && (
-                  <section className="talent-denial">
+                  <details className="talent-denial">
+                    <summary>Preview or edit denial email</summary>
                     <header>
                       <span>Denial email</span>
                       <small>{qualification.email || selected.email || 'Email required'}</small>
@@ -608,31 +487,8 @@ export default function CreatorAcquisitionWorkspace({ canManage = false, onPromo
                     {selected.enrichment?.denial?.status === 'sent' && (
                       <small className="denial-sent-note">Denial sent to {selected.enrichment.denial.to || selected.email}.</small>
                     )}
-                    <div>
-                      <button type="button" onClick={() => denyApplication(false)} disabled={saving}>Mark denied only</button>
-                      <button
-                        type="button"
-                        className="primary-action"
-                        onClick={() => denyApplication(true)}
-                        disabled={saving || !(qualification.email || selected.email) || !denialEmail.subject.trim() || !denialEmail.body.trim()}
-                      >
-                        Deny + send email
-                      </button>
-                    </div>
-                  </section>
+                  </details>
                 )}
-                <div className="talent-actions">
-                  {mode !== 'applications' && <button onClick={() => update('denied')} disabled={saving}>Deny</button>}
-                  <button onClick={() => update('reviewing')} disabled={saving}>Keep reviewing</button>
-                  <button
-                    className="primary-action"
-                    onClick={promote}
-                    disabled={saving || !canPromote}
-                    title={!canPromote ? 'Complete the scorecard with a Strong fit or Potential recommendation first' : ''}
-                  >
-                    Promote to pipeline
-                  </button>
-                </div>
               </>
             )}
           </aside>
