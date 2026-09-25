@@ -7,22 +7,22 @@ const S = {
   wrap: { padding: '28px 36px', maxWidth: 1400 },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 },
   filters: { display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' },
-  input: { background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', minWidth: 180 },
-  select: { background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, cursor: 'pointer' },
-  ghostBtn: { padding: '8px 14px', background: 'none', border: '1px solid #dedbd3', color: '#77746f', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 },
+  input: { background: 'var(--ui-soft, #f4f1ea)', border: '1px solid var(--ui-border, #dedbd3)', color: 'var(--ui-ink, #171717)', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', minWidth: 180 },
+  select: { background: 'var(--ui-soft, #f4f1ea)', border: '1px solid var(--ui-border, #dedbd3)', color: 'var(--ui-ink, #171717)', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, cursor: 'pointer' },
+  ghostBtn: { padding: '8px 14px', background: 'none', border: '1px solid var(--ui-border, #dedbd3)', color: 'var(--ui-muted, #77746f)', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 },
   table: { width: '100%', borderCollapse: 'collapse' },
-  th: { textAlign: 'left', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#88857f', fontWeight: 600, padding: '10px 12px', borderBottom: '1px solid #dedbd3' },
-  td: { fontSize: 11, color: '#343330', padding: '14px 12px', borderBottom: '1px solid #f4f1ea', verticalAlign: 'top' },
+  th: { textAlign: 'left', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ui-subtle, #88857f)', fontWeight: 600, padding: '10px 12px', borderBottom: '1px solid var(--ui-border, #dedbd3)' },
+  td: { fontSize: 11, color: '#343330', padding: '14px 12px', borderBottom: '1px solid var(--ui-soft, #f4f1ea)', verticalAlign: 'top' },
   mono: { fontFamily: "'JetBrains Mono', monospace" },
-  adName: { fontSize: 12, color: '#171717', fontWeight: 500, marginBottom: 3 },
-  creatorPill: { display: 'inline-block', padding: '2px 8px', borderRadius: 3, fontSize: 10, background: 'rgba(220,68,10,0.12)', color: '#d84a17', letterSpacing: 1, fontWeight: 600 },
-  sourceSub: { display: 'block', marginTop: 5, fontSize: 9, color: '#77746f', textTransform: 'capitalize' },
-  copy: { fontSize: 10, color: '#77746f', lineHeight: 1.5, maxWidth: 360 },
-  link: { fontSize: 10, color: '#77746f', letterSpacing: 1.5, textTransform: 'uppercase', textDecoration: 'none', borderBottom: '1px dashed #dedbd3' },
-  empty: { border: '2px dashed #dedbd3', borderRadius: 6, padding: '72px 32px', textAlign: 'center', color: '#88857f' },
-  stat: { border: '1px solid #dedbd3', borderRadius: 6, padding: '14px 18px', background: '#fff', minWidth: 140 },
-  statLabel: { fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', marginBottom: 4 },
-  statVal: { fontSize: 22, color: '#171717' },
+  adName: { fontSize: 12, color: 'var(--ui-ink, #171717)', fontWeight: 500, marginBottom: 3 },
+  creatorPill: { display: 'inline-block', padding: '2px 8px', borderRadius: 3, fontSize: 10, background: 'rgba(220,68,10,0.12)', color: 'var(--ui-accent, #d84a17)', letterSpacing: 1, fontWeight: 600 },
+  sourceSub: { display: 'block', marginTop: 5, fontSize: 9, color: 'var(--ui-muted, #77746f)', textTransform: 'capitalize' },
+  copy: { fontSize: 10, color: 'var(--ui-muted, #77746f)', lineHeight: 1.5, maxWidth: 360 },
+  link: { fontSize: 10, color: 'var(--ui-muted, #77746f)', letterSpacing: 1.5, textTransform: 'uppercase', textDecoration: 'none', borderBottom: '1px dashed var(--ui-border, #dedbd3)' },
+  empty: { border: '2px dashed var(--ui-border, #dedbd3)', borderRadius: 6, padding: '72px 32px', textAlign: 'center', color: 'var(--ui-subtle, #88857f)' },
+  stat: { border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 6, padding: '14px 18px', background: '#fff', minWidth: 140 },
+  statLabel: { fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', marginBottom: 4 },
+  statVal: { fontSize: 22, color: 'var(--ui-ink, #171717)' },
 };
 
 function fmtDate(iso) {
@@ -113,8 +113,8 @@ export default function LaunchLogTool() {
       <div style={S.header}>
         <div>
           <div className="eyebrow" style={{ marginBottom: 6 }}>Insights</div>
-          <div className="display-lg" style={{ color: '#171717' }}>Launch Log</div>
-          <div className="display-italic" style={{ fontSize: 14, color: '#77746f', marginTop: 6 }}>
+          <div className="display-lg" style={{ color: 'var(--ui-ink, #171717)' }}>Launch Log</div>
+          <div className="display-italic" style={{ fontSize: 14, color: 'var(--ui-muted, #77746f)', marginTop: 6 }}>
             Every ad you've ever pushed, in the order it went out.
           </div>
         </div>
@@ -128,31 +128,31 @@ export default function LaunchLogTool() {
       <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
         <div style={S.stat}>
           <div style={S.statLabel}>Total launches</div>
-          <div className="display-md" style={{ color: '#171717' }}>{rows.length}</div>
+          <div className="display-md" style={{ color: 'var(--ui-ink, #171717)' }}>{rows.length}</div>
         </div>
         <div style={S.stat}>
           <div style={S.statLabel}>Last 24h</div>
-          <div className="display-md" style={{ color: '#171717' }}>{last24h}</div>
+          <div className="display-md" style={{ color: 'var(--ui-ink, #171717)' }}>{last24h}</div>
         </div>
         <div style={S.stat}>
           <div style={S.statLabel}>Last 7 days</div>
-          <div className="display-md" style={{ color: '#171717' }}>{last7d}</div>
+          <div className="display-md" style={{ color: 'var(--ui-ink, #171717)' }}>{last7d}</div>
         </div>
         <div style={S.stat}>
           <div style={S.statLabel}>Sources used</div>
-          <div className="display-md" style={{ color: '#171717' }}>{uniqueSources}</div>
+          <div className="display-md" style={{ color: 'var(--ui-ink, #171717)' }}>{uniqueSources}</div>
         </div>
         <div style={S.stat}>
           <div style={S.statLabel}>Creator UGC</div>
-          <div className="display-md" style={{ color: '#171717' }}>{creatorLaunches}</div>
+          <div className="display-md" style={{ color: 'var(--ui-ink, #171717)' }}>{creatorLaunches}</div>
         </div>
         <div style={S.stat}>
           <div style={S.statLabel}>Founder / internal</div>
-          <div className="display-md" style={{ color: '#171717' }}>{(sourceCounts.founder || 0) + (sourceCounts.internal_employee || 0)}</div>
+          <div className="display-md" style={{ color: 'var(--ui-ink, #171717)' }}>{(sourceCounts.founder || 0) + (sourceCounts.internal_employee || 0)}</div>
         </div>
         <div style={S.stat}>
           <div style={S.statLabel}>Needs source</div>
-          <div className="display-md" style={{ color: needsSourceCount ? '#b42318' : '#171717' }}>{needsSourceCount}</div>
+          <div className="display-md" style={{ color: needsSourceCount ? '#b42318' : 'var(--ui-ink, #171717)' }}>{needsSourceCount}</div>
         </div>
       </div>
 
@@ -179,14 +179,14 @@ export default function LaunchLogTool() {
           <option value="">All users</option>
           {users.map(u => <option key={u} value={u}>{u}</option>)}
         </select>
-        <span style={{ fontSize: 10, color: '#88857f', letterSpacing: 1.5 }}>
+        <span style={{ fontSize: 10, color: 'var(--ui-subtle, #88857f)', letterSpacing: 1.5 }}>
           {filtered.length} of {rows.length}
         </span>
       </div>
 
       {!loading && rows.length === 0 && (
         <div style={S.empty}>
-          <div className="display-lg" style={{ color: '#171717', marginBottom: 10 }}>Nothing launched yet.</div>
+          <div className="display-lg" style={{ color: 'var(--ui-ink, #171717)', marginBottom: 10 }}>Nothing launched yet.</div>
           <div className="display-italic" style={{ fontSize: 14, maxWidth: 400, margin: '0 auto' }}>
             Ads you push from the Launcher will appear here with full metadata — source, angle, copy used, timestamp.
           </div>
@@ -209,24 +209,24 @@ export default function LaunchLogTool() {
           <tbody>
             {filtered.map(r => (
               <tr key={r.id}>
-                <td style={{ ...S.td, ...S.mono, whiteSpace: 'nowrap', color: '#77746f' }}>{fmtDate(r.launched_at)}</td>
+                <td style={{ ...S.td, ...S.mono, whiteSpace: 'nowrap', color: 'var(--ui-muted, #77746f)' }}>{fmtDate(r.launched_at)}</td>
                 <td style={S.td}>
                   <div style={S.adName}>{r.ad_name}</div>
-                  <div style={{ ...S.mono, fontSize: 9, color: '#88857f' }}>{r.drive_file_name}</div>
+                  <div style={{ ...S.mono, fontSize: 9, color: 'var(--ui-subtle, #88857f)' }}>{r.drive_file_name}</div>
                 </td>
                 <td style={S.td}>
-                  {sourceLabel(r) ? <span style={S.creatorPill}>{sourceLabel(r)}</span> : <span style={{ color: '#88857f' }}>—</span>}
+                  {sourceLabel(r) ? <span style={S.creatorPill}>{sourceLabel(r)}</span> : <span style={{ color: 'var(--ui-subtle, #88857f)' }}>—</span>}
                   <span style={S.sourceSub}>{sourceTypeLabel(sourceTypeKey(r))}</span>
                 </td>
-                <td style={{ ...S.td, fontSize: 10, color: '#77746f' }}>
-                  {r.launched_by_email || <span style={{ color: '#88857f' }}>—</span>}
+                <td style={{ ...S.td, fontSize: 10, color: 'var(--ui-muted, #77746f)' }}>
+                  {r.launched_by_email || <span style={{ color: 'var(--ui-subtle, #88857f)' }}>—</span>}
                 </td>
-                <td style={{ ...S.td, fontSize: 10, color: '#77746f' }}>
+                <td style={{ ...S.td, fontSize: 10, color: 'var(--ui-muted, #77746f)' }}>
                   <div>{productName(r.product_id)}</div>
-                  <div style={{ color: '#88857f' }}>{angleName(r.angle_id)}</div>
+                  <div style={{ color: 'var(--ui-subtle, #88857f)' }}>{angleName(r.angle_id)}</div>
                 </td>
                 <td style={S.td}>
-                  {r.headline && <div style={{ fontSize: 11, color: '#171717', fontWeight: 500, marginBottom: 3 }}>{r.headline}</div>}
+                  {r.headline && <div style={{ fontSize: 11, color: 'var(--ui-ink, #171717)', fontWeight: 500, marginBottom: 3 }}>{r.headline}</div>}
                   {r.primary_text && <div style={S.copy}>{r.primary_text}</div>}
                 </td>
                 <td style={S.td}>
@@ -236,7 +236,7 @@ export default function LaunchLogTool() {
                   >
                     Open ↗
                   </a>
-                  <div style={{ ...S.mono, fontSize: 9, color: '#88857f', marginTop: 4 }}>{r.ad_id}</div>
+                  <div style={{ ...S.mono, fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 4 }}>{r.ad_id}</div>
                   <LaunchPacketDetails adId={r.ad_id} />
                 </td>
               </tr>

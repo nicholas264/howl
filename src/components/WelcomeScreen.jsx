@@ -199,47 +199,27 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
   };
 
   return (
-    <div style={{ padding: '60px 36px', maxWidth: 1100, margin: '0 auto' }}>
+    <div className="home-workspace">
       {/* Hero */}
-      <div style={{
-        position: 'relative',
-        border: '2px dashed #dedbd3',
-        borderRadius: 12,
-        padding: '88px 32px 80px',
-        textAlign: 'center',
-        overflow: 'hidden',
-        background: 'radial-gradient(ellipse at center top, rgba(220,68,10,0.12) 0%, rgba(220,68,10,0.04) 35%, transparent 70%)',
-      }}>
-        {/* Soft ember glow */}
-        <div aria-hidden style={{
-          position: 'absolute',
-          top: '-40%', left: '50%',
-          transform: 'translateX(-50%)',
-          width: 520, height: 520,
-          background: 'radial-gradient(circle, rgba(245,166,35,0.18) 0%, rgba(220,68,10,0.08) 30%, transparent 60%)',
-          filter: 'blur(20px)',
-          pointerEvents: 'none',
-          animation: 'campfire-pulse 6s ease-in-out infinite',
-        }} />
-
+      <div className="home-hero">
         <div className="eyebrow" style={{ marginBottom: 18, color: '#9a6a0a' }}>
           {firstName ? `${greeting}, ${firstName}` : greeting}
         </div>
 
         <div className="display-italic" style={{
-          fontSize: 80,
-          color: '#171717',
+          fontSize: 'clamp(28px, 3vw, 40px)',
+          color: 'var(--ui-ink, #171717)',
           lineHeight: 1,
           marginBottom: 18,
           letterSpacing: '-0.02em',
-          textShadow: '0 0 40px rgba(220,68,10,0.25)',
+          fontWeight: 650,
         }}>
           Welcome to the campfire.
         </div>
 
         <div className="display-italic" style={{
-          fontSize: 18,
-          color: '#77746f',
+          fontSize: 14,
+          color: 'var(--ui-muted, #77746f)',
           maxWidth: 560,
           margin: '0 auto',
           lineHeight: 1.5,
@@ -254,14 +234,14 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
               onClick={() => setActiveTab(primaryAction.tab)}
               style={{
                 padding: '12px 28px',
-                background: '#d84a17',
+                background: 'var(--ui-accent, #d84a17)',
                 border: 'none',
                 color: '#fff',
                 fontFamily: 'inherit',
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: 700,
-                letterSpacing: 3,
-                textTransform: 'uppercase',
+                letterSpacing: 0,
+                textTransform: 'none',
                 cursor: 'pointer',
                 borderRadius: 4,
                 boxShadow: '0 6px 24px rgba(220,68,10,0.35)',
@@ -277,13 +257,13 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
               style={{
                 padding: '12px 28px',
                 background: 'transparent',
-                border: '1px solid #dedbd3',
-                color: '#77746f',
+                border: '1px solid var(--ui-border, #dedbd3)',
+                color: 'var(--ui-muted, #77746f)',
                 fontFamily: 'inherit',
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: 600,
-                letterSpacing: 3,
-                textTransform: 'uppercase',
+                letterSpacing: 0,
+                textTransform: 'none',
                 cursor: 'pointer',
                 borderRadius: 4,
               }}
@@ -297,8 +277,8 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
       <section style={{ marginTop: 32 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-end', marginBottom: 14 }}>
           <div>
-            <div className="eyebrow" style={{ color: '#88857f', marginBottom: 8 }}>Command center</div>
-            <div className="display-md" style={{ color: '#171717' }}>What needs your attention</div>
+            <div className="eyebrow" style={{ color: 'var(--ui-subtle, #88857f)', marginBottom: 8 }}>Command center</div>
+            <div className="display-md" style={{ color: 'var(--ui-ink, #171717)' }}>What needs your attention</div>
           </div>
           <button
             type="button"
@@ -306,13 +286,13 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
             style={{
               padding: '9px 13px',
               background: '#fff',
-              border: '1px solid #dedbd3',
-              color: '#77746f',
+              border: '1px solid var(--ui-border, #dedbd3)',
+              color: 'var(--ui-muted, #77746f)',
               borderRadius: 5,
               fontFamily: 'inherit',
               fontSize: 9,
               letterSpacing: 1.5,
-              textTransform: 'uppercase',
+              textTransform: 'none',
               cursor: 'pointer',
             }}
           >
@@ -322,7 +302,7 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
         {actionError && <div className="app-error" style={{ marginBottom: 12 }}>{actionError}</div>}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 12 }}>
           {loadingActions ? (
-            <div style={{ gridColumn: '1 / -1', padding: 18, background: '#fff', border: '1px solid #dedbd3', borderRadius: 8, color: '#77746f', fontSize: 11 }}>
+            <div style={{ gridColumn: '1 / -1', padding: 18, background: '#fff', border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 8, color: 'var(--ui-muted, #77746f)', fontSize: 11 }}>
               Loading the action queue…
             </div>
           ) : actionCards.length ? actionCards.map(card => (
@@ -336,7 +316,7 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
                 gap: 14,
                 textAlign: 'left',
                 background: card.priority === 'high' ? '#fff7f1' : '#fff',
-                border: `1px solid ${card.priority === 'high' ? 'rgba(216,74,23,0.35)' : '#dedbd3'}`,
+                border: `1px solid ${card.priority === 'high' ? 'rgba(216,74,23,0.35)' : 'var(--ui-border, #dedbd3)'}`,
                 borderRadius: 9,
                 padding: '18px 18px',
                 cursor: 'pointer',
@@ -351,24 +331,24 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
                 width: 42,
                 height: 42,
                 borderRadius: 7,
-                background: card.priority === 'high' ? '#d84a17' : '#f4f1ea',
-                color: card.priority === 'high' ? '#fff' : '#171717',
+                background: card.priority === 'high' ? 'var(--ui-accent, #d84a17)' : 'var(--ui-soft, #f4f1ea)',
+                color: card.priority === 'high' ? '#fff' : 'var(--ui-ink, #171717)',
                 fontSize: 15,
                 fontWeight: 800,
               }}>
                 {card.count}
               </span>
               <span>
-                <i style={{ display: 'block', marginBottom: 6, color: '#88857f', fontStyle: 'normal', fontSize: 8, letterSpacing: 1.5, textTransform: 'uppercase' }}>{card.eyebrow}</i>
-                <strong style={{ display: 'block', marginBottom: 6, color: '#171717', fontSize: 14 }}>{card.title}</strong>
-                <small style={{ display: 'block', color: '#77746f', fontSize: 10, lineHeight: 1.45 }}>{card.detail}</small>
-                <b style={{ display: 'block', marginTop: 12, color: '#d84a17', fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase' }}>{card.action}</b>
+                <i style={{ display: 'block', marginBottom: 6, color: 'var(--ui-subtle, #88857f)', fontStyle: 'normal', fontSize: 8, letterSpacing: 1.5, textTransform: 'uppercase' }}>{card.eyebrow}</i>
+                <strong style={{ display: 'block', marginBottom: 6, color: 'var(--ui-ink, #171717)', fontSize: 14 }}>{card.title}</strong>
+                <small style={{ display: 'block', color: 'var(--ui-muted, #77746f)', fontSize: 10, lineHeight: 1.45 }}>{card.detail}</small>
+                <b style={{ display: 'block', marginTop: 12, color: 'var(--ui-accent, #d84a17)', fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase' }}>{card.action}</b>
               </span>
             </button>
           )) : (
-            <div style={{ gridColumn: '1 / -1', padding: 20, background: '#fff', border: '1px solid #dedbd3', borderRadius: 8 }}>
-              <strong style={{ display: 'block', marginBottom: 6, color: '#171717', fontSize: 14 }}>No critical work queued.</strong>
-              <p style={{ margin: 0, color: '#77746f', fontSize: 11, lineHeight: 1.5 }}>The core action queue is clear. Next best move is planning the next creator campaign or reviewing fresh creative performance.</p>
+            <div style={{ gridColumn: '1 / -1', padding: 20, background: '#fff', border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 8 }}>
+              <strong style={{ display: 'block', marginBottom: 6, color: 'var(--ui-ink, #171717)', fontSize: 14 }}>No critical work queued.</strong>
+              <p style={{ margin: 0, color: 'var(--ui-muted, #77746f)', fontSize: 12, lineHeight: 1.5 }}>The core action queue is clear. Next best move is planning the next creator campaign or reviewing fresh creative performance.</p>
             </div>
           )}
         </div>
@@ -376,7 +356,7 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
 
       {/* Quick actions */}
       <div style={{ marginTop: 36 }}>
-        <div className="eyebrow" style={{ marginBottom: 14, color: '#88857f' }}>Where the embers are</div>
+        <div className="eyebrow" style={{ marginBottom: 14, color: 'var(--ui-subtle, #88857f)' }}>Where the embers are</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
           {availableActions.map(a => (
             <button
@@ -386,7 +366,7 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
               style={{
                 textAlign: 'left',
                 background: '#fff',
-                border: '1px solid #dedbd3',
+                border: '1px solid var(--ui-border, #dedbd3)',
                 borderRadius: 6,
                 padding: '20px 22px',
                 cursor: 'pointer',
@@ -394,23 +374,23 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
                 color: 'inherit',
                 transition: 'all 0.15s',
               }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(220,68,10,0.4)'; e.currentTarget.style.background = '#f4f1ea'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#dedbd3'; e.currentTarget.style.background = '#fff'; }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(220,68,10,0.4)'; e.currentTarget.style.background = 'var(--ui-soft, #f4f1ea)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--ui-border, #dedbd3)'; e.currentTarget.style.background = '#fff'; }}
             >
-              <div className="eyebrow" style={{ marginBottom: 8, color: '#88857f' }}>{a.eyebrow}</div>
-              <div className="display-md" style={{ color: '#171717', marginBottom: 6 }}>{a.title}</div>
-              <div style={{ fontSize: 11, color: '#77746f', lineHeight: 1.4 }}>{a.sub}</div>
+              <div className="eyebrow" style={{ marginBottom: 8, color: 'var(--ui-subtle, #88857f)' }}>{a.eyebrow}</div>
+              <div className="display-md" style={{ color: 'var(--ui-ink, #171717)', marginBottom: 6 }}>{a.title}</div>
+              <div style={{ fontSize: 12, color: 'var(--ui-muted, #77746f)', lineHeight: 1.4 }}>{a.sub}</div>
             </button>
           ))}
           {!availableActions.length && (
             <div style={{
               gridColumn: '1 / -1',
               background: '#fff',
-              border: '1px solid #dedbd3',
+              border: '1px solid var(--ui-border, #dedbd3)',
               borderRadius: 6,
               padding: '20px 22px',
-              color: '#77746f',
-              fontSize: 11,
+              color: 'var(--ui-muted, #77746f)',
+              fontSize: 12,
               lineHeight: 1.5,
             }}>
               Your account is active, but no product areas are assigned yet. Ask an admin to add creator, launch, or analytics permissions.
@@ -421,7 +401,7 @@ export default function WelcomeScreen({ setActiveTab, can = () => true, openCrea
 
       {/* Tagline */}
       <div style={{ marginTop: 48, textAlign: 'center' }}>
-        <div className="display-italic" style={{ fontSize: 13, color: '#88857f' }}>
+        <div className="display-italic" style={{ fontSize: 13, color: 'var(--ui-subtle, #88857f)' }}>
           Built in Wheat Ridge. Forged in fire.
         </div>
       </div>

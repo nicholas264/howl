@@ -445,14 +445,14 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <div style={{ padding: '20px 28px', borderBottom: '1px solid #dedbd3', flexShrink: 0 }}>
+      <div style={{ padding: '20px 28px', borderBottom: '1px solid var(--ui-border, #dedbd3)', flexShrink: 0 }}>
         <div className="eyebrow" style={{ marginBottom: 4 }}>Create</div>
-        <div className="display-md" style={{ color: '#171717' }}>Video Ads</div>
+        <div className="display-md" style={{ color: 'var(--ui-ink, #171717)' }}>Video Ads</div>
       </div>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 
       {/* Left panel */}
-      <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #dedbd3', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid var(--ui-border, #dedbd3)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
 
         {!supported && (
           <div style={{ padding: '10px 20px', background: '#fff0ee', borderBottom: '1px solid #f5c0b0', fontSize: 10, color: '#b03010' }}>
@@ -466,8 +466,8 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
           <div>
             <div style={S.label}>Video</div>
             {videoFile ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', border: '1px solid #dedbd3', borderRadius: 4, background: '#f4f1ea' }}>
-                <span style={{ fontSize: 10, color: '#171717', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>{videoFile.name}</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 4, background: 'var(--ui-soft, #f4f1ea)' }}>
+                <span style={{ fontSize: 10, color: 'var(--ui-ink, #171717)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>{videoFile.name}</span>
                 <button onClick={() => fileInputRef.current?.click()} style={S.link}>Replace</button>
               </div>
             ) : (
@@ -475,9 +475,9 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
                 onDrop={handleDrop}
                 onDragOver={e => { e.preventDefault(); setDragging(true); }}
                 onDragLeave={() => setDragging(false)}
-                style={{ display: 'block', padding: '18px 12px', borderRadius: 4, cursor: 'pointer', textAlign: 'center', border: `1px dashed ${dragging ? '#d84a17' : '#c9c4ba'}`, background: dragging ? 'rgba(220,68,10,0.15)' : 'transparent' }}
+                style={{ display: 'block', padding: '18px 12px', borderRadius: 4, cursor: 'pointer', textAlign: 'center', border: `1px dashed ${dragging ? 'var(--ui-accent, #d84a17)' : 'var(--ui-border-strong, #c9c4ba)'}`, background: dragging ? 'rgba(220,68,10,0.15)' : 'transparent' }}
               >
-                <div style={{ fontSize: 10, color: dragging ? '#d84a17' : '#77746f' }}>
+                <div style={{ fontSize: 10, color: dragging ? 'var(--ui-accent, #d84a17)' : 'var(--ui-muted, #77746f)' }}>
                   {dragging ? 'Drop video here' : 'Upload MP4 / MOV / WebM'}
                 </div>
                 <div style={{ fontSize: 9, color: '#b0a898', marginTop: 4 }}>Include "r1" or "r4" in filename to auto-filter reviews</div>
@@ -510,16 +510,16 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
                   <span>Review</span>
                   <span style={{ color: '#b0a898', fontWeight: 400 }}>{filteredReviews.length} available</span>
                 </div>
-                <div style={{ border: '1px solid #dedbd3', borderRadius: 4, overflow: 'hidden', maxHeight: 240, overflowY: 'auto' }}>
+                <div style={{ border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 4, overflow: 'hidden', maxHeight: 240, overflowY: 'auto' }}>
                   {filteredReviews.length === 0
-                    ? <div style={{ padding: 16, fontSize: 10, color: '#77746f' }}>No reviews for this product.</div>
+                    ? <div style={{ padding: 16, fontSize: 10, color: 'var(--ui-muted, #77746f)' }}>No reviews for this product.</div>
                     : filteredReviews.map(r => {
                       const active = selectedReview?.id === r.id;
                       return (
-                        <div key={r.id} onClick={() => setSelectedReview(r)} style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #dedbd3', background: active ? 'rgba(220,68,10,0.15)' : '#f4f1ea', borderLeft: `3px solid ${active ? COLORS.flame : 'transparent'}` }}>
+                        <div key={r.id} onClick={() => setSelectedReview(r)} style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid var(--ui-border, #dedbd3)', background: active ? 'rgba(220,68,10,0.15)' : 'var(--ui-soft, #f4f1ea)', borderLeft: `3px solid ${active ? COLORS.flame : 'transparent'}` }}>
                           <div style={{ fontSize: 9, color: COLORS.flame, marginBottom: 2 }}>{'★'.repeat(r.rating)} · {PRODUCT_NAMES[r.handle] || r.handle}</div>
-                          <div style={{ fontSize: 10, color: '#171717', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{r.quote}</div>
-                          <div style={{ fontSize: 9, color: '#77746f', marginTop: 3 }}>{r.nickname}</div>
+                          <div style={{ fontSize: 10, color: 'var(--ui-ink, #171717)', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{r.quote}</div>
+                          <div style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', marginTop: 3 }}>{r.nickname}</div>
                         </div>
                       );
                     })}
@@ -536,9 +536,9 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
           {/* Font size */}
           <div>
             <div style={{ ...S.label, display: 'flex', justifyContent: 'space-between' }}>
-              <span>Font Size</span><span style={{ color: '#171717' }}>{fontSize}px</span>
+              <span>Font Size</span><span style={{ color: 'var(--ui-ink, #171717)' }}>{fontSize}px</span>
             </div>
-            <input type="range" min={32} max={160} step={4} value={fontSize} onChange={e => setFontSize(Number(e.target.value))} style={{ width: '100%', accentColor: '#d84a17' }} />
+            <input type="range" min={32} max={160} step={4} value={fontSize} onChange={e => setFontSize(Number(e.target.value))} style={{ width: '100%', accentColor: 'var(--ui-accent, #d84a17)' }} />
           </div>
 
           {/* Color */}
@@ -548,7 +548,7 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
               {TEXT_COLORS.map(c => (
                 <button key={c.id} onClick={() => setColorId(c.id)} style={{
                   flex: 1, padding: '7px 0', borderRadius: 4, cursor: 'pointer',
-                  border: `2px solid ${colorId === c.id ? c.value : '#dedbd3'}`,
+                  border: `2px solid ${colorId === c.id ? c.value : 'var(--ui-border, #dedbd3)'}`,
                   background: c.value === '#ffffff' ? '#f5f5f5' : c.value,
                   color: c.value === '#ffffff' ? '#333' : '#fff',
                   fontFamily: 'inherit', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase',
@@ -563,11 +563,11 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
             <div style={{ ...S.label, display: 'flex', justifyContent: 'space-between' }}>
               <span>Position</span>
               <button onClick={() => setTextPos(DEFAULT_TEXT_POS)} style={{
-                background: 'none', border: 'none', color: '#d84a17',
+                background: 'none', border: 'none', color: 'var(--ui-accent, #d84a17)',
                 fontFamily: 'inherit', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer',
               }}>Reset</button>
             </div>
-            <div style={{ fontSize: 9, color: '#77746f', lineHeight: 1.5 }}>
+            <div style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', lineHeight: 1.5 }}>
               Drag the text on the preview to reposition.
             </div>
           </div>
@@ -577,22 +577,22 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
             <div style={S.label}>Text Shadow</div>
             <button onClick={() => setShadow(s => !s)} style={{
               padding: '4px 12px', borderRadius: 20, cursor: 'pointer',
-              border: `1px solid ${shadow ? '#d84a17' : '#dedbd3'}`,
-              background: shadow ? '#d84a17' : '#f4f1ea',
-              color: shadow ? '#fff' : '#77746f',
+              border: `1px solid ${shadow ? 'var(--ui-accent, #d84a17)' : 'var(--ui-border, #dedbd3)'}`,
+              background: shadow ? 'var(--ui-accent, #d84a17)' : 'var(--ui-soft, #f4f1ea)',
+              color: shadow ? '#fff' : 'var(--ui-muted, #77746f)',
               fontFamily: 'inherit', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase',
             }}>{shadow ? 'On' : 'Off'}</button>
           </div>
         </div>
 
         {/* Export — pinned bottom */}
-        <div style={{ flexShrink: 0, padding: '14px 16px', borderTop: '1px solid #dedbd3' }}>
+        <div style={{ flexShrink: 0, padding: '14px 16px', borderTop: '1px solid var(--ui-border, #dedbd3)' }}>
           {exporting && (
             <div style={{ marginBottom: 8 }}>
-              <div style={{ height: 3, background: '#dedbd3', borderRadius: 2, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${exportProgress}%`, background: '#d84a17', transition: 'width 0.2s' }} />
+              <div style={{ height: 3, background: 'var(--ui-border, #dedbd3)', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${exportProgress}%`, background: 'var(--ui-accent, #d84a17)', transition: 'width 0.2s' }} />
               </div>
-              <div style={{ fontSize: 9, color: '#77746f', marginTop: 4, letterSpacing: 1 }}>
+              <div style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', marginTop: 4, letterSpacing: 1 }}>
                 {exportMsg} {exportProgress > 0 && `${exportProgress}%`}
               </div>
             </div>
@@ -646,7 +646,7 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
         ) : (
           <div style={{ color: '#555', fontSize: 12, textAlign: 'center', padding: 40, lineHeight: 1.8 }}>
             Upload a video to preview
-            {hasCSV && <><br /><span style={{ color: '#88857f', fontSize: 10 }}>Include "r1" or "r4" in filename to auto-filter reviews</span></>}
+            {hasCSV && <><br /><span style={{ color: 'var(--ui-subtle, #88857f)', fontSize: 10 }}>Include "r1" or "r4" in filename to auto-filter reviews</span></>}
           </div>
         )}
       </div>
@@ -656,9 +656,9 @@ export default function VideoAdTool({ initialText, onTextConsumed, onAddToCart }
 }
 
 const S = {
-  label: { fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', marginBottom: 6, fontWeight: 600, display: 'block' },
-  link: { fontSize: 9, color: '#d84a17', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 },
-  textarea: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #dedbd3', borderRadius: 4, background: '#f4f1ea', color: '#171717', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.5, resize: 'vertical', outline: 'none' },
-  filterBtn: (active) => ({ padding: '3px 10px', border: `1px solid ${active ? '#d84a17' : '#dedbd3'}`, background: active ? 'rgba(220,68,10,0.15)' : '#f4f1ea', color: active ? '#d84a17' : '#77746f', fontFamily: 'inherit', fontSize: 9, cursor: 'pointer', borderRadius: 3 }),
-  exportBtn: (disabled) => ({ width: '100%', padding: '12px 0', background: disabled ? '#dedbd3' : '#d84a17', border: 'none', borderRadius: 4, color: disabled ? '#88857f' : '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer' }),
+  label: { fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', marginBottom: 6, fontWeight: 600, display: 'block' },
+  link: { fontSize: 9, color: 'var(--ui-accent, #d84a17)', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 },
+  textarea: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 4, background: 'var(--ui-soft, #f4f1ea)', color: 'var(--ui-ink, #171717)', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.5, resize: 'vertical', outline: 'none' },
+  filterBtn: (active) => ({ padding: '3px 10px', border: `1px solid ${active ? 'var(--ui-accent, #d84a17)' : 'var(--ui-border, #dedbd3)'}`, background: active ? 'rgba(220,68,10,0.15)' : 'var(--ui-soft, #f4f1ea)', color: active ? 'var(--ui-accent, #d84a17)' : 'var(--ui-muted, #77746f)', fontFamily: 'inherit', fontSize: 9, cursor: 'pointer', borderRadius: 3 }),
+  exportBtn: (disabled) => ({ width: '100%', padding: '12px 0', background: disabled ? 'var(--ui-border, #dedbd3)' : 'var(--ui-accent, #d84a17)', border: 'none', borderRadius: 4, color: disabled ? 'var(--ui-subtle, #88857f)' : '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer' }),
 };

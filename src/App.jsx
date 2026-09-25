@@ -42,6 +42,7 @@ import { useDriveAuth } from "./hooks/useDriveAuth";
 import { cartGetAll } from "./utils/cartDb";
 import { loadLaunchDrafts, persistLaunchDraft, deleteLaunchDraft } from "./lib/launchDrafts.js";
 import "./styles.css";
+import "./theme.css";
 
 const TabFallback = () => (
   <div style={{ padding: 32, color: '#77746f', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase' }}>
@@ -320,7 +321,7 @@ export default function HowlAdEngine({ appAccess }) {
   }, [navigate]);
 
   return (
-    <div className={`app-shell${activeTab === 'crm' ? ' crm-shell' : ''}`} style={{ minHeight: "100vh", background: "#f7f6f2", color: "#171717", fontFamily: "'Helvetica Neue', Helvetica, sans-serif" }}>
+    <div className="app-shell">
       <div className="shell">
         <aside className="sidebar">
           <div className="sidebar-top">

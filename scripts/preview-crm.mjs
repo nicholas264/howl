@@ -7,6 +7,11 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {useTestDatabase} from '../tests/neon-test-adapter.mjs';
+import {ensureStudioTables} from '../api/_lib/static-studio-store.js';
+import {ensureScriptStudio} from '../api/_lib/script-studio-store.js';
+import {ensureFinance} from '../api/_lib/finance.js';
+import {ensureOrganization} from '../api/_lib/organization.js';
+import {ensureCooWorkspace} from '../api/_lib/coo.js';
 import {ensureRateLimits} from '../api/_lib/rate-limit.js';
 import {ensureDealerIntake} from '../api/_lib/dealer-intake.js';
 import {createDealerIntakeHandler} from '../api/dealer-intake.js';
@@ -24,7 +29,7 @@ Object.assign(process.env,{NODE_ENV:'development',AUTH_DISABLED:'true',VITE_AUTH
 globalThis.fetch=async()=>{throw new Error('External requests are disabled in the isolated CRM preview.');};
 const directory=await mkdtemp(join(tmpdir(),'campfire-crm-preview-'));
 const db=new PGlite(directory);useTestDatabase(db);const sql=neon(process.env.DATABASE_URL);
-await initializeSchema(sql);await ensureCrm(sql);await ensureDealerIntake(sql);await ensureRateLimits(sql);await ensureGoogleOAuthTables(sql);await ensureLaunchDrafts(sql);
+await initializeSchema(sql);await ensureFinance(sql);await ensureStudioTables(sql);await ensureScriptStudio(sql);await ensureOrganization(sql);await ensureCooWorkspace(sql);await ensureCrm(sql);await ensureDealerIntake(sql);await ensureRateLimits(sql);await ensureGoogleOAuthTables(sql);await ensureLaunchDrafts(sql);
 const authorize=async()=>({sql,userId:'local-dev',role:'owner',permissions:ROLE_PERMISSIONS.owner});
 const crm=createCrmHandler({authorize});
 for(const [company,title,stage,value,nextAction] of [['Sample Outdoor Co.','Opening assortment','new',2400,'Introduce the HOWL lineup'],['Sample Trail Supply','Fall restock','contacted',5600,'Call the store buyer'],['Sample Camp Store','Holiday floor display','qualified',8200,'Confirm display space'],['Sample Outfitters','Three-store rollout','proposal',12500,'Review the proposal'],['Sample Basecamp','First order','won',3600,'']]) {
@@ -32,11 +37,14 @@ for(const [company,title,stage,value,nextAction] of [['Sample Outdoor Co.','Open
 }
 const emailHandler=createCrmEmailHandler({authorize,getConnection:async()=>({google_email:'roy-preview@example.com',scopes:['https://www.googleapis.com/auth/gmail.send']}),getToken:async()=>'simulation',fetchImpl:async()=>Response.json({id:'simulated-'+randomUUID()})});
 const intake=createDealerIntakeHandler({getSql:()=>sql});
-const previewPlugin={name:'isolated-crm-review',enforce:'pre',transformIndexHtml(html){return html.replace('<body>','<body><div style="background:#285840;color:white;padding:9px 16px;font:13px sans-serif;text-align:center">Local CRM preview · Sample data · Email sending is simulated</div>');},configureServer(server){server.middlewares.use(async(req,res,next)=>{
+const previewPlugin={name:'isolated-crm-review',enforce:'pre',transform(code,id){
+ // The isolated preview has no Clerk session; mock the creator UI hook here only.
+ if(id.includes('/src/components/'))return code.replace("import { useAuth } from '@clerk/clerk-react';", "const useAuth=()=>({getToken:async()=>null,userId:'local-dev'});");
+},transformIndexHtml(html){return html.replace('<body>','<body><div style="background:#285840;color:white;padding:9px 16px;font:13px sans-serif;text-align:center">Local CRM preview · Sample data · Email sending is simulated</div>');},configureServer(server){server.middlewares.use(async(req,res,next)=>{
  const url=new URL(req.url,'http://localhost');if(url.pathname==='/dealer-intake'){req.url='/dealer-intake.html';return next();}if(!['/api/crm-email','/api/dealer-intake'].includes(url.pathname))return next();
  const chunks=[];for await(const c of req)chunks.push(c);req.query=Object.fromEntries(url.searchParams);req.body=chunks.length?JSON.parse(Buffer.concat(chunks).toString()):{};
  res.status=code=>{res.statusCode=code;return res;};res.json=body=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(body));};if(url.pathname==='/api/dealer-intake'){req.headers.origin='https://welcometothecampfire.io';await intake(req,res);}else await emailHandler(req,res);
 });}};
-const server=await createServer({plugins:[previewPlugin],server:{host:'127.0.0.1',port:5190,strictPort:true}});await server.listen();
-console.log('Isolated CRM preview: http://127.0.0.1:5190/?tab=crm');
+const server=await createServer({plugins:[previewPlugin],server:{host:'127.0.0.1',port:Number(process.env.PREVIEW_PORT||5190),strictPort:true}});await server.listen();
+console.log(`Isolated app preview: http://127.0.0.1:${process.env.PREVIEW_PORT||5190}/?tab=crm`);
 console.log('Preview database:',directory);

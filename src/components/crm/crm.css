@@ -1,15 +1,4 @@
-/* CRM uses a compact product UI, scoped away from Campfire's editorial tools. */
-.app-shell.crm-shell .shell { background: #fff; }
-.app-shell.crm-shell .main-panel { background: #fff; }
-.app-shell.crm-shell .sidebar { background: #fafafa; border-color: #e8e8eb; box-shadow: none; }
-.app-shell.crm-shell .sidebar-top { background: #fafafa; border-color: #e8e8eb; justify-content: flex-start; padding-left: 22px; }
-.app-shell.crm-shell .sidebar-top img { width: 120px; }
-.app-shell.crm-shell .sidebar-section { font: 500 11px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; letter-spacing: 0; color: #929298; padding: 22px 12px 8px; }
-.app-shell.crm-shell .side-item { font-size: 12px; font-weight: 500; color: #62636b; border-radius: 7px; padding: 9px 12px; }
-.app-shell.crm-shell .side-item.on { color: #bd471e; background: #fff0e8; font-weight: 600; }
-.app-shell.crm-shell .side-item.on:before { display: none; }
-.app-shell.crm-shell .side-item:hover { background: #f0f0f2; }
-.app-shell.crm-shell .sidebar-foot { background: #fafafa; border-color: #e8e8eb; }
+/* CRM-specific layout; shared application chrome lives in theme.css. */
 .crm, .crm-dialog { --crm-ink: #23242a; --crm-muted: #686b76; --crm-line: #e9eaee; --crm-accent: #d65328; font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color: var(--crm-ink); -webkit-font-smoothing: antialiased; }
 .crm { padding: 24px 32px 20px; max-width: 1900px; margin: auto; }
 .crm *, .crm-dialog * { box-sizing: border-box; }
@@ -157,5 +146,5 @@
 .crm-resolution a { color: #b74d2b; text-decoration: underline; }
 @media(min-width:1700px) { .crm-board { grid-template-columns: repeat(6,minmax(0,1fr)); } }
 @media(max-width:1150px) { .crm-toolbar { flex-wrap: wrap; }.crm-filters { flex: 1; justify-content: flex-end; }.crm-search input { width: 150px; }.crm-summary strong small { display: none; } }
-@media(max-width:760px) { .crm { padding: 20px 16px; }.crm-breadcrumb { margin-bottom: 20px; }.crm-header { align-items: flex-start; }.app-shell .crm h1 { font-size: 24px; }.crm-header p { max-width: 190px; font-size: 12px; line-height: 1.6; }.crm-header>.crm-actions { align-items: flex-end; flex-direction: column-reverse; }.crm-summary { grid-template-columns: 1.2fr 1fr 1fr; }.crm-summary>div,.crm-summary>button { padding: 0 12px; }.crm-summary>div>span,.crm-summary>button>span { font-size: 10px; }.crm-summary strong { font-size: 23px; }.crm-summary span small { display: none; }.crm-filters { justify-content: flex-start; width: 100%; }.crm-search { flex: 1; min-width: 100px; }.crm-search input { width: 100%; }.crm-board { grid-template-columns: repeat(6,250px); }.crm-workspace-footer { flex-direction: column; gap: 8px; }.crm-dialog { inset: 0; width: 100%; height: 100dvh; border-radius: 0; border: 0; }.crm-dialog-header,.crm-dialog-body { padding: 22px 18px; }.crm-contact { grid-template-columns: 1fr 1fr; }.crm-contact button { justify-self: end; }.crm-section-heading { align-items: flex-start; }.crm-archive { flex-direction: column; align-items: flex-start; }.app-shell.crm-shell .sidebar-top { padding: 9px; }.app-shell.crm-shell .sidebar-top img { width: 68px; } }
+@media(max-width:760px) { .crm { padding: 20px 16px; }.crm-breadcrumb { margin-bottom: 20px; }.crm-header { align-items: flex-start; }.app-shell .crm h1 { font-size: 24px; }.crm-header p { max-width: 190px; font-size: 12px; line-height: 1.6; }.crm-header>.crm-actions { align-items: flex-end; flex-direction: column-reverse; }.crm-summary { grid-template-columns: 1.2fr 1fr 1fr; }.crm-summary>div,.crm-summary>button { padding: 0 12px; }.crm-summary>div>span,.crm-summary>button>span { font-size: 10px; }.crm-summary strong { font-size: 23px; }.crm-summary span small { display: none; }.crm-filters { justify-content: flex-start; width: 100%; }.crm-search { flex: 1; min-width: 100px; }.crm-search input { width: 100%; }.crm-board { grid-template-columns: repeat(6,250px); }.crm-workspace-footer { flex-direction: column; gap: 8px; }.crm-dialog { inset: 0; width: 100%; height: 100dvh; border-radius: 0; border: 0; }.crm-dialog-header,.crm-dialog-body { padding: 22px 18px; }.crm-contact { grid-template-columns: 1fr 1fr; }.crm-contact button { justify-self: end; }.crm-section-heading { align-items: flex-start; }.crm-archive { flex-direction: column; align-items: flex-start; } }
 @media(prefers-reduced-motion:reduce) { .crm *, .crm-dialog * { scroll-behavior: auto; transition: none!important; } }

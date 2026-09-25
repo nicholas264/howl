@@ -50,10 +50,6 @@ function reviewScorecard(value, previous = {}) {
   return result;
 }
 
-function promotableScorecard(scorecard = {}) {
-  return SCORE_FIELDS.every(field => Number(scorecard[field]) >= 1 && Number(scorecard[field]) <= 5)
-    && ['strong_fit', 'potential'].includes(scorecard.recommendation);
-}
 
 async function sendApplicationDenialEmail({ sql, access, application, subject, body }) {
   const to = validEmail(application.email);
@@ -355,9 +351,6 @@ export default async function handler(req, res) {
 
     if (req.body?.action === 'promote') {
       const reviewedRecord = withQualification(record, req.body);
-      if (!promotableScorecard(reviewedRecord.review_scorecard)) {
-        return res.status(400).json({ error: 'Complete the fit scorecard with a Strong fit or Potential recommendation before promotion.' });
-      }
       const creator = await promote(sql, access, type === 'application' ? 'application' : 'discovery', reviewedRecord);
       if (type === 'application') {
         await sql`

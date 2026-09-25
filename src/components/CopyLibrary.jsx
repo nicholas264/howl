@@ -191,25 +191,25 @@ export function getCopyWarnings(variant) {
 }
 
 const S = {
-  wrap: { border: '1px solid #dedbd3', borderRadius: 6, background: '#fff', marginBottom: 20 },
+  wrap: { border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 6, background: '#fff', marginBottom: 20 },
   header: { padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none', width: '100%', border: 0, background: 'transparent', textAlign: 'left', fontFamily: 'inherit' },
-  body: { padding: 16, borderTop: '1px solid #dedbd3' },
-  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#77746f', marginBottom: 6, display: 'block' },
-  input: { background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', width: '100%' },
-  textarea: { background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', width: '100%', resize: 'vertical', minHeight: 60 },
+  body: { padding: 16, borderTop: '1px solid var(--ui-border, #dedbd3)' },
+  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', marginBottom: 6, display: 'block' },
+  input: { background: 'var(--ui-soft, #f4f1ea)', border: '1px solid var(--ui-border, #dedbd3)', color: 'var(--ui-ink, #171717)', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', width: '100%' },
+  textarea: { background: 'var(--ui-soft, #f4f1ea)', border: '1px solid var(--ui-border, #dedbd3)', color: 'var(--ui-ink, #171717)', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', width: '100%', resize: 'vertical', minHeight: 60 },
   addRow: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, alignItems: 'flex-end' },
   btn: (disabled) => ({
-    padding: '8px 14px', background: disabled ? '#dedbd3' : '#d84a17', border: 'none',
-    color: disabled ? '#88857f' : '#fff', fontFamily: 'inherit', fontSize: 10,
+    padding: '8px 14px', background: disabled ? 'var(--ui-border, #dedbd3)' : 'var(--ui-accent, #d84a17)', border: 'none',
+    color: disabled ? 'var(--ui-subtle, #88857f)' : '#fff', fontFamily: 'inherit', fontSize: 10,
     fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 4,
   }),
-  variantCard: { border: '1px solid #dedbd3', borderRadius: 4, padding: 10, marginTop: 8, background: '#fff', display: 'grid', gridTemplateColumns: '1fr auto', gap: 10 },
-  vLabel: { fontSize: 10, color: '#d84a17', letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700, marginBottom: 4 },
-  vHeadline: { fontSize: 12, color: '#171717', fontWeight: 600, marginBottom: 4 },
-  vBody: { fontSize: 11, color: '#77746f', lineHeight: 1.4 },
-  deleteBtn: { background: 'none', border: '1px solid #dedbd3', color: '#77746f', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 3, padding: '4px 8px', fontFamily: 'inherit' },
+  variantCard: { border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 4, padding: 10, marginTop: 8, background: '#fff', display: 'grid', gridTemplateColumns: '1fr auto', gap: 10 },
+  vLabel: { fontSize: 10, color: 'var(--ui-accent, #d84a17)', letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700, marginBottom: 4 },
+  vHeadline: { fontSize: 12, color: 'var(--ui-ink, #171717)', fontWeight: 600, marginBottom: 4 },
+  vBody: { fontSize: 11, color: 'var(--ui-muted, #77746f)', lineHeight: 1.4 },
+  deleteBtn: { background: 'none', border: '1px solid var(--ui-border, #dedbd3)', color: 'var(--ui-muted, #77746f)', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 3, padding: '4px 8px', fontFamily: 'inherit' },
   warning: { marginTop: 6, color: '#9f3212', fontSize: 10, lineHeight: 1.35 },
-  count: { fontSize: 10, color: '#88857f', letterSpacing: 2, textTransform: 'uppercase' },
+  count: { fontSize: 10, color: 'var(--ui-subtle, #88857f)', letterSpacing: 2, textTransform: 'uppercase' },
 };
 
 export default function CopyLibrary({ library, onUse }) {
@@ -282,7 +282,7 @@ export default function CopyLibrary({ library, onUse }) {
       <button type="button" style={S.header} aria-expanded={open} onClick={() => setOpen(o => !o)}>
         <div>
           <div className="eyebrow" style={{ marginBottom: 2 }}>Reusable</div>
-          <div className="display-md" style={{ color: '#171717' }}>
+          <div className="display-md" style={{ color: 'var(--ui-ink, #171717)' }}>
             Copy Library <span style={{ ...S.count, marginLeft: 6, fontFamily: "'JetBrains Mono', monospace" }}>· {library.variants.length} saved {qualityIssueCount > 0 ? `· ${qualityIssueCount} need review` : ''} {library.loaded ? '' : '(loading…)'}</span>
           </div>
         </div>
@@ -292,7 +292,7 @@ export default function CopyLibrary({ library, onUse }) {
         <div style={S.body}>
           {library.error && (
             <div style={{ marginBottom: 12, padding: '8px 10px', border: '1px solid #efb4a2', background: '#fff4ef', color: '#9f3212', fontSize: 10, borderRadius: 4 }}>
-              Copy Library could not load. <button type="button" onClick={library.refresh} style={{ border: 0, padding: 0, background: 'transparent', color: '#d84a17', font: 'inherit', fontWeight: 700, cursor: 'pointer' }}>Retry</button>
+              Copy Library could not load. <button type="button" onClick={library.refresh} style={{ border: 0, padding: 0, background: 'transparent', color: 'var(--ui-accent, #d84a17)', font: 'inherit', fontWeight: 700, cursor: 'pointer' }}>Retry</button>
             </div>
           )}
           <div style={S.addRow}>
@@ -398,7 +398,7 @@ export default function CopyLibrary({ library, onUse }) {
                 </div>
               ))}
               {visibleVariants.length === 0 && (
-                <div style={{ padding: '18px 4px', color: '#77746f', fontSize: 11 }}>No saved copy matches these filters.</div>
+                <div style={{ padding: '18px 4px', color: 'var(--ui-muted, #77746f)', fontSize: 11 }}>No saved copy matches these filters.</div>
               )}
             </div>
           )}

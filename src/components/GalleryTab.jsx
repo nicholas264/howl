@@ -10,30 +10,30 @@ const FILTERS = [
 const S = {
   wrap: { padding: '28px 36px', maxWidth: 1200 },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
-  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#77746f' },
+  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)' },
   filters: { display: 'flex', gap: 6 },
   chip: (active) => ({
     padding: '6px 14px', borderRadius: 4, fontSize: 9, letterSpacing: 2, textTransform: 'uppercase',
     fontFamily: 'inherit', fontWeight: 600, cursor: 'pointer',
-    border: `1px solid ${active ? '#d84a17' : '#dedbd3'}`,
-    background: active ? 'rgba(220,68,10,0.15)' : '#f4f1ea',
-    color: active ? '#d84a17' : '#77746f',
+    border: `1px solid ${active ? 'var(--ui-accent, #d84a17)' : 'var(--ui-border, #dedbd3)'}`,
+    background: active ? 'rgba(220,68,10,0.15)' : 'var(--ui-soft, #f4f1ea)',
+    color: active ? 'var(--ui-accent, #d84a17)' : 'var(--ui-muted, #77746f)',
   }),
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 },
-  card: { border: '1px solid #dedbd3', borderRadius: 6, background: '#fff', overflow: 'hidden' },
-  thumb: { width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block', background: '#f4f1ea' },
+  card: { border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 6, background: '#fff', overflow: 'hidden' },
+  thumb: { width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block', background: 'var(--ui-soft, #f4f1ea)' },
   info: { padding: '10px 12px' },
-  name: { fontSize: 10, color: '#171717', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 4 },
-  meta: { fontSize: 9, color: '#88857f', marginBottom: 8 },
+  name: { fontSize: 10, color: 'var(--ui-ink, #171717)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 4 },
+  meta: { fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginBottom: 8 },
   badge: (status) => {
     if (status === 'pushed') return { background: 'rgba(63,185,80,0.15)', color: '#256b35', border: '1px solid rgba(63,185,80,0.4)' };
     if (status === 'error') return { background: 'rgba(248,81,73,0.15)', color: '#b42318', border: '1px solid rgba(248,81,73,0.4)' };
-    return { background: '#dedbd3', color: '#77746f', border: '1px solid #dedbd3' };
+    return { background: 'var(--ui-border, #dedbd3)', color: 'var(--ui-muted, #77746f)', border: '1px solid var(--ui-border, #dedbd3)' };
   },
   badgeBase: { display: 'inline-block', padding: '3px 8px', borderRadius: 3, fontSize: 8, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700 },
-  empty: { border: '2px dashed #dedbd3', borderRadius: 6, padding: '48px', textAlign: 'center', color: '#88857f', fontSize: 11 },
-  videoThumb: { width: '100%', aspectRatio: '1', background: '#f4f1ea', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #dedbd3' },
-  carouselThumb: { width: '100%', aspectRatio: '1', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, background: '#f4f1ea', padding: 2 },
+  empty: { border: '2px dashed var(--ui-border, #dedbd3)', borderRadius: 6, padding: '48px', textAlign: 'center', color: 'var(--ui-subtle, #88857f)', fontSize: 11 },
+  videoThumb: { width: '100%', aspectRatio: '1', background: 'var(--ui-soft, #f4f1ea)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid var(--ui-border, #dedbd3)' },
+  carouselThumb: { width: '100%', aspectRatio: '1', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, background: 'var(--ui-soft, #f4f1ea)', padding: 2 },
 };
 
 function statusLabel(status) {
@@ -81,8 +81,8 @@ export default function GalleryTab({ cart }) {
     <div style={S.wrap}>
       <div style={{ marginBottom: 24 }}>
         <div className="eyebrow" style={{ marginBottom: 6 }}>Launch</div>
-        <div className="display-lg" style={{ color: '#171717' }}>Gallery</div>
-        <div className="display-italic" style={{ fontSize: 14, color: '#77746f', marginTop: 6 }}>
+        <div className="display-lg" style={{ color: 'var(--ui-ink, #171717)' }}>Gallery</div>
+        <div className="display-italic" style={{ fontSize: 14, color: 'var(--ui-muted, #77746f)', marginTop: 6 }}>
           Everything in your publish cart — drafts, pushed, and failures.
         </div>
       </div>
@@ -113,8 +113,8 @@ export default function GalleryTab({ cart }) {
                 {/* Thumbnail */}
                 {item.type === 'video' ? (
                   <div style={S.videoThumb}>
-                    <span style={{ fontSize: 28, color: '#88857f' }}>&#9654;</span>
-                    <span style={{ fontSize: 8, color: '#88857f', letterSpacing: 2, marginTop: 6 }}>VIDEO</span>
+                    <span style={{ fontSize: 28, color: 'var(--ui-subtle, #88857f)' }}>&#9654;</span>
+                    <span style={{ fontSize: 8, color: 'var(--ui-subtle, #88857f)', letterSpacing: 2, marginTop: 6 }}>VIDEO</span>
                   </div>
                 ) : item.type === 'carousel' && item.cards ? (
                   <div style={S.carouselThumb}>
@@ -136,7 +136,7 @@ export default function GalleryTab({ cart }) {
                     {statusLabel(status)}
                   </span>
                   {item.metaPushedAt && status === 'pushed' && (
-                    <span style={{ fontSize: 8, color: '#88857f', marginLeft: 6 }}>
+                    <span style={{ fontSize: 8, color: 'var(--ui-subtle, #88857f)', marginLeft: 6 }}>
                       {formatDate(item.metaPushedAt)}
                     </span>
                   )}
