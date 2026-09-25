@@ -616,26 +616,26 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <div style={{ padding: '20px 28px', borderBottom: '1px solid #dedbd3', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+      <div style={{ padding: '20px 28px', borderBottom: '1px solid var(--ui-border, #dedbd3)', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
           <div className="eyebrow" style={{ marginBottom: 4 }}>Create</div>
-          <div className="display-md" style={{ color: '#171717' }}>Image Ads</div>
+          <div className="display-md" style={{ color: 'var(--ui-ink, #171717)' }}>Image Ads</div>
         </div>
 
       </div>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 
       {/* Left panel */}
-      <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #dedbd3', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid var(--ui-border, #dedbd3)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
 
         {/* Mode toggle */}
-        <div style={{ padding: '10px 16px', borderBottom: '1px solid #dedbd3', display: 'flex', gap: 6 }}>
+        <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--ui-border, #dedbd3)', display: 'flex', gap: 6 }}>
           {['single', 'batch'].map(m => (
             <button key={m} onClick={() => setMode(m)} style={{
               flex: 1, padding: '6px 0', borderRadius: 4, cursor: 'pointer',
-              border: `1px solid ${mode === m ? '#d84a17' : '#dedbd3'}`,
-              background: mode === m ? '#d84a17' : '#f4f1ea',
-              color: mode === m ? '#fff' : '#77746f',
+              border: `1px solid ${mode === m ? 'var(--ui-accent, #d84a17)' : 'var(--ui-border, #dedbd3)'}`,
+              background: mode === m ? 'var(--ui-accent, #d84a17)' : 'var(--ui-soft, #f4f1ea)',
+              color: mode === m ? '#fff' : 'var(--ui-muted, #77746f)',
               fontFamily: 'inherit', fontSize: 9, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase',
             }}>{m === 'single' ? 'Single' : 'Batch'}</button>
           ))}
@@ -650,9 +650,9 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
               {FORMATS.map(f => (
                 <button key={f.id} onClick={() => setFormatId(f.id)} style={{
                   flex: 1, padding: '7px 0', borderRadius: 4, cursor: 'pointer',
-                  border: `2px solid ${formatId === f.id ? '#d84a17' : '#dedbd3'}`,
-                  background: formatId === f.id ? 'rgba(220,68,10,0.15)' : '#f4f1ea',
-                  color: formatId === f.id ? '#d84a17' : '#77746f',
+                  border: `2px solid ${formatId === f.id ? 'var(--ui-accent, #d84a17)' : 'var(--ui-border, #dedbd3)'}`,
+                  background: formatId === f.id ? 'rgba(220,68,10,0.15)' : 'var(--ui-soft, #f4f1ea)',
+                  color: formatId === f.id ? 'var(--ui-accent, #d84a17)' : 'var(--ui-muted, #77746f)',
                   fontFamily: 'inherit', fontSize: 10, fontWeight: formatId === f.id ? 700 : 400,
                   letterSpacing: 1, textTransform: 'uppercase',
                 }}>{f.label}</button>
@@ -665,30 +665,30 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
             onDrop={e => { e.preventDefault(); setDragging(false); Array.from(e.dataTransfer.files).forEach(addImage); }}
             onDragOver={e => { e.preventDefault(); setDragging(true); }}
             onDragLeave={e => { if (e.currentTarget.contains(e.relatedTarget)) return; setDragging(false); }}
-            style={{ borderRadius: 4, padding: dragging ? 6 : 0, margin: dragging ? -6 : 0, background: dragging ? 'rgba(220,68,10,0.10)' : 'transparent', outline: dragging ? '1px dashed #d84a17' : 'none' }}
+            style={{ borderRadius: 4, padding: dragging ? 6 : 0, margin: dragging ? -6 : 0, background: dragging ? 'rgba(220,68,10,0.10)' : 'transparent', outline: dragging ? '1px dashed var(--ui-accent, #d84a17)' : 'none' }}
           >
             <div style={{ ...S.label, display: 'flex', justifyContent: 'space-between' }}>
-              <span>Images {mode === 'batch' && images.length > 0 && <span style={{ color: '#d84a17' }}>({selectedIds.size} selected)</span>}{uploading > 0 && <span style={{ color: '#77746f', marginLeft: 6 }}>· uploading {uploading}…</span>}</span>
+              <span>Images {mode === 'batch' && images.length > 0 && <span style={{ color: 'var(--ui-accent, #d84a17)' }}>({selectedIds.size} selected)</span>}{uploading > 0 && <span style={{ color: 'var(--ui-muted, #77746f)', marginLeft: 6 }}>· uploading {uploading}…</span>}</span>
               <button onClick={() => fileInputRef.current?.click()} style={S.link}>+ Add</button>
             </div>
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={e => { Array.from(e.target.files).forEach(addImage); e.target.value = ''; }} style={{ display: 'none' }} />
             {images.length === 0 ? (
               <label
                 onClick={() => fileInputRef.current?.click()}
-                style={{ display: 'block', padding: '18px 12px', borderRadius: 4, cursor: 'pointer', textAlign: 'center', border: `1px dashed ${dragging ? '#d84a17' : '#c9c4ba'}`, background: 'transparent' }}
+                style={{ display: 'block', padding: '18px 12px', borderRadius: 4, cursor: 'pointer', textAlign: 'center', border: `1px dashed ${dragging ? 'var(--ui-accent, #d84a17)' : 'var(--ui-border-strong, #c9c4ba)'}`, background: 'transparent' }}
               >
-                <div style={{ fontSize: 10, color: dragging ? '#d84a17' : '#77746f' }}>{dragging ? 'Drop images here' : 'Upload or drag images'}</div>
+                <div style={{ fontSize: 10, color: dragging ? 'var(--ui-accent, #d84a17)' : 'var(--ui-muted, #77746f)' }}>{dragging ? 'Drop images here' : 'Upload or drag images'}</div>
               </label>
             ) : (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {images.map(img => {
                   const isActive = mode === 'single' ? activeImg?.id === img.id : selectedIds.has(img.id);
                   return (
-                    <div key={img.id} style={{ position: 'relative', width: 72, height: 72, borderRadius: 4, overflow: 'hidden', border: `2px solid ${isActive ? '#d84a17' : '#dedbd3'}`, cursor: 'pointer', flexShrink: 0 }}
+                    <div key={img.id} style={{ position: 'relative', width: 72, height: 72, borderRadius: 4, overflow: 'hidden', border: `2px solid ${isActive ? 'var(--ui-accent, #d84a17)' : 'var(--ui-border, #dedbd3)'}`, cursor: 'pointer', flexShrink: 0 }}
                       onClick={() => mode === 'single' ? setActiveImg(img) : toggleSelected(img.id)}>
                       <img crossOrigin="anonymous" src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                       {mode === 'batch' && selectedIds.has(img.id) && (
-                        <div style={{ position: 'absolute', top: 3, left: 3, width: 14, height: 14, background: '#d84a17', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ position: 'absolute', top: 3, left: 3, width: 14, height: 14, background: 'var(--ui-accent, #d84a17)', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <span style={{ color: '#fff', fontSize: 9, lineHeight: 1 }}>✓</span>
                         </div>
                       )}
@@ -697,7 +697,7 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
                     </div>
                   );
                 })}
-                <div onClick={() => fileInputRef.current?.click()} style={{ width: 72, height: 72, borderRadius: 4, border: '1px dashed #c0b89a', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#77746f', fontSize: 20, flexShrink: 0 }}>+</div>
+                <div onClick={() => fileInputRef.current?.click()} style={{ width: 72, height: 72, borderRadius: 4, border: '1px dashed #c0b89a', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--ui-muted, #77746f)', fontSize: 20, flexShrink: 0 }}>+</div>
               </div>
             )}
           </div>
@@ -726,8 +726,8 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
                 </div>
                 <textarea value={batchHooks} onChange={e => setBatchHooks(e.target.value)} placeholder={"Still had a campfire at 6°\nNucking futs.\nFeel it to believe it."} rows={6} style={S.textarea} />
                 {batchHookList.length > 0 && images.length > 0 && (
-                  <div style={{ fontSize: 9, color: '#77746f', marginTop: 4 }}>
-                    {selImgs.length} image{selImgs.length !== 1 ? 's' : ''} × {batchHookList.length} hook{batchHookList.length !== 1 ? 's' : ''} = <b style={{ color: '#171717' }}>{selImgs.length * batchHookList.length} ads</b>
+                  <div style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', marginTop: 4 }}>
+                    {selImgs.length} image{selImgs.length !== 1 ? 's' : ''} × {batchHookList.length} hook{batchHookList.length !== 1 ? 's' : ''} = <b style={{ color: 'var(--ui-ink, #171717)' }}>{selImgs.length * batchHookList.length} ads</b>
                   </div>
                 )}
               </div>
@@ -738,7 +738,7 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
               {mode === 'batch' && images.length > 0 && (
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button onClick={() => setSelectedIds(new Set(images.map(i => i.id)))} style={{ ...S.link, fontSize: 9 }}>Select all</button>
-                  <span style={{ color: '#dedbd3' }}>·</span>
+                  <span style={{ color: 'var(--ui-border, #dedbd3)' }}>·</span>
                   <button onClick={() => setSelectedIds(new Set())} style={{ ...S.link, fontSize: 9, color: '#b0a898' }}>None</button>
                 </div>
               )}
@@ -749,9 +749,9 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
         </div>
 
         {/* Export pinned bottom */}
-        <div style={{ flexShrink: 0, padding: '14px 16px', borderTop: '1px solid #dedbd3' }}>
+        <div style={{ flexShrink: 0, padding: '14px 16px', borderTop: '1px solid var(--ui-border, #dedbd3)' }}>
           {exporting && exportMsg && (
-            <div style={{ fontSize: 9, color: '#77746f', marginBottom: 8, letterSpacing: 1 }}>Rendering {exportMsg}…</div>
+            <div style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', marginBottom: 8, letterSpacing: 1 }}>Rendering {exportMsg}…</div>
           )}
           {mode === 'single' ? (
             <>
@@ -859,8 +859,8 @@ export default function ImageAdTool({ initialText, onTextConsumed, driveAuth, on
 }
 
 const S = {
-  label: { fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', marginBottom: 6, fontWeight: 600, display: 'block' },
-  link: { fontSize: 9, color: '#d84a17', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 },
-  textarea: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #dedbd3', borderRadius: 4, background: '#f4f1ea', color: '#171717', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.5, resize: 'vertical', outline: 'none' },
-  exportBtn: (disabled) => ({ width: '100%', padding: '12px 0', background: disabled ? '#dedbd3' : '#d84a17', border: 'none', borderRadius: 4, color: disabled ? '#88857f' : '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer' }),
+  label: { fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', marginBottom: 6, fontWeight: 600, display: 'block' },
+  link: { fontSize: 9, color: 'var(--ui-accent, #d84a17)', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 },
+  textarea: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 4, background: 'var(--ui-soft, #f4f1ea)', color: 'var(--ui-ink, #171717)', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.5, resize: 'vertical', outline: 'none' },
+  exportBtn: (disabled) => ({ width: '100%', padding: '12px 0', background: disabled ? 'var(--ui-border, #dedbd3)' : 'var(--ui-accent, #d84a17)', border: 'none', borderRadius: 4, color: disabled ? 'var(--ui-subtle, #88857f)' : '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer' }),
 };

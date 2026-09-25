@@ -8,7 +8,7 @@ import { getAnnualRevenuePace } from '../utils/forecastPace';
 
 const TYPE_COLORS = {
   static:  '#6e40c9',
-  review:  '#d84a17',
+  review:  'var(--ui-accent, #d84a17)',
   video:   '#1a7f37',
   other:   '#4a5568',
 };
@@ -16,19 +16,19 @@ const TYPE_COLORS = {
 const TYPE_LABELS = { static: 'Static', review: 'Review', video: 'Video', other: 'Other' };
 
 const DASH = {
-  bg: '#f7f6f2',
+  bg: 'var(--ui-canvas, #f7f6f2)',
   surface: '#fff',
-  surface2: '#f4f1ea',
-  surface3: '#faf9f6',
-  border: '#dedbd3',
-  border2: '#c9c4ba',
-  text: '#171717',
+  surface2: 'var(--ui-soft, #f4f1ea)',
+  surface3: 'var(--ui-soft, #faf9f6)',
+  border: 'var(--ui-border, #dedbd3)',
+  border2: 'var(--ui-border-strong, #c9c4ba)',
+  text: 'var(--ui-ink, #171717)',
   text2: '#343330',
-  muted: '#6f6d68',
-  muted2: '#88857f',
-  flame: '#d84a17',
-  flameDim: '#fff0e9',
-  flameBorder: '#efb9a4',
+  muted: 'var(--ui-muted, #6f6d68)',
+  muted2: 'var(--ui-subtle, #88857f)',
+  flame: 'var(--ui-accent, #d84a17)',
+  flameDim: 'var(--ui-accent-soft, #fff0e9)',
+  flameBorder: 'var(--ui-accent-border, #efb9a4)',
   success: '#256b35',
   warning: '#9a6a0a',
   danger: '#b42318',
@@ -161,7 +161,7 @@ function getCreativeStatus(g) {
   const profit = Number(g.contribProfit) || 0;
 
   if (spend < 50 && purchases === 0) {
-    return { label: 'Learning', color: DASH.muted, bg: '#f4f1ea', border: '#d8d4ca' };
+    return { label: 'Learning', color: DASH.muted, bg: 'var(--ui-soft, #f4f1ea)', border: '#d8d4ca' };
   }
   if (profit > 0 && roas >= 2 && purchases >= 2) {
     return { label: 'Winner', color: DASH.success, bg: '#edf7ee', border: '#afd5b7' };
@@ -216,7 +216,7 @@ const S = {
   ghostBtn:{ padding: '10px 15px', background: DASH.surface, border: `1px solid ${DASH.border}`, color: DASH.muted, fontFamily: 'inherit', fontSize: 11, fontWeight: 700, letterSpacing: 0.4, cursor: 'pointer', borderRadius: 9 },
   btn:     { padding: '10px 15px', background: DASH.text, border: 'none', color: '#fff', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, letterSpacing: 0.4, cursor: 'pointer', borderRadius: 9 },
   card:    { background: DASH.surface, border: `1px solid ${DASH.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 16px 36px rgba(45,40,30,.07)' },
-  stat:    { fontSize: 30, fontWeight: 400, color: DASH.text, lineHeight: 1, fontFamily: "'Instrument Serif', Georgia, serif" },
+  stat:    { fontSize: 30, fontWeight: 400, color: DASH.text, lineHeight: 1, fontFamily: "var(--ui-font, 'Instrument Serif', Georgia, serif)" },
   divider: { borderTop: `1px solid ${DASH.border}`, margin: '28px 0' },
   err:     { padding: '10px 13px', border: `1px solid ${DASH.flameBorder}`, background: '#fff3ed', color: DASH.danger, fontSize: 11, borderRadius: 10 },
 };
@@ -1019,8 +1019,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <div className="eyebrow" style={{ marginBottom: 6 }}>Dashboard</div>
-          <div className="display-lg" style={{ color: '#171717' }}>{v.title}</div>
-          <div className="display-italic" style={{ fontSize: 14, color: '#77746f', marginTop: 6 }}>
+          <div className="display-lg" style={{ color: 'var(--ui-ink, #171717)' }}>{v.title}</div>
+          <div className="display-italic" style={{ fontSize: 14, color: 'var(--ui-muted, #77746f)', marginTop: 6 }}>
             {v.subtitle}
           </div>
         </div>
@@ -1186,8 +1186,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                   <button key={d} onClick={() => setCreativeWindowDays(d)} disabled={creativeTableLoading} style={{
                     padding: '5px 10px',
                     background: creativeWindowDays === d ? 'rgba(220,68,10,0.15)' : 'none',
-                    border: `1px solid ${creativeWindowDays === d ? '#d84a17' : '#dedbd3'}`,
-                    color: creativeWindowDays === d ? '#d84a17' : '#77746f',
+                    border: `1px solid ${creativeWindowDays === d ? 'var(--ui-accent, #d84a17)' : 'var(--ui-border, #dedbd3)'}`,
+                    color: creativeWindowDays === d ? 'var(--ui-accent, #d84a17)' : 'var(--ui-muted, #77746f)',
                     fontFamily: 'inherit', fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase',
                     cursor: creativeTableLoading ? 'not-allowed' : 'pointer', borderRadius: 3,
                   }}>{d}d</button>
@@ -1231,7 +1231,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                       letterSpacing: 1,
                       textTransform: 'uppercase',
                     }}>
-                      {label} <span style={{ color: '#171717' }}>{statusCounts[label]}</span>
+                      {label} <span style={{ color: 'var(--ui-ink, #171717)' }}>{statusCounts[label]}</span>
                     </span>
                   );
                 })}
@@ -1239,11 +1239,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
             )}
 
             {creativeTableLoading && !creativeTable && (
-              <div style={{ fontSize: 11, color: '#88857f', padding: '20px 0' }}>Loading…</div>
+              <div style={{ fontSize: 11, color: 'var(--ui-subtle, #88857f)', padding: '20px 0' }}>Loading…</div>
             )}
 
             {creativeTable && groups.length === 0 && (
-              <div style={{ fontSize: 11, color: '#88857f', padding: '14px 0' }}>
+              <div style={{ fontSize: 11, color: 'var(--ui-subtle, #88857f)', padding: '14px 0' }}>
                 No creative performance in this window. Try a longer window or click Sync from Meta.
               </div>
             )}
@@ -1252,16 +1252,16 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
               <div style={{ marginTop: 4, overflowX: 'auto' }}>
                 <table style={{ width: '100%', minWidth: 1100, borderCollapse: 'collapse', fontSize: 10.5, tableLayout: 'auto' }}>
                   <thead>
-                    <tr style={{ color: '#88857f', fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase' }}>
+                    <tr style={{ color: 'var(--ui-subtle, #88857f)', fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase' }}>
                       {COLS.map(c => (
                         <th key={c.key}
                             onClick={() => c.sortable && sortClick(c.key)}
                             style={{
                               textAlign: c.align, padding: '7px 6px',
                               cursor: c.sortable ? 'pointer' : 'default',
-                              borderBottom: '1px solid #dedbd3',
+                              borderBottom: '1px solid var(--ui-border, #dedbd3)',
                               userSelect: 'none',
-                              color: creativeSortKey === c.key ? '#d84a17' : '#88857f',
+                              color: creativeSortKey === c.key ? 'var(--ui-accent, #d84a17)' : 'var(--ui-subtle, #88857f)',
                               whiteSpace: 'nowrap',
                             }}>
                           {c.label}{sortIcon(c.key)}
@@ -1276,16 +1276,16 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                       return (
                         <React.Fragment key={g.groupKey}>
                           <tr onClick={() => toggleCreativeRow(g.groupKey)}
-                              style={{ borderTop: '1px solid #dedbd3', cursor: 'pointer', background: isOpen ? 'rgba(220,68,10,0.04)' : 'transparent' }}>
+                              style={{ borderTop: '1px solid var(--ui-border, #dedbd3)', cursor: 'pointer', background: isOpen ? 'rgba(220,68,10,0.04)' : 'transparent' }}>
                             <td style={{ padding: '7px 6px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                 {g.thumbnailUrl
-                                  ? <img src={g.thumbnailUrl} alt="" style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 4, flexShrink: 0, background: '#f4f1ea' }} onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
-                                  : <div style={{ width: 32, height: 32, background: '#f4f1ea', borderRadius: 4, flexShrink: 0 }} />
+                                  ? <img src={g.thumbnailUrl} alt="" style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 4, flexShrink: 0, background: 'var(--ui-soft, #f4f1ea)' }} onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
+                                  : <div style={{ width: 32, height: 32, background: 'var(--ui-soft, #f4f1ea)', borderRadius: 4, flexShrink: 0 }} />
                                 }
                                 <div style={{ minWidth: 0 }}>
-                                  <div style={{ color: '#171717', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{g.name || '(unnamed)'}</div>
-                                  <div style={{ fontSize: 9, color: '#88857f', letterSpacing: 1, textTransform: 'uppercase' }}>{g.adCount} {g.adCount === 1 ? 'ad' : 'ads'}</div>
+                                  <div style={{ color: 'var(--ui-ink, #171717)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{g.name || '(unnamed)'}</div>
+                                  <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', letterSpacing: 1, textTransform: 'uppercase' }}>{g.adCount} {g.adCount === 1 ? 'ad' : 'ads'}</div>
                                 </div>
                               </div>
                             </td>
@@ -1315,7 +1315,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                                   <td key={c.key} style={{ padding: '7px 6px', textAlign: 'left', minWidth: 190, maxWidth: 260 }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                                       {ideas.map((idea, idx) => (
-                                        <span key={idx} style={{ color: idx === 0 ? '#171717' : '#77746f', fontSize: 9.5, lineHeight: 1.25 }}>
+                                        <span key={idx} style={{ color: idx === 0 ? 'var(--ui-ink, #171717)' : 'var(--ui-muted, #77746f)', fontSize: 9.5, lineHeight: 1.25 }}>
                                           {idea}
                                         </span>
                                       ))}
@@ -1338,7 +1338,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                                       fontFamily: 'inherit', borderRadius: 3, cursor: isAnalyzing ? 'wait' : 'pointer',
                                       background: g.isAnalyzed ? 'rgba(63,185,80,0.12)' : 'rgba(220,68,10,0.12)',
                                       border: `1px solid ${g.isAnalyzed ? 'rgba(63,185,80,0.5)' : 'rgba(220,68,10,0.5)'}`,
-                                      color: g.isAnalyzed ? '#256b35' : '#d84a17',
+                                      color: g.isAnalyzed ? '#256b35' : 'var(--ui-accent, #d84a17)',
                                     }}>
                                       {isAnalyzing ? '…' : (g.isAnalyzed ? 'View DNA' : 'Analyze')}
                                     </button>
@@ -1360,14 +1360,14 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                           {isOpen && (
                             <tr style={{ background: 'rgba(28,35,48,0.6)' }}>
                               <td colSpan={COLS.length} style={{ padding: '4px 10px 12px 56px' }}>
-                                {exp.loading && <div style={{ fontSize: 10, color: '#88857f', padding: '8px 0' }}>Loading ads…</div>}
+                                {exp.loading && <div style={{ fontSize: 10, color: 'var(--ui-subtle, #88857f)', padding: '8px 0' }}>Loading ads…</div>}
                                 {!exp.loading && exp.ads && exp.ads.length === 0 && (
-                                  <div style={{ fontSize: 10, color: '#88857f', padding: '8px 0' }}>No ads.</div>
+                                  <div style={{ fontSize: 10, color: 'var(--ui-subtle, #88857f)', padding: '8px 0' }}>No ads.</div>
                                 )}
                                 {!exp.loading && exp.ads && exp.ads.length > 0 && (
                                   <table style={{ width: '100%', fontSize: 10, borderCollapse: 'collapse' }}>
                                     <thead>
-                                      <tr style={{ color: '#88857f', letterSpacing: 1, textTransform: 'uppercase', fontSize: 8 }}>
+                                      <tr style={{ color: 'var(--ui-subtle, #88857f)', letterSpacing: 1, textTransform: 'uppercase', fontSize: 8 }}>
                                         <th style={{ textAlign: 'left',  padding: '4px 8px' }}>Ad name</th>
                                         <th style={{ textAlign: 'left',  padding: '4px 8px' }}>Status</th>
                                         <th style={{ textAlign: 'left',  padding: '4px 8px' }}>Created</th>
@@ -1383,13 +1383,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                                         const rev = Number(ad.purchase_value) || 0;
                                         const roas = spend > 0 ? rev / spend : 0;
                                         return (
-                                          <tr key={ad.ad_id} style={{ borderTop: '1px solid #dedbd3' }}>
+                                          <tr key={ad.ad_id} style={{ borderTop: '1px solid var(--ui-border, #dedbd3)' }}>
                                             <td style={{ padding: '5px 8px', color: '#343330', maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ad.ad_name || ad.ad_id}</td>
-                                            <td style={{ padding: '5px 8px', color: '#77746f' }}>{ad.status || '—'}</td>
-                                            <td style={{ padding: '5px 8px', color: '#77746f' }}>{ad.created_time ? new Date(ad.created_time).toLocaleDateString() : '—'}</td>
-                                            <td style={{ padding: '5px 8px', textAlign: 'right', color: '#77746f' }}>${spend.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                                            <td style={{ padding: '5px 8px', textAlign: 'right', color: '#171717', fontWeight: 600 }}>${rev.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-                                            <td style={{ padding: '5px 8px', textAlign: 'right', color: '#77746f' }}>{Number(ad.purchases) || 0}</td>
+                                            <td style={{ padding: '5px 8px', color: 'var(--ui-muted, #77746f)' }}>{ad.status || '—'}</td>
+                                            <td style={{ padding: '5px 8px', color: 'var(--ui-muted, #77746f)' }}>{ad.created_time ? new Date(ad.created_time).toLocaleDateString() : '—'}</td>
+                                            <td style={{ padding: '5px 8px', textAlign: 'right', color: 'var(--ui-muted, #77746f)' }}>${spend.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                                            <td style={{ padding: '5px 8px', textAlign: 'right', color: 'var(--ui-ink, #171717)', fontWeight: 600 }}>${rev.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                                            <td style={{ padding: '5px 8px', textAlign: 'right', color: 'var(--ui-muted, #77746f)' }}>{Number(ad.purchases) || 0}</td>
                                             <td style={{ padding: '5px 8px', textAlign: 'right', color: roas >= 2 ? '#256b35' : roas >= 1 ? '#9a6a0a' : '#b42318', fontWeight: 700 }}>{roas.toFixed(2)}x</td>
                                           </tr>
                                         );
@@ -1408,7 +1408,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
               </div>
             )}
 
-            <div style={{ fontSize: 9, color: '#88857f', letterSpacing: 1, marginTop: 12 }}>
+            <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', letterSpacing: 1, marginTop: 12 }}>
               Window: last {creativeTable?.sinceDays || creativeWindowDays}d · {groups.length} creative {groups.length === 1 ? 'group' : 'groups'} · grouped by video / image hash
             </div>
           </div>
@@ -1487,7 +1487,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
         }
         const topSources = Object.entries(sourceMap).sort((a,b) => b[1].total - a[1].total).slice(0, 5);
 
-        const FMT_COLORS = { video: '#d84a17', static: '#2ea98f', other: '#77746f' };
+        const FMT_COLORS = { video: 'var(--ui-accent, #d84a17)', static: '#2ea98f', other: 'var(--ui-muted, #77746f)' };
 
         return (
           <>
@@ -1497,22 +1497,22 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
               {/* Period stats split by format */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, marginTop: 10 }}>
                 {periods.map(({ label, data }) => (
-                  <div key={label} style={{ borderLeft: '2px solid #dedbd3', paddingLeft: 12 }}>
-                    <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#88857f', marginBottom: 4 }}>{label}</div>
-                    <div style={{ fontSize: 24, fontWeight: 700, color: '#171717', lineHeight: 1, marginBottom: 8 }}>{data.total}</div>
+                  <div key={label} style={{ borderLeft: '2px solid var(--ui-border, #dedbd3)', paddingLeft: 12 }}>
+                    <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ui-subtle, #88857f)', marginBottom: 4 }}>{label}</div>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--ui-ink, #171717)', lineHeight: 1, marginBottom: 8 }}>{data.total}</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ color: FMT_COLORS.video, letterSpacing: 1, textTransform: 'uppercase', fontWeight: 600 }}>Video</span>
-                        <span style={{ color: data.video > 0 ? '#171717' : '#88857f', fontWeight: 700 }}>{data.video}</span>
+                        <span style={{ color: data.video > 0 ? 'var(--ui-ink, #171717)' : 'var(--ui-subtle, #88857f)', fontWeight: 700 }}>{data.video}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ color: FMT_COLORS.static, letterSpacing: 1, textTransform: 'uppercase', fontWeight: 600 }}>Static</span>
-                        <span style={{ color: data.static > 0 ? '#171717' : '#88857f', fontWeight: 700 }}>{data.static}</span>
+                        <span style={{ color: data.static > 0 ? 'var(--ui-ink, #171717)' : 'var(--ui-subtle, #88857f)', fontWeight: 700 }}>{data.static}</span>
                       </div>
                       {data.other > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                           <span style={{ color: FMT_COLORS.other, letterSpacing: 1, textTransform: 'uppercase', fontWeight: 600 }}>Other</span>
-                          <span style={{ color: '#171717', fontWeight: 700 }}>{data.other}</span>
+                          <span style={{ color: 'var(--ui-ink, #171717)', fontWeight: 700 }}>{data.other}</span>
                         </div>
                       )}
                     </div>
@@ -1531,8 +1531,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                       const barPct = (m.total / maxLaunch) * 100;
                       return (
                         <div key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: 9, color: '#77746f', width: 44, flexShrink: 0, textAlign: 'right' }}>{lbl}</span>
-                          <div style={{ flex: 1, height: 16, background: '#f4f1ea', borderRadius: 3, overflow: 'hidden' }}>
+                          <span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', width: 44, flexShrink: 0, textAlign: 'right' }}>{lbl}</span>
+                          <div style={{ flex: 1, height: 16, background: 'var(--ui-soft, #f4f1ea)', borderRadius: 3, overflow: 'hidden' }}>
                             <div style={{ display: 'flex', height: '100%', width: `${barPct}%`, transition: 'width 0.4s' }}>
                               {['video', 'static', 'other'].map(t => {
                                 if (!m[t]) return null;
@@ -1541,7 +1541,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                               })}
                             </div>
                           </div>
-                          <span style={{ fontSize: 11, color: m.total > 0 ? '#171717' : '#88857f', width: 28, textAlign: 'right', fontWeight: m.total > 0 ? 700 : 400 }}>{m.total || '—'}</span>
+                          <span style={{ fontSize: 11, color: m.total > 0 ? 'var(--ui-ink, #171717)' : 'var(--ui-subtle, #88857f)', width: 28, textAlign: 'right', fontWeight: m.total > 0 ? 700 : 400 }}>{m.total || '—'}</span>
                           {m.total > 0 && (
                             <div style={{ display: 'flex', gap: 6, width: 60, justifyContent: 'flex-end' }}>
                               {m.video > 0 && <span style={{ fontSize: 8, color: FMT_COLORS.video, letterSpacing: 1 }}>{m.video}V</span>}
@@ -1556,7 +1556,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                     {[['video', 'Video'], ['static', 'Static'], ['other', 'Other']].map(([k, l]) => (
                       <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <div style={{ width: 8, height: 8, borderRadius: 2, background: FMT_COLORS[k] }} />
-                        <span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>{l}</span>
+                        <span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>{l}</span>
                       </div>
                     ))}
                   </div>
@@ -1566,7 +1566,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                 <div>
                   <span style={S.label}>Top Sources (This Month)</span>
                   {topSources.length === 0 ? (
-                    <div style={{ fontSize: 11, color: '#88857f', marginTop: 8 }}>No launches yet this month.</div>
+                    <div style={{ fontSize: 11, color: 'var(--ui-subtle, #88857f)', marginTop: 8 }}>No launches yet this month.</div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
                       {topSources.map(([c, d]) => {
@@ -1575,7 +1575,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                         return (
                           <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <span style={{ fontSize: 11, color: '#343330', width: 100, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c}</span>
-                            <div style={{ flex: 1, height: 14, background: '#f4f1ea', borderRadius: 3, overflow: 'hidden' }}>
+                            <div style={{ flex: 1, height: 14, background: 'var(--ui-soft, #f4f1ea)', borderRadius: 3, overflow: 'hidden' }}>
                               <div style={{ display: 'flex', height: '100%', width: `${barPct}%` }}>
                                 {['video', 'static', 'other'].map(t => {
                                   if (!d[t]) return null;
@@ -1584,7 +1584,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                                 })}
                               </div>
                             </div>
-                            <span style={{ fontSize: 11, color: '#171717', width: 24, textAlign: 'right', fontWeight: 700 }}>{d.total}</span>
+                            <span style={{ fontSize: 11, color: 'var(--ui-ink, #171717)', width: 24, textAlign: 'right', fontWeight: 700 }}>{d.total}</span>
                           </div>
                         );
                       })}
@@ -1592,7 +1592,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                   )}
                 </div>
               </div>
-              <div style={{ fontSize: 9, color: '#88857f', marginTop: 12, letterSpacing: 1 }}>
+              <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 12, letterSpacing: 1 }}>
                 Source: launch_history · {launches.length} ads logged · {allTime.video} video / {allTime.static} static{allTime.other > 0 ? ` / ${allTime.other} other` : ''}
               </div>
             </div>
@@ -1601,7 +1601,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
       })()}
       {view === 'creative' && launchesError && <div style={{ ...S.err, marginBottom: 20 }}>Launch log: {launchesError}</div>}
       {view === 'creative' && (!launches || launches.length === 0) && !launchesError && (
-        <div style={{ ...S.card, color: '#77746f', fontSize: 12 }}>No launches logged yet. Push an ad via Launcher to populate this view.</div>
+        <div style={{ ...S.card, color: 'var(--ui-muted, #77746f)', fontSize: 12 }}>No launches logged yet. Push an ad via Launcher to populate this view.</div>
       )}
 
       </details>}
@@ -1613,16 +1613,16 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
         }}>
           <div onClick={(e) => e.stopPropagation()} style={{
             width: 'min(620px, 100%)', height: '100%', overflowY: 'auto',
-            background: '#fff', borderLeft: '1px solid #dedbd3', padding: '24px 28px',
+            background: '#fff', borderLeft: '1px solid var(--ui-border, #dedbd3)', padding: '24px 28px',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
               <div>
                 <div style={{ fontSize: 12, color: '#68746c', marginBottom: 6 }}>Saved creative analysis</div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: '#171717', maxWidth: 460 }}>{analysisDrawer.name || '(unnamed)'}</div><p className="ca-caption">This analysis reflects the evidence and metrics available when it was generated. Use the analytics cards for the selected reporting window.</p>
+                <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--ui-ink, #171717)', maxWidth: 460 }}>{analysisDrawer.name || '(unnamed)'}</div><p className="ca-caption">This analysis reflects the evidence and metrics available when it was generated. Use the analytics cards for the selected reporting window.</p>
               </div>
               <button onClick={() => setAnalysisDrawer(null)} style={{
                 padding: '6px 10px', fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase',
-                background: 'none', border: '1px solid #dedbd3', color: '#77746f',
+                background: 'none', border: '1px solid var(--ui-border, #dedbd3)', color: 'var(--ui-muted, #77746f)',
                 fontFamily: 'inherit', borderRadius: 3, cursor: 'pointer',
               }}>Close</button>
             </div>
@@ -1674,7 +1674,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
             )}
 
             {analysisDrawer.loading && (
-              <div style={{ fontSize: 11, color: '#77746f', padding: '20px 0' }}>
+              <div style={{ fontSize: 11, color: 'var(--ui-muted, #77746f)', padding: '20px 0' }}>
                 {analyzingGroup === analysisDrawer.groupKey
                   ? 'Fetching asset, transcribing, and analyzing… This takes 30–90 seconds.'
                   : 'Loading…'}
@@ -1685,7 +1685,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
             )}
 
             {!analysisDrawer.loading && !analysisDrawer.analysis && !analysisDrawer.error && (
-              <div style={{ fontSize: 11, color: '#77746f', padding: '14px 0' }}>
+              <div style={{ fontSize: 11, color: 'var(--ui-muted, #77746f)', padding: '14px 0' }}>
                 Not analyzed yet.{' '}
                 <button onClick={() => runAnalysis(analysisDrawer.groupKey, analysisDrawer.name, '', analysisDrawer.media?.assetId || null)} style={S.ghostBtn}>
                   Analyze now
@@ -1715,14 +1715,14 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
               };
               const Field = ({ label, value }) => value ? (
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 9, letterSpacing: 2, color: '#88857f', textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
-                  <div style={{ fontSize: 12.5, color: '#171717', lineHeight: 1.55 }}>{value}</div>
+                  <div style={{ fontSize: 9, letterSpacing: 2, color: 'var(--ui-subtle, #88857f)', textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--ui-ink, #171717)', lineHeight: 1.55 }}>{value}</div>
                 </div>
               ) : null;
               const Pill = ({ label, value }) => value ? (
                 <span style={{
                   display: 'inline-block', padding: '4px 9px', fontSize: 9.5, letterSpacing: 1.2, textTransform: 'uppercase',
-                  background: 'rgba(220,68,10,0.1)', border: '1px solid rgba(220,68,10,0.4)', color: '#d84a17',
+                  background: 'rgba(220,68,10,0.1)', border: '1px solid rgba(220,68,10,0.4)', color: 'var(--ui-accent, #d84a17)',
                   borderRadius: 3, marginRight: 6, marginBottom: 6, fontWeight: 600,
                 }}>{label}: {value}</span>
               ) : null;
@@ -1787,8 +1787,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
 
                   {a.transcript && (
                     <div style={{ marginBottom: 16 }}>
-                      <div style={{ fontSize: 9, letterSpacing: 2, color: '#88857f', textTransform: 'uppercase', marginBottom: 4 }}>Transcript</div>
-                      <div style={{ fontSize: 11.5, color: '#343330', lineHeight: 1.55, padding: 12, background: '#f4f1ea', borderRadius: 4, whiteSpace: 'pre-wrap' }}>
+                      <div style={{ fontSize: 9, letterSpacing: 2, color: 'var(--ui-subtle, #88857f)', textTransform: 'uppercase', marginBottom: 4 }}>Transcript</div>
+                      <div style={{ fontSize: 11.5, color: '#343330', lineHeight: 1.55, padding: 12, background: 'var(--ui-soft, #f4f1ea)', borderRadius: 4, whiteSpace: 'pre-wrap' }}>
                         {a.transcript}
                       </div>
                     </div>
@@ -1816,7 +1816,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                   )}
 
                   <div className="motion-review-actions">
-                    <div style={{ fontSize: 9, color: '#88857f', letterSpacing: 1 }}>
+                    <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', letterSpacing: 1 }}>
                       {a.generated_at ? `Analyzed ${new Date(a.generated_at).toLocaleString()}` : ''}
                     </div>
                     <div>
@@ -1893,7 +1893,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
         const hasAnyData = monthlyInsights.length > 0 || shopifyMonths.length > 0 || (historySnapshots && historySnapshots.length > 0);
 	        if (!hasAnyData) {
 	          return (
-	            <div style={{ ...S.card, color: '#77746f', fontSize: 12 }}>
+	            <div style={{ ...S.card, color: 'var(--ui-muted, #77746f)', fontSize: 12 }}>
 	              {(loading || shopifyLoading || googleLoading) ? 'Loading…' : 'No data yet. Click Sync Data above to populate this view.'}
 	            </div>
 	          );
@@ -2302,7 +2302,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
           const maxKlaviyoRevenue = Math.max(...rows.map(r => r.klaviyoRevenue || 0), 1);
           const klaviyoTopDrivers = [
             ...(klaviyoData?.topFlows || []).map(item => ({ ...item, kind: 'Flow', color: '#2ea98f' })),
-            ...(klaviyoData?.topMessages || []).map(item => ({ ...item, kind: 'Message', color: '#d84a17' })),
+            ...(klaviyoData?.topMessages || []).map(item => ({ ...item, kind: 'Message', color: 'var(--ui-accent, #d84a17)' })),
           ].sort((a, b) => b.revenue - a.revenue).slice(0, 8);
           const klaviyoMetricCoverage = Array.isArray(klaviyoData?.metricCoverage)
             ? klaviyoData.metricCoverage
@@ -2422,8 +2422,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
               <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 16, marginTop: 28 }}>
                 <div>
                   <div className="eyebrow" style={{ marginBottom: 6 }}>Performance</div>
-                  <div className="display-md" style={{ color: '#171717' }}>Performance Control Room</div>
-                  <div className="display-italic" style={{ fontSize: 12, color: '#77746f', marginTop: 4 }}>
+                  <div className="display-md" style={{ color: 'var(--ui-ink, #171717)' }}>Performance Control Room</div>
+                  <div className="display-italic" style={{ fontSize: 12, color: 'var(--ui-muted, #77746f)', marginTop: 4 }}>
                     Ratio guardrails, source health, channel mix, and lifecycle revenue.
                   </div>
                 </div>
@@ -2431,7 +2431,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
               <div style={{ ...S.card, marginBottom: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
                   <span style={S.label}>Data Health + Ratio Guardrails</span>
-                  <span style={{ fontSize: 10, color: '#77746f', letterSpacing: 1 }}>
+                  <span style={{ fontSize: 10, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>
                     {latestRevenueMonth ? `${fmtMo(latestRevenueMonth.month)} latest · Rev ${fmt$(latestRevenueMonth.revenue)}${revenueMom == null ? '' : ` · MoM ${revenueMom >= 0 ? '+' : ''}${(revenueMom * 100).toFixed(1)}%`}` : 'Waiting on source data'}
                   </span>
                 </div>
@@ -2439,13 +2439,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                   <div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                       {guardrails.map(item => (
-                        <div key={item.label} style={{ padding: 11, background: '#fff', border: '1px solid #dedbd3', borderRadius: 6 }}>
+                        <div key={item.label} style={{ padding: 11, background: '#fff', border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 6 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
-                            <span style={{ fontSize: 9, letterSpacing: 1.6, textTransform: 'uppercase', color: '#77746f', fontWeight: 700 }}>{item.label}</span>
+                            <span style={{ fontSize: 9, letterSpacing: 1.6, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', fontWeight: 700 }}>{item.label}</span>
                             <span style={{ fontSize: 9, color: item.color, fontWeight: 800, letterSpacing: 1 }}>{item.label === 'Klaviyo Rev Share' && Object.keys(snapshotKlaviyoByMonth).length === 0 ? 'Setup' : item.status}</span>
                           </div>
                           <div style={{ marginTop: 6, fontSize: 20, fontWeight: 800, color: item.color, lineHeight: 1 }}>{item.value}</div>
-                          <div style={{ marginTop: 5, fontSize: 9, color: '#88857f', lineHeight: 1.35 }}>{item.note}</div>
+                          <div style={{ marginTop: 5, fontSize: 9, color: 'var(--ui-subtle, #88857f)', lineHeight: 1.35 }}>{item.note}</div>
                         </div>
                       ))}
                     </div>
@@ -2453,10 +2453,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                   <div>
                     <div style={{ display: 'grid', gap: 6 }}>
                       {dataHealthItems.map(item => (
-                        <div key={item.label} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center', padding: '8px 10px', background: '#fff', border: '1px solid #dedbd3', borderRadius: 6 }}>
+                        <div key={item.label} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center', padding: '8px 10px', background: '#fff', border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 6 }}>
                           <div>
-                            <div style={{ fontSize: 9, letterSpacing: 1.4, textTransform: 'uppercase', color: '#77746f', fontWeight: 700 }}>{item.label}</div>
-                            <div style={{ marginTop: 3, fontSize: 10, color: '#88857f' }}>{item.note}</div>
+                            <div style={{ fontSize: 9, letterSpacing: 1.4, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', fontWeight: 700 }}>{item.label}</div>
+                            <div style={{ marginTop: 3, fontSize: 10, color: 'var(--ui-subtle, #88857f)' }}>{item.note}</div>
                           </div>
                           <div style={{ fontSize: 10, color: item.color, fontWeight: 800, letterSpacing: 1 }}>{item.status}</div>
                         </div>
@@ -2464,7 +2464,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                     </div>
                   </div>
                 </div>
-                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #dedbd3', display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 9, color: '#77746f', letterSpacing: 1 }}>
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--ui-border, #dedbd3)', display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 9, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>
                   <span>YTD CVR {ltmCvr == null ? '—' : fmtPct(ltmCvr)}</span>
                   <span>Latest CVR {latestRevenueMonth?.cvr == null ? '—' : fmtPct(latestRevenueMonth.cvr)}</span>
                   <span>CVR MoM {cvrMom == null ? '—' : `${cvrMom >= 0 ? '+' : ''}${(cvrMom * 100).toFixed(2)} pts`}</span>
@@ -2474,27 +2474,27 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
               <div style={{ ...S.card, marginBottom: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
                   <span style={S.label}>Conversion + Acquisition Cost Trends</span>
-                  <span style={{ fontSize: 10, color: '#77746f', letterSpacing: 1 }}>Shopify CVR and blended NCAC by month</span>
+                  <span style={{ fontSize: 10, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>Shopify CVR and blended NCAC by month</span>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                  <div style={{ padding: '10px 12px', background: '#fff', border: '1px solid #dedbd3', borderRadius: 6 }}>
+                  <div style={{ padding: '10px 12px', background: '#fff', border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 6 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
                       <span style={{ ...S.label, marginBottom: 0 }}>CVR Trend</span>
-                      <span style={{ fontSize: 10, color: '#88857f' }}>{ltmCvr == null ? '—' : fmtPct(ltmCvr)} YTD</span>
+                      <span style={{ fontSize: 10, color: 'var(--ui-subtle, #88857f)' }}>{ltmCvr == null ? '—' : fmtPct(ltmCvr)} YTD</span>
                     </div>
                     <TrendLineChart
                       rows={trendRows}
                       value={r => r.cvr}
                       format={n => (n * 100).toFixed(1) + '%'}
-                      color="#d84a17"
+                      color="var(--ui-accent, #d84a17)"
                       target={0.015}
                       targetLabel="1.5% target"
                     />
                   </div>
-                  <div style={{ padding: '10px 12px', background: '#fff', border: '1px solid #dedbd3', borderRadius: 6 }}>
+                  <div style={{ padding: '10px 12px', background: '#fff', border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 6 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
                       <span style={{ ...S.label, marginBottom: 0 }}>NCAC Trend</span>
-                      <span style={{ fontSize: 10, color: '#88857f' }}>{ltmNcac == null ? '—' : fmtSignedCurrency(ltmNcac)} avg</span>
+                      <span style={{ fontSize: 10, color: 'var(--ui-subtle, #88857f)' }}>{ltmNcac == null ? '—' : fmtSignedCurrency(ltmNcac)} avg</span>
                     </div>
                     <TrendLineChart
                       rows={trendRows}
@@ -2511,7 +2511,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
               <div style={{ ...S.card, marginBottom: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
                   <span style={S.label}>Media Mix — Meta vs Google</span>
-                  <span style={{ fontSize: 10, color: '#77746f', letterSpacing: 1 }}>
+                  <span style={{ fontSize: 10, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>
                     {summaryYear} YTD: <span style={{ color: '#1877f2', fontWeight: 700 }}>{fmtPct(mixMetaPct)} Meta</span>
                     {' · '}
                     <span style={{ color: '#fbbc05', fontWeight: 700 }}>{fmtPct(mixGooglePct)} Google</span>
@@ -2519,28 +2519,28 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                     <span style={{ color: '#343330' }}>{fmt$(ltm.adSpend)} total</span>
                   </span>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid #dedbd3' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid var(--ui-border, #dedbd3)' }}>
                   <div>
                     <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#1877f2', marginBottom: 4, fontWeight: 600 }}>Meta CPA</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: '#171717', lineHeight: 1 }}>{ltmMetaCpa == null ? '—' : '$' + ltmMetaCpa.toFixed(0)}</div>
-                    <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>{ltmMetaPurchases.toLocaleString()} purchases</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--ui-ink, #171717)', lineHeight: 1 }}>{ltmMetaCpa == null ? '—' : '$' + ltmMetaCpa.toFixed(0)}</div>
+                    <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 4, letterSpacing: 1 }}>{ltmMetaPurchases.toLocaleString()} purchases</div>
                   </div>
                   <div>
                     <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#fbbc05', marginBottom: 4, fontWeight: 600 }}>Google CPA</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: '#171717', lineHeight: 1 }}>{ltmGoogleCpa == null ? '—' : '$' + ltmGoogleCpa.toFixed(0)}</div>
-                    <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>{ltmGoogleConv.toLocaleString(undefined, { maximumFractionDigits: 1 })} conversions</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--ui-ink, #171717)', lineHeight: 1 }}>{ltmGoogleCpa == null ? '—' : '$' + ltmGoogleCpa.toFixed(0)}</div>
+                    <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 4, letterSpacing: 1 }}>{ltmGoogleConv.toLocaleString(undefined, { maximumFractionDigits: 1 })} conversions</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', marginBottom: 4, fontWeight: 600 }}>Blended CPA</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: '#171717', lineHeight: 1 }}>{ltmCpa == null ? '—' : '$' + ltmCpa.toFixed(0)}</div>
-                    <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>{ltm.orders.toLocaleString()} orders (Shopify)</div>
+                    <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', marginBottom: 4, fontWeight: 600 }}>Blended CPA</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--ui-ink, #171717)', lineHeight: 1 }}>{ltmCpa == null ? '—' : '$' + ltmCpa.toFixed(0)}</div>
+                    <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 4, letterSpacing: 1 }}>{ltm.orders.toLocaleString()} orders (Shopify)</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', marginBottom: 4, fontWeight: 600 }}>Channel CPA Delta</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: (ltmGoogleCpa != null && ltmMetaCpa != null) ? (ltmGoogleCpa < ltmMetaCpa ? '#256b35' : '#b42318') : '#171717', lineHeight: 1 }}>
+                    <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', marginBottom: 4, fontWeight: 600 }}>Channel CPA Delta</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: (ltmGoogleCpa != null && ltmMetaCpa != null) ? (ltmGoogleCpa < ltmMetaCpa ? '#256b35' : '#b42318') : 'var(--ui-ink, #171717)', lineHeight: 1 }}>
                       {(ltmGoogleCpa != null && ltmMetaCpa != null) ? (ltmGoogleCpa < ltmMetaCpa ? 'Google ' : 'Meta ') + 'wins' : '—'}
                     </div>
-                    <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>
+                    <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 4, letterSpacing: 1 }}>
                       {(ltmGoogleCpa != null && ltmMetaCpa != null) ? '$' + Math.abs(ltmGoogleCpa - ltmMetaCpa).toFixed(0) + ' difference' : 'need both channels'}
                     </div>
                   </div>
@@ -2551,14 +2551,14 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                     const metaPct = r.adSpend > 0 ? (r.metaSpend / r.adSpend) * 100 : 0;
                     return (
                       <div key={r.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontSize: 9, color: '#77746f', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}</span>
-                        <div style={{ flex: 1, height: 16, background: '#f4f1ea', borderRadius: 3, overflow: 'hidden' }}>
+                        <span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}</span>
+                        <div style={{ flex: 1, height: 16, background: 'var(--ui-soft, #f4f1ea)', borderRadius: 3, overflow: 'hidden' }}>
                           <div style={{ display: 'flex', height: '100%', width: `${barPct}%`, transition: 'width 0.4s' }}>
                             <div title={`Meta: ${fmt$(r.metaSpend)}`} style={{ width: `${metaPct}%`, background: '#1877f2', height: '100%' }} />
                             <div title={`Google: ${fmt$(r.googleSpend)}`} style={{ width: `${100 - metaPct}%`, background: '#fbbc05', height: '100%' }} />
                           </div>
                         </div>
-                        <span style={{ fontSize: 11, color: '#171717', width: 70, textAlign: 'right', fontWeight: 700 }}>{fmt$(r.adSpend)}</span>
+                        <span style={{ fontSize: 11, color: 'var(--ui-ink, #171717)', width: 70, textAlign: 'right', fontWeight: 700 }}>{fmt$(r.adSpend)}</span>
                         <div style={{ display: 'flex', gap: 6, width: 140, justifyContent: 'flex-end', fontSize: 9 }}>
                           {r.metaSpend > 0 && <span style={{ color: '#1877f2', letterSpacing: 1 }}>{fmt$(r.metaSpend)}M</span>}
                           {r.googleSpend > 0 && <span style={{ color: '#fbbc05', letterSpacing: 1 }}>{fmt$(r.googleSpend)}G</span>}
@@ -2568,46 +2568,46 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                   })}
                 </div>
                 <div style={{ display: 'flex', gap: 14, marginTop: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#1877f2' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Paid Social</span></div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#fbbc05' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Google</span></div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#1877f2' }} /><span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>Paid Social</span></div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#fbbc05' }} /><span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>Google</span></div>
                 </div>
               </div>
               <div style={{ ...S.card, marginBottom: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
                   <span style={S.label}>Klaviyo — Email/SMS Revenue Contribution</span>
-                  <span style={{ fontSize: 10, color: '#77746f', letterSpacing: 1 }}>
+                  <span style={{ fontSize: 10, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>
                     {ltmKlaviyoRevenuePct == null ? 'No revenue snapshot' : `${summaryYear} YTD: ${fmt$(ltm.klaviyoRevenue)} · ${fmtPct(ltmKlaviyoRevenuePct)} of net revenue`}
                   </span>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid #dedbd3' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid var(--ui-border, #dedbd3)' }}>
                   {[
                     { label: 'Attributed Revenue', value: fmt$(ltm.klaviyoRevenue), sub: `${ltm.klaviyoOrders.toLocaleString()} orders` },
-                    { label: '% of Net Revenue', value: ltmKlaviyoRevenuePct == null ? '—' : fmtPct(ltmKlaviyoRevenuePct), color: ltmKlaviyoRevenuePct != null && ltmKlaviyoRevenuePct >= 0.25 ? '#256b35' : '#171717' },
+                    { label: '% of Net Revenue', value: ltmKlaviyoRevenuePct == null ? '—' : fmtPct(ltmKlaviyoRevenuePct), color: ltmKlaviyoRevenuePct != null && ltmKlaviyoRevenuePct >= 0.25 ? '#256b35' : 'var(--ui-ink, #171717)' },
                     { label: 'Flow Revenue', value: fmt$(ltm.klaviyoFlowRevenue), sub: ltm.klaviyoRevenue > 0 ? fmtPct(ltm.klaviyoFlowRevenue / ltm.klaviyoRevenue) + ' of Klaviyo' : '' },
                     { label: 'Open Rate', value: ltmEmailOpenRate == null ? '—' : fmtPct(ltmEmailOpenRate), sub: `${ltm.emailOpens.toLocaleString()} opens` },
                     { label: 'Click Rate', value: ltmEmailClickRate == null ? '—' : fmtPct(ltmEmailClickRate), sub: `${ltm.emailClicks.toLocaleString()} clicks` },
                   ].map(({ label, value, sub, color }) => (
                     <div key={label}>
-                      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', marginBottom: 4, fontWeight: 600 }}>{label}</div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: color || '#171717', lineHeight: 1 }}>{value}</div>
-                      {sub && <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>{sub}</div>}
+                      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', marginBottom: 4, fontWeight: 600 }}>{label}</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: color || 'var(--ui-ink, #171717)', lineHeight: 1 }}>{value}</div>
+                      {sub && <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 4, letterSpacing: 1 }}>{sub}</div>}
                     </div>
                   ))}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid #dedbd3' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid var(--ui-border, #dedbd3)' }}>
                   {[
                     { label: 'Revenue / Recipient', value: ltmKlaviyoRevenuePerRecipient == null ? '—' : '$' + ltmKlaviyoRevenuePerRecipient.toFixed(2), sub: `${ltm.emailSends.toLocaleString()} sends` },
                     { label: 'Click-to-Open', value: ltmEmailClickToOpenRate == null ? '—' : fmtPct(ltmEmailClickToOpenRate), sub: 'clicks / opens' },
-                    { label: 'Unsubscribe Rate', value: ltmEmailUnsubscribeRate == null ? '—' : fmtPct(ltmEmailUnsubscribeRate), sub: `${ltm.emailUnsubscribes.toLocaleString()} unsubscribes`, color: ltmEmailUnsubscribeRate != null && ltmEmailUnsubscribeRate > 0.005 ? '#b42318' : '#171717' },
+                    { label: 'Unsubscribe Rate', value: ltmEmailUnsubscribeRate == null ? '—' : fmtPct(ltmEmailUnsubscribeRate), sub: `${ltm.emailUnsubscribes.toLocaleString()} unsubscribes`, color: ltmEmailUnsubscribeRate != null && ltmEmailUnsubscribeRate > 0.005 ? '#b42318' : 'var(--ui-ink, #171717)' },
                     { label: 'Flow Mix', value: ltmKlaviyoFlowPct == null ? '—' : fmtPct(ltmKlaviyoFlowPct), sub: 'flow revenue share' },
                     { label: 'SMS Sends', value: ltm.smsSends ? ltm.smsSends.toLocaleString() : '—', sub: `${ltm.smsClicks.toLocaleString()} clicks` },
                     { label: 'SMS Click Rate', value: ltmSmsClickRate == null ? '—' : fmtPct(ltmSmsClickRate), sub: 'clicks / SMS sends' },
-                    { label: 'SMS Unsub Rate', value: ltmSmsUnsubscribeRate == null ? '—' : fmtPct(ltmSmsUnsubscribeRate), sub: `${ltm.smsUnsubscribes.toLocaleString()} SMS unsubscribes`, color: ltmSmsUnsubscribeRate != null && ltmSmsUnsubscribeRate > 0.01 ? '#b42318' : '#171717' },
+                    { label: 'SMS Unsub Rate', value: ltmSmsUnsubscribeRate == null ? '—' : fmtPct(ltmSmsUnsubscribeRate), sub: `${ltm.smsUnsubscribes.toLocaleString()} SMS unsubscribes`, color: ltmSmsUnsubscribeRate != null && ltmSmsUnsubscribeRate > 0.01 ? '#b42318' : 'var(--ui-ink, #171717)' },
                   ].map(({ label, value, sub, color }) => (
                     <div key={label}>
-                      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', marginBottom: 4, fontWeight: 600 }}>{label}</div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: color || '#171717', lineHeight: 1 }}>{value}</div>
-                      {sub && <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>{sub}</div>}
+                      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', marginBottom: 4, fontWeight: 600 }}>{label}</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: color || 'var(--ui-ink, #171717)', lineHeight: 1 }}>{value}</div>
+                      {sub && <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 4, letterSpacing: 1 }}>{sub}</div>}
                     </div>
                   ))}
                 </div>
@@ -2618,15 +2618,15 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                     const campaignPct = r.klaviyoRevenue > 0 ? Math.max(0, 100 - flowPct) : 0;
                     return (
                       <div key={r.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontSize: 9, color: '#77746f', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}</span>
-                        <div style={{ flex: 1, height: 16, background: '#f4f1ea', borderRadius: 3, overflow: 'hidden' }}>
+                        <span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}</span>
+                        <div style={{ flex: 1, height: 16, background: 'var(--ui-soft, #f4f1ea)', borderRadius: 3, overflow: 'hidden' }}>
                           <div style={{ display: 'flex', height: '100%', width: `${barPct}%`, transition: 'width 0.4s' }}>
                             <div title={`Flow: ${fmt$(r.klaviyoFlowRevenue)}`} style={{ width: `${flowPct}%`, background: '#2ea98f', height: '100%' }} />
-                            <div title={`Campaign/message: ${fmt$(r.klaviyoCampaignRevenue)}`} style={{ width: `${campaignPct}%`, background: '#d84a17', height: '100%' }} />
+                            <div title={`Campaign/message: ${fmt$(r.klaviyoCampaignRevenue)}`} style={{ width: `${campaignPct}%`, background: 'var(--ui-accent, #d84a17)', height: '100%' }} />
                           </div>
                         </div>
-                        <span style={{ fontSize: 11, color: '#171717', width: 70, textAlign: 'right', fontWeight: 700 }}>{fmt$(r.klaviyoRevenue)}</span>
-                        <span style={{ fontSize: 9, color: '#88857f', width: 92, textAlign: 'right', letterSpacing: 1 }}>{r.klaviyoRevenuePct == null ? '—' : fmtPct(r.klaviyoRevenuePct)} rev</span>
+                        <span style={{ fontSize: 11, color: 'var(--ui-ink, #171717)', width: 70, textAlign: 'right', fontWeight: 700 }}>{fmt$(r.klaviyoRevenue)}</span>
+                        <span style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', width: 92, textAlign: 'right', letterSpacing: 1 }}>{r.klaviyoRevenuePct == null ? '—' : fmtPct(r.klaviyoRevenuePct)} rev</span>
                       </div>
                     );
                   })}
@@ -2637,38 +2637,38 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                   </div>
                 )}
                 {klaviyoTopDrivers.length > 0 && (
-                  <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid #dedbd3' }}>
+                  <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--ui-border, #dedbd3)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
                       <span style={S.label}>Top Klaviyo Revenue Drivers</span>
-                      <span style={{ fontSize: 9, color: '#88857f', letterSpacing: 1 }}>Loaded from latest Klaviyo pull</span>
+                      <span style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', letterSpacing: 1 }}>Loaded from latest Klaviyo pull</span>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                       {klaviyoTopDrivers.map(item => (
-                        <div key={`${item.kind}-${item.id}`} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 8, alignItems: 'center', padding: '8px 10px', background: '#fff', border: '1px solid #dedbd3', borderRadius: 6 }}>
+                        <div key={`${item.kind}-${item.id}`} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 8, alignItems: 'center', padding: '8px 10px', background: '#fff', border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 6 }}>
                           <span style={{ fontSize: 8, color: item.color, fontWeight: 800, letterSpacing: 1 }}>{item.kind}</span>
                           <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 10, color: '#343330' }} title={item.id}>{item.name || item.id}</span>
-                          <span style={{ fontSize: 10, color: '#171717', fontWeight: 800 }}>{fmt$(item.revenue)}</span>
+                          <span style={{ fontSize: 10, color: 'var(--ui-ink, #171717)', fontWeight: 800 }}>{fmt$(item.revenue)}</span>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
                 {klaviyoMetricCoverage.length > 0 && (
-                  <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid #dedbd3' }}>
+                  <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--ui-border, #dedbd3)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
                       <span style={S.label}>Klaviyo Metric Coverage</span>
-                      <span style={{ fontSize: 9, color: '#88857f', letterSpacing: 1 }}>
+                      <span style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', letterSpacing: 1 }}>
                         {klaviyoMetricCoverage.filter(item => item.configured).length}/{klaviyoMetricCoverage.length} detected
                       </span>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
                       {klaviyoMetricCoverage.map(item => (
-                        <div key={item.key || item.label} style={{ padding: '8px 10px', background: '#fff', border: '1px solid #dedbd3', borderRadius: 6 }}>
+                        <div key={item.key || item.label} style={{ padding: '8px 10px', background: '#fff', border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 6 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
-                            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#77746f', fontWeight: 700 }}>{item.label}</span>
+                            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', fontWeight: 700 }}>{item.label}</span>
                             <span style={{ flexShrink: 0, fontSize: 8, color: item.configured ? '#256b35' : '#9a6a0a', fontWeight: 800, letterSpacing: 1 }}>{item.configured ? 'Found' : 'Missing'}</span>
                           </div>
-                          <div style={{ marginTop: 4, fontSize: 9, color: '#88857f', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.metricName || 'Metric not found'}>
+                          <div style={{ marginTop: 4, fontSize: 9, color: 'var(--ui-subtle, #88857f)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.metricName || 'Metric not found'}>
                             {item.metricName || 'Not returned by Klaviyo'}
                           </div>
                         </div>
@@ -2683,10 +2683,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                   value={performanceQuestion}
                   onChange={e => setPerformanceQuestion(e.target.value)}
                   rows={3}
-                  style={{ width: '100%', marginTop: 8, padding: 10, background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 12, borderRadius: 4, resize: 'vertical' }}
+                  style={{ width: '100%', marginTop: 8, padding: 10, background: 'var(--ui-soft, #f4f1ea)', border: '1px solid var(--ui-border, #dedbd3)', color: 'var(--ui-ink, #171717)', fontFamily: 'inherit', fontSize: 12, borderRadius: 4, resize: 'vertical' }}
                 />
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
-                  <span style={{ fontSize: 9, color: '#88857f', letterSpacing: 1 }}>
+                  <span style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', letterSpacing: 1 }}>
                     Uses monthly Shopify, Meta, Google, Klaviyo, CM3, and net profit rows.
                   </span>
                   <button onClick={runPerformanceAnalysis} disabled={performanceChatLoading || !performanceQuestion.trim()} style={performanceChatLoading ? { ...S.ghostBtn, cursor: 'not-allowed' } : S.btn}>
@@ -2695,7 +2695,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                 </div>
                 {performanceChatError && <div style={{ ...S.err, marginTop: 12 }}>{performanceChatError}</div>}
                 {performanceAnswer && (
-                  <div style={{ marginTop: 14, padding: 14, background: '#fff', border: '1px solid #dedbd3', borderRadius: 6, color: '#343330', fontSize: 12, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                  <div style={{ marginTop: 14, padding: 14, background: '#fff', border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 6, color: '#343330', fontSize: 12, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                     {performanceAnswer}
                   </div>
                 )}
@@ -2709,8 +2709,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
             <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 16, marginTop: 28 }}>
 	              <div>
 	                <div className="eyebrow" style={{ marginBottom: 6 }}>CFO View</div>
-	                <div className="display-md" style={{ color: '#171717' }}>Financial Performance</div>
-	                <div className="display-italic" style={{ fontSize: 12, color: '#77746f', marginTop: 4 }}>
+	                <div className="display-md" style={{ color: 'var(--ui-ink, #171717)' }}>Financial Performance</div>
+	                <div className="display-italic" style={{ fontSize: 12, color: 'var(--ui-muted, #77746f)', marginTop: 4 }}>
 	                  Revenue, CM3, OpEx coverage, and estimated net profit.
 	                </div>
               </div>
@@ -2746,12 +2746,12 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
 	                        value={numberInputValue(settings[k])}
 	                        onFocus={e => e.target.select()}
 	                        onChange={e => setSettings({ ...settings, [k]: numberInputChange(e.target.value) })}
-	                        style={{ width: '100%', padding: '6px 8px', background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 12, borderRadius: 4 }}
+	                        style={{ width: '100%', padding: '6px 8px', background: 'var(--ui-soft, #f4f1ea)', border: '1px solid var(--ui-border, #dedbd3)', color: 'var(--ui-ink, #171717)', fontFamily: 'inherit', fontSize: 12, borderRadius: 4 }}
 	                      />
-	                      <span style={{ fontSize: 9, color: '#88857f' }}>{suffix}</span>
+	                      <span style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)' }}>{suffix}</span>
 	                    </div>
 	                  ))}
-                  <div style={{ gridColumn: '1 / -1', fontSize: 9, color: '#88857f', letterSpacing: 1 }}>
+                  <div style={{ gridColumn: '1 / -1', fontSize: 9, color: 'var(--ui-subtle, #88857f)', letterSpacing: 1 }}>
                     Dealer/wholesale COGS assumes wholesale revenue is {dealerWholesaleRetailPct.toFixed(0)}% of retail, deriving an estimated {dealerGrossMarginPct.toFixed(1)}% gross margin on wholesale revenue from the DTC gross margin.
                   </div>
                   <div>
@@ -2760,35 +2760,35 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                       type="month"
                       value={settings.cfoStartMonth || '2026-01'}
                       onChange={e => setSettings({ ...settings, cfoStartMonth: e.target.value || '2026-01' })}
-                      style={{ width: '100%', padding: '6px 8px', background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 12, borderRadius: 4 }}
+                      style={{ width: '100%', padding: '6px 8px', background: 'var(--ui-soft, #f4f1ea)', border: '1px solid var(--ui-border, #dedbd3)', color: 'var(--ui-ink, #171717)', fontFamily: 'inherit', fontSize: 12, borderRadius: 4 }}
                     />
-                    <span style={{ fontSize: 9, color: '#88857f' }}>YYYY-MM</span>
+                    <span style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)' }}>YYYY-MM</span>
                   </div>
                 </div>
                 {/* Monthly OpEx + explicit revenue-source overrides. Google spend
                     pulls live from the Ads API — no manual override column. */}
-                <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid #dedbd3' }}>
+                <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--ui-border, #dedbd3)' }}>
                   <span style={S.label}>Monthly Overrides — OpEx and Revenue Sources</span>
-                  <div style={{ fontSize: 9, color: '#88857f', marginBottom: 10, letterSpacing: 1 }}>
+                  <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginBottom: 10, letterSpacing: 1 }}>
                     Dealer values replace that month's imported/connected dealer snapshot. Off-platform values are added only for sales outside both Shopify stores.
                   </div>
                   <div style={{ overflowX: 'auto', maxHeight: 480 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '60px 90px 95px 70px 95px 70px 70px 70px', gap: 5, alignItems: 'center', minWidth: 680 }}>
-                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#88857f', fontWeight: 600 }}>Month</div>
-                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#88857f', fontWeight: 600 }}>OpEx</div>
-                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#88857f', fontWeight: 600 }}>Dealer Rev</div>
-                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#88857f', fontWeight: 600 }}>Dealer Ord</div>
-                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#88857f', fontWeight: 600 }}>Other Rev</div>
-                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#88857f', fontWeight: 600 }}>Other Ord</div>
-                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#88857f', fontWeight: 600 }}>+ New</div>
-                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#88857f', fontWeight: 600 }}>+ Ret</div>
+                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--ui-subtle, #88857f)', fontWeight: 600 }}>Month</div>
+                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--ui-subtle, #88857f)', fontWeight: 600 }}>OpEx</div>
+                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--ui-subtle, #88857f)', fontWeight: 600 }}>Dealer Rev</div>
+                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--ui-subtle, #88857f)', fontWeight: 600 }}>Dealer Ord</div>
+                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--ui-subtle, #88857f)', fontWeight: 600 }}>Other Rev</div>
+                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--ui-subtle, #88857f)', fontWeight: 600 }}>Other Ord</div>
+                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--ui-subtle, #88857f)', fontWeight: 600 }}>+ New</div>
+                      <div style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--ui-subtle, #88857f)', fontWeight: 600 }}>+ Ret</div>
                       {recent13.map(({ month: mk }) => {
                         const inp = (key, ph) => (
                           <input
                             type="number" step="1" placeholder={ph}
                             value={settings[key]?.[mk] ?? ''}
                             onChange={e => setSettings({ ...settings, [key]: { ...(settings[key] || {}), [mk]: e.target.value === '' ? undefined : parseFloat(e.target.value) || 0 } })}
-                            style={{ width: '100%', padding: '4px 6px', background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, borderRadius: 3 }}
+                            style={{ width: '100%', padding: '4px 6px', background: 'var(--ui-soft, #f4f1ea)', border: '1px solid var(--ui-border, #dedbd3)', color: 'var(--ui-ink, #171717)', fontFamily: 'inherit', fontSize: 11, borderRadius: 3 }}
                           />
                         );
                         return (
@@ -2817,7 +2817,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
             )}
 
             {!dataReady && (
-              <div style={{ ...S.card, marginBottom: 20, color: '#77746f', fontSize: 12 }}>
+              <div style={{ ...S.card, marginBottom: 20, color: 'var(--ui-muted, #77746f)', fontSize: 12 }}>
                 Sync Dashboard above to populate this view.
               </div>
             )}
@@ -2884,13 +2884,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                   ].map(({ label, value, sub, color, bridge }) => (
                     <div key={label} style={S.card}>
                       <span style={S.label}>{label}</span>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: color || '#171717', lineHeight: 1 }}>{value}</div>
-                      {sub && <div style={{ fontSize: 9, color: '#88857f', marginTop: 6, letterSpacing: 1 }}>{sub}</div>}
+                      <div style={{ fontSize: 20, fontWeight: 700, color: color || 'var(--ui-ink, #171717)', lineHeight: 1 }}>{value}</div>
+                      {sub && <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 6, letterSpacing: 1 }}>{sub}</div>}
                       {bridge && (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginTop: 10, paddingTop: 8, borderTop: '1px solid #dedbd3' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--ui-border, #dedbd3)' }}>
                           {bridge.map(item => (
                             <div key={item.label}>
-                              <div style={{ fontSize: 8, color: '#88857f', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 3 }}>{item.label}</div>
+                              <div style={{ fontSize: 8, color: 'var(--ui-subtle, #88857f)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 3 }}>{item.label}</div>
                               <div style={{ fontSize: 11, color: item.value >= 0 ? '#256b35' : '#b42318', fontWeight: 700 }}>{fmt$(item.value)}</div>
                             </div>
                           ))}
@@ -2904,7 +2904,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                 <div style={{ ...S.card, marginBottom: 20 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 14, marginBottom: 14, flexWrap: 'wrap' }}>
                     <span style={{ ...S.label, marginBottom: 0 }}>Monthly Revenue YTD — {summaryYear}</span>
-                    <span style={{ fontSize: 10, color: '#77746f', letterSpacing: 1 }}>
+                    <span style={{ fontSize: 10, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>
                       {fmt$(ltm.revenue)} YTD gross sales · current month is MTD
                     </span>
                   </div>
@@ -2916,24 +2916,24 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                       const otherPct = r.revenue > 0 ? (r.offPlatformRevenue / r.revenue) * 100 : 0;
                       return (
                         <div key={r.month} style={{ display: 'grid', gridTemplateRows: 'auto 1fr auto auto', gap: 6, minWidth: 0, alignItems: 'end' }}>
-                          <div style={{ fontSize: 10, color: r.isCurrent ? '#d84a17' : '#171717', textAlign: 'center', fontWeight: 800, lineHeight: 1 }}>
+                          <div style={{ fontSize: 10, color: r.isCurrent ? 'var(--ui-accent, #d84a17)' : 'var(--ui-ink, #171717)', textAlign: 'center', fontWeight: 800, lineHeight: 1 }}>
                             {fmt$(r.revenue)}
                           </div>
                           <div style={{ height: 168, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
                             <div
                               title={`${fmtMo(r.month)} revenue: ${fmt$(r.revenue)} | DTC ${fmt$(r.dtcGrossRevenue)} | Dealer ${fmt$(r.dealerRevenue)} | Other ${fmt$(r.offPlatformRevenue)} | 2025 deferred ${fmt$(r.deferredRevenue)}`}
-                              style={{ width: '100%', maxWidth: 54, height: barHeight, display: 'flex', flexDirection: 'column-reverse', background: '#f4f1ea', border: '1px solid #dedbd3', borderRadius: 5, overflow: 'hidden' }}
+                              style={{ width: '100%', maxWidth: 54, height: barHeight, display: 'flex', flexDirection: 'column-reverse', background: 'var(--ui-soft, #f4f1ea)', border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 5, overflow: 'hidden' }}
                             >
-                              {r.dtcGrossRevenue > 0 && <div style={{ height: `${dtcPct}%`, background: '#d84a17' }} />}
+                              {r.dtcGrossRevenue > 0 && <div style={{ height: `${dtcPct}%`, background: 'var(--ui-accent, #d84a17)' }} />}
                               {r.dealerRevenue > 0 && <div style={{ height: `${dealerPct}%`, background: '#9a6a0a' }} />}
                               {r.offPlatformRevenue > 0 && <div style={{ height: `${otherPct}%`, background: '#315f91' }} />}
                               {r.deferredRevenue > 0 && <div style={{ height: `${r.deferredRevenue / r.revenue * 100}%`, background: '#7861a8' }} />}
                             </div>
                           </div>
-                          <div style={{ fontSize: 9, color: r.isCurrent ? '#d84a17' : '#77746f', textAlign: 'center', fontWeight: r.isCurrent ? 800 : 700, letterSpacing: 1 }}>
+                          <div style={{ fontSize: 9, color: r.isCurrent ? 'var(--ui-accent, #d84a17)' : 'var(--ui-muted, #77746f)', textAlign: 'center', fontWeight: r.isCurrent ? 800 : 700, letterSpacing: 1 }}>
                             {fmtMo(r.month)}
                           </div>
-                          <div style={{ fontSize: 8, color: '#88857f', textAlign: 'center', minHeight: 10, letterSpacing: 1 }}>
+                          <div style={{ fontSize: 8, color: 'var(--ui-subtle, #88857f)', textAlign: 'center', minHeight: 10, letterSpacing: 1 }}>
                             {r.isCurrent ? 'MTD' : ''}
                           </div>
                         </div>
@@ -2941,19 +2941,19 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                     })}
                   </div>
                   <div style={{ display: 'flex', gap: 14, marginTop: 12, flexWrap: 'wrap' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#d84a17' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>DTC Gross</span></div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#9a6a0a' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Dealer</span></div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#315f91' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Other</span></div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#7861a8' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>2025 Deferred</span></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--ui-accent, #d84a17)' }} /><span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>DTC Gross</span></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#9a6a0a' }} /><span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>Dealer</span></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#315f91' }} /><span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>Other</span></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#7861a8' }} /><span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>2025 Deferred</span></div>
                   </div>
                 </div>
 
                 {/* Current-month pace */}
                 {pace && (
-                  <div style={{ ...S.card, marginBottom: 20, borderColor: '#d84a17' }}>
+                  <div style={{ ...S.card, marginBottom: 20, borderColor: 'var(--ui-accent, #d84a17)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
                       <span style={S.label}>{fmtMo(currentMonthKey)} Pace — Day {dayOfMonth} of {daysInCurrentMonth}</span>
-                      <span style={{ fontSize: 9, color: '#88857f', letterSpacing: 1 }}>(Sales pace × {paceFactor.toFixed(2)}; deferred amount added once)</span>
+                      <span style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', letterSpacing: 1 }}>(Sales pace × {paceFactor.toFixed(2)}; deferred amount added once)</span>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
                       {[
@@ -2973,8 +2973,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                       ].map(({ label, value, sub, color }) => (
                         <div key={label}>
                           <span style={S.label}>{label}</span>
-                          <div style={{ fontSize: 18, fontWeight: 700, color: color || '#171717', lineHeight: 1 }}>{value}</div>
-                          {sub && <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>{sub}</div>}
+                          <div style={{ fontSize: 18, fontWeight: 700, color: color || 'var(--ui-ink, #171717)', lineHeight: 1 }}>{value}</div>
+                          {sub && <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 4, letterSpacing: 1 }}>{sub}</div>}
                         </div>
                       ))}
                     </div>
@@ -2991,16 +2991,16 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                       const newPct = tot > 0 ? (r.newCustomers / tot) * 100 : 0;
                       return (
                         <div key={r.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: 9, color: '#77746f', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}</span>
-                          <div style={{ flex: 1, height: 16, background: '#f4f1ea', borderRadius: 3, overflow: 'hidden' }}>
+                          <span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}</span>
+                          <div style={{ flex: 1, height: 16, background: 'var(--ui-soft, #f4f1ea)', borderRadius: 3, overflow: 'hidden' }}>
                             <div style={{ display: 'flex', height: '100%', width: `${barPct}%`, transition: 'width 0.4s' }}>
-                              <div title={`New: ${r.newCustomers}`} style={{ width: `${newPct}%`, background: '#d84a17', height: '100%' }} />
+                              <div title={`New: ${r.newCustomers}`} style={{ width: `${newPct}%`, background: 'var(--ui-accent, #d84a17)', height: '100%' }} />
                               <div title={`Returning: ${r.returningCustomers}`} style={{ width: `${100 - newPct}%`, background: '#2ea98f', height: '100%' }} />
                             </div>
                           </div>
-                          <span style={{ fontSize: 11, color: '#171717', width: 32, textAlign: 'right', fontWeight: 700 }}>{tot || '—'}</span>
+                          <span style={{ fontSize: 11, color: 'var(--ui-ink, #171717)', width: 32, textAlign: 'right', fontWeight: 700 }}>{tot || '—'}</span>
                           <div style={{ display: 'flex', gap: 6, width: 96, justifyContent: 'flex-end', fontSize: 9 }}>
-                            {r.newCustomers > 0 && <span style={{ color: '#d84a17', letterSpacing: 1 }}>{r.newCustomers}N</span>}
+                            {r.newCustomers > 0 && <span style={{ color: 'var(--ui-accent, #d84a17)', letterSpacing: 1 }}>{r.newCustomers}N</span>}
                             {r.returningCustomers > 0 && <span style={{ color: '#2ea98f', letterSpacing: 1 }}>{r.returningCustomers}R</span>}
                           </div>
                         </div>
@@ -3008,8 +3008,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                     })}
                   </div>
                   <div style={{ display: 'flex', gap: 14, marginTop: 10 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#d84a17' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>New</span></div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#2ea98f' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Returning</span></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--ui-accent, #d84a17)' }} /><span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>New</span></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#2ea98f' }} /><span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>Returning</span></div>
                   </div>
                 </div>
 
@@ -3030,7 +3030,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                       <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
                           <span style={S.label}>Media Mix — Meta vs Google</span>
-                          <span style={{ fontSize: 10, color: '#77746f', letterSpacing: 1 }}>
+                          <span style={{ fontSize: 10, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>
                             {summaryYear} YTD: <span style={{ color: '#1877f2', fontWeight: 700 }}>{fmtPct(mixMetaPct)} Meta</span>
                             {' · '}
                             <span style={{ color: '#fbbc05', fontWeight: 700 }}>{fmtPct(mixGooglePct)} Google</span>
@@ -3038,28 +3038,28 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                             <span style={{ color: '#343330' }}>{fmt$(ltm.adSpend)} total</span>
                           </span>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid #dedbd3' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid var(--ui-border, #dedbd3)' }}>
                           <div>
                             <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#1877f2', marginBottom: 4, fontWeight: 600 }}>Meta CPA</div>
-                            <div style={{ fontSize: 18, fontWeight: 700, color: '#171717', lineHeight: 1 }}>{ltmMetaCpa == null ? '—' : '$' + ltmMetaCpa.toFixed(0)}</div>
-                            <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>{ltmMetaPurchases.toLocaleString()} purchases</div>
+                            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--ui-ink, #171717)', lineHeight: 1 }}>{ltmMetaCpa == null ? '—' : '$' + ltmMetaCpa.toFixed(0)}</div>
+                            <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 4, letterSpacing: 1 }}>{ltmMetaPurchases.toLocaleString()} purchases</div>
                           </div>
                           <div>
                             <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#fbbc05', marginBottom: 4, fontWeight: 600 }}>Google CPA</div>
-                            <div style={{ fontSize: 18, fontWeight: 700, color: '#171717', lineHeight: 1 }}>{ltmGoogleCpa == null ? '—' : '$' + ltmGoogleCpa.toFixed(0)}</div>
-                            <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>{ltmGoogleConv.toLocaleString(undefined, { maximumFractionDigits: 1 })} conversions</div>
+                            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--ui-ink, #171717)', lineHeight: 1 }}>{ltmGoogleCpa == null ? '—' : '$' + ltmGoogleCpa.toFixed(0)}</div>
+                            <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 4, letterSpacing: 1 }}>{ltmGoogleConv.toLocaleString(undefined, { maximumFractionDigits: 1 })} conversions</div>
                           </div>
                           <div>
-                            <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', marginBottom: 4, fontWeight: 600 }}>Blended CPA</div>
-                            <div style={{ fontSize: 18, fontWeight: 700, color: '#171717', lineHeight: 1 }}>{ltmCpa == null ? '—' : '$' + ltmCpa.toFixed(0)}</div>
-                            <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>{ltm.orders.toLocaleString()} orders (Shopify)</div>
+                            <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', marginBottom: 4, fontWeight: 600 }}>Blended CPA</div>
+                            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--ui-ink, #171717)', lineHeight: 1 }}>{ltmCpa == null ? '—' : '$' + ltmCpa.toFixed(0)}</div>
+                            <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 4, letterSpacing: 1 }}>{ltm.orders.toLocaleString()} orders (Shopify)</div>
                           </div>
                           <div>
-                            <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', marginBottom: 4, fontWeight: 600 }}>Channel CPA Δ</div>
-                            <div style={{ fontSize: 18, fontWeight: 700, color: (ltmGoogleCpa != null && ltmMetaCpa != null) ? (ltmGoogleCpa < ltmMetaCpa ? '#256b35' : '#b42318') : '#171717', lineHeight: 1 }}>
+                            <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', marginBottom: 4, fontWeight: 600 }}>Channel CPA Δ</div>
+                            <div style={{ fontSize: 18, fontWeight: 700, color: (ltmGoogleCpa != null && ltmMetaCpa != null) ? (ltmGoogleCpa < ltmMetaCpa ? '#256b35' : '#b42318') : 'var(--ui-ink, #171717)', lineHeight: 1 }}>
                               {(ltmGoogleCpa != null && ltmMetaCpa != null) ? (ltmGoogleCpa < ltmMetaCpa ? 'Google ' : 'Meta ') + 'wins' : '—'}
                             </div>
-                            <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>
+                            <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 4, letterSpacing: 1 }}>
                               {(ltmGoogleCpa != null && ltmMetaCpa != null) ? '$' + Math.abs(ltmGoogleCpa - ltmMetaCpa).toFixed(0) + ' difference' : 'need both channels'}
                             </div>
                           </div>
@@ -3070,14 +3070,14 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                             const metaPct = r.adSpend > 0 ? (r.metaSpend / r.adSpend) * 100 : 0;
                             return (
                               <div key={r.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <span style={{ fontSize: 9, color: '#77746f', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}</span>
-                                <div style={{ flex: 1, height: 16, background: '#f4f1ea', borderRadius: 3, overflow: 'hidden' }}>
+                                <span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}</span>
+                                <div style={{ flex: 1, height: 16, background: 'var(--ui-soft, #f4f1ea)', borderRadius: 3, overflow: 'hidden' }}>
                                   <div style={{ display: 'flex', height: '100%', width: `${barPct}%`, transition: 'width 0.4s' }}>
                                     <div title={`Meta: ${fmt$(r.metaSpend)}`} style={{ width: `${metaPct}%`, background: '#1877f2', height: '100%' }} />
                                     <div title={`Google: ${fmt$(r.googleSpend)}`} style={{ width: `${100 - metaPct}%`, background: '#fbbc05', height: '100%' }} />
                                   </div>
                                 </div>
-                                <span style={{ fontSize: 11, color: '#171717', width: 70, textAlign: 'right', fontWeight: 700 }}>{fmt$(r.adSpend)}</span>
+                                <span style={{ fontSize: 11, color: 'var(--ui-ink, #171717)', width: 70, textAlign: 'right', fontWeight: 700 }}>{fmt$(r.adSpend)}</span>
                                 <div style={{ display: 'flex', gap: 6, width: 140, justifyContent: 'flex-end', fontSize: 9 }}>
                                   {r.metaSpend > 0 && <span style={{ color: '#1877f2', letterSpacing: 1 }}>{fmt$(r.metaSpend)}M</span>}
                                   {r.googleSpend > 0 && <span style={{ color: '#fbbc05', letterSpacing: 1 }}>{fmt$(r.googleSpend)}G</span>}
@@ -3087,8 +3087,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                           })}
                         </div>
                         <div style={{ display: 'flex', gap: 14, marginTop: 10 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#1877f2' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Paid Social</span></div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#fbbc05' }} /><span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>Google</span></div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#1877f2' }} /><span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>Paid Social</span></div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: '#fbbc05' }} /><span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>Google</span></div>
                         </div>
                       </>
                     );
@@ -3108,8 +3108,8 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                       const barW = Math.min(Math.abs(pct), 1.5) * 50; // 50% of bar = 1x coverage
                       return (
                         <div key={r.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: 9, color: '#77746f', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}{r.isCurrent ? '*' : ''}</span>
-                          <div style={{ flex: 1, height: 14, background: '#f4f1ea', borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
+                          <span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}{r.isCurrent ? '*' : ''}</span>
+                          <div style={{ flex: 1, height: 14, background: 'var(--ui-soft, #f4f1ea)', borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
                             {/* 100% line */}
                             <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: '#256b35', opacity: 0.5 }} />
                             <div style={{
@@ -3118,14 +3118,14 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                               background: isFull ? '#256b35' : positive ? '#9a6a0a' : '#b42318',
                             }} />
                           </div>
-                          <span style={{ fontSize: 11, color: cov == null ? '#88857f' : isFull ? '#256b35' : positive ? '#9a6a0a' : '#b42318', width: 60, textAlign: 'right', fontWeight: 700 }}>
+                          <span style={{ fontSize: 11, color: cov == null ? 'var(--ui-subtle, #88857f)' : isFull ? '#256b35' : positive ? '#9a6a0a' : '#b42318', width: 60, textAlign: 'right', fontWeight: 700 }}>
                             {cov == null ? '—' : (cov * 100).toFixed(0) + '%'}
                           </span>
                         </div>
                       );
                     })}
                   </div>
-                  <div style={{ fontSize: 9, color: '#88857f', marginTop: 8, letterSpacing: 1 }}>
+                  <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 8, letterSpacing: 1 }}>
                     Green line = 100% (CM3 fully covers OpEx). * = current month (MTD, not annualized).
                   </div>
                 </div>
@@ -3152,7 +3152,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                   <div style={S.card}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
                       <span style={{ ...S.label, marginBottom: 0 }}>NCAC Trend</span>
-                      <span style={{ fontSize: 10, color: '#88857f' }}>Ad spend ÷ new customers</span>
+                      <span style={{ fontSize: 10, color: 'var(--ui-subtle, #88857f)' }}>Ad spend ÷ new customers</span>
                     </div>
                     <TrendLineChart
                       rows={rows.filter(r => r.month <= currentMonthKey)}
@@ -3173,9 +3173,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                         const barPct = (Math.abs(r.cm3) / cmAbsMax) * 50; // 50% half-width either side of midline
                         return (
                           <div key={r.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{ fontSize: 9, color: '#77746f', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}</span>
-                            <div style={{ flex: 1, height: 14, background: '#f4f1ea', borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
-                              <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: '#dedbd3' }} />
+                            <span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}</span>
+                            <div style={{ flex: 1, height: 14, background: 'var(--ui-soft, #f4f1ea)', borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
+                              <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'var(--ui-border, #dedbd3)' }} />
                               <div style={{
                                 position: 'absolute', top: 0, bottom: 0,
                                 ...(pos ? { left: '50%', width: `${barPct}%` } : { right: '50%', width: `${barPct}%` }),
@@ -3202,9 +3202,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                       const barPct = (Math.abs(value) / netProfitAbsMax) * 50;
                       return (
                         <div key={r.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: 9, color: '#77746f', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}{r.isCurrent ? '*' : ''}</span>
-                          <div style={{ flex: 1, height: 16, background: '#f4f1ea', borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
-                            <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: '#dedbd3' }} />
+                          <span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', width: 44, flexShrink: 0, textAlign: 'right' }}>{fmtMo(r.month)}{r.isCurrent ? '*' : ''}</span>
+                          <div style={{ flex: 1, height: 16, background: 'var(--ui-soft, #f4f1ea)', borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
+                            <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'var(--ui-border, #dedbd3)' }} />
                             <div style={{
                               position: 'absolute', top: 0, bottom: 0,
                               ...(pos ? { left: '50%', width: `${barPct}%` } : { right: '50%', width: `${barPct}%` }),
@@ -3218,7 +3218,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                       );
                     })}
                   </div>
-                  <div style={{ fontSize: 9, color: '#88857f', marginTop: 8, letterSpacing: 1 }}>
+                  <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 8, letterSpacing: 1 }}>
 	                    Closed months use actual/MTD net profit. * = current month projected to month-end using today&apos;s MTD pace.
 	                  </div>
                 </div>
@@ -3231,7 +3231,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                       <thead>
                         <tr>
                           {['Month', 'DTC', 'Dealer', 'Other', '2025 Deferred', 'Total', 'Orders', 'New', 'Ret', 'Meta', 'Google', 'NCAC', '1st Pay', 'COGS', 'Fees', 'Ship', 'Pick', 'CM3', 'CM%', 'OpEx', 'OpEx Cov', 'Net Profit', 'ROAS'].map(h => (
-                            <th key={h} style={{ fontSize: 8, letterSpacing: 1, color: '#88857f', textAlign: h === 'Month' ? 'left' : 'right', padding: '4px 6px 8px 0', textTransform: 'uppercase', fontWeight: 600 }}>{h}</th>
+                            <th key={h} style={{ fontSize: 8, letterSpacing: 1, color: 'var(--ui-subtle, #88857f)', textAlign: h === 'Month' ? 'left' : 'right', padding: '4px 6px 8px 0', textTransform: 'uppercase', fontWeight: 600 }}>{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -3239,28 +3239,28 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                         {rows.map(r => {
                           const margin = r.netRevenue > 0 ? r.cm3 / r.netRevenue : 0;
                           return (
-                            <tr key={r.month} style={{ borderTop: '1px solid #dedbd3' }}>
+                            <tr key={r.month} style={{ borderTop: '1px solid var(--ui-border, #dedbd3)' }}>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#343330' }}>{fmtMo(r.month)}</td>
-                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#171717', textAlign: 'right' }}>{fmt$(r.dtcRevenue)}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: 'var(--ui-ink, #171717)', textAlign: 'right' }}>{fmt$(r.dtcRevenue)}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#9a6a0a', textAlign: 'right' }}>{r.dealerRevenue ? fmt$(r.dealerRevenue) : '—'}</td>
-                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#77746f', textAlign: 'right' }}>{r.offPlatformRevenue ? fmt$(r.offPlatformRevenue) : '—'}</td>
-                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#77746f', textAlign: 'right' }}>{r.deferredRevenue ? fmt$(r.deferredRevenue) : '—'}</td>
-                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#171717', textAlign: 'right', fontWeight: 600 }}>{fmt$(r.revenue)}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: 'var(--ui-muted, #77746f)', textAlign: 'right' }}>{r.offPlatformRevenue ? fmt$(r.offPlatformRevenue) : '—'}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: 'var(--ui-muted, #77746f)', textAlign: 'right' }}>{r.deferredRevenue ? fmt$(r.deferredRevenue) : '—'}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: 'var(--ui-ink, #171717)', textAlign: 'right', fontWeight: 600 }}>{fmt$(r.revenue)}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.orders < (r.newCustomers + r.returningCustomers) ? '#b42318' : '#343330', textAlign: 'right' }} title={r.orders < (r.newCustomers + r.returningCustomers) ? `Orders (${r.orders}) < customers (${r.newCustomers + r.returningCustomers}) — data inconsistency` : ''}>{r.orders || '—'}{r.orders < (r.newCustomers + r.returningCustomers) ? '⚠' : ''}</td>
-                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#d84a17', textAlign: 'right', fontWeight: 600 }}>{r.newCustomers || '—'}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: 'var(--ui-accent, #d84a17)', textAlign: 'right', fontWeight: 600 }}>{r.newCustomers || '—'}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#2ea98f', textAlign: 'right', fontWeight: 600 }}>{r.returningCustomers || '—'}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#343330', textAlign: 'right' }}>{fmt$(r.metaSpend)}</td>
-                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.googleSpend > 0 ? '#343330' : '#88857f', textAlign: 'right' }}>{r.googleSpend > 0 ? fmt$(r.googleSpend) : '—'}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.googleSpend > 0 ? '#343330' : 'var(--ui-subtle, #88857f)', textAlign: 'right' }}>{r.googleSpend > 0 ? fmt$(r.googleSpend) : '—'}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#9a6a0a', textAlign: 'right', fontWeight: 600 }}>{r.ncac != null ? '$' + r.ncac.toFixed(0) : '—'}</td>
-                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.firstOrderPayback == null ? '#88857f' : r.firstOrderPayback >= 1 ? '#256b35' : '#b42318', textAlign: 'right', fontWeight: 600 }}>{r.firstOrderPayback == null ? '—' : (r.firstOrderPayback * 100).toFixed(0) + '%'}</td>
-                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#77746f', textAlign: 'right' }}>{fmt$(r.cogs)}</td>
-                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#77746f', textAlign: 'right' }}>{fmt$(r.paymentFees)}</td>
-                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#77746f', textAlign: 'right' }}>{fmt$(r.shipCost)}</td>
-                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: '#77746f', textAlign: 'right' }}>{fmt$(r.fulfill)}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.firstOrderPayback == null ? 'var(--ui-subtle, #88857f)' : r.firstOrderPayback >= 1 ? '#256b35' : '#b42318', textAlign: 'right', fontWeight: 600 }}>{r.firstOrderPayback == null ? '—' : (r.firstOrderPayback * 100).toFixed(0) + '%'}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: 'var(--ui-muted, #77746f)', textAlign: 'right' }}>{fmt$(r.cogs)}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: 'var(--ui-muted, #77746f)', textAlign: 'right' }}>{fmt$(r.paymentFees)}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: 'var(--ui-muted, #77746f)', textAlign: 'right' }}>{fmt$(r.shipCost)}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: 'var(--ui-muted, #77746f)', textAlign: 'right' }}>{fmt$(r.fulfill)}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.cm3 >= 0 ? '#256b35' : '#b42318', textAlign: 'right', fontWeight: 700 }}>{fmt$(r.cm3)}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: margin >= 0 ? '#256b35' : '#b42318', textAlign: 'right' }}>{r.netRevenue > 0 ? fmtPct(margin) : '—'}</td>
-                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: opexByMonth[r.month] != null ? '#343330' : '#88857f', textAlign: 'right' }}>{fmt$(r.opex)}</td>
-                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.opexCoverage == null ? '#88857f' : r.opexCoverage >= 1 ? '#256b35' : r.opexCoverage >= 0 ? '#9a6a0a' : '#b42318', textAlign: 'right', fontWeight: 600 }}>{r.opexCoverage == null ? '—' : (r.opexCoverage * 100).toFixed(0) + '%'}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: opexByMonth[r.month] != null ? '#343330' : 'var(--ui-subtle, #88857f)', textAlign: 'right' }}>{fmt$(r.opex)}</td>
+                              <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.opexCoverage == null ? 'var(--ui-subtle, #88857f)' : r.opexCoverage >= 1 ? '#256b35' : r.opexCoverage >= 0 ? '#9a6a0a' : '#b42318', textAlign: 'right', fontWeight: 600 }}>{r.opexCoverage == null ? '—' : (r.opexCoverage * 100).toFixed(0) + '%'}</td>
                               <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.netProfit >= 0 ? '#256b35' : '#b42318', textAlign: 'right', fontWeight: 700 }}>{fmt$(r.netProfit)}</td>
                               <td style={{ padding: '6px 0', fontSize: 11, color: '#343330', textAlign: 'right' }}>{r.blendedRoas != null ? r.blendedRoas.toFixed(2) : '—'}</td>
                             </tr>
@@ -3268,31 +3268,31 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                         })}
                       </tbody>
                       <tfoot>
-                        <tr style={{ borderTop: '2px solid #dedbd3' }}>
-                          <td style={{ padding: '8px 6px 4px 0', fontSize: 9, letterSpacing: 1, color: '#88857f', textTransform: 'uppercase', fontWeight: 700 }}>{summaryYear} YTD</td>
-                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#171717', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.dtcRevenue)}</td>
+                        <tr style={{ borderTop: '2px solid var(--ui-border, #dedbd3)' }}>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 9, letterSpacing: 1, color: 'var(--ui-subtle, #88857f)', textTransform: 'uppercase', fontWeight: 700 }}>{summaryYear} YTD</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: 'var(--ui-ink, #171717)', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.dtcRevenue)}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#9a6a0a', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.dealerRevenue)}</td>
-                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#77746f', textAlign: 'right', fontWeight: 700 }}>{ltm.offPlatformRevenue ? fmt$(ltm.offPlatformRevenue) : '—'}</td>
-                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#77746f', textAlign: 'right', fontWeight: 700 }}>{ltm.deferredRevenue ? fmt$(ltm.deferredRevenue) : '—'}</td>
-                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#171717', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.revenue)}</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: 'var(--ui-muted, #77746f)', textAlign: 'right', fontWeight: 700 }}>{ltm.offPlatformRevenue ? fmt$(ltm.offPlatformRevenue) : '—'}</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: 'var(--ui-muted, #77746f)', textAlign: 'right', fontWeight: 700 }}>{ltm.deferredRevenue ? fmt$(ltm.deferredRevenue) : '—'}</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: 'var(--ui-ink, #171717)', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.revenue)}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#343330', textAlign: 'right' }}>{ltm.orders.toLocaleString()}</td>
-                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#d84a17', textAlign: 'right', fontWeight: 700 }}>{ltm.newCustomers.toLocaleString()}</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: 'var(--ui-accent, #d84a17)', textAlign: 'right', fontWeight: 700 }}>{ltm.newCustomers.toLocaleString()}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#2ea98f', textAlign: 'right', fontWeight: 700 }}>{ltm.returningCustomers.toLocaleString()}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#343330', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.metaSpend)}</td>
-                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: ltm.googleSpend > 0 ? '#343330' : '#88857f', textAlign: 'right', fontWeight: 700 }}>{ltm.googleSpend > 0 ? fmt$(ltm.googleSpend) : '—'}</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: ltm.googleSpend > 0 ? '#343330' : 'var(--ui-subtle, #88857f)', textAlign: 'right', fontWeight: 700 }}>{ltm.googleSpend > 0 ? fmt$(ltm.googleSpend) : '—'}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#9a6a0a', textAlign: 'right', fontWeight: 700 }}>{ltmNcac == null ? '—' : '$' + ltmNcac.toFixed(0)}</td>
                           <td colSpan={5} />
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: ltm.cm3 >= 0 ? '#256b35' : '#b42318', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.cm3)}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: ltmCmMargin >= 0 ? '#256b35' : '#b42318', textAlign: 'right', fontWeight: 700 }}>{fmtPct(ltmCmMargin)}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: '#343330', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.opex)}</td>
-                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: ltmOpexCoverage == null ? '#88857f' : ltmOpexCoverage >= 1 ? '#256b35' : '#9a6a0a', textAlign: 'right', fontWeight: 700 }}>{ltmOpexCoverage == null ? '—' : (ltmOpexCoverage * 100).toFixed(0) + '%'}</td>
+                          <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: ltmOpexCoverage == null ? 'var(--ui-subtle, #88857f)' : ltmOpexCoverage >= 1 ? '#256b35' : '#9a6a0a', textAlign: 'right', fontWeight: 700 }}>{ltmOpexCoverage == null ? '—' : (ltmOpexCoverage * 100).toFixed(0) + '%'}</td>
                           <td style={{ padding: '8px 6px 4px 0', fontSize: 11, color: ltm.netProfit >= 0 ? '#256b35' : '#b42318', textAlign: 'right', fontWeight: 700 }}>{fmt$(ltm.netProfit)}</td>
                           <td style={{ padding: '8px 0 4px', fontSize: 11, color: '#343330', textAlign: 'right', fontWeight: 700 }}>{ltmRoas == null ? '—' : ltmRoas.toFixed(2)}</td>
                         </tr>
                       </tfoot>
                     </table>
                   </div>
-                  <div style={{ fontSize: 9, color: '#88857f', marginTop: 8, letterSpacing: 1 }}>
+                  <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 8, letterSpacing: 1 }}>
                     2025 deferred revenue is a revenue-only recognition adjustment; no additional costs or payment fees are assumed. CM3 = Net Revenue − COGS − Payment Fees − Shipping − Pick/Pack − (Meta + Google) Spend. Estimated net profit = CM3 − OpEx. COGS uses Shopify per-unit cost when set, GM% assumption otherwise. Dealer COGS uses the wholesale margin assumption. NCAC = (Meta + Google) spend ÷ new lifetime customers. OpEx column = monthly P&L override or default; current month is prorated MTD. Bold OpEx = override set; dim = default.
                   </div>
                 </div>
@@ -3307,7 +3307,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
         const sheetIdField = (
           <div style={{ ...S.card, marginBottom: 16 }}>
             <span style={S.label}>Forecast Sheet ID</span>
-            <div style={{ fontSize: 9, color: '#88857f', marginBottom: 8, letterSpacing: 1 }}>
+            <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginBottom: 8, letterSpacing: 1 }}>
               From the URL: docs.google.com/spreadsheets/d/<strong style={{ color: '#9a6a0a' }}>SHEET_ID</strong>/edit
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -3316,20 +3316,20 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                 value={settings?.forecastSheetId || ''}
                 onChange={e => setSettings({ ...settings, forecastSheetId: e.target.value.trim() })}
                 placeholder="1uzteHW4sWB6Q49Rt7pOFzmIMD_s0Dxec0lQwgTfFHRI"
-                style={{ flex: 1, padding: '8px 10px', background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, borderRadius: 4 }}
+                style={{ flex: 1, padding: '8px 10px', background: 'var(--ui-soft, #f4f1ea)', border: '1px solid var(--ui-border, #dedbd3)', color: 'var(--ui-ink, #171717)', fontFamily: 'inherit', fontSize: 11, borderRadius: 4 }}
               />
               <input
                 type="text"
                 value={settings?.forecastSheetName || '615 Sales Plan $13M'}
                 onChange={e => setSettings({ ...settings, forecastSheetName: e.target.value })}
                 placeholder="615 Sales Plan $13M"
-                style={{ width: 160, padding: '8px 10px', background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, borderRadius: 4 }}
+                style={{ width: 160, padding: '8px 10px', background: 'var(--ui-soft, #f4f1ea)', border: '1px solid var(--ui-border, #dedbd3)', color: 'var(--ui-ink, #171717)', fontFamily: 'inherit', fontSize: 11, borderRadius: 4 }}
               />
               <button onClick={() => saveSettings(settings)} disabled={savingSettings} style={S.btn}>
                 {savingSettings ? 'Saving…' : 'Save'}
               </button>
             </div>
-            <div style={{ fontSize: 9, color: '#88857f', marginTop: 8, letterSpacing: 1 }}>
+            <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 8, letterSpacing: 1 }}>
               Make sure the forecast sheet is shared (Viewer) with <code style={{ color: '#9a6a0a' }}>howl-drive-uploader@howl-creative-studio.iam.gserviceaccount.com</code>. After saving, click Refresh Forecast.
             </div>
           </div>
@@ -3342,15 +3342,15 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
           return (
             <>
               {sheetIdField}
-              <div style={{ ...S.card, color: '#77746f', fontSize: 12 }}>
-                <div style={{ fontSize: 13, color: '#171717', marginBottom: 10 }}>No forecast loaded yet.</div>
+              <div style={{ ...S.card, color: 'var(--ui-muted, #77746f)', fontSize: 12 }}>
+                <div style={{ fontSize: 13, color: 'var(--ui-ink, #171717)', marginBottom: 10 }}>No forecast loaded yet.</div>
                 <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6 }}>
                   <li>Paste the Sheet ID above and Save.</li>
                   <li>Make sure the sheet is shared (Viewer) with the service account.</li>
                   <li>Click <strong>Pull Forecast</strong> in the header.</li>
                 </ol>
                 {forecastUpdatedAt && (
-                  <div style={{ marginTop: 14, fontSize: 9, color: '#88857f', letterSpacing: 1 }}>
+                  <div style={{ marginTop: 14, fontSize: 9, color: 'var(--ui-subtle, #88857f)', letterSpacing: 1 }}>
                     Last cached: {forecastUpdatedAt.toLocaleString()}
                   </div>
                 )}
@@ -3555,7 +3555,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
           { key: 'cm3',     label: 'CM3',      goodWhen: 'higher' },
         ];
         const colorFor = (actual, target, goodWhen) => {
-          if (target == null || target === 0) return '#77746f';
+          if (target == null || target === 0) return 'var(--ui-muted, #77746f)';
           const ratio = actual / target;
           if (goodWhen === 'higher')  return ratio >= 1 ? '#256b35' : ratio >= 0.85 ? '#9a6a0a' : '#b42318';
           if (goodWhen === 'lower')   return ratio <= 1 ? '#256b35' : ratio <= 1.15 ? '#9a6a0a' : '#b42318';
@@ -3587,7 +3587,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
         return (
           <>
             {forecastUpdatedAt && (
-              <div style={{ fontSize: 9, color: '#88857f', letterSpacing: 1, marginBottom: 14 }}>
+              <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', letterSpacing: 1, marginBottom: 14 }}>
                 Forecast last pulled {forecastUpdatedAt.toLocaleString()} · Sheet: {forecast.sheetName} · {(forecast.months || []).length} months parsed
               </div>
             )}
@@ -3602,16 +3602,16 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                     ['annualRevenueTargetStretch', 'Stretch target'],
                   ].map(([key, label]) => (
                     <label key={key} style={{ display: 'block' }}>
-                      <span style={{ fontSize: 8, color: '#88857f', letterSpacing: 1, textTransform: 'uppercase' }}>{label}</span>
+                      <span style={{ fontSize: 8, color: 'var(--ui-subtle, #88857f)', letterSpacing: 1, textTransform: 'uppercase' }}>{label}</span>
                       <div style={{ display: 'flex', alignItems: 'center', marginTop: 4 }}>
-                        <span style={{ padding: '7px 0 7px 9px', background: '#f4f1ea', border: '1px solid #dedbd3', borderRight: 0, color: '#77746f', fontSize: 10, borderRadius: '4px 0 0 4px' }}>$</span>
+                        <span style={{ padding: '7px 0 7px 9px', background: 'var(--ui-soft, #f4f1ea)', border: '1px solid var(--ui-border, #dedbd3)', borderRight: 0, color: 'var(--ui-muted, #77746f)', fontSize: 10, borderRadius: '4px 0 0 4px' }}>$</span>
                         <input
                           type="number"
                           min="0"
                           step="100000"
                           value={settings?.[key] || ''}
                           onChange={e => setSettings({ ...settings, [key]: Number(e.target.value) })}
-                          style={{ width: 112, padding: '7px 8px 7px 4px', background: '#f4f1ea', border: '1px solid #dedbd3', borderLeft: 0, color: '#171717', fontFamily: 'inherit', fontSize: 10, borderRadius: '0 4px 4px 0' }}
+                          style={{ width: 112, padding: '7px 8px 7px 4px', background: 'var(--ui-soft, #f4f1ea)', border: '1px solid var(--ui-border, #dedbd3)', borderLeft: 0, color: 'var(--ui-ink, #171717)', fontFamily: 'inherit', fontSize: 10, borderRadius: '0 4px 4px 0' }}
                         />
                       </div>
                     </label>
@@ -3627,33 +3627,33 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                   const ahead = pace.daysDelta >= 0;
                   const paceColor = pace.percentToPace >= 1 ? '#256b35' : pace.percentToPace >= 0.9 ? '#9a6a0a' : '#b42318';
                   return (
-                    <div key={label} style={{ border: '1px solid #dedbd3', borderRadius: 6, padding: '14px 16px', background: '#fff' }}>
+                    <div key={label} style={{ border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 6, padding: '14px 16px', background: '#fff' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
                         <div>
                           <div style={{ ...S.label, marginBottom: 5 }}>{label}</div>
-                          <div style={{ fontSize: 24, fontWeight: 700, color: '#171717', lineHeight: 1 }}>{fmtCompact$(pace.annualTarget)}</div>
-                          {source && <div style={{ fontSize: 8, color: '#88857f', marginTop: 5, letterSpacing: 1, textTransform: 'uppercase' }}>{source}</div>}
+                          <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--ui-ink, #171717)', lineHeight: 1 }}>{fmtCompact$(pace.annualTarget)}</div>
+                          {source && <div style={{ fontSize: 8, color: 'var(--ui-subtle, #88857f)', marginTop: 5, letterSpacing: 1, textTransform: 'uppercase' }}>{source}</div>}
                         </div>
                         <div style={{ fontSize: 24, fontWeight: 700, color: paceColor }}>{(pace.percentToPace * 100).toFixed(1)}%</div>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginTop: 16 }}>
                         <div>
-                          <div style={{ fontSize: 8, color: '#88857f', letterSpacing: 1, textTransform: 'uppercase' }}>Actual YTD</div>
-                          <div style={{ fontSize: 14, color: '#171717', fontWeight: 700, marginTop: 3 }}>{fmt$(pace.actualRevenue)}</div>
+                          <div style={{ fontSize: 8, color: 'var(--ui-subtle, #88857f)', letterSpacing: 1, textTransform: 'uppercase' }}>Actual YTD</div>
+                          <div style={{ fontSize: 14, color: 'var(--ui-ink, #171717)', fontWeight: 700, marginTop: 3 }}>{fmt$(pace.actualRevenue)}</div>
                         </div>
                         <div>
-                          <div style={{ fontSize: 8, color: '#88857f', letterSpacing: 1, textTransform: 'uppercase' }}>Expected Today</div>
+                          <div style={{ fontSize: 8, color: 'var(--ui-subtle, #88857f)', letterSpacing: 1, textTransform: 'uppercase' }}>Expected Today</div>
                           <div style={{ fontSize: 14, color: '#343330', fontWeight: 700, marginTop: 3 }}>{fmt$(pace.expectedRevenue)}</div>
                         </div>
                       </div>
-                      <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #dedbd3', fontSize: 14, fontWeight: 700, color: ahead ? '#256b35' : '#b42318' }}>
+                      <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--ui-border, #dedbd3)', fontSize: 14, fontWeight: 700, color: ahead ? '#256b35' : '#b42318' }}>
                         {Math.abs(pace.daysDelta).toFixed(1)} days {ahead ? 'ahead of pace' : 'behind pace'}
                       </div>
                     </div>
                   );
                 })}
               </div>
-              <div style={{ fontSize: 9, color: '#88857f', marginTop: 10, letterSpacing: 1 }}>
+              <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 10, letterSpacing: 1 }}>
                 Both plans follow their supplied workbook's monthly TOTAL HOWL REV curve, scaled to the saved annual target.
               </div>
             </div>
@@ -3667,10 +3667,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                   const ratio = pctOf(a, t);
                   const color = colorFor(a, t, goodWhen);
                   return (
-                    <div key={key} style={{ borderLeft: '2px solid #dedbd3', paddingLeft: 14 }}>
+                    <div key={key} style={{ borderLeft: '2px solid var(--ui-border, #dedbd3)', paddingLeft: 14 }}>
                       <div style={{ ...S.label, marginBottom: 4 }}>{label}</div>
-                      <div style={{ fontSize: 22, fontWeight: 700, color: '#171717', lineHeight: 1 }}>{fmt$(a)}</div>
-                      <div style={{ fontSize: 10, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>vs {fmt$(t)} target</div>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ui-ink, #171717)', lineHeight: 1 }}>{fmt$(a)}</div>
+                      <div style={{ fontSize: 10, color: 'var(--ui-subtle, #88857f)', marginTop: 4, letterSpacing: 1 }}>vs {fmt$(t)} target</div>
                       <div style={{ fontSize: 12, fontWeight: 700, color, marginTop: 6 }}>
                         {ratio == null ? '—' : (ratio * 100).toFixed(0) + '% to plan'}
                       </div>
@@ -3687,13 +3687,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                 {[
                   { label: 'YTD CVR', value: fmtPct(ytdCvr), sub: `${ytdActual.shopifyOrders.toLocaleString()} Shopify orders / ${ytdActual.sessions.toLocaleString()} sessions` },
                   { label: 'Latest CVR', value: latestConversionRow?.cvr == null ? '—' : fmtPct(latestConversionRow.cvr), sub: latestConversionRow ? `${fmtMo(latestConversionRow.month)} actual` : 'no session data' },
-                  { label: 'CVR MoM', value: cvrTrend == null ? '—' : `${cvrTrend >= 0 ? '+' : ''}${(cvrTrend * 100).toFixed(2)} pts`, sub: priorConversionRow ? `${fmtMo(priorConversionRow.month)} to ${fmtMo(latestConversionRow.month)}` : 'need prior month', color: cvrTrend == null ? '#171717' : cvrTrend >= 0 ? '#256b35' : '#b42318' },
+                  { label: 'CVR MoM', value: cvrTrend == null ? '—' : `${cvrTrend >= 0 ? '+' : ''}${(cvrTrend * 100).toFixed(2)} pts`, sub: priorConversionRow ? `${fmtMo(priorConversionRow.month)} to ${fmtMo(latestConversionRow.month)}` : 'need prior month', color: cvrTrend == null ? 'var(--ui-ink, #171717)' : cvrTrend >= 0 ? '#256b35' : '#b42318' },
                   { label: 'Revenue / Session', value: ytdRevenuePerSession == null ? '—' : '$' + ytdRevenuePerSession.toFixed(2), sub: 'gross sales / sessions' },
                 ].map(({ label, value, sub, color }) => (
-                  <div key={label} style={{ borderLeft: '2px solid #dedbd3', paddingLeft: 14 }}>
+                  <div key={label} style={{ borderLeft: '2px solid var(--ui-border, #dedbd3)', paddingLeft: 14 }}>
                     <div style={{ ...S.label, marginBottom: 4 }}>{label}</div>
-                    <div style={{ fontSize: 22, fontWeight: 700, color: color || '#171717', lineHeight: 1 }}>{value}</div>
-                    <div style={{ fontSize: 10, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>{sub}</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: color || 'var(--ui-ink, #171717)', lineHeight: 1 }}>{value}</div>
+                    <div style={{ fontSize: 10, color: 'var(--ui-subtle, #88857f)', marginTop: 4, letterSpacing: 1 }}>{sub}</div>
                   </div>
                 ))}
               </div>
@@ -3708,10 +3708,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                   const ratio = pctOf(proj, tgt);
                   const color = colorFor(proj, tgt, goodWhen);
                   return (
-                    <div key={key} style={{ borderLeft: '2px solid #dedbd3', paddingLeft: 14 }}>
+                    <div key={key} style={{ borderLeft: '2px solid var(--ui-border, #dedbd3)', paddingLeft: 14 }}>
                       <div style={{ ...S.label, marginBottom: 4 }}>{label}</div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: '#171717', lineHeight: 1 }}>{fmt$(proj)}</div>
-                      <div style={{ fontSize: 10, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>vs {fmt$(tgt)} plan</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--ui-ink, #171717)', lineHeight: 1 }}>{fmt$(proj)}</div>
+                      <div style={{ fontSize: 10, color: 'var(--ui-subtle, #88857f)', marginTop: 4, letterSpacing: 1 }}>vs {fmt$(tgt)} plan</div>
                       <div style={{ fontSize: 12, fontWeight: 700, color, marginTop: 6 }}>
                         {ratio == null ? '—' : (ratio * 100).toFixed(0) + '% of plan'}
                       </div>
@@ -3729,14 +3729,14 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                   <thead>
                     <tr>
                       {['Month', 'Status', 'Revenue Act', 'Rev Tgt', 'Δ', 'Spend Act', 'Spend Tgt', 'Δ', 'CM3 Act', 'CM3 Tgt', 'Δ'].map((h, i) => (
-                        <th key={i} style={{ fontSize: 8, letterSpacing: 1, color: '#88857f', textAlign: i === 0 || i === 1 ? 'left' : 'right', padding: '4px 6px 8px 0', textTransform: 'uppercase', fontWeight: 600 }}>{h}</th>
+                        <th key={i} style={{ fontSize: 8, letterSpacing: 1, color: 'var(--ui-subtle, #88857f)', textAlign: i === 0 || i === 1 ? 'left' : 'right', padding: '4px 6px 8px 0', textTransform: 'uppercase', fontWeight: 600 }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map(r => {
                       const status = r.isPast ? 'actual' : r.isCurrent ? 'pace' : 'plan';
-                      const statusColor = r.isPast ? '#256b35' : r.isCurrent ? '#d84a17' : '#88857f';
+                      const statusColor = r.isPast ? '#256b35' : r.isCurrent ? 'var(--ui-accent, #d84a17)' : 'var(--ui-subtle, #88857f)';
                       const revRow = r.isPast ? r.actRevenue : r.isCurrent ? r.projRevenue : r.tgtRevenue;
                       const cacRow = r.isPast ? r.actCac : r.isCurrent ? r.projCac : r.tgtCac;
                       const cm3Row = r.isPast ? r.actCm3 : r.isCurrent ? r.projCm3 : r.tgtCm3;
@@ -3745,16 +3745,16 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                       const dCm3 = r.tgtCm3 > 0 ? (cm3Row / r.tgtCm3) - 1 : (r.tgtCm3 < 0 ? null : null);
                       const cell = (txt, color) => <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: color || '#343330', textAlign: 'right' }}>{txt}</td>;
                       const deltaCell = (d, goodWhen) => {
-                        if (d == null) return cell('—', '#88857f');
+                        if (d == null) return cell('—', 'var(--ui-subtle, #88857f)');
                         const sign = d > 0 ? '+' : '';
                         const good = goodWhen === 'lower' ? d <= 0 : d >= 0;
                         return cell(`${sign}${(d * 100).toFixed(0)}%`, good ? '#256b35' : '#b42318');
                       };
                       return (
-                        <tr key={r.month} style={{ borderTop: '1px solid #dedbd3' }}>
-                          <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.isCurrent ? '#d84a17' : '#343330', fontWeight: r.isCurrent ? 700 : 400 }}>{fmtMo(r.month)}</td>
+                        <tr key={r.month} style={{ borderTop: '1px solid var(--ui-border, #dedbd3)' }}>
+                          <td style={{ padding: '6px 6px 6px 0', fontSize: 11, color: r.isCurrent ? 'var(--ui-accent, #d84a17)' : '#343330', fontWeight: r.isCurrent ? 700 : 400 }}>{fmtMo(r.month)}</td>
                           <td style={{ padding: '6px 6px 6px 0', fontSize: 9, color: statusColor, letterSpacing: 1, textTransform: 'uppercase', fontWeight: 600 }}>{status}</td>
-                          {cell(fmt$(revRow), '#171717')} {cell(fmt$(r.tgtRevenue))}{deltaCell(dRev, 'higher')}
+                          {cell(fmt$(revRow), 'var(--ui-ink, #171717)')} {cell(fmt$(r.tgtRevenue))}{deltaCell(dRev, 'higher')}
                           {cell(fmt$(cacRow))} {cell(fmt$(r.tgtCac))}{deltaCell(dCac, 'lower')}
                           {cell(fmt$(cm3Row), cm3Row >= 0 ? '#256b35' : '#b42318')} {cell(fmt$(r.tgtCm3))}{deltaCell(dCm3, 'higher')}
                         </tr>
@@ -3763,7 +3763,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                   </tbody>
                 </table>
               </div>
-              <div style={{ fontSize: 9, color: '#88857f', marginTop: 10, letterSpacing: 1 }}>
+              <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 10, letterSpacing: 1 }}>
                 STATUS — actual: closed month, pace: current month projected to month-end, plan: forecast value used. Spend delta uses "lower is better"; revenue & CM3 use "higher is better". Forecast revenue line = TOTAL HOWL REV when present, paced against gross sales actuals.
               </div>
             </div>
@@ -3772,7 +3772,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
       })()}
 
       {view === 'meta' && !data && !loading && (
-        <div style={{ color: '#88857f', fontSize: 12, padding: '40px 0' }}>
+        <div style={{ color: 'var(--ui-subtle, #88857f)', fontSize: 12, padding: '40px 0' }}>
           Sync Dashboard above to pull ad delivery data.
         </div>
       )}
@@ -3780,19 +3780,19 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
       {view === 'meta' && data && (
         <>
           {/* Live daily budget */}
-          <div style={{ ...S.card, marginBottom: 20, borderColor: totalDailyBudget > 0 ? '#d84a17' : '#dedbd3' }}>
+          <div style={{ ...S.card, marginBottom: 20, borderColor: totalDailyBudget > 0 ? 'var(--ui-accent, #d84a17)' : 'var(--ui-border, #dedbd3)' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24 }}>
               <div>
                 <span style={S.label}>Live Daily Budget</span>
-                <div style={{ fontSize: 36, fontWeight: 700, color: '#171717', lineHeight: 1 }}>
-                  ${totalDailyBudget.toFixed(0)}<span style={{ fontSize: 16, color: '#77746f', fontWeight: 400 }}>/day</span>
+                <div style={{ fontSize: 36, fontWeight: 700, color: 'var(--ui-ink, #171717)', lineHeight: 1 }}>
+                  ${totalDailyBudget.toFixed(0)}<span style={{ fontSize: 16, color: 'var(--ui-muted, #77746f)', fontWeight: 400 }}>/day</span>
                 </div>
-                <div style={{ fontSize: 10, color: '#77746f', marginTop: 8, letterSpacing: 1 }}>
+                <div style={{ fontSize: 10, color: 'var(--ui-muted, #77746f)', marginTop: 8, letterSpacing: 1 }}>
                   {activeAdsets.length} active ad set{activeAdsets.length !== 1 ? 's' : ''}
-                  {totalDailyBudget > 0 && <> — <span style={{ color: '#171717' }}>${(totalDailyBudget * 7).toFixed(0)}/wk</span> — <span style={{ color: '#171717' }}>${(totalDailyBudget * 30).toFixed(0)}/mo</span></>}
+                  {totalDailyBudget > 0 && <> — <span style={{ color: 'var(--ui-ink, #171717)' }}>${(totalDailyBudget * 7).toFixed(0)}/wk</span> — <span style={{ color: 'var(--ui-ink, #171717)' }}>${(totalDailyBudget * 30).toFixed(0)}/mo</span></>}
                 </div>
                 {totalLifetimeBudget > 0 && (
-                  <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, letterSpacing: 1 }}>
+                  <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 4, letterSpacing: 1 }}>
                     + ${totalLifetimeBudget.toFixed(0)} in lifetime budgets (${totalBudgetRemaining.toFixed(0)} remaining)
                   </div>
                 )}
@@ -3816,15 +3816,15 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                       <div key={cid}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                           <span style={{ fontSize: 9, color: '#343330', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {campaignName} <span style={{ color: '#88857f' }}>({cb.adsets.length})</span>
+                            {campaignName} <span style={{ color: 'var(--ui-subtle, #88857f)' }}>({cb.adsets.length})</span>
                             {strategyLabel && <span style={{ color: '#9a6a0a', marginLeft: 4 }}>{strategyLabel}</span>}
                           </span>
-                          <span style={{ fontSize: 9, color: '#171717', fontWeight: 600 }}>
+                          <span style={{ fontSize: 9, color: 'var(--ui-ink, #171717)', fontWeight: 600 }}>
                             {dailyForCampaign > 0 ? `$${dailyForCampaign.toFixed(0)}/day` : cb.campaignLifetimeBudget > 0 ? `$${cb.campaignLifetimeBudget.toFixed(0)} LT` : '—'}
                           </span>
                         </div>
-                        <div style={{ height: 3, background: '#f4f1ea', borderRadius: 2 }}>
-                          <div style={{ height: '100%', width: `${Math.max(pct, 2)}%`, background: '#d84a17', borderRadius: 2 }} />
+                        <div style={{ height: 3, background: 'var(--ui-soft, #f4f1ea)', borderRadius: 2 }}>
+                          <div style={{ height: '100%', width: `${Math.max(pct, 2)}%`, background: 'var(--ui-accent, #d84a17)', borderRadius: 2 }} />
                         </div>
                       </div>
                     );
@@ -3851,7 +3851,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
 
           {/* Active ads by type */}
           {activeCount > 0 && (() => {
-            const FORMAT_COLORS = { video: '#d84a17', static: '#e8722a', review: '#9a6a0a', other: '#77746f' };
+            const FORMAT_COLORS = { video: 'var(--ui-accent, #d84a17)', static: '#e8722a', review: '#9a6a0a', other: 'var(--ui-muted, #77746f)' };
             const maxTypeCount = Math.max(...Object.values(activeTypeCounts), 1);
             return (
               <div style={{ ...S.card, marginBottom: 20 }}>
@@ -3870,11 +3870,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                       <div key={type}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
                           <span style={{ fontSize: 12, color: '#343330', fontWeight: 600 }}>{label}</span>
-                          <span style={{ fontSize: 20, fontWeight: 700, color: '#171717' }}>
-                            {count} <span style={{ fontSize: 11, color: '#88857f', fontWeight: 400 }}>({pct}%)</span>
+                          <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--ui-ink, #171717)' }}>
+                            {count} <span style={{ fontSize: 11, color: 'var(--ui-subtle, #88857f)', fontWeight: 400 }}>({pct}%)</span>
                           </span>
                         </div>
-                        <div style={{ height: 10, background: '#f4f1ea', borderRadius: 5, overflow: 'hidden' }}>
+                        <div style={{ height: 10, background: 'var(--ui-soft, #f4f1ea)', borderRadius: 5, overflow: 'hidden' }}>
                           <div style={{ height: '100%', width: `${barPct}%`, background: FORMAT_COLORS[type], borderRadius: 5, transition: 'width 0.4s' }} />
                         </div>
                       </div>
@@ -3897,9 +3897,9 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                     <div key={type}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                         <span style={{ fontSize: 11, color: TYPE_COLORS[type], fontWeight: 700, letterSpacing: 1 }}>{TYPE_LABELS[type]}</span>
-                        <span style={{ fontSize: 11, color: '#77746f' }}>{count} <span style={{ color: '#88857f' }}>({pct}%)</span></span>
+                        <span style={{ fontSize: 11, color: 'var(--ui-muted, #77746f)' }}>{count} <span style={{ color: 'var(--ui-subtle, #88857f)' }}>({pct}%)</span></span>
                       </div>
-                      <div style={{ height: 4, background: '#dedbd3', borderRadius: 2 }}>
+                      <div style={{ height: 4, background: 'var(--ui-border, #dedbd3)', borderRadius: 2 }}>
                         <div style={{ height: '100%', width: `${pct}%`, background: TYPE_COLORS[type], borderRadius: 2, transition: 'width 0.4s' }} />
                       </div>
                     </div>
@@ -3921,12 +3921,12 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                   ].map(({ label, value }) => (
                     <div key={label}>
                       <span style={{ ...S.label, marginBottom: 4 }}>{label}</span>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: '#171717' }}>{value}</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--ui-ink, #171717)' }}>{value}</div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div style={{ color: '#88857f', fontSize: 11, marginTop: 8 }}>No spend data available for this period.</div>
+                <div style={{ color: 'var(--ui-subtle, #88857f)', fontSize: 11, marginTop: 8 }}>No spend data available for this period.</div>
               )}
             </div>
           </div>
@@ -3940,10 +3940,10 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                 const barPct = (m.total / maxBarCount) * 100;
                 return (
                   <div key={mKey} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ fontSize: 10, color: '#77746f', width: 48, flexShrink: 0, textAlign: 'right' }}>
+                    <span style={{ fontSize: 10, color: 'var(--ui-muted, #77746f)', width: 48, flexShrink: 0, textAlign: 'right' }}>
                       {formatMonthLabel(mKey)}
                     </span>
-                    <div style={{ flex: 1, height: 20, background: '#f4f1ea', borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
+                    <div style={{ flex: 1, height: 20, background: 'var(--ui-soft, #f4f1ea)', borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
                       {/* Stacked bar: static / review / video / other */}
                       <div style={{ display: 'flex', height: '100%', width: `${barPct}%`, transition: 'width 0.4s' }}>
                         {['static', 'review', 'video', 'other'].map(type => {
@@ -3956,7 +3956,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                         })}
                       </div>
                     </div>
-                    <span style={{ fontSize: 11, color: m.total > 0 ? '#171717' : '#88857f', width: 28, textAlign: 'right', fontWeight: m.total > 0 ? 700 : 400 }}>
+                    <span style={{ fontSize: 11, color: m.total > 0 ? 'var(--ui-ink, #171717)' : 'var(--ui-subtle, #88857f)', width: 28, textAlign: 'right', fontWeight: m.total > 0 ? 700 : 400 }}>
                       {m.total || '—'}
                     </span>
                     {/* Type mini breakdown */}
@@ -3978,7 +3978,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
               {Object.entries(TYPE_COLORS).map(([type, color]) => (
                 <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <div style={{ width: 8, height: 8, borderRadius: 2, background: color }} />
-                  <span style={{ fontSize: 9, color: '#77746f', letterSpacing: 1 }}>{TYPE_LABELS[type]}</span>
+                  <span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', letterSpacing: 1 }}>{TYPE_LABELS[type]}</span>
                 </div>
               ))}
             </div>
@@ -3991,7 +3991,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
               <thead>
                 <tr>
                   {['Name', 'Type', 'Status', 'Created'].map(h => (
-                    <th key={h} style={{ fontSize: 8, letterSpacing: 2, color: '#88857f', textAlign: 'left', padding: '4px 8px 8px 0', textTransform: 'uppercase', fontWeight: 600 }}>{h}</th>
+                    <th key={h} style={{ fontSize: 8, letterSpacing: 2, color: 'var(--ui-subtle, #88857f)', textAlign: 'left', padding: '4px 8px 8px 0', textTransform: 'uppercase', fontWeight: 600 }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -3999,7 +3999,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                 {recent.map(ad => {
                   const type = parseAdType(ad);
                   return (
-                    <tr key={ad.id} style={{ borderTop: '1px solid #dedbd3' }}>
+                    <tr key={ad.id} style={{ borderTop: '1px solid var(--ui-border, #dedbd3)' }}>
                       <td style={{ padding: '8px 8px 8px 0', fontSize: 11, color: '#343330', maxWidth: 320 }}>
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{ad.name}</span>
                       </td>
@@ -4007,11 +4007,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                         <span style={{ color: TYPE_COLORS[type], textTransform: 'uppercase' }}>{TYPE_LABELS[type]}</span>
                       </td>
                       <td style={{ padding: '8px 8px 8px 0', fontSize: 9 }}>
-                        <span style={{ color: ad.status === 'ACTIVE' ? '#256b35' : ad.status === 'PAUSED' ? '#77746f' : '#b42318', letterSpacing: 1, textTransform: 'uppercase' }}>
+                        <span style={{ color: ad.status === 'ACTIVE' ? '#256b35' : ad.status === 'PAUSED' ? 'var(--ui-muted, #77746f)' : '#b42318', letterSpacing: 1, textTransform: 'uppercase' }}>
                           {ad.status}
                         </span>
                       </td>
-                      <td style={{ padding: '8px 0', fontSize: 10, color: '#77746f', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '8px 0', fontSize: 10, color: 'var(--ui-muted, #77746f)', whiteSpace: 'nowrap' }}>
                         {new Date(ad.created_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
                       </td>
                     </tr>
@@ -4020,7 +4020,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
               </tbody>
             </table>
             {ads.length > 10 && (
-              <div style={{ fontSize: 9, color: '#88857f', marginTop: 8, letterSpacing: 1 }}>
+              <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 8, letterSpacing: 1 }}>
                 Showing 10 most recent of {ads.length} total ads
               </div>
             )}
@@ -4030,7 +4030,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
 
       {/* ── Shopify Analytics Section ─────────────────────────────────────── */}
       {view === 'shopify' && shopifyUpdated && (
-        <div style={{ fontSize: 9, color: '#88857f', letterSpacing: 1, marginBottom: 16 }}>
+        <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', letterSpacing: 1, marginBottom: 16 }}>
           Updated {shopifyUpdated.toLocaleTimeString()}
         </div>
       )}
@@ -4046,7 +4046,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
       )}
 
       {view === 'shopify' && !shopifyData && !shopifyLoading && !(historySnapshots || []).some(r => r.shopify || r.shopify_dealer) && (
-        <div style={{ color: '#88857f', fontSize: 12, padding: '40px 0' }}>
+        <div style={{ color: 'var(--ui-subtle, #88857f)', fontSize: 12, padding: '40px 0' }}>
           Sync Dashboard above to pull store analytics.
         </div>
       )}
@@ -4133,12 +4133,12 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                 { label: 'Worst CVR Month', value: worstCvrMonth ? `${worstCvrMonth.cvr.toFixed(2)}%` : '—', sub: worstCvrMonth ? fmtMonth(worstCvrMonth.month) : '' },
                 { label: 'Best Revenue Month', value: bestRevMonth ? `$${Math.round(bestRevMonth.netSales).toLocaleString()}` : '—', sub: bestRevMonth ? fmtMonth(bestRevMonth.month) : '' },
                 { label: 'This Month Pace', value: currentMonthData ? `$${Math.round(projectedRevenue).toLocaleString()}` : '—', sub: currentMonthData ? `$${Math.round(currentMonthData.netSales).toLocaleString()} so far` : 'No current month snapshot' },
-                { label: 'MoM Trend', value: momTrend !== null ? `${momTrend >= 0 ? '+' : ''}${momTrend.toFixed(1)}%` : '—', sub: momTrend !== null ? (momTrend >= 0 ? 'Revenue up' : 'Revenue down') : '', color: momTrend !== null ? (momTrend >= 0 ? '#256b35' : '#b42318') : '#171717' },
+                { label: 'MoM Trend', value: momTrend !== null ? `${momTrend >= 0 ? '+' : ''}${momTrend.toFixed(1)}%` : '—', sub: momTrend !== null ? (momTrend >= 0 ? 'Revenue up' : 'Revenue down') : '', color: momTrend !== null ? (momTrend >= 0 ? '#256b35' : '#b42318') : 'var(--ui-ink, #171717)' },
               ].map(({ label, value, sub, color }) => (
                 <div key={label} style={S.card}>
                   <span style={S.label}>{label}</span>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: color || '#171717', lineHeight: 1 }}>{value}</div>
-                  {sub && <div style={{ fontSize: 9, color: '#88857f', marginTop: 6, letterSpacing: 1 }}>{sub}</div>}
+                  <div style={{ fontSize: 22, fontWeight: 700, color: color || 'var(--ui-ink, #171717)', lineHeight: 1 }}>{value}</div>
+                  {sub && <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 6, letterSpacing: 1 }}>{sub}</div>}
                 </div>
               ))}
             </div>
@@ -4150,20 +4150,20 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                 <thead>
                   <tr>
                     {['Month', 'Revenue', 'Orders', 'Sessions', 'CVR%', 'AOV'].map(h => (
-                      <th key={h} style={{ fontSize: 8, letterSpacing: 2, color: '#88857f', textAlign: h === 'Month' ? 'left' : 'right', padding: '4px 8px 8px 0', textTransform: 'uppercase', fontWeight: 600 }}>{h}</th>
+                      <th key={h} style={{ fontSize: 8, letterSpacing: 2, color: 'var(--ui-subtle, #88857f)', textAlign: h === 'Month' ? 'left' : 'right', padding: '4px 8px 8px 0', textTransform: 'uppercase', fontWeight: 600 }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {months.map(m => {
                     const isCurrentMonth = currentMonthData && m.month === currentMonthData.month && months.indexOf(m) === months.length - 1;
-                    const cvrColor = m.cvr > avgCvr ? '#256b35' : m.cvr > 0 ? '#b42318' : '#88857f';
+                    const cvrColor = m.cvr > avgCvr ? '#256b35' : m.cvr > 0 ? '#b42318' : 'var(--ui-subtle, #88857f)';
                     return (
-                      <tr key={m.month} style={{ borderTop: '1px solid #dedbd3', background: isCurrentMonth ? 'rgba(220,68,10,0.08)' : 'transparent' }}>
-                        <td style={{ padding: '8px 8px 8px 0', fontSize: 11, color: isCurrentMonth ? '#d84a17' : '#343330', fontWeight: isCurrentMonth ? 700 : 400 }}>
-                          {fmtMonth(m.month)} {isCurrentMonth && <span style={{ fontSize: 8, color: '#d84a17', letterSpacing: 1 }}>(CURRENT)</span>}
+                      <tr key={m.month} style={{ borderTop: '1px solid var(--ui-border, #dedbd3)', background: isCurrentMonth ? 'rgba(220,68,10,0.08)' : 'transparent' }}>
+                        <td style={{ padding: '8px 8px 8px 0', fontSize: 11, color: isCurrentMonth ? 'var(--ui-accent, #d84a17)' : '#343330', fontWeight: isCurrentMonth ? 700 : 400 }}>
+                          {fmtMonth(m.month)} {isCurrentMonth && <span style={{ fontSize: 8, color: 'var(--ui-accent, #d84a17)', letterSpacing: 1 }}>(CURRENT)</span>}
                         </td>
-                        <td style={{ padding: '8px 8px 8px 0', fontSize: 11, color: '#171717', textAlign: 'right', fontWeight: 600 }}>
+                        <td style={{ padding: '8px 8px 8px 0', fontSize: 11, color: 'var(--ui-ink, #171717)', textAlign: 'right', fontWeight: 600 }}>
                           ${Math.round(m.netSales).toLocaleString()}
                         </td>
                         <td style={{ padding: '8px 8px 8px 0', fontSize: 11, color: '#343330', textAlign: 'right' }}>
@@ -4183,7 +4183,7 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                   })}
                 </tbody>
               </table>
-              <div style={{ fontSize: 9, color: '#88857f', marginTop: 8, letterSpacing: 1 }}>
+              <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 8, letterSpacing: 1 }}>
                 Avg CVR: {avgCvr.toFixed(2)}% — Total Revenue: ${Math.round(totalRevenue).toLocaleString()} — Total Orders: {totalOrders.toLocaleString()} — Total Sessions: {totalSessions.toLocaleString()}
               </div>
             </div>
@@ -4198,13 +4198,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                     const barPct = maxCvr > 0 ? (m.cvr / maxCvr) * 100 : 0;
                     return (
                       <div key={m.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontSize: 9, color: '#77746f', width: 44, flexShrink: 0, textAlign: 'right' }}>
+                        <span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', width: 44, flexShrink: 0, textAlign: 'right' }}>
                           {fmtMonth(m.month)}
                         </span>
-                        <div style={{ flex: 1, height: 16, background: '#f4f1ea', borderRadius: 3, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${barPct}%`, background: '#d84a17', borderRadius: 3, transition: 'width 0.4s' }} />
+                        <div style={{ flex: 1, height: 16, background: 'var(--ui-soft, #f4f1ea)', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${barPct}%`, background: 'var(--ui-accent, #d84a17)', borderRadius: 3, transition: 'width 0.4s' }} />
                         </div>
-                        <span style={{ fontSize: 10, color: m.cvr > 0 ? '#171717' : '#88857f', width: 40, textAlign: 'right', fontWeight: m.cvr > 0 ? 700 : 400 }}>
+                        <span style={{ fontSize: 10, color: m.cvr > 0 ? 'var(--ui-ink, #171717)' : 'var(--ui-subtle, #88857f)', width: 40, textAlign: 'right', fontWeight: m.cvr > 0 ? 700 : 400 }}>
                           {m.cvr > 0 ? m.cvr.toFixed(2) + '%' : '—'}
                         </span>
                       </div>
@@ -4221,13 +4221,13 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                     const barPct = maxRevenue > 0 ? (m.netSales / maxRevenue) * 100 : 0;
                     return (
                       <div key={m.month} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontSize: 9, color: '#77746f', width: 44, flexShrink: 0, textAlign: 'right' }}>
+                        <span style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', width: 44, flexShrink: 0, textAlign: 'right' }}>
                           {fmtMonth(m.month)}
                         </span>
-                        <div style={{ flex: 1, height: 16, background: '#f4f1ea', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ flex: 1, height: 16, background: 'var(--ui-soft, #f4f1ea)', borderRadius: 3, overflow: 'hidden' }}>
                           <div style={{ height: '100%', width: `${barPct}%`, background: '#2ea98f', borderRadius: 3, transition: 'width 0.4s' }} />
                         </div>
-                        <span style={{ fontSize: 10, color: m.netSales > 0 ? '#171717' : '#88857f', width: 52, textAlign: 'right', fontWeight: m.netSales > 0 ? 700 : 400 }}>
+                        <span style={{ fontSize: 10, color: m.netSales > 0 ? 'var(--ui-ink, #171717)' : 'var(--ui-subtle, #88857f)', width: 52, textAlign: 'right', fontWeight: m.netSales > 0 ? 700 : 400 }}>
                           {m.netSales > 0 ? '$' + Math.round(m.netSales).toLocaleString() : '—'}
                         </span>
                       </div>
@@ -4248,11 +4248,11 @@ export default function DashboardTool({ view = 'cfo', setActiveTab, onOpenCreato
                       <div key={p.name}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
                           <span style={{ fontSize: 11, color: '#343330', fontWeight: 600, maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-                          <span style={{ fontSize: 11, color: '#171717', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                            ${Math.round(p.totalRevenue).toLocaleString()} <span style={{ fontSize: 9, color: '#88857f', fontWeight: 400 }}>({p.totalOrders} orders)</span>
+                          <span style={{ fontSize: 11, color: 'var(--ui-ink, #171717)', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                            ${Math.round(p.totalRevenue).toLocaleString()} <span style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', fontWeight: 400 }}>({p.totalOrders} orders)</span>
                           </span>
                         </div>
-                        <div style={{ height: 8, background: '#f4f1ea', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ height: 8, background: 'var(--ui-soft, #f4f1ea)', borderRadius: 4, overflow: 'hidden' }}>
                           <div style={{ height: '100%', width: `${barPct}%`, background: '#2ea98f', borderRadius: 4, transition: 'width 0.4s' }} />
                         </div>
                       </div>
@@ -4312,22 +4312,22 @@ function ManualTranscriptPaste({ groupKey, name, analyzing, onSubmit }) {
           disabled={uploading || analyzing}
           style={{
             padding: "7px 14px", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700,
-            background: uploading || analyzing ? "rgba(220,68,10,0.2)" : "#d84a17",
-            border: "1px solid #d84a17", color: uploading || analyzing ? "rgba(255,255,255,0.5)" : "#fff",
+            background: uploading || analyzing ? "rgba(220,68,10,0.2)" : "var(--ui-accent, #d84a17)",
+            border: "1px solid var(--ui-accent, #d84a17)", color: uploading || analyzing ? "rgba(255,255,255,0.5)" : "#fff",
             fontFamily: "inherit", borderRadius: 3,
             cursor: uploading || analyzing ? "not-allowed" : "pointer",
           }}
         >
           {uploading ? "Transcribing..." : "Upload video file"}
         </button>
-        <span style={{ fontSize: 10, color: "#77746f" }}>
+        <span style={{ fontSize: 10, color: "var(--ui-muted, #77746f)" }}>
           .mp4 / .mov, up to 25MB. Whisper transcribes, then re-analyzes.
         </span>
       </div>
       <input ref={fileRef} type="file" accept="video/*,audio/*" onChange={onFile} style={{ display: "none" }} />
       {uploadErr && <div style={{ fontSize: 11, color: "#b42318", marginBottom: 8 }}>{uploadErr}</div>}
 
-      <div style={{ fontSize: 9, letterSpacing: 1.5, color: "#88857f", textTransform: "uppercase", margin: "10px 0 4px" }}>
+      <div style={{ fontSize: 9, letterSpacing: 1.5, color: "var(--ui-subtle, #88857f)", textTransform: "uppercase", margin: "10px 0 4px" }}>
         Or paste script manually
       </div>
       <textarea
@@ -4337,8 +4337,8 @@ function ManualTranscriptPaste({ groupKey, name, analyzing, onSubmit }) {
         rows={4}
         style={{
           width: "100%", padding: "8px 10px",
-          background: "#f4f1ea", border: "1px solid #dedbd3",
-          color: "#171717", fontFamily: "inherit", fontSize: 11.5, lineHeight: 1.5,
+          background: "var(--ui-soft, #f4f1ea)", border: "1px solid var(--ui-border, #dedbd3)",
+          color: "var(--ui-ink, #171717)", fontFamily: "inherit", fontSize: 11.5, lineHeight: 1.5,
           borderRadius: 3, resize: "vertical", boxSizing: "border-box",
         }}
       />
@@ -4358,7 +4358,7 @@ function ManualTranscriptPaste({ groupKey, name, analyzing, onSubmit }) {
           style={{
             padding: "6px 14px", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700,
             background: text.trim() && !analyzing && !uploading ? "rgba(220,68,10,0.15)" : "rgba(220,68,10,0.06)",
-            border: "1px solid #d84a17", color: text.trim() && !analyzing && !uploading ? "#d84a17" : "rgba(220,68,10,0.5)",
+            border: "1px solid var(--ui-accent, #d84a17)", color: text.trim() && !analyzing && !uploading ? "var(--ui-accent, #d84a17)" : "rgba(220,68,10,0.5)",
             fontFamily: "inherit", borderRadius: 3,
             cursor: text.trim() && !analyzing && !uploading ? "pointer" : "not-allowed",
           }}

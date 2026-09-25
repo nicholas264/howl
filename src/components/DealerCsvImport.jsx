@@ -3,11 +3,11 @@ import { useState, useCallback } from 'react';
 import Papa from 'papaparse';
 
 const S = {
-  card:    { background: '#fff', border: '1px solid #dedbd3', borderRadius: 6, padding: '20px 22px', marginBottom: 20 },
-  label:   { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#77746f', marginBottom: 8, display: 'block' },
-  btn:     { padding: '8px 16px', background: '#d84a17', border: 'none', color: '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 },
-  ghost:   { padding: '8px 16px', background: 'none', border: '1px solid #dedbd3', color: '#77746f', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 },
-  err:     { padding: '8px 12px', border: '1px solid rgba(220,68,10,0.4)', background: 'rgba(220,68,10,0.1)', color: '#d84a17', fontSize: 10, borderRadius: 4, marginTop: 10 },
+  card:    { background: '#fff', border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 6, padding: '20px 22px', marginBottom: 20 },
+  label:   { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', marginBottom: 8, display: 'block' },
+  btn:     { padding: '8px 16px', background: 'var(--ui-accent, #d84a17)', border: 'none', color: '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 },
+  ghost:   { padding: '8px 16px', background: 'none', border: '1px solid var(--ui-border, #dedbd3)', color: 'var(--ui-muted, #77746f)', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 },
+  err:     { padding: '8px 12px', border: '1px solid rgba(220,68,10,0.4)', background: 'rgba(220,68,10,0.1)', color: 'var(--ui-accent, #d84a17)', fontSize: 10, borderRadius: 4, marginTop: 10 },
 };
 
 async function customerKey(email) {
@@ -185,7 +185,7 @@ export default function DealerCsvImport({ onUploaded }) {
   return (
     <div style={S.card}>
       <span style={S.label}>Dealer Store CSV Import</span>
-      <div style={{ fontSize: 10, color: '#77746f', marginBottom: 12, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 10, color: 'var(--ui-muted, #77746f)', marginBottom: 12, lineHeight: 1.5 }}>
         Export orders from <strong>{`{dealer-store} → Orders → Export`}</strong> as CSV (default columns, all orders or a date range).
         Drop the file below — we aggregate per month and add it to your dashboard totals.
         New vs returning is inferred from email + first-seen month within the upload.
@@ -208,22 +208,22 @@ export default function DealerCsvImport({ onUploaded }) {
 
       {parsed && (
         <div style={{ marginTop: 14 }}>
-          <div style={{ fontSize: 9, color: '#88857f', letterSpacing: 1, marginBottom: 6 }}>Preview — {parsed.length} months parsed</div>
+          <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', letterSpacing: 1, marginBottom: 6 }}>Preview — {parsed.length} months parsed</div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
                 {['Month', 'Orders', 'Revenue', 'New', 'Ret'].map(h => (
-                  <th key={h} style={{ fontSize: 8, letterSpacing: 1, color: '#88857f', textAlign: h === 'Month' ? 'left' : 'right', padding: '4px 8px 6px 0', textTransform: 'uppercase', fontWeight: 600 }}>{h}</th>
+                  <th key={h} style={{ fontSize: 8, letterSpacing: 1, color: 'var(--ui-subtle, #88857f)', textAlign: h === 'Month' ? 'left' : 'right', padding: '4px 8px 6px 0', textTransform: 'uppercase', fontWeight: 600 }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {parsed.map(m => (
-                <tr key={m.month} style={{ borderTop: '1px solid #dedbd3' }}>
+                <tr key={m.month} style={{ borderTop: '1px solid var(--ui-border, #dedbd3)' }}>
                   <td style={{ padding: '4px 8px 4px 0', fontSize: 11, color: '#343330' }}>{fmtMo(m.month)}</td>
                   <td style={{ padding: '4px 8px 4px 0', fontSize: 11, color: '#343330', textAlign: 'right' }}>{m.orders}</td>
-                  <td style={{ padding: '4px 8px 4px 0', fontSize: 11, color: '#171717', textAlign: 'right', fontWeight: 600 }}>{fmt$(m.netSales)}</td>
-                  <td style={{ padding: '4px 8px 4px 0', fontSize: 11, color: '#d84a17', textAlign: 'right' }}>{m.newCustomers}</td>
+                  <td style={{ padding: '4px 8px 4px 0', fontSize: 11, color: 'var(--ui-ink, #171717)', textAlign: 'right', fontWeight: 600 }}>{fmt$(m.netSales)}</td>
+                  <td style={{ padding: '4px 8px 4px 0', fontSize: 11, color: 'var(--ui-accent, #d84a17)', textAlign: 'right' }}>{m.newCustomers}</td>
                   <td style={{ padding: '4px 0', fontSize: 11, color: '#2ea98f', textAlign: 'right' }}>{m.returningCustomers}</td>
                 </tr>
               ))}

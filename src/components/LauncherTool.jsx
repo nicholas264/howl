@@ -348,21 +348,21 @@ function sourceConfig(value) {
 const S = {
   wrap: { padding: '28px 36px', maxWidth: 1240 },
   h1: { fontSize: 22, marginBottom: 4 },
-  sub: { color: '#77746f', fontSize: 13, marginTop: 0, marginBottom: 16 },
-  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: '#77746f', marginBottom: 6, display: 'block' },
-  input: { background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', width: '100%' },
-  select: { background: '#f4f1ea', border: '1px solid #dedbd3', color: '#171717', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, cursor: 'pointer', width: '100%' },
-  card: { border: '1px solid #dedbd3', borderRadius: 6, background: '#fff', padding: 14, display: 'grid', gridTemplateColumns: '140px minmax(0, 1fr) auto', gap: 16, alignItems: 'center', marginBottom: 12 },
-  thumbBox: { width: 140, height: 140, borderRadius: 4, background: '#f4f1ea', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: '#88857f', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700, overflow: 'hidden' },
-  fileMeta: { fontSize: 10, color: '#77746f', marginBottom: 4 },
-  fileName: { fontSize: 12, fontWeight: 600, color: '#171717', wordBreak: 'break-all' },
+  sub: { color: 'var(--ui-muted, #77746f)', fontSize: 13, marginTop: 0, marginBottom: 16 },
+  label: { fontSize: 9, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', marginBottom: 6, display: 'block' },
+  input: { background: 'var(--ui-soft, #f4f1ea)', border: '1px solid var(--ui-border, #dedbd3)', color: 'var(--ui-ink, #171717)', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, outline: 'none', width: '100%' },
+  select: { background: 'var(--ui-soft, #f4f1ea)', border: '1px solid var(--ui-border, #dedbd3)', color: 'var(--ui-ink, #171717)', fontFamily: 'inherit', fontSize: 11, padding: '8px 10px', borderRadius: 4, cursor: 'pointer', width: '100%' },
+  card: { border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 6, background: '#fff', padding: 14, display: 'grid', gridTemplateColumns: '140px minmax(0, 1fr) auto', gap: 16, alignItems: 'center', marginBottom: 12 },
+  thumbBox: { width: 140, height: 140, borderRadius: 4, background: 'var(--ui-soft, #f4f1ea)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: 'var(--ui-subtle, #88857f)', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700, overflow: 'hidden' },
+  fileMeta: { fontSize: 10, color: 'var(--ui-muted, #77746f)', marginBottom: 4 },
+  fileName: { fontSize: 12, fontWeight: 600, color: 'var(--ui-ink, #171717)', wordBreak: 'break-all' },
   row: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginTop: 10 },
   btn: (disabled) => ({
-    padding: '9px 18px', background: disabled ? '#dedbd3' : '#d84a17', border: 'none',
-    color: disabled ? '#88857f' : '#fff', fontFamily: 'inherit', fontSize: 10,
+    padding: '9px 18px', background: disabled ? 'var(--ui-border, #dedbd3)' : 'var(--ui-accent, #d84a17)', border: 'none',
+    color: disabled ? 'var(--ui-subtle, #88857f)' : '#fff', fontFamily: 'inherit', fontSize: 10,
     fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 4,
   }),
-  ghost: { padding: '8px 14px', background: 'none', border: '1px solid #dedbd3', color: '#77746f', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 },
+  ghost: { padding: '8px 14px', background: 'none', border: '1px solid var(--ui-border, #dedbd3)', color: 'var(--ui-muted, #77746f)', fontFamily: 'inherit', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 },
   badge: (color) => ({
     fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700,
     color, padding: '2px 6px', borderRadius: 3,
@@ -374,9 +374,9 @@ const S = {
     lineHeight: 1.35,
     color: linked ? '#256b35' : '#b42318',
   }),
-  err: { padding: '8px 12px', border: '1px solid rgba(220,68,10,0.4)', background: 'rgba(220,68,10,0.1)', color: '#d84a17', fontSize: 10, borderRadius: 4 },
-  settings: { background: '#fff', border: '1px solid #dedbd3', borderRadius: 6, padding: 16, marginBottom: 18 },
-  divider: { borderTop: '1px solid #dedbd3', margin: '20px 0' },
+  err: { padding: '8px 12px', border: '1px solid rgba(220,68,10,0.4)', background: 'rgba(220,68,10,0.1)', color: 'var(--ui-accent, #d84a17)', fontSize: 10, borderRadius: 4 },
+  settings: { background: '#fff', border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 6, padding: 16, marginBottom: 18 },
+  divider: { borderTop: '1px solid var(--ui-border, #dedbd3)', margin: '20px 0' },
 };
 
 function driveItemIncludesAnyId(item, ids) {
@@ -1562,15 +1562,15 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
             <input style={S.input} type="number" min="1" step="1" value={batchAdsetBudget} onChange={e => setBatchAdsetBudget(e.target.value)} disabled={campaignBudget || (config.namingMode || 'batch_adsets') === 'existing_adset'} />
           </div>
         </div>
-        <div style={{ marginTop: 8, color: '#88857f', fontSize: 10 }}>
+        <div style={{ marginTop: 8, color: 'var(--ui-subtle, #88857f)', fontSize: 10 }}>
           Tokens: {'{creator}'}, {'{asset}'}, {'{product}'}, {'{date}'}, {'{source}'}, {'{index}'}.
-          <button type="button" onClick={resetNamingDefaults} style={{ marginLeft: 10, padding: 0, border: 0, background: 'transparent', color: '#d84a17', font: 'inherit', cursor: 'pointer' }}>
+          <button type="button" onClick={resetNamingDefaults} style={{ marginLeft: 10, padding: 0, border: 0, background: 'transparent', color: 'var(--ui-accent, #d84a17)', font: 'inherit', cursor: 'pointer' }}>
             Reset naming defaults
           </button>
         </div>
 
         {selectedCampaignId === '__new__' && (
-          <div style={{ marginTop: 12, padding: 12, border: '1px dashed #dedbd3', borderRadius: 6 }}>
+          <div style={{ marginTop: 12, padding: 12, border: '1px dashed var(--ui-border, #dedbd3)', borderRadius: 6 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, alignItems: 'flex-end' }}>
               <div>
                 <label style={S.label}>Campaign name</label>
@@ -1594,14 +1594,14 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         )}
 
         {selectedAdsetId === '__new__' && (
-          <div style={{ marginTop: 12, padding: 12, border: '1px dashed #dedbd3', borderRadius: 6 }}>
-            <div style={{ marginBottom: 8, fontSize: 10, color: '#77746f' }}>
-              Inherits objective <strong style={{ color: '#171717' }}>{effectiveObjective}</strong>
+          <div style={{ marginTop: 12, padding: 12, border: '1px dashed var(--ui-border, #dedbd3)', borderRadius: 6 }}>
+            <div style={{ marginBottom: 8, fontSize: 10, color: 'var(--ui-muted, #77746f)' }}>
+              Inherits objective <strong style={{ color: 'var(--ui-ink, #171717)' }}>{effectiveObjective}</strong>
               {effectiveObjective === 'OUTCOME_SALES' && config.defaultPixelId && (
-                <> · pixel <strong style={{ color: '#171717' }}>{config.defaultPixelId}</strong> · optimizing for <strong style={{ color: '#171717' }}>PURCHASE</strong></>
+                <> · pixel <strong style={{ color: 'var(--ui-ink, #171717)' }}>{config.defaultPixelId}</strong> · optimizing for <strong style={{ color: 'var(--ui-ink, #171717)' }}>PURCHASE</strong></>
               )}
             </div>
-            <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 10, color: focusedItem ? '#171717' : '#88857f' }}>
+            <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 10, color: focusedItem ? 'var(--ui-ink, #171717)' : 'var(--ui-subtle, #88857f)' }}>
               {focusedItem ? `Naming from selected creative: ${focusedAdsetName}` : 'Select a creative below to prefill the ad set name.'}
               <button
                 type="button"
@@ -1659,14 +1659,14 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         <button onClick={() => requestPreflight(selectedQueue)} disabled={batchLaunching || selectedLaunchReadyCount === 0} style={S.btn(batchLaunching || selectedLaunchReadyCount === 0)}>
           {batchLaunching ? 'Launching…' : `Launch ready (${selectedLaunchReadyCount})`}
         </button>
-        <div style={{ fontSize: 11, color: '#77746f' }}>
+        <div style={{ fontSize: 11, color: 'var(--ui-muted, #77746f)' }}>
           {queue.length} item{queue.length === 1 ? '' : 's'} ·
-          <span style={{ color: '#d84a17', marginLeft: 4 }}>{driveItems.length} Drive</span> ·
+          <span style={{ color: 'var(--ui-accent, #d84a17)', marginLeft: 4 }}>{driveItems.length} Drive</span> ·
           <span style={{ color: '#256b35', marginLeft: 4 }}>{cart.filter(c => c.metaStatus !== 'pushed').length} Cart</span> ·
-          <span style={{ color: '#171717', marginLeft: 4 }}>{selectedQueue.length} selected</span>
+          <span style={{ color: 'var(--ui-ink, #171717)', marginLeft: 4 }}>{selectedQueue.length} selected</span>
         </div>
         {pairingSource && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#171717' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--ui-ink, #171717)' }}>
             Pairing <strong>{assetLabel(pairingSource)}</strong>
             <button type="button" onClick={() => setPairingSourceId(null)} style={{ ...S.ghost, padding: '5px 9px', fontSize: 9 }}>Cancel</button>
           </div>
@@ -1674,7 +1674,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       </div>
 
       {selectedQueue.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8, alignItems: 'flex-end', padding: 12, marginBottom: 14, border: '1px solid #dedbd3', borderRadius: 6, background: '#faf9f6' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8, alignItems: 'flex-end', padding: 12, marginBottom: 14, border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 6, background: 'var(--ui-soft, #faf9f6)' }}>
           <div>
             <label style={S.label}>Product for {selectedQueue.length} selected</label>
             <select style={S.select} value={bulkProductId} onChange={e => { setBulkProductId(e.target.value); setBulkCopyIndex(''); }}>
@@ -1700,7 +1700,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
       {driveError && <div style={S.err}>Drive: {driveError}</div>}
 
       {!loadingDrive && queue.length === 0 && (
-        <div style={{ padding: '60px 20px', textAlign: 'center', color: '#88857f', fontSize: 13 }}>
+        <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--ui-subtle, #88857f)', fontSize: 13 }}>
           The launcher is empty. Drop assets in the Drive UGC inbox, or generate creatives that land in the cart.
         </div>
       )}
@@ -1717,21 +1717,21 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
         const launchDisabled = batchLaunching || !canLaunchItem(item);
 
         return (
-          <div className="launcher-queue-card" key={id} style={{ ...S.card, borderColor: selectedItems.has(id) ? '#d84a17' : '#dedbd3', boxShadow: selectedItems.has(id) ? 'inset 3px 0 #d84a17' : 'none' }}>
+          <div className="launcher-queue-card" key={id} style={{ ...S.card, borderColor: selectedItems.has(id) ? 'var(--ui-accent, #d84a17)' : 'var(--ui-border, #dedbd3)', boxShadow: selectedItems.has(id) ? 'inset 3px 0 var(--ui-accent, #d84a17)' : 'none' }}>
             {/* THUMB COL */}
             <div className="launcher-queue-thumb">
-              <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8, color: '#77746f', fontSize: 10, cursor: 'pointer' }}>
-                <input type="checkbox" checked={selectedItems.has(id)} onChange={() => toggleSelected(id)} style={{ accentColor: '#d84a17' }} />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8, color: 'var(--ui-muted, #77746f)', fontSize: 10, cursor: 'pointer' }}>
+                <input type="checkbox" checked={selectedItems.has(id)} onChange={() => toggleSelected(id)} style={{ accentColor: 'var(--ui-accent, #d84a17)' }} />
                 Include
               </label>
               {item.source === 'drive' ? (
                 item.kind === 'pair' ? (
                   <div style={{ position: 'relative', width: 140, height: 140 }}>
                     <DriveThumb fileId={item.feed.id} alt="feed" style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, objectFit: 'cover', borderRadius: 4, border: '2px solid #fff', zIndex: 1 }}
-                      fallback={<div style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, borderRadius: 4, background: '#f4f1ea', border: '2px solid #fff', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#88857f', fontSize: 9 }}>{item.feedAspect || 'Feed'}</div>}
+                      fallback={<div style={{ position: 'absolute', top: 0, left: 0, width: 90, height: 90, borderRadius: 4, background: 'var(--ui-soft, #f4f1ea)', border: '2px solid #fff', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ui-subtle, #88857f)', fontSize: 9 }}>{item.feedAspect || 'Feed'}</div>}
                     />
                     <DriveThumb fileId={item.story.id} alt="story" style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, objectFit: 'cover', borderRadius: 4, border: '2px solid #fff', zIndex: 2 }}
-                      fallback={<div style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, borderRadius: 4, background: '#f4f1ea', border: '2px solid #fff', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#88857f', fontSize: 9 }}>{item.storyAspect || 'Story'}</div>}
+                      fallback={<div style={{ position: 'absolute', bottom: 0, right: 0, width: 60, height: 100, borderRadius: 4, background: 'var(--ui-soft, #f4f1ea)', border: '2px solid #fff', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ui-subtle, #88857f)', fontSize: 9 }}>{item.storyAspect || 'Story'}</div>}
                     />
                   </div>
                 ) : (
@@ -1760,7 +1760,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                   : (item.name || 'Untitled')}
                 <span style={{ marginLeft: 8 }}>
                   {item.source === 'drive'
-                    ? <span style={S.badge('#d84a17')}>Drive</span>
+                    ? <span style={S.badge('var(--ui-accent, #d84a17)')}>Drive</span>
                     : <span style={S.badge('#256b35')}>Cart</span>}
                   {item.source === 'drive' && item.kind === 'pair' && (
                     <span style={{ marginLeft: 6, ...S.badge('#256b35') }}>{item.aspectLabel || 'Feed + Story'}</span>
@@ -1769,7 +1769,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                     <span style={{ marginLeft: 6, ...S.badge('#7357c7') }}>Manual</span>
                   )}
                   {item.source === 'drive' && item.kind === 'single' && driveSingleAspect(item) && (
-                    <span style={{ marginLeft: 6, ...S.badge('#77746f') }}>{driveSingleAspect(item)}</span>
+                    <span style={{ marginLeft: 6, ...S.badge('var(--ui-muted, #77746f)') }}>{driveSingleAspect(item)}</span>
                   )}
                   {(item.squareUrl || item.url) && item.storyUrl && item.type !== 'video' && (
                     <span style={{ marginLeft: 6, ...S.badge('#256b35') }}>4:5 + 9:16</span>
@@ -1777,7 +1777,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                 </span>
               </div>
               {item.source === 'drive' && item.folderPath && (
-                <div style={{ fontSize: 9, color: '#d84a17', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 }}>
+                <div style={{ fontSize: 9, color: 'var(--ui-accent, #d84a17)', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 }}>
                   📁 {item.folderPath}
                 </div>
               )}
@@ -1789,12 +1789,12 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                   : (item.type || 'image')}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
-                <div style={{ padding: '7px 8px', background: '#faf9f6', border: '1px solid #ebe8e1', borderRadius: 4, color: '#77746f', fontSize: 9, minWidth: 0 }}>
-                  <strong style={{ display: 'block', color: '#171717', fontSize: 10, marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{buildNamesForItem(item).adsetName}</strong>
+                <div style={{ padding: '7px 8px', background: 'var(--ui-soft, #faf9f6)', border: '1px solid var(--ui-border, #ebe8e1)', borderRadius: 4, color: 'var(--ui-muted, #77746f)', fontSize: 9, minWidth: 0 }}>
+                  <strong style={{ display: 'block', color: 'var(--ui-ink, #171717)', fontSize: 10, marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{buildNamesForItem(item).adsetName}</strong>
                   Ad set preview
                 </div>
-                <div style={{ padding: '7px 8px', background: '#faf9f6', border: '1px solid #ebe8e1', borderRadius: 4, color: '#77746f', fontSize: 9, minWidth: 0 }}>
-                  <strong style={{ display: 'block', color: '#171717', fontSize: 10, marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{buildNamesForItem(item).adName}</strong>
+                <div style={{ padding: '7px 8px', background: 'var(--ui-soft, #faf9f6)', border: '1px solid var(--ui-border, #ebe8e1)', borderRadius: 4, color: 'var(--ui-muted, #77746f)', fontSize: 9, minWidth: 0 }}>
+                  <strong style={{ display: 'block', color: 'var(--ui-ink, #171717)', fontSize: 10, marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{buildNamesForItem(item).adName}</strong>
                   Ad preview
                 </div>
               </div>
@@ -1815,7 +1815,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                   >
                     {SOURCE_ATTRIBUTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
-                  <div style={{ fontSize: 9, color: '#88857f', marginTop: 4, lineHeight: 1.35 }}>{attribution.hint}</div>
+                  <div style={{ fontSize: 9, color: 'var(--ui-subtle, #88857f)', marginTop: 4, lineHeight: 1.35 }}>{attribution.hint}</div>
                 </div>
                 {attribution.requiresCreator ? (
                   <div style={{ position: 'relative' }}>
@@ -1832,7 +1832,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                       placeholder="Search creator"
                       autoComplete="off"
                     />
-                    <span style={{ position: 'absolute', top: 29, right: 10, color: '#77746f', fontSize: 12, pointerEvents: 'none' }}>v</span>
+                    <span style={{ position: 'absolute', top: 29, right: 10, color: 'var(--ui-muted, #77746f)', fontSize: 12, pointerEvents: 'none' }}>v</span>
                     {openCreatorPickerId === id && (() => {
                       const options = creatorOptionsFor(m.creator || '');
                       const typedName = (m.creator || '').trim();
@@ -1875,7 +1875,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                                   background: 'transparent',
                                   border: 0,
                                   borderRadius: 4,
-                                  color: '#171717',
+                                  color: 'var(--ui-ink, #171717)',
                                   fontFamily: 'inherit',
                                   fontSize: 11,
                                   textAlign: 'left',
@@ -1883,12 +1883,12 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                                 }}
                               >
                                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{creator.name}</span>
-                                {social && <span style={{ flex: 'none', color: '#88857f', fontSize: 9 }}>{social}</span>}
+                                {social && <span style={{ flex: 'none', color: 'var(--ui-subtle, #88857f)', fontSize: 9 }}>{social}</span>}
                               </button>
                             );
                           })}
                           {!options.length && (
-                            <div style={{ padding: '8px 9px', color: '#88857f', fontSize: 10 }}>
+                            <div style={{ padding: '8px 9px', color: 'var(--ui-subtle, #88857f)', fontSize: 10 }}>
                               {creatorsError || 'No matching creator.'}
                             </div>
                           )}
@@ -1902,10 +1902,10 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                                 width: '100%',
                                 marginTop: 4,
                                 padding: '9px',
-                                background: '#f4f1ea',
-                                border: '1px solid #dedbd3',
+                                background: 'var(--ui-soft, #f4f1ea)',
+                                border: '1px solid var(--ui-border, #dedbd3)',
                                 borderRadius: 4,
-                                color: '#d84a17',
+                                color: 'var(--ui-accent, #d84a17)',
                                 fontFamily: 'inherit',
                                 fontSize: 10,
                                 fontWeight: 700,
@@ -2023,22 +2023,22 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
                           onClick={() => updateMeta(id, { headline: option.headline, primaryText: option.primaryText })}
                           style={{
                             padding: '9px 10px',
-                            background: active ? 'rgba(220,68,10,0.08)' : '#faf9f6',
-                            border: `1px solid ${active ? '#d84a17' : '#ebe8e1'}`,
+                            background: active ? 'rgba(220,68,10,0.08)' : 'var(--ui-soft, #faf9f6)',
+                            border: `1px solid ${active ? 'var(--ui-accent, #d84a17)' : 'var(--ui-border, #ebe8e1)'}`,
                             borderRadius: 4,
-                            color: '#171717',
+                            color: 'var(--ui-ink, #171717)',
                             fontFamily: 'inherit',
                             textAlign: 'left',
                             cursor: 'pointer',
                           }}
                         >
-                          <span style={{ display: 'block', color: active ? '#d84a17' : '#77746f', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700, marginBottom: 5 }}>
+                          <span style={{ display: 'block', color: active ? 'var(--ui-accent, #d84a17)' : 'var(--ui-muted, #77746f)', fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700, marginBottom: 5 }}>
                             {option.source} · {option.label}
                           </span>
                           <span style={{ display: 'block', fontSize: 11, fontWeight: 700, lineHeight: 1.25, marginBottom: 4 }}>
                             {option.headline}
                           </span>
-                          <span style={{ display: 'block', fontSize: 10, color: '#77746f', lineHeight: 1.35 }}>
+                          <span style={{ display: 'block', fontSize: 10, color: 'var(--ui-muted, #77746f)', lineHeight: 1.35 }}>
                             {option.primaryText}
                           </span>
                         </button>
@@ -2120,10 +2120,10 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
             onClick={event => event.stopPropagation()}
             style={{ width: 'min(760px, 100%)', maxHeight: 'calc(100vh - 40px)', overflow: 'auto', background: '#fff', border: '1px solid #c9c5bc', borderRadius: 6, boxShadow: '0 18px 50px rgba(0,0,0,0.24)' }}
           >
-            <div style={{ position: 'sticky', top: 0, zIndex: 1, padding: '18px 20px 14px', borderBottom: '1px solid #dedbd3', background: '#fff' }}>
-              <div id="launcher-preflight-title" style={{ fontSize: 18, fontWeight: 700, color: '#171717' }}>Review {preflightItems.length} paused ad{preflightItems.length === 1 ? '' : 's'}</div>
-              <div style={{ marginTop: 5, color: '#77746f', fontSize: 11, lineHeight: 1.45 }}>
-                Campaign: <strong style={{ color: '#171717' }}>{campaigns.find(campaign => String(campaign.id) === String(selectedCampaignId))?.name || selectedCampaignId}</strong>
+            <div style={{ position: 'sticky', top: 0, zIndex: 1, padding: '18px 20px 14px', borderBottom: '1px solid var(--ui-border, #dedbd3)', background: '#fff' }}>
+              <div id="launcher-preflight-title" style={{ fontSize: 18, fontWeight: 700, color: 'var(--ui-ink, #171717)' }}>Review {preflightItems.length} paused ad{preflightItems.length === 1 ? '' : 's'}</div>
+              <div style={{ marginTop: 5, color: 'var(--ui-muted, #77746f)', fontSize: 11, lineHeight: 1.45 }}>
+                Campaign: <strong style={{ color: 'var(--ui-ink, #171717)' }}>{campaigns.find(campaign => String(campaign.id) === String(selectedCampaignId))?.name || selectedCampaignId}</strong>
                 {' | '}{(config.namingMode || 'batch_adsets') === 'existing_adset'
                   ? `Existing ad set: ${adsets.find(adset => String(adset.id) === String(selectedAdsetId))?.name || selectedAdsetId}`
                   : campaignBudget ? 'One new ad set per creative; existing campaign budget and bid settings' : `One new ad set per creative at $${batchAdsetBudget}/day`}
@@ -2134,7 +2134,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
               {reviewState.loading && <p role="status">Checking media and approval evidence ({reviewState.rows.length}/{preflightItems.length})…</p>}
               {reviewState.error && <p role="alert" style={{color:'#b42318'}}>{reviewState.error}</p>}
               {reviewState.rows.map(({item,plan,approvals,warnings})=>(
-                <section key={item.unifiedId} style={{padding:'12px 0',borderBottom:'1px solid #ebe8e1',fontSize:12,overflowWrap:'anywhere'}}>
+                <section key={item.unifiedId} style={{padding:'12px 0',borderBottom:'1px solid var(--ui-border, #ebe8e1)',fontSize:12,overflowWrap:'anywhere'}}>
                   <strong>{assetLabel(item)}</strong>
                   <div style={{display:'flex',gap:12,marginTop:8}}>{plan.media.map(asset=>asset.drive_file_id
                     ? <DriveThumb key={asset.role} fileId={asset.drive_file_id} alt={`${asset.role} preview`} style={{maxWidth:160,maxHeight:180,objectFit:'contain'}} fallback={<span>{asset.role} preview unavailable</span>} />
@@ -2160,7 +2160,7 @@ export default function LauncherTool({ cart = [], onAddToCart, onUpdateCartItem,
               ))}
             </div>
 
-            <div style={{ position: 'sticky', bottom: 0, display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '14px 20px', borderTop: '1px solid #dedbd3', background: '#faf9f6' }}>
+            <div style={{ position: 'sticky', bottom: 0, display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '14px 20px', borderTop: '1px solid var(--ui-border, #dedbd3)', background: 'var(--ui-soft, #faf9f6)' }}>
               <button type="button" onClick={closeReview} style={S.ghost}>Keep editing</button>
               <button type="button" onClick={confirmPreflight} disabled={batchLaunching || reviewState.loading || !!reviewState.error || !reviewState.rows.length} style={S.btn(batchLaunching || reviewState.loading || !!reviewState.error)}>
                 Create {preflightItems.length} paused ad{preflightItems.length === 1 ? '' : 's'}

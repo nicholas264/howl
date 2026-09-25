@@ -532,36 +532,36 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <div style={{ padding: '20px 28px', borderBottom: '1px solid #dedbd3', flexShrink: 0 }}>
+      <div style={{ padding: '20px 28px', borderBottom: '1px solid var(--ui-border, #dedbd3)', flexShrink: 0 }}>
         <div className="eyebrow" style={{ marginBottom: 4 }}>Create</div>
-        <div className="display-md" style={{ color: '#171717' }}>Review Ads</div>
+        <div className="display-md" style={{ color: 'var(--ui-ink, #171717)' }}>Review Ads</div>
       </div>
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
       {/* Left panel — flex column with fixed header/footer, scrollable list */}
-      <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid #dedbd3', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid var(--ui-border, #dedbd3)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
 
         {/* Fixed: CSV header */}
-        <div style={{ padding: '12px 20px', borderBottom: '1px solid #dedbd3', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--ui-border, #dedbd3)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 10, color: '#171717', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div style={{ fontSize: 10, color: 'var(--ui-ink, #171717)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {csvName || `${reviews.length} reviews`}
             </div>
-            <div style={{ fontSize: 9, color: '#77746f', marginTop: 1 }}>{reviews.length} reviews loaded</div>
+            <div style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', marginTop: 1 }}>{reviews.length} reviews loaded</div>
           </div>
           <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
-            <button onClick={loadSyncedReviews} disabled={syncedLoading} style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#d84a17', background: 'none', border: 'none', cursor: syncedLoading ? 'wait' : 'pointer', padding: 0 }}>
+            <button onClick={loadSyncedReviews} disabled={syncedLoading} style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--ui-accent, #d84a17)', background: 'none', border: 'none', cursor: syncedLoading ? 'wait' : 'pointer', padding: 0 }}>
               {syncedLoading ? 'Loading' : 'Sync'}
             </button>
-            <label style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#d84a17', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            <label style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--ui-accent, #d84a17)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               <input type="file" accept=".csv" onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
               Replace
             </label>
-            <button onClick={clearCSV} style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#77746f', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Clear</button>
+            <button onClick={clearCSV} style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Clear</button>
           </div>
         </div>
 
         {/* Fixed: Rating filter */}
-        <div style={{ padding: '8px 16px', borderBottom: '1px solid #dedbd3', flexShrink: 0, display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--ui-border, #dedbd3)', flexShrink: 0, display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
           {[0, 5, 4, 3].map(r => (
             <button key={r} onClick={() => setRatingFilter(r)} style={S.filterBtn(ratingFilter === r)}>
               {r === 0 ? 'All' : `${r}★`}
@@ -573,7 +573,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
           </div>
         </div>
 
-        <div style={{ padding: '10px 16px', borderBottom: '1px solid #dedbd3', display: 'grid', gap: 8 }}>
+        <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--ui-border, #dedbd3)', display: 'grid', gap: 8 }}>
           <label style={{ fontSize: 11 }}>Batch product
             <select aria-label="Batch product" disabled={exporting || bgUploading} value={productFilter} onChange={e => changeBatchProduct(e.target.value)} style={{ width: '100%', padding: 8, marginTop: 5 }}>
               <option value="all">Choose a product — browse all reviews</option>
@@ -588,19 +588,19 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
               handleBgModeChange('cycle'); setPreviewMode('bulk');
             }}>Auto-select batch</button>
           </div>
-          <span style={{ fontSize: 10, color: '#77746f' }}>Choose reviews below, or auto-select up to {batchSize} visible reviews (excluding held reviews). Nothing is launched automatically.</span>
+          <span style={{ fontSize: 10, color: 'var(--ui-muted, #77746f)' }}>Choose reviews below, or auto-select up to {batchSize} visible reviews (excluding held reviews). Nothing is launched automatically.</span>
         </div>
 
         {/* Scrollable: review list */}
         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
           {filtered.length === 0 && (
-            <div style={{ padding: 20, fontSize: 10, color: '#77746f' }}>No reviews at this rating.</div>
+            <div style={{ padding: 20, fontSize: 10, color: 'var(--ui-muted, #77746f)' }}>No reviews at this rating.</div>
           )}
           {filtered.map(r => {
             const isSelected = selected.has(r.id);
             const isPreviewing = previewId === r.id;
             return (
-              <div key={r.id} onClick={() => setPreviewId(r.id)} style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid #dedbd3', background: isPreviewing ? 'rgba(220,68,10,0.1)' : 'transparent', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <div key={r.id} onClick={() => setPreviewId(r.id)} style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid var(--ui-border, #dedbd3)', background: isPreviewing ? 'rgba(220,68,10,0.1)' : 'transparent', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                 <input
                   type="checkbox"
                   aria-label={`Use review by ${r.nickname}: ${r.quote}`}
@@ -614,12 +614,12 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
                     setPreviewId(r.id);
                   }}
                   onClick={e => e.stopPropagation()}
-                  style={{ marginTop: 3, flexShrink: 0, accentColor: '#d84a17' }}
+                  style={{ marginTop: 3, flexShrink: 0, accentColor: 'var(--ui-accent, #d84a17)' }}
                 />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 9, color: '#d84a17', marginBottom: 2 }}>{'★'.repeat(r.rating)}</div>
-                  <div style={{ fontSize: 10, color: '#171717', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{r.quote}</div>
-                  <div style={{ fontSize: 9, color: '#77746f', marginTop: 3 }}>{r.nickname} · {PRODUCT_NAMES[r.handle]}{r.adStatus === 'hold' ? ' · On hold' : ''}</div>
+                  <div style={{ fontSize: 9, color: 'var(--ui-accent, #d84a17)', marginBottom: 2 }}>{'★'.repeat(r.rating)}</div>
+                  <div style={{ fontSize: 10, color: 'var(--ui-ink, #171717)', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{r.quote}</div>
+                  <div style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', marginTop: 3 }}>{r.nickname} · {PRODUCT_NAMES[r.handle]}{r.adStatus === 'hold' ? ' · On hold' : ''}</div>
                 </div>
               </div>
             );
@@ -627,17 +627,17 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
         </div>
 
         {/* Fixed: Format + background + export */}
-        <div style={{ flexShrink: 0, maxHeight: '48vh', overflowY: 'auto', padding: '14px 16px', borderTop: '1px solid #dedbd3', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ flexShrink: 0, maxHeight: '48vh', overflowY: 'auto', padding: '14px 16px', borderTop: '1px solid var(--ui-border, #dedbd3)', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', gap: 6 }}>
             {Object.entries(FORMATS).map(([key, f]) => (
               <button key={key} onClick={() => toggleFormat(key)} style={S.fmtBtn(formatKeys.includes(key))}>{f.label}</button>
             ))}
           </div>
           <div style={{ fontSize: 11, fontWeight: 600 }}>{productFilter === 'all' ? 'Choose a product before selecting images' : `Select backgrounds showing ${PRODUCT_NAMES[productFilter]}`}</div>
-          <div style={{ fontSize: 10, color: '#77746f' }}>Image choices are remembered separately for each product in this browser.</div>
+          <div style={{ fontSize: 10, color: 'var(--ui-muted, #77746f)' }}>Image choices are remembered separately for each product in this browser.</div>
           <BgImagePicker bgImages={bgImages} bgMode={bgMode} savedImages={savedImages} onModeChange={handleBgModeChange} onSelect={selectBgImage} onUpload={handleBgFiles} onClear={clearBg} fileRef={bgFileRef} scrimColor={scrimColor} onScrimChange={handleScrimChange} uploading={bgUploading} />
           <TextColorPicker textColor={textColor} onChange={handleTextColorChange} />
-          <div style={{ fontSize: 11, color: '#77746f', lineHeight: 1.5 }}>
+          <div style={{ fontSize: 11, color: 'var(--ui-muted, #77746f)', lineHeight: 1.5 }}>
             {productFilter === 'all' ? 'Choose a batch product first.' : `${PRODUCT_NAMES[productFilter]}: ${selectedCount} reviews, ${bgImages.length} images → ${variants.length} paired ads.`}{' '}
             {bgImages.length === 0 && ' Select images for this product.'}
             Cart always includes matching 4:5 + 9:16. Format buttons control previews and PNG exports. Large batches pause automatically for upload limits; keep this tab open.
@@ -657,7 +657,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
             <button
               onClick={handleBulkAddToCart}
               disabled={exporting || !batchReady}
-              style={{ ...S.exportBtn(exporting || !batchReady), background: (exporting || !batchReady) ? '#dedbd3' : '#6e40c9', marginTop: 4 }}
+              style={{ ...S.exportBtn(exporting || !batchReady), background: (exporting || !batchReady) ? 'var(--ui-border, #dedbd3)' : '#6e40c9', marginTop: 4 }}
               title={selectedCount === 0 ? 'Select at least one review before adding to cart.' : ''}
             >
               {exporting ? `Rendering ${exportProgress}...` : selectedCount === 0 ? 'Select reviews' : `Add ${variants.length} paired ads to Cart`}
@@ -667,7 +667,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
             <button
               onClick={handleAddCarouselToCart}
               disabled={exporting || !batchReady || selectedCount < 2}
-              style={{ ...S.exportBtn(exporting || !batchReady || selectedCount < 2), background: (exporting || !batchReady || selectedCount < 2) ? '#dedbd3' : '#1a7f37', marginTop: 4 }}
+              style={{ ...S.exportBtn(exporting || !batchReady || selectedCount < 2), background: (exporting || !batchReady || selectedCount < 2) ? 'var(--ui-border, #dedbd3)' : '#1a7f37', marginTop: 4 }}
               title={selectedCount < 2 ? 'Select at least two reviews to build a carousel.' : ''}
             >
               {exporting ? `Building carousel ${exportProgress}...` : selectedCount < 2 ? 'Select 2+ for carousel' : `Add as Carousel (${selectedCount} cards)`}
@@ -677,7 +677,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
             <button
               onClick={() => handleBulkExport({ toDrive: true })}
               disabled={exporting || !batchReady}
-              style={{ ...S.exportBtn(exporting || !batchReady), background: exporting || !batchReady ? '#dedbd3' : '#1a7f37', marginTop: 4 }}
+              style={{ ...S.exportBtn(exporting || !batchReady), background: exporting || !batchReady ? 'var(--ui-border, #dedbd3)' : '#1a7f37', marginTop: 4 }}
               title={selectedCount === 0 ? 'Select at least one review before saving to Drive.' : ''}
             >
               {exporting ? `Saving ${exportProgress}...` : `Save to Drive`}
@@ -693,7 +693,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
             <button onClick={() => setPreviewMode('single')} style={S.modeBtn(previewMode === 'single')}>Single</button>
             <button onClick={() => setPreviewMode('bulk')} style={S.modeBtn(previewMode === 'bulk')}>Bulk</button>
           </div>
-          <div style={{ fontSize: 10, color: '#77746f', letterSpacing: 1, textTransform: 'uppercase' }}>
+          <div style={{ fontSize: 10, color: 'var(--ui-muted, #77746f)', letterSpacing: 1, textTransform: 'uppercase' }}>
             {selectedCount} selected
           </div>
         </div>
@@ -734,13 +734,13 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
                 }))}
               </div>
               {variants.length > bulkPreviewVariants.length && (
-                <div style={{ fontSize: 10, color: '#77746f', letterSpacing: 1, textTransform: 'uppercase' }}>
+                <div style={{ fontSize: 10, color: 'var(--ui-muted, #77746f)', letterSpacing: 1, textTransform: 'uppercase' }}>
                   Showing first {bulkPreviewVariants.length} of {variants.length} paired ads
                 </div>
               )}
             </>
           ) : (
-            <div style={{ color: '#77746f', fontSize: 12 }}>Select reviews to preview the batch.</div>
+            <div style={{ color: 'var(--ui-muted, #77746f)', fontSize: 12 }}>Select reviews to preview the batch.</div>
           )
         ) : (
           <>
@@ -788,7 +788,7 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
                   </PreviewCard>
                 )
               ) : (
-                <div style={{ color: '#77746f', fontSize: 12 }}>No reviews match filter</div>
+                <div style={{ color: 'var(--ui-muted, #77746f)', fontSize: 12 }}>No reviews match filter</div>
               )}
             </div>
 
@@ -828,21 +828,21 @@ export default function ReviewAdTool({ driveAuth, onAddToCart }) {
 const TEXT_COLOR_OPTIONS = [
   { label: 'Dark',   value: '#333F4C' },
   { label: 'White',  value: '#ffffff' },
-  { label: 'Flame',  value: '#d84a17' },
+  { label: 'Flame',  value: 'var(--ui-accent, #d84a17)' },
   { label: 'Black',  value: '#000000' },
 ];
 
 function TextColorPicker({ textColor, onChange }) {
   return (
     <div>
-      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', fontWeight: 600, marginBottom: 5 }}>Text Color</div>
+      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', fontWeight: 600, marginBottom: 5 }}>Text Color</div>
       <div style={{ display: 'flex', gap: 5 }}>
         {TEXT_COLOR_OPTIONS.map(o => (
           <button key={o.label} onClick={() => onChange(o.value)} style={{
             flex: 1, padding: '5px 0', borderRadius: 3, cursor: 'pointer', fontSize: 9,
-            border: `1px solid ${textColor === o.value ? '#d84a17' : '#dedbd3'}`,
-            background: textColor === o.value ? 'rgba(220,68,10,0.15)' : '#f4f1ea',
-            color: textColor === o.value ? '#d84a17' : '#77746f',
+            border: `1px solid ${textColor === o.value ? 'var(--ui-accent, #d84a17)' : 'var(--ui-border, #dedbd3)'}`,
+            background: textColor === o.value ? 'rgba(220,68,10,0.15)' : 'var(--ui-soft, #f4f1ea)',
+            color: textColor === o.value ? 'var(--ui-accent, #d84a17)' : 'var(--ui-muted, #77746f)',
             fontFamily: 'inherit', letterSpacing: 1, textTransform: 'uppercase',
           }}>{o.label}</button>
         ))}
@@ -862,11 +862,11 @@ function BgImagePicker({ bgImages, bgMode, savedImages, onModeChange, onSelect, 
   const hasBackground = bgImages.length > 0;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Background Image</span>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => fileRef.current?.click()} style={{ fontSize: 9, color: '#d84a17', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' }}>{uploading ? 'Uploading' : '+ Upload'}</button>
-          {hasBackground && <button onClick={onClear} style={{ fontSize: 9, color: '#77746f', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' }}>Clear</button>}
+          <button onClick={() => fileRef.current?.click()} style={{ fontSize: 9, color: 'var(--ui-accent, #d84a17)', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' }}>{uploading ? 'Uploading' : '+ Upload'}</button>
+          {hasBackground && <button onClick={onClear} style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' }}>Clear</button>}
         </div>
       </div>
       <div style={{ display: 'flex', gap: 5 }}>
@@ -875,14 +875,14 @@ function BgImagePicker({ bgImages, bgMode, savedImages, onModeChange, onSelect, 
         <button onClick={() => onModeChange('rotate')} style={S.miniModeBtn(bgMode === 'rotate')}>Every image</button>
       </div>
       <input ref={fileRef} type="file" multiple accept="image/*" onChange={e => { onUpload(e.target.files); e.target.value = ''; }} style={{ display: 'none' }} />
-      <div style={{ fontSize: 10, color: '#77746f' }}>Cycle images uses one background per review, repeating in selection order. Every image creates all combinations.</div>
+      <div style={{ fontSize: 10, color: 'var(--ui-muted, #77746f)' }}>Cycle images uses one background per review, repeating in selection order. Every image creates all combinations.</div>
       {savedImages.length > 0 ? (
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', maxHeight: 140, overflowY: 'auto' }}>
           {savedImages.map(img => (
-            <div key={img.id} role="button" tabIndex={0} aria-pressed={bgImages.includes(img.url)} title={img.file_name || 'Select background'} aria-label={img.file_name || 'Select background'} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(img.url); } }} onClick={() => onSelect(img.url)} style={{ width: 48, height: 48, borderRadius: 3, overflow: 'hidden', border: `2px solid ${bgImages.includes(img.url) ? '#d84a17' : '#e0d9c4'}`, cursor: 'pointer', flexShrink: 0, position: 'relative' }}>
+            <div key={img.id} role="button" tabIndex={0} aria-pressed={bgImages.includes(img.url)} title={img.file_name || 'Select background'} aria-label={img.file_name || 'Select background'} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(img.url); } }} onClick={() => onSelect(img.url)} style={{ width: 48, height: 48, borderRadius: 3, overflow: 'hidden', border: `2px solid ${bgImages.includes(img.url) ? 'var(--ui-accent, #d84a17)' : '#e0d9c4'}`, cursor: 'pointer', flexShrink: 0, position: 'relative' }}>
               <img crossOrigin="anonymous" src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
               {bgMode !== 'single' && bgImages.includes(img.url) && (
-                <span style={{ position: 'absolute', right: 3, bottom: 3, padding: '1px 4px', borderRadius: 2, background: '#d84a17', color: '#fff', fontSize: 8, fontWeight: 700 }}>
+                <span style={{ position: 'absolute', right: 3, bottom: 3, padding: '1px 4px', borderRadius: 2, background: 'var(--ui-accent, #d84a17)', color: '#fff', fontSize: 8, fontWeight: 700 }}>
                   {bgImages.indexOf(img.url) + 1}
                 </span>
               )}
@@ -890,18 +890,18 @@ function BgImagePicker({ bgImages, bgMode, savedImages, onModeChange, onSelect, 
           ))}
         </div>
       ) : (
-        <div style={{ fontSize: 9, color: '#77746f' }}>Upload images in Image Ads tab to reuse here.</div>
+        <div style={{ fontSize: 9, color: 'var(--ui-muted, #77746f)' }}>Upload images in Image Ads tab to reuse here.</div>
       )}
       {hasBackground && (
         <div>
-          <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', fontWeight: 600, marginBottom: 5 }}>Overlay Color</div>
+          <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', fontWeight: 600, marginBottom: 5 }}>Overlay Color</div>
           <div style={{ display: 'flex', gap: 5 }}>
             {SCRIM_OPTIONS.map(o => (
               <button key={o.label} onClick={() => onScrimChange(o.value)} style={{
                 flex: 1, padding: '5px 0', borderRadius: 3, cursor: 'pointer', fontSize: 9,
-                border: `1px solid ${scrimColor === o.value ? '#d84a17' : '#e0d9c4'}`,
+                border: `1px solid ${scrimColor === o.value ? 'var(--ui-accent, #d84a17)' : '#e0d9c4'}`,
                 background: scrimColor === o.value ? '#fef8f0' : '#fff',
-                color: scrimColor === o.value ? '#d84a17' : '#8a8270',
+                color: scrimColor === o.value ? 'var(--ui-accent, #d84a17)' : '#8a8270',
                 fontFamily: 'inherit', letterSpacing: 1, textTransform: 'uppercase',
               }}>{o.label}</button>
             ))}
@@ -923,20 +923,20 @@ function PreviewCard({ fmt, scale, children }) {
 }
 
 const S = {
-  label: { fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#77746f', marginBottom: 8, fontWeight: 600 },
-  textarea: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #dedbd3', borderRadius: 4, background: '#f4f1ea', color: '#171717', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.5, resize: 'vertical', outline: 'none' },
-  input: { width: '100%', boxSizing: 'border-box', padding: '8px 12px', border: '1px solid #dedbd3', borderRadius: 4, background: '#f4f1ea', color: '#171717', fontFamily: 'inherit', fontSize: 12, outline: 'none' },
-  fmtBtn: (active) => ({ flex: 1, padding: '7px 0', border: `1px solid ${active ? '#d84a17' : '#dedbd3'}`, background: active ? 'rgba(220,68,10,0.15)' : '#f4f1ea', color: active ? '#d84a17' : '#77746f', fontFamily: 'inherit', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 }),
-  exportBtn: (disabled) => ({ width: '100%', padding: '12px 0', background: disabled ? '#dedbd3' : '#d84a17', border: 'none', borderRadius: 4, color: disabled ? '#88857f' : '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer' }),
-  filterBtn: (active) => ({ padding: '3px 8px', border: `1px solid ${active ? '#d84a17' : '#dedbd3'}`, background: active ? 'rgba(220,68,10,0.15)' : '#f4f1ea', color: active ? '#d84a17' : '#77746f', fontFamily: 'inherit', fontSize: 9, cursor: 'pointer', borderRadius: 3 }),
-  microBtn: { padding: '3px 7px', border: '1px solid #dedbd3', background: '#f4f1ea', color: '#77746f', fontFamily: 'inherit', fontSize: 8, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 3 },
-  linkBtn: { padding: 0, border: 'none', background: 'none', color: '#d84a17', fontFamily: 'inherit', fontSize: 9, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer' },
-  miniModeBtn: (active) => ({ flex: 1, padding: '5px 0', border: `1px solid ${active ? '#d84a17' : '#dedbd3'}`, background: active ? 'rgba(220,68,10,0.15)' : '#f4f1ea', color: active ? '#d84a17' : '#77746f', fontFamily: 'inherit', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 3 }),
-  modeBtn: (active) => ({ padding: '6px 14px', border: `1px solid ${active ? '#d84a17' : '#dedbd3'}`, background: active ? 'rgba(220,68,10,0.12)' : '#f4f1ea', color: active ? '#d84a17' : '#77746f', fontFamily: 'inherit', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 }),
+  label: { fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--ui-muted, #77746f)', marginBottom: 8, fontWeight: 600 },
+  textarea: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 4, background: 'var(--ui-soft, #f4f1ea)', color: 'var(--ui-ink, #171717)', fontFamily: 'inherit', fontSize: 12, lineHeight: 1.5, resize: 'vertical', outline: 'none' },
+  input: { width: '100%', boxSizing: 'border-box', padding: '8px 12px', border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 4, background: 'var(--ui-soft, #f4f1ea)', color: 'var(--ui-ink, #171717)', fontFamily: 'inherit', fontSize: 12, outline: 'none' },
+  fmtBtn: (active) => ({ flex: 1, padding: '7px 0', border: `1px solid ${active ? 'var(--ui-accent, #d84a17)' : 'var(--ui-border, #dedbd3)'}`, background: active ? 'rgba(220,68,10,0.15)' : 'var(--ui-soft, #f4f1ea)', color: active ? 'var(--ui-accent, #d84a17)' : 'var(--ui-muted, #77746f)', fontFamily: 'inherit', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 }),
+  exportBtn: (disabled) => ({ width: '100%', padding: '12px 0', background: disabled ? 'var(--ui-border, #dedbd3)' : 'var(--ui-accent, #d84a17)', border: 'none', borderRadius: 4, color: disabled ? 'var(--ui-subtle, #88857f)' : '#fff', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', cursor: disabled ? 'not-allowed' : 'pointer' }),
+  filterBtn: (active) => ({ padding: '3px 8px', border: `1px solid ${active ? 'var(--ui-accent, #d84a17)' : 'var(--ui-border, #dedbd3)'}`, background: active ? 'rgba(220,68,10,0.15)' : 'var(--ui-soft, #f4f1ea)', color: active ? 'var(--ui-accent, #d84a17)' : 'var(--ui-muted, #77746f)', fontFamily: 'inherit', fontSize: 9, cursor: 'pointer', borderRadius: 3 }),
+  microBtn: { padding: '3px 7px', border: '1px solid var(--ui-border, #dedbd3)', background: 'var(--ui-soft, #f4f1ea)', color: 'var(--ui-muted, #77746f)', fontFamily: 'inherit', fontSize: 8, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 3 },
+  linkBtn: { padding: 0, border: 'none', background: 'none', color: 'var(--ui-accent, #d84a17)', fontFamily: 'inherit', fontSize: 9, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer' },
+  miniModeBtn: (active) => ({ flex: 1, padding: '5px 0', border: `1px solid ${active ? 'var(--ui-accent, #d84a17)' : 'var(--ui-border, #dedbd3)'}`, background: active ? 'rgba(220,68,10,0.15)' : 'var(--ui-soft, #f4f1ea)', color: active ? 'var(--ui-accent, #d84a17)' : 'var(--ui-muted, #77746f)', fontFamily: 'inherit', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 3 }),
+  modeBtn: (active) => ({ padding: '6px 14px', border: `1px solid ${active ? 'var(--ui-accent, #d84a17)' : 'var(--ui-border, #dedbd3)'}`, background: active ? 'rgba(220,68,10,0.12)' : 'var(--ui-soft, #f4f1ea)', color: active ? 'var(--ui-accent, #d84a17)' : 'var(--ui-muted, #77746f)', fontFamily: 'inherit', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 4 }),
   previewToolbar: { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexShrink: 0 },
-  editPanel: { width: 'min(620px, 100%)', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 180px', gap: 12, padding: 16, border: '1px solid #dedbd3', borderRadius: 4, background: '#fffdf8', boxSizing: 'border-box' },
+  editPanel: { width: 'min(620px, 100%)', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 180px', gap: 12, padding: 16, border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 4, background: '#fffdf8', boxSizing: 'border-box' },
   bulkGrid: { width: '100%', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 14, alignItems: 'start' },
-  bulkCard: { border: '1px solid #dedbd3', borderRadius: 4, background: '#fffdf8', padding: 10, cursor: 'pointer', fontFamily: 'inherit', color: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, minHeight: 0 },
-  bulkMeta: { width: '100%', display: 'flex', justifyContent: 'space-between', gap: 8, color: '#77746f', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' },
+  bulkCard: { border: '1px solid var(--ui-border, #dedbd3)', borderRadius: 4, background: '#fffdf8', padding: 10, cursor: 'pointer', fontFamily: 'inherit', color: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, minHeight: 0 },
+  bulkMeta: { width: '100%', display: 'flex', justifyContent: 'space-between', gap: 8, color: 'var(--ui-muted, #77746f)', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' },
   rightPanel: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 22, background: '#fff', padding: 32, overflow: 'auto' },
 };

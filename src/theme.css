@@ -1,0 +1,94 @@
+/* Shared Campfire product theme. Keep public pages and artwork outside this scope. */
+.app-shell {
+  --ui-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --ui-canvas: #fff;
+  --ui-surface: #fff;
+  --ui-soft: #f7f8fa;
+  --ui-border: #e9eaee;
+  --ui-border-strong: #cfd1d9;
+  --ui-ink: #23242a;
+  --ui-muted: #686b76;
+  --ui-subtle: #85868d;
+  --ui-accent: #d65328;
+  --ui-accent-soft: #fff0e8;
+  --ui-accent-border: #efb9a4;
+  --bg: var(--ui-canvas);
+  --surface: var(--ui-surface);
+  --surface2: var(--ui-soft);
+  --border: var(--ui-border);
+  --border2: var(--ui-border-strong);
+  --text: var(--ui-ink);
+  --muted: var(--ui-muted);
+  --muted2: var(--ui-subtle);
+  --flame: var(--ui-accent);
+  --flame-dim: var(--ui-accent-soft);
+  --flame-border: var(--ui-accent-border);
+  min-height: 100vh;
+  background: var(--ui-canvas);
+  color: var(--ui-ink);
+  font: 400 13px/1.5 var(--ui-font);
+  -webkit-font-smoothing: antialiased;
+}
+.app-shell .shell, .app-shell .main-panel { background: var(--ui-canvas); color: var(--ui-ink); }
+.app-shell .sidebar { background: #fafafa; border-color: var(--ui-border); box-shadow: none; }
+.app-shell .sidebar-top { background: #fafafa; border-color: var(--ui-border); justify-content: flex-start; padding-left: 22px; }
+.app-shell .sidebar-top img { width: 120px; }
+.app-shell .sidebar-section { font: 500 11px/1.4 var(--ui-font); letter-spacing: 0; color: var(--ui-subtle); padding: 22px 12px 8px; }
+.app-shell .side-item { font: 500 12px/1.4 var(--ui-font); color: #62636b; border-radius: 7px; padding: 9px 12px; }
+.app-shell .side-item.on { color: #bd471e; background: var(--ui-accent-soft); font-weight: 600; }
+.app-shell .side-item.on::before { display: none; }
+.app-shell .side-item:hover { background: #f0f0f2; }
+.app-shell .side-item .count { font-family: var(--ui-font); background: #edeef2; color: var(--ui-muted); }
+.app-shell .side-item.on .count { background: #fff; color: #bd471e; }
+.app-shell .sidebar-foot { background: #fafafa; border-color: var(--ui-border); }
+.app-shell .sidebar-foot .acct-lbl { font-size: 11px; letter-spacing: 0; text-transform: none; }
+
+/* Consistent UI typography, without changing the fonts used to render ad artwork. */
+.app-shell :is(h1,h2,h3,h4,.display,.display-xl,.display-lg,.display-md) { font-family: var(--ui-font); font-style: normal; font-weight: 600; letter-spacing: -.025em; color: var(--ui-ink); }
+.app-shell :is(.workspace-head,.creator-head,.coo-head,.fin-header,.org-heading,.forge-head,.ss-header,.sku-pacing-topbar,.campaign-head,.concept-head) h1 { font-size: 28px; line-height: 1.2; letter-spacing: -.045em; font-weight: 650; }
+.app-shell :is(.workspace-kicker,.eyebrow,.forge-eyebrow) { font: 500 12px/1.4 var(--ui-font); letter-spacing: 0; text-transform: none; color: var(--ui-muted); }
+.app-shell :is(.workspace-head,.creator-head,.coo-head,.fin-header,.org-heading,.ss-header) p { font-size: 13px; color: var(--ui-muted); }
+.app-shell :is(button,input,select,textarea) { font-family: var(--ui-font); }
+.app-shell :is(button,input,select,textarea,a,summary):focus-visible { outline: 3px solid #f4bba5; outline-offset: 3px; }
+.app-shell :is(input,select,textarea):focus { border-color: var(--ui-accent); box-shadow: 0 0 0 2px #d6532814; }
+.app-shell :is(.primary-action,.gobtn,.xbtn,.fbtn,.tab,.brief-send,.operations-inline-action) { font-size: 12px; letter-spacing: 0; text-transform: none; font-weight: 500; border-radius: 7px; }
+.app-shell :is(.workspace-tool-card,.admin-panel,.motion-workspace,.concept-output,.concept-controls,.campaign-inputs,.campaign-results,.campaign-history) { box-shadow: none; }
+.app-shell :is(.workspace-page,.creator-workspace,.admin-workspace,.coo-page,.fin-workspace,.org-workspace,.forge) { padding: 24px 32px 48px; }
+.app-shell :is(.fin-workspace,.org-workspace,.org-dialog,.ca-workspace,.ca-review,.ss) { font-family: var(--ui-font); color: var(--ui-ink); }
+.app-shell .ss { --ss-ink: var(--ui-ink); --ss-muted: var(--ui-muted); --ss-line: var(--ui-border); --ss-paper: var(--ui-surface); --ss-bg: var(--ui-canvas); --ss-orange: var(--ui-accent); }
+.app-shell .sku-pacing-workspace { --ink: var(--ui-ink); --muted: var(--ui-muted); --rule: var(--ui-border); --paper: var(--ui-surface); --soft: var(--ui-soft); --signal: var(--ui-accent); }
+.app-shell :is(.fin-workspace,.org-workspace,.org-dialog,.coo-page,.coo-dialog) button { font-size: 12px; font-weight: 500; border-radius: 7px; }
+.app-shell :is(.fin-actions>button,.fin-save button:first-of-type,.fin-empty>button,.org-primary,.coo-primary) { background: var(--ui-accent); border-color: #c74c24; color: #fff; }
+.app-shell :is(.fin-actions>button,.fin-save button:first-of-type,.fin-empty>button,.org-primary,.coo-primary):hover { background: #c24a22; border-color: #b8441f; color: #fff; }
+.app-shell .fin-tabs button[aria-current], .app-shell .org-toolbar button[aria-pressed=true] { background: var(--ui-accent-soft); border-color: var(--ui-accent-border); color: #bd471e; }
+.app-shell :is(.org-heading h1,.org-build-branch p) { font-family: var(--ui-font); }
+.app-shell .org-heading h1 { font-size: 28px; font-weight: 650; }
+@media(max-width:760px) {
+  .app-shell .sidebar-top { padding: 9px; }
+  .app-shell .sidebar-top img { width: 58px; }
+  .app-shell .sidebar-section { display: none; }
+  .app-shell .side-item { padding: 8px 10px; font-size: 12px; }
+  .app-shell :is(.workspace-page,.creator-workspace,.admin-workspace,.coo-page,.fin-workspace,.org-workspace,.forge) { padding: 20px 16px 40px; }
+  .app-shell :is(.workspace-head,.creator-head,.coo-head,.fin-header,.org-heading,.forge-head,.ss-header,.sku-pacing-topbar) h1 { font-size: 24px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .app-shell :is(button,a,input,select,textarea) { transition: none; }
+}
+/* Financial chart series keep their distinct colors; workspace controls share the app palette. */
+.app-shell .fin-workspace { background: var(--ui-canvas); --fin-accent: var(--ui-accent); }
+.app-shell :is(.fin-demo-banner,.fin-demo-note,.fin-save) { background: var(--ui-soft); border-color: var(--ui-border); color: var(--ui-muted); }
+.app-shell .fin-month-selector button[aria-pressed=true], .app-shell .fin-settings-nav button[aria-pressed=true] { background: var(--ui-accent-soft); color: #bd471e; border-color: var(--ui-accent-border); }
+.app-shell .fin-ebitda-editor summary { color: var(--ui-accent); }
+.app-shell .display-italic { font-family: var(--ui-font); font-style: normal; }
+.app-shell .home-workspace { padding: 24px 32px 48px; max-width: 1300px; margin: auto; }
+.app-shell .home-hero { padding: 44px 24px; text-align: center; border-bottom: 1px solid var(--ui-border); background: var(--ui-surface); margin-bottom: 28px; }
+@media(max-width:760px) {
+  .app-shell .home-workspace { padding: 20px 16px 40px; }
+  .app-shell .home-hero { padding: 28px 0; }
+}
+.app-shell .creator-motion-workspace :is(.creator-view-tabs,.creator-detail-tabs) { background: #f3f4f6; border-radius: 8px; }
+.app-shell .creator-motion-workspace :is(.creator-view-tabs,.creator-detail-tabs) button.active { background: #fff; color: var(--ui-ink); box-shadow: 0 1px 3px #1920330a; }
+.app-shell .creator-motion-workspace .creator-stage-tabs button.active { background: var(--ui-accent-soft); color: #bd471e; border-color: var(--ui-accent-border); }
+.app-shell .creator-motion-workspace :is(.creator-layout,.talent-layout) { box-shadow: none; border-radius: 10px; }
+.app-shell .creator-motion-workspace button { font-family: var(--ui-font); font-weight: 500; }
+.app-shell .ss :is(button,input,select,textarea) { font-size: 13px; border-radius: 7px; }
