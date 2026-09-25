@@ -1,14 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import CooPlanEditor from './CooPlanEditor.jsx';
-import { dayString, KPI_TEMPLATES, STATUSES, LABELS, latestCheckin, CONSTRAINT_STATUSES, constraintsForMetric, cycleLevel, ancestorCycleIds } from '../../lib/coo.js';
+import { dayString, KPI_TEMPLATES, STATUSES, LABELS, latestCheckin, CONSTRAINT_STATUSES, constraintsForMetric, cycleLevel, ancestorCycleIds, periodDates } from '../../lib/coo.js';
 const TITLES={department:'department',cycle:'planning cycle',objective:'focus',metric:'KPI',initiative:'initiative',review:'weekly review',constraint:'constraint'};
 export default function CooEditor({editor,state,onClose,onSave,busy: saving,error,onRefresh}) {
   const {kind,item,mode='save',defaults={}}=editor;
   const [importing,setImporting]=useState(false);
   const busy=saving||importing;
   const checkin=mode==='checkin';
+  const parentPeriod=state.cycles.find(c=>c.id===defaults.parentId);
+  const dateReference=parentPeriod&&(dayString()<parentPeriod.start||dayString()>parentPeriod.end)?parentPeriod.start:dayString();
   const latest=item&&latestCheckin(state,kind,item.id);
-  const [values,setValues]=useState(()=>checkin?{date:dayString(),numerator:'',denominator:'',evidence:'',value:'',forecast:latest?.forecast??'',constraintSelection:'',constraintStatus:'open',constraintNote:'',constraintDecision:'',decision:item?.decision||'',constraintTitle:'',constraintOwner:'',constraintDueDate:'',assignAction:false,actionTitle:'',actionOwner:'',actionDueDate:'',status:latest?.status||(kind==='constraint'?'open':'on-track'),note:'',blocker:'',nextStep:''}:{level:kind==='cycle'?(cycleLevel(item)||'annual'):'',measurement:'direct',numeratorLabel:'',denominatorLabel:'',name:'',title:'',owner:'',description:'',departmentId:'',cycleId:'',parentId:'',objectiveId:'',kind:'kpi',baseline:'',target:'',unit:'',direction:'increase',cadence:7,source:'',dueDate:'',dependencyId:'',parentInitiativeId:'',reviewId:'',type:'initiative',start:'',end:'',date:dayString(),decisions:'',lessons:'',plan:[],planSource:'',tolerance:0,metricIds:[],objectiveIds:[],impact:'',decision:'',constraintId:'',...defaults,...item});
+  const [values,setValues]=useState(()=>checkin?{date:dayString(),numerator:'',denominator:'',evidence:'',value:'',forecast:latest?.forecast??'',constraintSelection:'',constraintStatus:'open',constraintNote:'',constraintDecision:'',decision:item?.decision||'',constraintTitle:'',constraintOwner:'',constraintDueDate:'',assignAction:false,actionTitle:'',actionOwner:'',actionDueDate:'',status:latest?.status||(kind==='constraint'?'open':'on-track'),note:'',blocker:'',nextStep:''}:{level:kind==='cycle'?(cycleLevel(item)||'annual'):'',measurement:'direct',numeratorLabel:'',denominatorLabel:'',name:'',title:'',owner:'',description:'',departmentId:'',cycleId:'',parentId:'',objectiveId:'',kind:'kpi',baseline:'',target:'',unit:'',direction:'increase',cadence:7,source:'',dueDate:'',dependencyId:'',parentInitiativeId:'',reviewId:'',type:'initiative',start:'',end:'',date:dayString(),decisions:'',lessons:'',plan:[],planSource:'',tolerance:0,metricIds:[],objectiveIds:[],impact:'',decision:'',constraintId:'',...(kind==='cycle'?periodDates(defaults.level||cycleLevel(item)||'annual',dateReference):{}),...defaults,...item});
   const planLocked=!!item?.plan?.length;
   const cycle=state.cycles.find(c=>c.id===values.cycleId);
   const ref=useRef(null);
@@ -27,7 +29,7 @@ export default function CooEditor({editor,state,onClose,onSave,busy: saving,erro
   const select=(key,label,options,placeholder='Select…',required=true)=><label key={key}>{label}<select disabled={planLocked&&['cycleId','direction'].includes(key)} value={values[key]||''} required={required} onChange={e=>{
     set(key,e.target.value);
     if(key==='cycleId'){set('objectiveId','');set('parentId','');set('dependencyId','');set('parentInitiativeId','');set('reviewId','');set('constraintId','');set('metricIds',[]);set('objectiveIds',[]);if(!planLocked)set('plan',[]);}
-    if(key==='departmentId'){set('objectiveId','');set('parentId','');}if(key==='level')set('parentId','');if(key==='measurement'&&e.target.value==='percentage')set('unit','%');
+    if(key==='departmentId'){set('objectiveId','');set('parentId','');}if(key==='level'){set('parentId','');const dates=periodDates(e.target.value,values.start||dayString());set('start',dates.start);set('end',dates.end);}if(key==='measurement'&&e.target.value==='percentage')set('unit','%');
     if(key==='constraintSelection'){set('constraintStatus',latestCheckin(state,'constraint',e.target.value)?.status||'open');set('constraintDecision',state.constraints.find(c=>c.id===e.target.value)?.decision||'');}
   }}><option value="">{placeholder}</option>{options.map(o=><option key={o.id} value={o.id}>{o.name||o.title}</option>)}</select></label>;
   const simple=(key,label,options)=>select(key,label,options.map(([id,name])=>({id,name})));

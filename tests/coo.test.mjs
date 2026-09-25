@@ -266,3 +266,10 @@ test('calculated KPI measurements retain evidence and reject undefined ratios an
  const checked=command(legacy,'metric',f.metricId,{date:'2026-09-23',value:3},'checkin');
  assert.doesNotThrow(()=>command(checked,'metric',f.metricId,{...f.metric,title:'Renamed legacy metric'}));
 });
+
+test('period date defaults cover annual, quarterly and leap-year monthly boundaries',async()=>{
+ const {periodDates}=await import('../src/lib/coo.js');
+ assert.deepEqual(periodDates('annual','2026-09-25'),{start:'2026-01-01',end:'2026-12-31'});
+ assert.deepEqual(periodDates('quarterly','2026-09-25'),{start:'2026-07-01',end:'2026-09-30'});
+ assert.deepEqual(periodDates('monthly','2028-02-10'),{start:'2028-02-01',end:'2028-02-29'});
+});

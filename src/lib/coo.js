@@ -135,3 +135,10 @@ export function measurementValue(metric, values) {
   if (!Number.isFinite(values.numerator) || !Number.isFinite(values.denominator) || values.denominator <= 0) throw new Error('Enter a finite numerator and a denominator greater than zero.');
   return values.numerator / values.denominator * (metric.measurement === 'percentage' ? 100 : 1);
 }
+
+export function periodDates(level, reference = dayString()) {
+  const [year, month] = reference.split('-').map(Number);
+  const startMonth = level === 'annual' ? 1 : level === 'quarterly' ? Math.floor((month-1)/3)*3+1 : month;
+  const duration = level === 'annual' ? 12 : level === 'quarterly' ? 3 : 1;
+  return {start:`${year}-${String(startMonth).padStart(2,'0')}-01`,end:new Date(Date.UTC(year,startMonth-1+duration,0)).toISOString().slice(0,10)};
+}
