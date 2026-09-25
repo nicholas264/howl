@@ -114,3 +114,24 @@ export function scorecardCsv(state, metrics, today=dayString()) {
   for(const m of metrics) { const h=metricHealth(state,m,today); rows.push([state.departments.find(d=>d.id===m.departmentId)?.name,m.title,m.kind,m.owner,state.cycles.find(c=>c.id===m.cycleId)?.name,m.baseline,m.target,h.planned,h.value,h.variance,h.forecast,h.forecastGap,m.unit,LABELS[h.status],LABELS[h.planStatus],LABELS[h.goalStatus],h.latest?.date,m.source,m.description]); }
   return rows.map(r=>r.map(cell).join(',')).join('\r\n');
 }
+
+// Infer periods for existing plans without rewriting saved history.
+export function cycleLevel(cycle) {
+  if (cycle?.level) return cycle.level;
+  if (!cycle) return '';
+  const months = (Number(cycle.end.slice(0,4))-Number(cycle.start.slice(0,4)))*12 + Number(cycle.end.slice(5,7))-Number(cycle.start.slice(5,7))+1;
+  return months <= 1 ? 'monthly' : months <= 3 ? 'quarterly' : 'annual';
+}
+export function ancestorCycleIds(state, id) {
+  const ids = new Set();
+  let cycle = state.cycles.find(c => c.id === id);
+  while(cycle?.parentId && !ids.has(cycle.parentId)) {
+    ids.add(cycle.parentId); cycle = state.cycles.find(c => c.id === cycle.parentId);
+  }
+  return ids;
+}
+export function measurementValue(metric, values) {
+  if (!metric.measurement || metric.measurement === 'direct') return values.value;
+  if (!Number.isFinite(values.numerator) || !Number.isFinite(values.denominator) || values.denominator <= 0) throw new Error('Enter a finite numerator and a denominator greater than zero.');
+  return values.numerator / values.denominator * (metric.measurement === 'percentage' ? 100 : 1);
+}

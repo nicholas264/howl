@@ -228,3 +228,41 @@ test('quick-update actions use the constraint resolution department and clearing
   assert.equal(s.initiatives.at(-1).departmentId,c.departmentId);assert.equal(s.initiatives.at(-1).constraintId,c.id);assert.equal(s.initiatives.at(-1).objectiveId,'');
   assert.equal(s.constraints[0].decision,'');assert.equal(s.checkins.at(-1).decision,'');assert.equal(s.constraints[0].version,2);
 });
+
+test('monthly periods and department focuses align through the annual hierarchy',()=>{
+ const f=fixture();let s=command(f.state,'cycle',undefined,{name:'September',level:'monthly',start:'2026-09-01',end:'2026-09-30',parentId:f.cycleId});
+ const month=s.cycles.at(-1);
+ s=command(s,'objective',undefined,{title:'September quality',owner:'Pat',departmentId:f.departmentId,cycleId:month.id,parentId:f.objectiveId});
+ assert.equal(s.objectives.at(-1).parentId,f.objectiveId);
+ const quarter=s.cycles.find(c=>c.id===f.cycleId);
+ s=command(s,'cycle',quarter.id,{...quarter,name:'Q3 updated'});
+ assert.equal(s.cycles.at(-1).parentId,quarter.id);
+ assert.throws(()=>command(s,'cycle',month.id,{...month,parentId:f.annual}),/monthly/);
+ assert.throws(()=>command(s,'cycle',quarter.id,{...quarter,start:'2026-09-15'}),/contain/);
+ assert.throws(()=>command(s,'objective',undefined,{title:'Wrong department',owner:'Other',departmentId:s.departments[1].id,cycleId:month.id,parentId:f.objectiveId}),/matching department/);
+ const focus=s.objectives.find(o=>o.id===f.objectiveId);
+ assert.doesNotThrow(()=>command(s,'objective',focus.id,{...focus,title:'Updated focus'}));
+});
+test('focus limit applies per department and period and preserves existing records',()=>{
+ const f=fixture();let s=f.state;const values={owner:'Pat',departmentId:f.departmentId,cycleId:f.cycleId};
+ s=command(s,'objective',undefined,{...values,title:'Focus 2'});
+ s=command(s,'objective',undefined,{...values,title:'Focus 3'});
+ assert.throws(()=>command(s,'objective',undefined,{...values,title:'Focus 4'}),/1–3/);
+ const last=s.objectives.at(-1);assert.doesNotThrow(()=>command(s,'objective',last.id,{...last,title:'Renamed'}));
+ assert.doesNotThrow(()=>command(s,'objective',undefined,{...values,title:'Annual focus',cycleId:f.annual}));
+ s=command(s,'objective',last.id,{},'archive');
+ assert.doesNotThrow(()=>command(s,'objective',undefined,{...values,title:'Replacement focus'}));
+});
+test('calculated KPI measurements retain evidence and reject undefined ratios and changed definitions',()=>{
+ const f=fixture();let s=command(f.state,'metric',undefined,{...f.metric,measurement:'percentage',numeratorLabel:'Defects',denominatorLabel:'Inspected'});
+ const metric=s.metrics.at(-1);
+ s=command(s,'metric',metric.id,{date:'2026-09-23',numerator:3,denominator:200,value:999,evidence:'Inspection report 42'},'checkin');
+ assert.equal(s.checkins.at(-1).value,1.5);assert.equal(s.checkins.at(-1).numerator,3);assert.equal(s.checkins.at(-1).evidence,'Inspection report 42');
+ assert.throws(()=>command(s,'metric',metric.id,{date:'2026-09-23',numerator:3,denominator:0},'checkin'),/denominator/);
+ assert.throws(()=>command(s,'metric',metric.id,{date:'2026-09-23',numerator:3,denominator:Infinity},'checkin'),/denominator/);
+ assert.throws(()=>command(s,'metric',metric.id,{...metric,measurement:'direct'}),/measurement definition/);
+ assert.throws(()=>command(s,'metric',undefined,{...f.metric,measurement:'percentage',numeratorLabel:'Defects',denominatorLabel:'Inspected',unit:'units'}),/unit/);
+ const legacy=structuredClone(f.state);delete legacy.metrics[0].measurement;delete legacy.metrics[0].numeratorLabel;delete legacy.metrics[0].denominatorLabel;
+ const checked=command(legacy,'metric',f.metricId,{date:'2026-09-23',value:3},'checkin');
+ assert.doesNotThrow(()=>command(checked,'metric',f.metricId,{...f.metric,title:'Renamed legacy metric'}));
+});

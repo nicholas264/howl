@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { emptyWorkspace, DEPARTMENTS, STATUSES, dayString, metricHealth, constraintHealth, CONSTRAINT_STATUSES } from '../../src/lib/coo.js';
+import { emptyWorkspace, DEPARTMENTS, STATUSES, dayString, metricHealth, constraintHealth, CONSTRAINT_STATUSES, cycleLevel, ancestorCycleIds, measurementValue } from '../../src/lib/coo.js';
 export async function ensureCooWorkspace(sql) {
   await sql`CREATE TABLE IF NOT EXISTS coo_workspace (id TEXT PRIMARY KEY, data JSONB NOT NULL, revision INTEGER NOT NULL DEFAULT 1, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_by TEXT NOT NULL)`;
 }
@@ -34,7 +34,7 @@ export function applyCooCommand(current, command, actor, now = new Date()) {
     const cycle=state.cycles.find(c=>c.id===existing.cycleId);
     if(!cycle || cycle.archived || checkDate<cycle.start||checkDate>cycle.end) fail('The check-in date must fall within an active planning cycle.');
     const checkin={id:randomUUID(),kind,entityId:existing.id,date:checkDate,note:text(b.note??'','Context',5000,false),blocker:text(b.blocker??'','Blocker',2000,false),nextStep:text(b.nextStep??'','Next step',2000,false),createdAt:timestamp,createdBy:actor};
-    if(kind==='metric') { checkin.value=num(b.value,'actual value');checkin.target=existing.target;checkin.baseline=existing.baseline;checkin.forecast=b.forecast==null?null:num(b.forecast,'expected finish'); }
+    if(kind==='metric') { checkin.value=num(measurementValue(existing,b),'actual value');checkin.evidence=text(b.evidence??'','Evidence / report link',1000,false);if(existing.measurement&&existing.measurement!=='direct'){checkin.numerator=num(b.numerator,'numerator');checkin.denominator=num(b.denominator,'denominator');}checkin.target=existing.target;checkin.baseline=existing.baseline;checkin.forecast=b.forecast==null?null:num(b.forecast,'expected finish'); }
     else { if(!(kind==='constraint'?CONSTRAINT_STATUSES:STATUSES).includes(b.status)) fail('Select a valid initiative status.');checkin.status=b.status; }
     if(kind==='constraint'&&(b.decision!==undefined||b.status==='resolved')){checkin.decision=b.status==='resolved'?'':text(b.decision,'Decision needed',2000,false);existing.decision=checkin.decision;existing.version=(existing.version||1)+1;existing.updatedAt=timestamp;existing.updatedBy=actor;}
     if(state.checkins.length>=20000) fail('Check-in capacity reached. Contact an administrator to extend storage.');
@@ -88,16 +88,20 @@ export function applyCooCommand(current, command, actor, now = new Date()) {
   if(kind==='department'&&state.departments.some(d=>!d.archived&&d.id!==item.id&&d.name.toLowerCase()===item.name.toLowerCase())) fail('A department with this name already exists.');
   if(kind==='cycle') {
     item.start=date(b.start,'start date');item.end=date(b.end,'end date');if(item.end<=item.start) fail('The cycle must end after it starts.');
-    item.parentId=ref(state,'cycles',b.parentId,'annual cycle',true);
-    if(item.parentId) {const parent=state.cycles.find(c=>c.id===item.parentId);if(parent.id===item.id||parent.parentId||item.start<parent.start||item.end>parent.end) fail('A quarterly cycle must fall inside its annual cycle.');}
+    item.level=b.level||cycleLevel({...item,start:item.start,end:item.end});
+    if(!['annual','quarterly','monthly'].includes(item.level)) fail('Choose annual, quarterly, or monthly.');
+    item.parentId=ref(state,'cycles',b.parentId,'parent period',true);
+    if(item.parentId) {const parent=state.cycles.find(c=>c.id===item.parentId);if(parent.id===item.id||ancestorCycleIds(state,parent.id).has(item.id)||!((item.level==='monthly'&&cycleLevel(parent)==='quarterly')||(item.level==='quarterly'&&cycleLevel(parent)==='annual'))||item.start<parent.start||item.end>parent.end) fail('A quarterly cycle must fall inside its annual cycle; a monthly cycle must fall inside its quarterly cycle.');}
+
   }
   if(['objective','metric','initiative','review','constraint'].includes(kind)) {
     item.departmentId=ref(state,'departments',b.departmentId,'department',['objective','review'].includes(kind));
     item.cycleId=ref(state,'cycles',b.cycleId,'planning cycle');
   }
   if(kind==='objective') {
+    if(item.departmentId && state.objectives.filter(o=>!o.archived&&o.id!==item.id&&o.departmentId===item.departmentId&&o.cycleId===item.cycleId).length>=3 && (!existing||existing.departmentId!==item.departmentId||existing.cycleId!==item.cycleId)) fail('Keep each department to 1–3 focuses per period. Archive or reassign an existing focus first.');
     item.parentId=ref(state,'objectives',b.parentId,'company objective',true);
-    if(item.parentId) { const parent=state.objectives.find(o=>o.id===item.parentId);if(parent.departmentId||parent.parentId||(parent.cycleId!==item.cycleId&&parent.cycleId!==state.cycles.find(c=>c.id===item.cycleId)?.parentId)||parent.id===item.id) fail('Align to a company objective in this cycle or its annual cycle.'); }
+    if(item.parentId) { const parent=state.objectives.find(o=>o.id===item.parentId);if((parent.departmentId&&parent.departmentId!==item.departmentId)||(parent.cycleId===item.cycleId&&(parent.departmentId||parent.parentId))||(parent.cycleId!==item.cycleId&&!ancestorCycleIds(state,item.cycleId).has(parent.cycleId))||parent.id===item.id) fail('Align to a company focus in this cycle or a matching department focus in a parent period.'); }
   }
   if(kind==='metric'||kind==='initiative') {
     item.objectiveId=ref(state,'objectives',b.objectiveId,'objective',true);
@@ -112,7 +116,12 @@ export function applyCooCommand(current, command, actor, now = new Date()) {
     item.direction=b.direction;item.baseline=num(b.baseline,'baseline');item.target=num(b.target,'target');
     if(item.kind==='kr'&&((item.direction==='increase'&&item.target<item.baseline)||(item.direction==='decrease'&&item.target>item.baseline))) fail('The baseline and target must match the selected direction.');
     if(item.kind==='kr'&&item.target===item.baseline) fail('A key result must improve on its baseline.');
-    item.unit=text(b.unit??'','Unit',30,false);item.source=text(b.source??'','Source',500,false);
+    item.measurement=b.measurement||existing?.measurement||'direct';
+    if(!['direct','percentage','ratio'].includes(item.measurement)) fail('Choose a valid measurement method.');
+    item.numeratorLabel=text(b.numeratorLabel??'','Numerator label',150,item.measurement!=='direct');
+    item.denominatorLabel=text(b.denominatorLabel??'','Denominator label',150,item.measurement!=='direct');
+    item.unit=text(b.unit??'','Unit',30,false);
+    if(item.measurement==='percentage'&&item.unit!=='%') fail('Percentage measurements must use % as the unit.');item.source=text(b.source??'','Source',500,false);
     if(!Number.isInteger(b.cadence)||b.cadence<1||b.cadence>366) fail('Update cadence must be 1–366 days.');item.cadence=b.cadence;
     item.tolerance=num(b.tolerance??0,'at-risk tolerance');if(item.tolerance<0) fail('Tolerance cannot be negative.');
     if(!Array.isArray(b.plan??[])||(b.plan||[]).length>366) fail('Use at most 366 plan checkpoints.');
@@ -168,11 +177,11 @@ export function applyCooCommand(current, command, actor, now = new Date()) {
       const linked=kind==='constraint'?state.initiatives.some(i=>!i.archived&&i.constraintId===item.id):state.constraints.some(c=>!c.archived&&(kind==='metric'?c.metricIds:c.objectiveIds)?.includes(item.id));
       if(linked) fail('Reassign linked constraints or actions before changing the cycle.');
     }
-    if(['metric','initiative','constraint'].includes(kind)&&state.checkins.some(c=>c.entityId===existing.id)&&['cycleId',...(kind==='metric'?['departmentId','kind','unit','direction','baseline','target']:[])].some(k=>existing[k]!==item[k])) fail('Records with check-ins retain their measurement definition. Create a new record for a changed target, unit, baseline, or cycle.');
+    if(['metric','initiative','constraint'].includes(kind)&&state.checkins.some(c=>c.entityId===existing.id)&&['cycleId',...(kind==='metric'?['departmentId','kind','unit','direction','baseline','target','measurement','numeratorLabel','denominatorLabel']:[])].some(k=>(existing[k]??(k==='measurement'?'direct':['numeratorLabel','denominatorLabel'].includes(k)?'':undefined))!==item[k])) fail('Records with check-ins retain their measurement definition. Create a new record for a changed target, unit, baseline, or cycle.');
     const children=[...state.objectives,...state.metrics,...state.initiatives].filter(x=>!x.archived&&(x.parentId===item.id||x.objectiveId===item.id));
-    if(kind==='objective'&&children.some(x=>(x.cycleId!==item.cycleId&&!(x.parentId===item.id&&state.cycles.find(c=>c.id===x.cycleId)?.parentId===item.cycleId))||(item.departmentId&&x.departmentId!==item.departmentId)||(x.parentId===item.id&&item.departmentId))) fail('Reassign linked records before changing the objective scope.');
+    if(kind==='objective'&&children.some(x=>(x.cycleId!==item.cycleId&&!(x.parentId===item.id&&ancestorCycleIds(state,x.cycleId).has(item.cycleId)))||(item.departmentId&&x.departmentId!==item.departmentId)||(x.parentId===item.id&&x.cycleId===item.cycleId&&item.departmentId))) fail('Reassign linked records before changing the objective scope.');
     if(kind==='cycle') {
-      if(state.cycles.some(c=>!c.archived&&c.parentId===item.id&&(c.start<item.start||c.end>item.end||item.parentId))) fail('Annual dates must contain linked quarterly cycles.');
+      if(state.cycles.some(c=>!c.archived&&c.parentId===item.id&&(c.start<item.start||c.end>item.end||!((cycleLevel(c)==='monthly'&&item.level==='quarterly')||(cycleLevel(c)==='quarterly'&&item.level==='annual'))))) fail('Parent periods must contain linked child periods and preserve annual → quarterly → monthly order.');
       if(item.parentId!==existing.parentId&&state.objectives.some(o=>o.cycleId===item.id&&o.parentId&&state.objectives.find(p=>p.id===o.parentId)?.cycleId!==item.id)) fail('Reassign linked annual objectives before changing the parent cycle.');
       const entityIds=new Set([...state.metrics,...state.initiatives,...state.constraints].filter(x=>x.cycleId===item.id).map(x=>x.id));
       if(state.checkins.some(c=>entityIds.has(c.entityId)&&(c.date<item.start||c.date>item.end))||[...state.initiatives,...state.constraints].some(i=>!i.archived&&i.cycleId===item.id&&(i.dueDate<item.start||i.dueDate>item.end))||state.metrics.some(m=>m.cycleId===item.id&&m.plan?.length&&(item.start!==existing.start||item.end!==existing.end))||state.reviews.some(r=>r.cycleId===item.id&&(r.date<item.start||r.date>item.end))) fail('Cycle dates must contain existing check-ins and initiative due dates.');

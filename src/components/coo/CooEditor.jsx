@@ -1,14 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import CooPlanEditor from './CooPlanEditor.jsx';
-import { dayString, KPI_TEMPLATES, STATUSES, LABELS, latestCheckin, CONSTRAINT_STATUSES, constraintsForMetric } from '../../lib/coo.js';
-const TITLES={department:'department',cycle:'planning cycle',objective:'objective',metric:'metric',initiative:'initiative',review:'weekly review',constraint:'constraint'};
+import { dayString, KPI_TEMPLATES, STATUSES, LABELS, latestCheckin, CONSTRAINT_STATUSES, constraintsForMetric, cycleLevel, ancestorCycleIds } from '../../lib/coo.js';
+const TITLES={department:'department',cycle:'planning cycle',objective:'focus',metric:'KPI',initiative:'initiative',review:'weekly review',constraint:'constraint'};
 export default function CooEditor({editor,state,onClose,onSave,busy: saving,error,onRefresh}) {
   const {kind,item,mode='save',defaults={}}=editor;
   const [importing,setImporting]=useState(false);
   const busy=saving||importing;
   const checkin=mode==='checkin';
   const latest=item&&latestCheckin(state,kind,item.id);
-  const [values,setValues]=useState(()=>checkin?{date:dayString(),value:'',forecast:latest?.forecast??'',constraintSelection:'',constraintStatus:'open',constraintNote:'',constraintDecision:'',decision:item?.decision||'',constraintTitle:'',constraintOwner:'',constraintDueDate:'',assignAction:false,actionTitle:'',actionOwner:'',actionDueDate:'',status:latest?.status||(kind==='constraint'?'open':'on-track'),note:'',blocker:'',nextStep:''}:{name:'',title:'',owner:'',description:'',departmentId:'',cycleId:'',parentId:'',objectiveId:'',kind:'kpi',baseline:'',target:'',unit:'',direction:'increase',cadence:7,source:'',dueDate:'',dependencyId:'',parentInitiativeId:'',reviewId:'',type:'initiative',start:'',end:'',date:dayString(),decisions:'',lessons:'',plan:[],planSource:'',tolerance:0,metricIds:[],objectiveIds:[],impact:'',decision:'',constraintId:'',...defaults,...item});
+  const [values,setValues]=useState(()=>checkin?{date:dayString(),numerator:'',denominator:'',evidence:'',value:'',forecast:latest?.forecast??'',constraintSelection:'',constraintStatus:'open',constraintNote:'',constraintDecision:'',decision:item?.decision||'',constraintTitle:'',constraintOwner:'',constraintDueDate:'',assignAction:false,actionTitle:'',actionOwner:'',actionDueDate:'',status:latest?.status||(kind==='constraint'?'open':'on-track'),note:'',blocker:'',nextStep:''}:{level:kind==='cycle'?(cycleLevel(item)||'annual'):'',measurement:'direct',numeratorLabel:'',denominatorLabel:'',name:'',title:'',owner:'',description:'',departmentId:'',cycleId:'',parentId:'',objectiveId:'',kind:'kpi',baseline:'',target:'',unit:'',direction:'increase',cadence:7,source:'',dueDate:'',dependencyId:'',parentInitiativeId:'',reviewId:'',type:'initiative',start:'',end:'',date:dayString(),decisions:'',lessons:'',plan:[],planSource:'',tolerance:0,metricIds:[],objectiveIds:[],impact:'',decision:'',constraintId:'',...defaults,...item});
   const planLocked=!!item?.plan?.length;
   const cycle=state.cycles.find(c=>c.id===values.cycleId);
   const ref=useRef(null);
@@ -27,7 +27,7 @@ export default function CooEditor({editor,state,onClose,onSave,busy: saving,erro
   const select=(key,label,options,placeholder='Select…',required=true)=><label key={key}>{label}<select disabled={planLocked&&['cycleId','direction'].includes(key)} value={values[key]||''} required={required} onChange={e=>{
     set(key,e.target.value);
     if(key==='cycleId'){set('objectiveId','');set('parentId','');set('dependencyId','');set('parentInitiativeId','');set('reviewId','');set('constraintId','');set('metricIds',[]);set('objectiveIds',[]);if(!planLocked)set('plan',[]);}
-    if(key==='departmentId')set('objectiveId','');
+    if(key==='departmentId'){set('objectiveId','');set('parentId','');}if(key==='level')set('parentId','');if(key==='measurement'&&e.target.value==='percentage')set('unit','%');
     if(key==='constraintSelection'){set('constraintStatus',latestCheckin(state,'constraint',e.target.value)?.status||'open');set('constraintDecision',state.constraints.find(c=>c.id===e.target.value)?.decision||'');}
   }}><option value="">{placeholder}</option>{options.map(o=><option key={o.id} value={o.id}>{o.name||o.title}</option>)}</select></label>;
   const simple=(key,label,options)=>select(key,label,options.map(([id,name])=>({id,name})));
@@ -35,7 +35,7 @@ export default function CooEditor({editor,state,onClose,onSave,busy: saving,erro
   const submit=async e=>{
     e.preventDefault();if(busy)return;const payload={...values};
     if(kind==='metric'){
-      for(const k of checkin?['value']:['baseline','target','cadence','tolerance'])payload[k]=Number(payload[k]);
+      for(const k of checkin?['value','numerator','denominator']:['baseline','target','cadence','tolerance'])payload[k]=Number(payload[k]);
       if(checkin){
         payload.forecast=values.forecast===''?null:Number(values.forecast);
         if(values.constraintSelection)payload.constraintUpdate={id:values.constraintSelection==='new'?undefined:values.constraintSelection,title:values.constraintTitle,owner:values.constraintOwner,dueDate:values.constraintDueDate,status:values.constraintStatus,note:values.constraintNote,decision:values.constraintDecision};
@@ -51,7 +51,7 @@ export default function CooEditor({editor,state,onClose,onSave,busy: saving,erro
       <fieldset disabled={busy} className="coo-form">
       {checkin?<>
         {input('date','Reporting date','date',true,{max:dayString()})}
-        {kind==='metric'?<>{input('value',`Actual to date / current value (${item.unit||'number'})`,'number',true,{step:'any'})}{input('forecast',`Expected finish (${item.unit||'number'})`,'number',false,{step:'any'})}<p className="coo-hint">Goal: {item.target} {item.unit}. Enter your current expected end-of-cycle result; this does not change the agreed goal.</p></>:simple('status','Status',(kind==='constraint'?CONSTRAINT_STATUSES:STATUSES).map(s=>[s,LABELS[s]]))}
+        {kind==='metric'?<>{item.measurement&&item.measurement!=='direct'?<>{input('numerator',item.numeratorLabel,'number',true,{step:'any'})}{input('denominator',item.denominatorLabel,'number',true,{step:'any',min:0.000000001})}<p className="coo-hint coo-wide">Calculated actual: {values.numerator!==''&&Number(values.denominator)>0?(Number(values.numerator)/Number(values.denominator)*(item.measurement==='percentage'?100:1)).toLocaleString(undefined,{maximumFractionDigits:2}):'—'} {item.unit}</p></>:input('value',`Actual to date / current value (${item.unit||'number'})`,'number',true,{step:'any'})}{input('evidence','Evidence / report link','text',false,{maxLength:1000})}<p className="coo-hint coo-wide">{item.description} · Source: {item.source||'Not specified'}</p>{input('forecast',`Expected finish (${item.unit||'number'})`,'number',false,{step:'any'})}<p className="coo-hint">Goal: {item.target} {item.unit}. Enter your current expected end-of-cycle result; this does not change the agreed goal.</p></>:simple('status','Status',(kind==='constraint'?CONSTRAINT_STATUSES:STATUSES).map(s=>[s,LABELS[s]]))}
         {area('note','What changed?')}{area('nextStep','Next step')}{kind==='constraint'&&area('decision','Current decision needed (clear when answered)')}
         {kind==='metric'&&<>
           {select('constraintSelection','Constraint update',[...linkedOptions,{id:'new',title:'Create a new constraint'}],'No constraint update',false)}
@@ -64,17 +64,18 @@ export default function CooEditor({editor,state,onClose,onSave,busy: saving,erro
         {values.assignAction&&<>{input('actionTitle','Action title')}{input('actionOwner','Action owner')}{input('actionDueDate','Action due date','date')}</>}
         <p className="coo-hint coo-wide">Saved check-ins stay in history. A new check-in for the same date supersedes the earlier value without deleting it.</p>
       </>:<>
-        {kind==='metric'&&!item&&<label className="coo-wide">Start from a suggested KPI<select defaultValue="" onChange={e=>{const t=KPI_TEMPLATES[Number(e.target.value)];if(t){dirty.current=true;setValues(v=>({...v,...t,departmentId:active('departments').find(d=>d.name===t.department)?.id||v.departmentId}));}}}><option value="" disabled>Choose a template or define your own</option>{KPI_TEMPLATES.map((t,i)=><option value={i} key={t.title}>{t.department} — {t.title}</option>)}</select></label>}
+        {kind==='metric'&&!item&&<label className="coo-wide">Start from a suggested KPI<select defaultValue="" onChange={e=>{const t=KPI_TEMPLATES[Number(e.target.value)];if(t){dirty.current=true;setValues(v=>({...v,...t,departmentId:v.objectiveId?v.departmentId:active('departments').find(d=>d.name===t.department)?.id||v.departmentId}));}}}><option value="" disabled>Choose a template or define your own</option>{KPI_TEMPLATES.map((t,i)=><option value={i} key={t.title}>{t.department} — {t.title}</option>)}</select></label>}
         {input(['department','cycle'].includes(kind)?'name':'title',['department','cycle'].includes(kind)?'Name':'Title')}
         {input('owner','Accountable owner','text',!['department','cycle'].includes(kind),{maxLength:150})}
         {!['department','cycle'].includes(kind)&&<>
           {select('cycleId','Planning cycle',active('cycles'))}
           {select('departmentId','Department',active('departments'),['objective','review'].includes(kind)?'Company-wide':'Select department',!['objective','review'].includes(kind))}
         </>}
-        {kind==='cycle'&&<>{input('start','Start date','date')}{input('end','End date','date')}{select('parentId','Annual cycle (optional)',active('cycles').filter(c=>!c.parentId&&c.id!==item?.id),'Standalone / annual cycle',false)}</>}
-        {kind==='objective'&&select('parentId','Aligned company objective',active('objectives').filter(o=>!o.departmentId&&!o.parentId&&o.id!==item?.id&&(o.cycleId===values.cycleId||o.cycleId===state.cycles.find(c=>c.id===values.cycleId)?.parentId)),'No parent objective',false)}
-        {['metric','initiative'].includes(kind)&&select('objectiveId','Supporting objective',active('objectives').filter(o=>o.cycleId===values.cycleId&&(!o.departmentId||o.departmentId===values.departmentId)),'No linked objective',kind==='metric'&&values.kind==='kr')}
+        {kind==='cycle'&&<>{simple('level','Target period',[['annual','Annual'],['quarterly','Quarterly'],['monthly','Monthly']])}{input('start','Start date','date')}{input('end','End date','date')}{select('parentId','Parent period (optional)',active('cycles').filter(c=>c.id!==item?.id&&cycleLevel(c)===(values.level==='monthly'?'quarterly':values.level==='quarterly'?'annual':'')),'Standalone period',false)}</>}
+        {kind==='objective'&&select('parentId','Supports parent focus',active('objectives').filter(o=>o.id!==item?.id&&((o.cycleId===values.cycleId&&!o.departmentId&&!o.parentId)||(ancestorCycleIds(state,values.cycleId).has(o.cycleId)&&(!o.departmentId||o.departmentId===values.departmentId)))),'No parent focus',false)}
+        {['metric','initiative'].includes(kind)&&select('objectiveId','Department focus',active('objectives').filter(o=>o.cycleId===values.cycleId&&(!o.departmentId||o.departmentId===values.departmentId)),'Select a focus',kind==='metric'&&values.kind==='kr')}
         {kind==='metric'&&<>
+          {simple('measurement','Measure actuals with',[['direct','Enter reported value'],['percentage','Calculate percentage (numerator ÷ denominator × 100)'],['ratio','Calculate ratio (numerator ÷ denominator)']])}{values.measurement!=='direct'&&<>{input('numeratorLabel','Numerator name (e.g. on-time orders)')}{input('denominatorLabel','Denominator name (e.g. orders due)')}</>}
           {simple('kind','Metric type',[['kpi','KPI — ongoing operating health'],['kr','Key result — improvement goal']])}
           {simple('direction','Target direction',[['increase','At or above target'],['decrease','At or below target']])}
           {input('baseline','Baseline','number',true,{step:'any',disabled:planLocked})}{input('target','Goal','number',true,{step:'any',disabled:planLocked})}
