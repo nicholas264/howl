@@ -7,7 +7,7 @@ export default function ChartHoverLayer({ rows, series, x, y, format, onSelect }
  const row = point ? rows[point.index] : null;
  const monthLabel = month => new Date(`${month}-01T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
  const show = (index, key) => { setPoint({ index, key }); onSelect(index); };
- const width = 238, height = 34 + series.length * 20;
+ const width = 270, height = 34 + series.length * 20;
  const left = point ? Math.max(4, Math.min(756 - width, x(point.index) - width / 2)) : 0;
  const anchorY = row ? y(row[point.key]) : 0;
  const top = anchorY >= height + 12 ? anchorY - height - 12 : Math.min(222 - height, anchorY + 12);

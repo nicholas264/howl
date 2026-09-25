@@ -172,7 +172,8 @@ test('monthly financial trends preserve missing months, negative margins, and th
  const months=[{month:'2026-01',revenue:100,cogs:120,expenses:50,netIncome:-80},{month:'2026-02',revenue:0,cogs:10,expenses:20,netIncome:-40}];
  const accounts=[{id:'Expenses:1',group:'Expenses',values:{'2026-01':20,'2026-02':5}},{id:'Expenses:2',group:'Expenses',values:{'2026-01':30,'2026-02':15}}];
  const rows=financialTrends(periods,months,accounts,{sellingAccountIds:['Expenses:1']});
- assert.equal(rows[0].grossMargin,-.2);assert.equal(rows[0].contributionMargin,-.4);assert.equal(rows[0].netMargin,-.8);assert.equal(rows[0].operatingBudget,30);assert.equal(rows[0].sellingExpenses,20);assert.equal(rows[0].totalOpex,50);
- assert.equal(rows[1].grossMargin,null);assert.equal(rows[1].contributionMargin,null);assert.equal(rows[1].netMargin,null);assert.deepEqual(rows[2],{month:'2026-03'});
+ assert.equal(rows[0].grossMargin,-.2);assert.equal(rows[0].contributionMargin,-.4);assert.equal(rows[0].netMargin,-.8);assert.equal(rows[0].opexRatio,.3);assert.equal(rows[0].operatingBudget,30);assert.equal(rows[0].sellingExpenses,20);assert.equal(rows[0].totalOpex,50);
+ assert.equal(rows[1].opexRatio,null);assert.equal(rows[1].grossMargin,null);assert.equal(rows[1].contributionMargin,null);assert.equal(rows[1].netMargin,null);assert.deepEqual(rows[2],{month:'2026-03'});
  assert.equal(financialTrends(periods,months,accounts,{})[0].contributionMargin,null);
+ assert.equal(financialTrends(periods,months,accounts,{})[0].opexRatio,null);
 });
