@@ -44,3 +44,20 @@ test('product mappings round trip and reject unknown group and malformed item ID
  assert.deepEqual(validateSettings({...plan,productItemMapping:{11:'r1',12:'bags',13:'exclude'}}).productItemMapping,{11:'r1',12:'bags',13:'exclude'});
  for(const mapping of [[],null,{11:'anything'},{'../':'r1'}])assert.throws(()=>validateSettings({...plan,productItemMapping:mapping}));
 });
+
+test('dedicated product COGS replaces missing item costs and dealer mix uses actual sales',()=>{
+ const catalog=[{id:'1',name:'The Howl R1'},{id:'2',name:'DLR Howl R1'}];
+ const data={items:catalog,months:[{month:'2026-01',values:{1:{revenue:1000,cogs:null},2:{revenue:700,cogs:null}}}]};
+ const accounts=[{id:'COGS:1',name:'50007 COGS - R1',group:'COGS',values:{'2026-01':800}}];
+ const row=productMarginRows(['2026-01'],data,{1:'r1',2:'r1'},accounts)[0];
+ assert.equal(row.r1,900/1700);assert.equal(row.details.r1.dealerRevenue,700);assert.equal(row.details.r1.dealerShare,700/1700);assert.equal(row.details.r1.cogs,800);
+ const forced=productMarginRows(['2026-01'],data,{1:'r1',2:'r1'},accounts,{r1:'items'})[0];assert.equal(forced.r1,null);assert.equal(forced.details.r1.revenue,1700);
+ assert.equal(productMarginRows(['2026-01'],data,{1:'r1',2:'r1'},accounts,{r1:'COGS:missing'})[0].r1,null);
+});
+test('shared accessories are never automatically treated as bag costs',()=>{
+ const data={items:[{id:'1',name:'R1 HaulBag'}],months:[{month:'2026-01',values:{1:{revenue:100,cogs:null}}}]};
+ const accounts=[{id:'COGS:2',name:'50027 COGS - Accessories',group:'COGS',values:{'2026-01':60}}];
+ assert.equal(productMarginRows(['2026-01'],data,{},accounts)[0].bags,null);
+ assert.equal(productMarginRows(['2026-01'],data,{},accounts,{bags:'COGS:2'})[0].bags,.4);
+ assert.throws(()=>validateSettings({...plan,productCogsAccounts:{r1:'COGS:2',bags:'COGS:2'}}),/distinct/);
+});

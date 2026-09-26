@@ -19,7 +19,15 @@ export function productForItem(item, mapping = {}) {
  return Object.hasOwn(mapping, item.id) ? mapping[item.id] : suggestedProduct(item);
 }
 
-export function productMarginRows(periods, data, mapping = {}) {
+export function productCostAccount(product, accounts = [], mapping = {}) {
+ const requested = mapping[product];
+ if (requested === 'items') return null;
+ if (requested) return accounts.find(account => account.group === 'COGS' && account.id === requested) || null;
+ const candidates = accounts.filter(account => account.group === 'COGS' && new RegExp(`\\bCOGS\\s*-\\s*${product}$`, 'i').test(account.name));
+ return candidates.length === 1 ? candidates[0] : null;
+}
+
+export function productMarginRows(periods, data, mapping = {}, accounts = [], costMapping = {}) {
  return periods.map(month => {
   const source = data?.months?.find(row => row.month === month);
   const row = { month, details: {} };
@@ -27,12 +35,15 @@ export function productMarginRows(periods, data, mapping = {}) {
    const items = (data?.items || []).filter(item => productForItem(item, mapping) === product.key);
    const values = source && items.map(item => source.values[item.id]);
    // Missing COGS with recorded revenue cannot be assumed to mean zero cost.
-   const available = values?.length > 0 && values.every(value => value && Number.isFinite(value.revenue) && Number.isFinite(value.cogs));
+   const available = values?.length > 0 && values.every(value => value && Number.isFinite(value.revenue));
    const revenue = available ? values.reduce((sum, value) => sum + value.revenue, 0) : null;
-   const cogs = available ? values.reduce((sum, value) => sum + value.cogs, 0) : null;
-   const grossProfit = available ? revenue - cogs : null;
+   const dealerRevenue = available ? items.reduce((sum, item) => sum + (/(^|[\s:_-])DLR(?=[\s:_-]|$)/i.test(item.name) ? source.values[item.id].revenue : 0), 0) : null;
+   const account = productCostAccount(product.key, accounts, costMapping);
+   const invalidAccount = costMapping[product.key] && costMapping[product.key] !== 'items' && !account;
+   const cogs = !available || invalidAccount ? null : account ? (account.values[month] ?? 0) : values.every(value => Number.isFinite(value.cogs)) ? values.reduce((sum, value) => sum + value.cogs, 0) : null;
+   const grossProfit = Number.isFinite(revenue) && Number.isFinite(cogs) ? revenue - cogs : null;
    row[product.key] = ratio(grossProfit, revenue);
-   row.details[product.key] = { revenue, cogs, grossProfit, itemCount: items.length };
+   row.details[product.key] = { revenue, dealerRevenue, dealerShare: ratio(dealerRevenue, revenue), cogs, grossProfit, itemCount: items.length, costSource: account?.name || 'Item COGS' };
   }
   return row;
  });

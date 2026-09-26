@@ -27,11 +27,20 @@ export function validateSettings(s){
  }
  if(s.sellingAccountIds!==undefined&&(!Array.isArray(s.sellingAccountIds)||s.sellingAccountIds.length>3000||s.sellingAccountIds.some(id=>typeof id!=='string'||!/^Expenses:[\w.-]{1,90}$/.test(id))))throw new Error('Invalid selling expense accounts.');
  const productItemMapping={};
+ const productCogsAccounts={};
+ if(s.productCogsAccounts!==undefined){
+ if(!s.productCogsAccounts||typeof s.productCogsAccounts!=='object'||Array.isArray(s.productCogsAccounts)||Object.keys(s.productCogsAccounts).length>4)throw new Error('Invalid product COGS accounts.');
+ const used=new Set();
+ for(const [product,id] of Object.entries(s.productCogsAccounts)){
+ if(!['r1','r3','r4','bags'].includes(product)||typeof id!=='string'||(id!=='items'&&!/^COGS:[\w.-]{1,90}$/.test(id))||(id!=='items'&&used.has(id)))throw new Error('Each product must use a distinct COGS account.');
+ productCogsAccounts[product]=id;if(id!=='items')used.add(id);
+ }
+ }
  if(s.productItemMapping!==undefined){
  if(!s.productItemMapping||typeof s.productItemMapping!=='object'||Array.isArray(s.productItemMapping)||Object.keys(s.productItemMapping).length>5000)throw new Error('Invalid product item mapping.');
  for(const [id,product] of Object.entries(s.productItemMapping)){if(!/^\d{1,40}$/.test(id)||!['r1','r3','r4','bags','exclude'].includes(product))throw new Error('Invalid product item mapping.');productItemMapping[id]=product;}
  }
- return {start:s.start,basis:s.basis,currency:s.currency,targets,mapping,...(s.productItemMapping!==undefined?{productItemMapping}:{}),...(s.sellingAccountIds!==undefined?{sellingAccountIds:[...new Set(s.sellingAccountIds)]}:{}),...(s.ebitdaAdjustments!==undefined?{ebitdaAdjustments}: {})};
+ return {start:s.start,basis:s.basis,currency:s.currency,targets,mapping,...(s.productCogsAccounts!==undefined?{productCogsAccounts}:{}),...(s.productItemMapping!==undefined?{productItemMapping}:{}),...(s.sellingAccountIds!==undefined?{sellingAccountIds:[...new Set(s.sellingAccountIds)]}:{}),...(s.ebitdaAdjustments!==undefined?{ebitdaAdjustments}: {})};
 }
 export function setup(env=process.env){
  const keys=['QUICKBOOKS_CLIENT_ID','QUICKBOOKS_CLIENT_SECRET','QUICKBOOKS_REDIRECT_URI','QUICKBOOKS_ENVIRONMENT','QUICKBOOKS_TOKEN_ENCRYPTION_KEY'];
