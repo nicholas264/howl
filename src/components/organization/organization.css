@@ -9,3 +9,5 @@
 .org-node,.org-node .org-person{user-select:none;-webkit-user-select:none}.org-node .org-person[draggable=true]{cursor:grab}
 
 .org-node .org-person{cursor:grab;touch-action:none}.org-node .org-person:active{cursor:grabbing}
+
+.org-tree{cursor:grab;touch-action:none;overscroll-behavior:contain;user-select:none;-webkit-user-select:none}.org-tree.org-panning,.org-tree.org-panning *{cursor:grabbing}.org-roster-fields{border:0;padding:0;min-width:0}.org-roster-fields>label{font-size:13px;line-height:1.6}.org-roster-actions{display:flex;gap:8px;margin:14px 0}.org-roster-list{max-height:35vh;overflow:auto;border-block:1px solid var(--ui-border,#d7d8cd);margin-bottom:20px}.org-roster-list>label{display:flex;align-items:center;gap:12px;padding:12px 4px}.org-roster-list small{display:block;color:var(--ui-muted,#62675d);margin-top:4px}.org-heading>div:last-child{flex-wrap:wrap}.org-canvas-tools{gap:12px}

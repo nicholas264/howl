@@ -1,6 +1,6 @@
 # Campfire Financials — Privacy Notice
 
-Effective September 24, 2026.
+Effective September 26, 2026.
 
 ## Scope
 
@@ -25,6 +25,13 @@ This information supports HOWL's internal financial reporting and planning.
 QuickBooks report data is not used for advertising, sold, shared with other
 businesses for their own purposes, or sent to generative AI systems for
 inference or model training by this integration.
+
+The owner may also import active employee and contractor names and work emails
+into the organizational chart. Campfire reads employee/vendor records and keeps
+only roster fields and a hashed source reference for duplicate detection. It
+does not retain tax identifiers, pay rates, bank details, or payroll records in
+the chart. Imported profiles and their edit history remain until separately
+removed; disconnecting QuickBooks does not remove organizational profiles.
 
 ## Access and service providers
 

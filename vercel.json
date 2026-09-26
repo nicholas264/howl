@@ -39,6 +39,9 @@
     },
     "api/quickbooks-callback.js": {
       "maxDuration": 60
+    },
+    "api/organization.js": {
+      "maxDuration": 300
     }
   },
   "crons": [
