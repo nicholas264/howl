@@ -44,6 +44,7 @@ export function applyOrganizationCommand(current,command,actor,now=new Date()) {
     if(command.action==='restore'&&person.managerId&&!state.people.some(p=>p.id===person.managerId&&!p.archived))person.managerId='';
     if(command.action==='restore'&&descendants(state.people,person.id).has(person.managerId))fail('Reassign the manager before restoring this profile.');
   }
+  if(existing?.quickbooksSources)person.quickbooksSources=existing.quickbooksSources;
   person.version=(existing?.version||0)+1;person.updatedAt=timestamp;person.updatedBy=actor;person.createdAt=existing?.createdAt||timestamp;
   if(existing)state.people[state.people.findIndex(p=>p.id===person.id)]=person;else state.people.push(person);
   if(state.history.length>=10000)fail('Directory history capacity reached. Contact an administrator.');

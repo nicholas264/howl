@@ -19,3 +19,26 @@ The additive migration `ensureOrganization` creates `organization_workspace` usi
 Browser verification used the real organization handler and isolated PGlite database: imported the supplied roster, dragged people from the tray onto managers and observed a saved three-level hierarchy with sibling branches and connector lines, cleared the assignment via the manager selector, edited responsibilities and employment date, and reloaded to verify persisted profile and calculated tenure. Temporary test edits were removed by restarting the isolated preview and importing only the supplied names/titles again. At a requested 390px mobile viewport, document client and scroll widths were both 384px.
 
 The localhost preview uses a mocked owner identity, never production credentials. Organization names are the owner's supplied roster; COO examples are illustrative. Local preview changes are temporary and reset when its process stops. Hosted authentication and production database grants must be checked during release.
+
+## Chart navigation and QuickBooks roster
+
+Drag blank chart space to pan horizontally or vertically; dragging a person still
+assigns their manager. Scrollbars, trackpad scrolling, zoom, and arrow keys remain
+available. Panning does not write to the directory.
+
+**Add from QuickBooks** uses the existing owner-only accounting connection. It
+paginates active Employee and Vendor records, identifies 1099 contractors, and
+lets the owner include other vendors individually. Review the selection and set
+an optional shared role, department, and manager (for example, select assembly
+techs, enter “Assembly technician,” then select their actual manager).
+
+The server re-reads QuickBooks on import, validates selections, and saves the
+entire batch with the workspace revision and current connection version checked.
+Existing names/emails or hashed source IDs are skipped; ambiguous matches stop
+an import. Imported source IDs survive profile edits and archival. No supplier
+is automatically selected unless QuickBooks flags it as a contractor; review
+those flags. Job titles, full-time status, managers, and dates are not inferred.
+Tax/payroll/banking fields never leave the provider adapter or enter storage.
+
+Run `node scripts/preview-organization.mjs` for an isolated synthetic roster and
+in-memory PostgreSQL preview at `http://127.0.0.1:5193/org-preview`.
