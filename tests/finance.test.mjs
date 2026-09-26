@@ -67,7 +67,8 @@ test('real SQL: OAuth binding, replay, owner recheck, CAS, sync atomicity, refre
  assert.equal((await call('GET')).body.snapshot,null);
  assert.equal((await call('POST',{action:'save',settings:plan,revision:0})).statusCode,200);assert.equal((await call('POST',{action:'save',settings:plan,revision:0})).statusCode,409);
  assert.match((await connect('qb_oauth='+nonce())).reply.url,/invalid_state/);assert.equal(refreshes,0);
- const c=await connect();assert.match(c.reply.url,/connected/);assert.equal(refreshes,1);
+ await sql`UPDATE finance_workspace SET settings=jsonb_set(settings,'{productItemMapping}','{"101":"r1"}'::jsonb)`;
+ const c=await connect();assert.match(c.reply.url,/connected/);assert.equal((await call('GET')).body.settings.productItemMapping,undefined);assert.equal(refreshes,1);
  const [storedIdentity]=await sql`SELECT realm FROM finance_connection`;
  assert.notEqual(storedIdentity.realm,'123');assert.equal(decrypt(storedIdentity.realm,env),'123');
  const replay=res();await callback({method:'GET',headers:{cookie:c.cookie},query:{state:c.state,code:'fixture-code',realmId:'123'}},replay);assert.match(replay.url,/invalid_state/);assert.equal(refreshes,1);
