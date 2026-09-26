@@ -16,9 +16,9 @@ export function descendants(people,id) {
   while(queue.length){const parent=queue.pop();for(const p of people)if(p.managerId===parent&&!found.has(p.id)&&p.id!==id){found.add(p.id);queue.push(p.id);}}
   return found;
 }
-export function visibleHierarchy(people, query='', department='') {
+export function visibleHierarchy(people, query='', department='', tag='') {
   const active=people.filter(p=>!p.archived),byId=new Map(active.map(p=>[p.id,p])),matches=new Set(),visible=new Set();
-  for(const p of active)if((!department||p.department===department)&&`${p.name} ${p.title} ${p.department} ${p.responsibilities}`.toLowerCase().includes(query.toLowerCase()))matches.add(p.id);
+  for(const p of active)if((!department||p.department===department)&&(!tag||p.tags?.includes(tag))&&`${p.name} ${p.title} ${p.department} ${p.responsibilities} ${(p.tags||[]).join(' ')}`.toLowerCase().includes(query.toLowerCase()))matches.add(p.id);
   for(const id of matches){let p=byId.get(id);const seen=new Set();while(p&&!seen.has(p.id)){seen.add(p.id);visible.add(p.id);p=byId.get(p.managerId);}}
   return {people:active.filter(p=>visible.has(p.id)),matches};
 }

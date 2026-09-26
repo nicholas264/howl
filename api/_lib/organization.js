@@ -7,6 +7,12 @@ export async function ensureOrganization(sql) {
 const fail=message=>{throw new Error(message);};
 function text(value,label,max=200,required=false){if(typeof value!=='string'||value.length>max||(required&&!value.trim()))fail(`${label} ${required?'is required and ':''}must be at most ${max} characters.`);return value.trim();}
 function date(value,label){if(!value)return '';if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value)||!Number.isFinite(Date.parse(value))||new Date(value).toISOString().slice(0,10)!==value)fail(`Enter a valid ${label}.`);return value;}
+export function normalizeOrganizationTags(value=[]) {
+  if(!Array.isArray(value)||value.length>20)fail('Use at most 20 tags per person.');
+  const unique=new Map();
+  for(const raw of value){const tag=text(raw,'Tag',50);if(tag&&!unique.has(tag.toLowerCase()))unique.set(tag.toLowerCase(),tag);}
+  return [...unique.values()];
+}
 export function applyOrganizationCommand(current,command,actor,now=new Date()) {
   let state=structuredClone(current||{people:[],history:[]});
   if(command?.action==='import-roster'){
@@ -27,7 +33,7 @@ export function applyOrganizationCommand(current,command,actor,now=new Date()) {
   if(command.action==='save'){
     if(existing?.archived)fail('Restore this profile before editing.');
     const b=command.values||{};
-    person={id:existing?.id||randomUUID(),name:text(b.name,'Name',200,true),title:text(b.title,'Role / title',200,true),department:text(b.department??'','Department'),managerId:text(b.managerId??'','Manager'),responsibilities:text(b.responsibilities??'','Responsibilities',10000),email:text(b.email??'','Work email',254),location:text(b.location??'','Location'),employmentType:text(b.employmentType??'','Employment type',50),startDate:date(b.startDate,'start date'),endDate:date(b.endDate,'end date'),archived:false};
+    person={tags:normalizeOrganizationTags(b.tags??existing?.tags??[]),id:existing?.id||randomUUID(),name:text(b.name,'Name',200,true),title:text(b.title,'Role / title',200,true),department:text(b.department??'','Department'),managerId:text(b.managerId??'','Manager'),responsibilities:text(b.responsibilities??'','Responsibilities',10000),email:text(b.email??'','Work email',254),location:text(b.location??'','Location'),employmentType:text(b.employmentType??'','Employment type',50),startDate:date(b.startDate,'start date'),endDate:date(b.endDate,'end date'),archived:false};
     if(person.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(person.email))fail('Enter a valid work email.');
     if(person.email&&state.people.some(p=>p.id!==person.id&&p.email?.toLowerCase()===person.email.toLowerCase()))fail('A profile already uses this work email.');
     if(person.endDate&&(!person.startDate||person.endDate<person.startDate))fail('End date must be on or after the start date.');

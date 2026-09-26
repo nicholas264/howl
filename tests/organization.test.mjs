@@ -62,3 +62,13 @@ test('real PostgreSQL persists org profiles, rejects stale revisions and invalid
 test('supplied roster uses only confirmed names and roles, imports once without invented relationships',()=>{const s=applyOrganizationCommand(null,{action:'import-roster'},'owner',now);assert.equal(s.people.length,11);assert.equal(s.people.find(p=>p.name==='Randall Slimp').title,'CEO');assert.ok(s.people.every(p=>!p.managerId&&!p.startDate&&!p.department&&!p.responsibilities));assert.throws(()=>applyOrganizationCommand(s,{action:'import-roster'},'owner',now),/empty directory/);});
 
 test('drag and selector assignment preserve profile fields, validate loops and use record versions',()=>{let s=fixture();const [boss,lead,worker]=s.people;s=applyOrganizationCommand(s,{action:'assign-manager',id:worker.id,managerId:boss.id,expectedVersion:worker.version},'owner',now);assert.equal(s.people[2].managerId,boss.id);assert.equal(s.people[2].responsibilities,worker.responsibilities);assert.throws(()=>applyOrganizationCommand(s,{action:'assign-manager',id:boss.id,managerId:worker.id,expectedVersion:boss.version},'owner',now),/loop/);assert.throws(()=>applyOrganizationCommand(s,{action:'assign-manager',id:worker.id,managerId:lead.id,expectedVersion:worker.version},'owner',now),/changed/);s=applyOrganizationCommand(s,{action:'assign-manager',id:worker.id,managerId:'',expectedVersion:s.people[2].version},'owner',now);assert.equal(s.people[2].managerId,'');});
+
+test('tags are normalized, audited, preserved by older edits and usable as hierarchy filters',()=>{
+ let s=fixture(),worker=s.people[2];s=save(s,{...worker,tags:['Assembly Technician',' assembly technician ',' Safety ']},worker.id);
+ assert.deepEqual(s.people[2].tags,['Assembly Technician','Safety']);assert.deepEqual(s.history.at(-1).after.tags,['Assembly Technician','Safety']);
+ const {tags,...legacy}=s.people[2];s=save(s,{...legacy,title:'Assembly Technician'},worker.id);assert.deepEqual(s.people[2].tags,tags);
+ const h=visibleHierarchy(s.people,'','','Assembly Technician');assert.equal(h.people.length,3);assert.deepEqual([...h.matches],[worker.id]);
+ assert.equal(visibleHierarchy(s.people,'Safety').matches.size,1);
+ for(const tags of ['bad',[1],['x'.repeat(51)],Array(21).fill('tag')])assert.throws(()=>save(s,{...s.people[2],tags},worker.id));
+ s=save(s,{...s.people[2],tags:[]},worker.id);assert.deepEqual(s.people[2].tags,[]);
+});
