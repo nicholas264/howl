@@ -2,3 +2,7 @@
 scripts/verify-finance-sandbox.mjs
 scripts/preview-organization.mjs
 scripts/preview-organization-entry.jsx
+
+# Creative demand local preview never ships.
+scripts/preview-creative-demand.mjs
+scripts/creative-demand-preview.jsx

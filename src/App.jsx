@@ -30,6 +30,7 @@ const CreatorWorkspace = lazy(() => import("./components/CreatorWorkspace"));
 const CreatorPipelineFunnel = lazy(() => import("./components/CreatorPipelineFunnel"));
 const SeedingLedger = lazy(() => import("./components/SeedingLedger"));
 const CreativeFlowBoard = lazy(() => import("./components/CreativeFlowBoard"));
+const CreativeDemandWorkspace = lazy(() => import('./components/creative-demand/CreativeDemandWorkspace.jsx'));
 const CreativePlanningWorkspace = lazy(() => import("./components/CreativePlanningWorkspace"));
 const AdminWorkspace = lazy(() => import("./components/AdminWorkspace"));
 const WorkspaceHub = lazy(() => import("./components/WorkspaceHub"));
@@ -228,6 +229,7 @@ export default function HowlAdEngine({ appAccess }) {
         { key: 'welcome', label: 'Home' },
         { key: 'creators', label: 'Creators', permission: 'creators.read' },
         { key: 'creative-plan', label: 'Creative Forecast', permission: 'creators.read' },
+        { key: 'creative-demand', label: 'Creative Demand', permission: 'analytics.read' },
       ],
     },
     {
@@ -411,6 +413,7 @@ export default function HowlAdEngine({ appAccess }) {
         {activeTab === "creative-flow" && <CreativeFlowBoard setActiveTab={navigate} onOpenCreator={openPlannedCreator} canManage={can('creators.write')} />}
         {activeTab === "creative-pipeline" && <CreatorPipelineFunnel />}
         {activeTab === "seeding-ledger" && <SeedingLedger canManage={can('creators.write')} onOpenCreator={openPlannedCreator} />}
+        {activeTab === 'creative-demand' && <CreativeDemandWorkspace canSave={can('analytics.write')} onOpenForecast={() => navigate('creative-plan')} />}
         {activeTab === "creative-plan" && <CreativePlanningWorkspace onOpenCreator={openPlannedCreator} setActiveTab={navigate} />}
         {activeTab === "creative" && <WorkspaceHub type="creative" setActiveTab={navigate} can={can} />}
         {activeTab === "performance" && <WorkspaceHub type="performance" setActiveTab={navigate} can={can} appAccess={appAccess} />}
