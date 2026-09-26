@@ -93,3 +93,23 @@ Connected Apps. Logs contain failure codes only, never provider token responses.
 Protocol references: [Intuit OAuth client](https://github.com/intuit/oauth-jsclient),
 [OAuth discovery](https://developer.intuit.com/.well-known/openid_configuration/),
 [Reports API](https://developer.intuit.com/app/developer/qbo/docs/workflows/run-reports).
+
+## Product gross margin trends
+
+The owner-only overview includes R1, R3, R4, and Bags. Each sync reads the full
+QuickBooks Item catalog (including inactive items) and a monthly P&L with
+`summarize_column_by=ProductsAndServices`. Product report currency, basis, periods,
+and revenue/COGS totals must match the company reports. Company totals and
+unassigned entries are never allocated across products.
+
+Finished-product names suggest membership; the owner can override each item in
+**Review product item mapping**. Bags combines mapped bag items by total revenue
+and total COGS, not an average of item percentages. Saving a mapping recalculates
+from the imported item history. No QuickBooks transactions are written.
+
+Gross margin = (item revenue − item COGS) / item revenue. Nonpositive revenue,
+missing reports, unmapped groups, or revenue with no recorded COGS are shown as
+gaps. This is booked item gross margin, excluding selling expenses and overhead;
+it does not apply today's website price or item purchase cost to past months.
+A product import failure does not block company reports or reuse stale product
+history; the chart shows the error and can be retried with Sync QuickBooks.

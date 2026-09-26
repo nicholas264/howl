@@ -9,4 +9,16 @@ export function report(name,start,end,basis='Accrual'){
  group('Income',revenue),group('COGS',45000,[account('1','Materials & parts',45000)]),group('GrossProfit',revenue-45000),group('Expenses',40000,[account('2','Facilities & salaries',30000),account('3','Fulfillment & service',10000)]),group('NetOperatingIncome',revenue-85000),group('NetIncome',revenue-87000)
  ]:[group('CurrentAssets',200000),group('CurrentLiabilities',100000),group('BankAccounts',70000),group('AR',80000),group('Liabilities',150000),group('Equity',250000)]}};
 }
-export async function fixtureFetch(url){if(String(url).includes('tokens/bearer'))return Response.json({access_token:'fixture-access',refresh_token:'fixture-refresh',expires_in:3600});const u=new URL(url);return Response.json(report(u.pathname.split('/').at(-1),u.searchParams.get('start_date'),u.searchParams.get('end_date'),u.searchParams.get('accounting_method')));}
+export async function fixtureFetch(url){
+ if(String(url).includes('tokens/bearer'))return Response.json({access_token:'fixture-access',refresh_token:'fixture-refresh',expires_in:3600});
+ const u=new URL(url);
+ if(u.pathname.endsWith('/query'))return Response.json({QueryResponse:{Item:[{Id:'101',Name:'R1',Type:'Inventory',Active:true},{Id:'102',Name:'R3 HaulBag',Type:'Inventory',Active:false}]}});
+ const result=report(u.pathname.split('/').at(-1),u.searchParams.get('start_date'),u.searchParams.get('end_date'),u.searchParams.get('accounting_method'));
+ if(u.searchParams.get('summarize_column_by')==='ProductsAndServices'){
+  result.Header.SummarizeColumnsBy='ProductsAndServices';
+  result.Columns.Column=[{ColType:'Account'},...['101','102','total'].map((id,i)=>({ColType:'Money',ColTitle:['R1','R3 HaulBag','Total'][i],MetaData:[{Name:'ColKey',Value:id}]}))];
+  const expand=rows=>{for(const r of rows||[]){for(const cell of [r,r.Header,r.Summary])if(cell?.ColData){const [label,value]=cell.ColData;cell.ColData=[label,{value:String(Number(value.value)*.6)},{value:String(Number(value.value)*.4)},value];}expand(r.Rows?.Row);}};
+  expand(result.Rows.Row);
+ }
+ return Response.json(result);
+}
