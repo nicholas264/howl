@@ -6,7 +6,7 @@ import {validateSettings} from '../api/_lib/finance.js';
 import {plan} from './fixtures/finance.mjs';
 const items=[{id:'11',name:'R1',fullName:'Campfires:R1'},{id:'12',name:'R3 HaulBag',fullName:'R3 HaulBag'},{id:'13',name:'R4 HaulBag',fullName:'R4 HaulBag'}];
 const company={month:'2026-01',revenue:160,cogs:85};
-function report(){return {Header:{ReportName:'ProfitAndLoss',StartPeriod:'2026-01-01',EndPeriod:'2026-01-31',ReportBasis:'Accrual',Currency:'USD',SummarizeColumnsBy:'ProductsAndServices'},Columns:{Column:[{ColType:'Account'},...['11','12','13','not_specified','total'].map((id,i)=>({ColType:'Money',ColTitle:['R1','R3 HaulBag','R4 HaulBag','Not specified','Total'][i],MetaData:[{Name:'ColKey',Value:id}]}))]},Rows:{Row:[{group:'Income',Summary:{ColData:['Income','100','20','30','10','160'].map(value=>({value}))}},{group:'COGS',Summary:{ColData:['COGS','60','10','10','5','85'].map(value=>({value}))}}]}};}
+function report(){return {Header:{ReportName:'ProfitAndLoss',StartPeriod:'2026-01-01',EndPeriod:'2026-01-31',ReportBasis:'Accrual',Currency:'USD',SummarizeColumnsBy:'ProductsAndServices'},Columns:{Column:[{ColType:'Account'},...['11','12','13','not_specified','total'].map((id,i)=>({ColType:'Money',ColTitle:['R1','R3 HaulBag','R4 HaulBag','Not specified','Total'][i],MetaData:[{Name:'ColKey',Value:id}]}))]},Rows:{Row:[{group:'Income',Rows:{Row:[{type:'Data',ColData:[{id:'income1',value:'R4 sales'},...['100','20','30','10','160'].map(value=>({value}))]}]},Summary:{ColData:['Income','100','20','30','10','160'].map(value=>({value}))}},{group:'COGS',Summary:{ColData:['COGS','60','10','10','5','85'].map(value=>({value}))}}]}};}
 test('product reports use item identity and exclude unassigned amounts',()=>{
  const parsed=parseProductProfitLoss(report(),'2026-01','Accrual','USD',items,company);
  assert.deepEqual(parsed.values['11'],{revenue:100,cogs:60});assert.equal(Object.keys(parsed.values).length,3);
@@ -46,7 +46,7 @@ test('product mappings round trip and reject unknown group and malformed item ID
 });
 
 test('dedicated product COGS replaces missing item costs and dealer mix uses actual sales',()=>{
- const catalog=[{id:'1',name:'The Howl R1'},{id:'2',name:'DLR Howl R1'}];
+ const catalog=[{id:'1',name:'The Howl R1'},{id:'2',name:'Wholesale Howl R1',sku:'R1DLR'}];
  const data={items:catalog,months:[{month:'2026-01',values:{1:{revenue:1000,cogs:null},2:{revenue:700,cogs:null}}}]};
  const accounts=[{id:'COGS:1',name:'50007 COGS - R1',group:'COGS',values:{'2026-01':800}}];
  const row=productMarginRows(['2026-01'],data,{1:'r1',2:'r1'},accounts)[0];
@@ -60,4 +60,29 @@ test('shared accessories are never automatically treated as bag costs',()=>{
  assert.equal(productMarginRows(['2026-01'],data,{},accounts)[0].bags,null);
  assert.equal(productMarginRows(['2026-01'],data,{},accounts,{bags:'COGS:2'})[0].bags,.4);
  assert.throws(()=>validateSettings({...plan,productCogsAccounts:{r1:'COGS:2',bags:'COGS:2'}}),/distinct/);
+});
+
+test('recognition imports only unassigned income, never account totals or item-tagged recognition',()=>{
+ const parsed=parseProductProfitLoss(report(),'2026-01','Accrual','USD',items,company);
+ assert.deepEqual(parsed.revenueAdjustments,[{id:'Income:income1',name:'R4 sales',amount:10}]);
+ const data={items:[{id:'11',name:'R4'}],months:[parsed]};
+ const row=productMarginRows(['2026-01'],data)[0];
+ assert.equal(row.details.r4.itemRevenue,100);assert.equal(row.details.r4.recognizedRevenue,10);assert.equal(row.details.r4.revenue,110);assert.equal(row.r4,50/110);
+ const r=report();r.Rows.Row[0].Rows.Row[0].ColData[4].value='0';r.Rows.Row[0].Summary.ColData[4].value='0';r.Rows.Row[0].Rows.Row[0].ColData[1].value='110';r.Rows.Row[0].Summary.ColData[1].value='110';
+ const alreadyTagged=parseProductProfitLoss(r,'2026-01','Accrual','USD',items,company);
+ const taggedRow=productMarginRows(['2026-01'],{items:data.items,months:[alreadyTagged]})[0];
+ assert.equal(taggedRow.details.r4.revenue,110);assert.equal(taggedRow.details.r4.recognizedRevenue,0);
+});
+test('recognition follows posting month, supports reversals, and leaves unrelated shared income excluded',()=>{
+ const data={items:[{id:'1',name:'R4'}],months:[{month:'2026-02',values:{1:{revenue:85545,cogs:146386}},revenueAdjustments:[{id:'Income:2',name:'R4 deferred recognition',amount:220000},{id:'Income:3',name:'Other product income',amount:90000}]},{month:'2026-03',values:{1:{revenue:100,cogs:30}},revenueAdjustments:[{id:'Income:2',name:'R4 deferred recognition',amount:-20}]}]};
+ const rows=productMarginRows(['2026-01','2026-02','2026-03'],data);
+ assert.equal(rows[0].r4,null);assert.equal(rows[1].details.r4.revenue,305545);assert.equal(rows[1].r4,(305545-146386)/305545);assert.equal(rows[2].details.r4.revenue,80);
+ assert.equal(productMarginRows(['2026-02'],data,{},[],{},{'Income:2':'exclude'})[0].details.r4.revenue,85545);
+ assert.deepEqual(validateSettings({...plan,productRevenueMapping:{'Income:2':'r4'}}).productRevenueMapping,{'Income:2':'r4'});
+ for(const mapping of [[],null,{'COGS:2':'r4'},{'Income:2':'unknown'}])assert.throws(()=>validateSettings({...plan,productRevenueMapping:mapping}));
+});
+test('unreconciled unassigned income is rejected and old snapshots do not show a misleading R4 margin',()=>{
+ const r=report();r.Rows.Row[0].Rows.Row[0].ColData[4].value='999';assert.throws(()=>parseProductProfitLoss(r,'2026-01','Accrual','USD',items,company),/unassigned income did not reconcile/);
+ const rows=productMarginRows(['2026-02'],{items:[{id:'1',name:'R4'}],months:[{month:'2026-02',values:{1:{revenue:85545,cogs:146386}}}]});
+ assert.equal(rows[0].r4,null);assert.equal(rows[0].details.r4.itemRevenue,85545);assert.equal(rows[0].details.r4.recognizedRevenue,null);
 });

@@ -100,16 +100,16 @@ The owner-only overview includes R1, R3, R4, and Bags. Each sync reads the full
 QuickBooks Item catalog (including inactive items) and a monthly P&L with
 `summarize_column_by=ProductsAndServices`. Product report currency, basis, periods,
 and revenue/COGS totals must match the company reports. Company totals and
-unassigned entries are never allocated across products unless a dedicated product COGS account is explicitly selected.
+unassigned income is retained by account, separately from item sales. R4 income accounts are included in R4 by name; other income accounts require explicit mapping. Only the unassigned column is added, so revenue already tagged to an item cannot be counted twice. Dedicated product COGS accounts supply costs independently.
 
 Finished-product names suggest membership; the owner can override each item in
 **Review product item mapping**. Bags combines mapped bag items by total revenue
 and total COGS, not an average of item percentages. Saving a mapping recalculates
 from the imported item history. No QuickBooks transactions are written.
 
-Gross margin = (actual item revenue − product COGS) / actual item revenue. Dedicated COGS - R1, COGS - R3, and COGS - R4 accounts are matched by name; account costs replace item COGS rather than adding to it. Shared Accessories costs are not automatically assigned to Bags. DLR item revenue uses actual dealer prices. The chart is blended across direct and dealer sales, and the detail table shows dealer revenue and share. Nonpositive revenue,
+Gross margin = (item revenue + mapped unassigned revenue − product COGS) / (item revenue + mapped unassigned revenue). Deferred recognition follows its QuickBooks posting month, including reversals. The detail table shows item sales and recognized/unassigned revenue separately. Legacy snapshots with no recognition detail withhold R4 until the next sync. Dedicated COGS - R1, COGS - R3, and COGS - R4 accounts are matched by name; account costs replace item COGS rather than adding to it. Shared Accessories costs are not automatically assigned to Bags. DLR item revenue uses actual dealer prices. The chart is blended across direct and dealer sales, and the detail table shows dealer item revenue and its share of item sales; unassigned recognition has no dealer attribution. Nonpositive revenue,
 missing reports, unmapped groups, or revenue with no recorded COGS are shown as
-gaps. This is booked item gross margin, excluding selling expenses and overhead;
+gaps. This is booked product gross margin, excluding selling expenses and overhead;
 it does not apply today's website price or item purchase cost to past months.
 A product import failure does not block company reports or reuse stale product
 history; the chart shows the error and can be retried with Sync QuickBooks.
