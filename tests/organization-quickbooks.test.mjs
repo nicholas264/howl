@@ -53,3 +53,13 @@ test('owner-only roster import persists atomically, releases leases, and rejects
   const [saved]=await sql`SELECT data,revision FROM organization_workspace`;assert.equal(saved.revision,1);assert.equal(saved.data.people.length,1);
  }finally{useTestDatabase(null);await db.close();}
 });
+
+test('payroll middle initials match existing profiles without merging suffixes or distinct full middle names',()=>{
+ const people=[{id:'1',name:'Chase Collins'},{id:'2',name:'Carlos Porras Jr.'}];
+ assert.equal(matchQuickBooksPerson(people,{key:'one',name:'Chase C Collins'}).status,'existing');
+ assert.equal(matchQuickBooksPerson(people,{key:'one',name:'Chase C. Collins'}).status,'existing');
+ assert.equal(matchQuickBooksPerson(people,{key:'two',name:'Carlos E Porras'}).status,'new');
+ assert.equal(matchQuickBooksPerson(people,{key:'two',name:'Carlos E Porras Jr.'}).status,'existing');
+ assert.equal(matchQuickBooksPerson(people,{key:'three',name:'Chase Christopher Collins'}).status,'new');
+ assert.equal(matchQuickBooksPerson([...people,{id:'3',name:'Chase D Collins'}],{key:'one',name:'Chase C Collins'}).status,'ambiguous');
+});

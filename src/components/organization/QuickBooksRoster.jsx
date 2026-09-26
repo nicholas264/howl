@@ -6,14 +6,14 @@ export default function QuickBooksRoster({people,busy,error,onClose,onImport,onR
   const [title,setTitle]=useState(''),[department,setDepartment]=useState(''),[managerId,setManagerId]=useState(''),[showVendors,setShowVendors]=useState(false);
   useEffect(()=>{
     const previous=document.activeElement;dialog.current.showModal();let active=true;
-    apiJson('/api/organization?source=quickbooks').then(result=>{if(active){setCandidates(result.candidates);setSelected(new Set(result.candidates.filter(p=>p.status==='new'&&p.kind!=='Vendor').map(p=>p.key)));}}).catch(e=>{if(active)setFailure(e.message);});
+    apiJson('/api/organization?source=quickbooks').then(result=>{if(active){setCandidates(result.candidates);setSelected(new Set(result.candidates.filter(p=>p.status==='new'&&p.kind==='Employee').map(p=>p.key)));}}).catch(e=>{if(active)setFailure(e.message);});
     return()=>{active=false;previous?.focus?.();};
   },[]);
   const visible=(candidates||[]).filter(p=>showVendors||p.kind!=='Vendor');
   const toggle=key=>setSelected(current=>{const next=new Set(current);next.has(key)?next.delete(key):next.add(key);return next;});
   return <dialog ref={dialog} className="org-dialog org-roster-dialog" aria-labelledby="org-roster-title" onCancel={e=>{e.preventDefault();if(!busy)onClose();}}>
     <header><h2 id="org-roster-title">Add people from QuickBooks</h2><button disabled={busy} aria-label="Close QuickBooks roster" onClick={onClose}>×</button></header>
-    <p className="org-hint">Active employees and flagged contractors are selected by default. Review the names before adding them. Existing profiles are kept. Select your assembly team and set their role below.</p>
+    <p className="org-hint">Active employees are selected by default. Review contractors individually: QuickBooks may also flag suppliers as contractors. Existing profiles are kept. Select your assembly team and set their role below.</p>
     {(!candidates&&!failure)&&<p role="status">Loading QuickBooks people…</p>}
     {(failure||error)&&<p role="alert" className="org-error">{failure||error}{error&&<button disabled={busy} onClick={onRefresh}>Refresh directory</button>}</p>}
     {candidates&&<fieldset disabled={busy} className="org-roster-fields">

@@ -35,9 +35,8 @@ techs, enter “Assembly technician,” then select their actual manager).
 The server re-reads QuickBooks on import, validates selections, and saves the
 entire batch with the workspace revision and current connection version checked.
 Existing names/emails or hashed source IDs are skipped; ambiguous matches stop
-an import. Imported source IDs survive profile edits and archival. No supplier
-is automatically selected unless QuickBooks flags it as a contractor; review
-those flags. Job titles, full-time status, managers, and dates are not inferred.
+an import. Imported source IDs survive profile edits and archival. Only employees are automatically selected. Contractor and supplier records
+require individual review because QuickBooks contractor flags may include suppliers. Job titles, full-time status, managers, and dates are not inferred.
 Tax/payroll/banking fields never leave the provider adapter or enter storage.
 
 Run `node scripts/preview-organization.mjs` for an isolated synthetic roster and

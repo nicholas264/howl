@@ -2,6 +2,9 @@ import { hash, provider } from './finance.js';
 import { applyOrganizationCommand } from './organization.js';
 const normalized = value => String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
 
+// QuickBooks payroll often includes middle initials omitted from manually entered profiles.
+const withoutMiddleInitials = value => normalized(value).split(' ').filter((part,index,parts)=>index===0||index===parts.length-1||!/^\p{L}\.?$/u.test(part)).join(' ');
+
 // Keep only roster fields; never return tax IDs, payroll amounts, or bank details.
 export async function fetchQuickBooksPeople(connection, env=process.env, fetcher=fetch) {
   const candidates=[];
@@ -29,7 +32,7 @@ export async function fetchQuickBooksPeople(connection, env=process.env, fetcher
 export function matchQuickBooksPerson(people,candidate) {
   const sources=people.filter(p=>p.quickbooksSources?.includes(candidate.key));
   if(sources.length)return {status:sources.length===1?'existing':'ambiguous',person:sources[0]};
-  const matches=people.filter(p=>(candidate.email&&normalized(p.email)===normalized(candidate.email))||normalized(p.name)===normalized(candidate.name));
+  const matches=people.filter(p=>(candidate.email&&normalized(p.email)===normalized(candidate.email))||withoutMiddleInitials(p.name)===withoutMiddleInitials(candidate.name));
   return {status:matches.length>1?'ambiguous':matches.length?'existing':'new',person:matches[0]};
 }
 export function importQuickBooksPeople(current,candidates,selections,actor,now=new Date()) {
