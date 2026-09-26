@@ -4,7 +4,7 @@ import { financialTrends, ratio } from '../../lib/finance.js';
 const monthLabel = month => new Date(`${month}-01T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
 const percent = value => Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : '—';
 
-function TrendChart({ title, note, rows, series, format }) {
+export function TrendChart({ title, note, rows, series, format }) {
  const [selected, setSelected] = useState(null);
  const active = rows.find(r => r.month === selected) || rows.findLast(r => series.some(s => Number.isFinite(r[s.key]))) || rows[0];
  const values = rows.flatMap(r => series.map(s => r[s.key])).filter(Number.isFinite);

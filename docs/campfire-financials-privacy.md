@@ -16,7 +16,7 @@ use of QuickBooks financial reports in Campfire.
 After the authorized owner connects HOWL's QuickBooks company, Campfire stores
 the company identifier, encrypted authorization tokens, and a snapshot derived
 from Profit and Loss and Balance Sheet reports. That snapshot contains account
-identifiers and names, monthly income and operating costs, and balance-sheet
+identifiers and names, item identifiers, names, SKUs and product mappings, monthly item revenue and COGS, monthly income and operating costs, and balance-sheet
 amounts. Account names may contain personal information entered in the books.
 Campfire also stores the owner's financial targets, cost classifications,
 accounting settings, and connection/sync metadata.

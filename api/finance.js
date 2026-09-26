@@ -2,6 +2,7 @@ import { requirePermission } from './_lib/app-access.js';
 import { canAccessFinance,fiscalMonths } from '../src/lib/finance.js';
 import { defaultSettings,validateSettings,setup,nonce,hash,acquireConnection,releaseConnection,provider,monthEnd,closedThrough,protectRealm } from './_lib/finance.js';
 import { parseProfitLoss,parseBalanceSheet,combineAccounts } from './_lib/quickbooks-reports.js';
+import { syncProductMargins } from './_lib/quickbooks-products.js';
 export function createFinanceHandler({authorize=requirePermission,env=process.env,fetcher=fetch,now=()=>new Date()}={}){return async(req,res)=>{
  res.setHeader('Cache-Control','private, no-store');
  if(!['GET','POST'].includes(req.method))return res.status(405).json({error:'Method not allowed'});
@@ -27,7 +28,7 @@ export function createFinanceHandler({authorize=requirePermission,env=process.en
  }
  if(b.action==='disconnect'){
  // Atomic removal also invalidates pending consent and cached company data.
- await sql.transaction([sql`DELETE FROM finance_connection WHERE id='company'`,sql`UPDATE finance_workspace SET snapshot=NULL,settings=jsonb_set(settings-'ebitdaAdjustments'-'sellingAccountIds','{mapping}','{}'::jsonb),revision=revision+1 WHERE id='company'`,sql`DELETE FROM finance_oauth WHERE user_id=${userId}`]);return res.json({ok:true});
+ await sql.transaction([sql`DELETE FROM finance_connection WHERE id='company'`,sql`UPDATE finance_workspace SET snapshot=NULL,settings=jsonb_set(settings-'ebitdaAdjustments'-'sellingAccountIds'-'productItemMapping','{mapping}','{}'::jsonb),revision=revision+1 WHERE id='company'`,sql`DELETE FROM finance_oauth WHERE user_id=${userId}`]);return res.json({ok:true});
  }
  if(b.action==='save'){
  let settings;try{settings=validateSettings(b.settings);}catch(e){return res.status(400).json({error:e.message});}
@@ -50,6 +51,8 @@ export function createFinanceHandler({authorize=requirePermission,env=process.en
  const balance=parseBalanceSheet(await provider(`reports/BalanceSheet?${q}`,c.access,c.realm,env,fetcher),start,end,settings.basis);
  if(months.some(m=>m.currency!==settings.currency)||balance.currency!==settings.currency)throw new Error('Report currency differs from your plan. Update the plan currency and sync again.');
  const snapshot={months:months.map(({accounts,...m})=>m),accounts:combineAccounts(months),balance,closedThrough:periods.at(-1),syncedAt:now().toISOString(),environment:c.environment,basis:settings.basis,currency:settings.currency};
+ try { snapshot.productMargins=await syncProductMargins(c,settings,months,env,fetcher); }
+ catch(error) { snapshot.productMarginsError=`Product margins could not be imported: ${/^(QuickBooks |Product report )/.test(error.message || '') ? error.message : 'Incomplete product reports.'} Company reports are current; sync again to retry.`; }
  const saved=await sql`UPDATE finance_workspace SET snapshot=${JSON.stringify(snapshot)}::jsonb WHERE id='company' AND revision=${row.revision} AND EXISTS(SELECT 1 FROM finance_connection WHERE id='company' AND version=${c.version}) RETURNING id`;
  if(!saved.length)throw new Error('Settings or connection changed during sync. Sync again.');return res.json({ok:true});
  }finally{await releaseConnection(sql,c.version);}

@@ -73,7 +73,7 @@ test('real SQL: OAuth binding, replay, owner recheck, CAS, sync atomicity, refre
  const replay=res();await callback({method:'GET',headers:{cookie:c.cookie},query:{state:c.state,code:'fixture-code',realmId:'123'}},replay);assert.match(replay.url,/invalid_state/);assert.equal(refreshes,1);
  const safe=await call('GET');assert.ok(!JSON.stringify(safe.body).includes('fixture-access'));assert.ok(!JSON.stringify(safe.body).includes('fixture-secret'));
  assert.equal(safe.body.connection.realm,'123');
- assert.equal((await call('POST',{action:'sync'})).statusCode,200);let saved=(await call('GET')).body.snapshot;assert.equal(saved.months.length,2);assert.equal(saved.accounts.length,3);
+ assert.equal((await call('POST',{action:'sync'})).statusCode,200);let saved=(await call('GET')).body.snapshot;assert.equal(saved.months.length,2);assert.equal(saved.accounts.length,3);assert.equal(saved.productMargins.months.length,2);assert.equal(saved.productMargins.items.length,2);assert.equal(saved.productMargins.months[0].values[101].cogs,27000);
  assert.equal(Object.hasOwn(saved,'realm'),false);
  await sql`UPDATE finance_connection SET realm='123'`;
  await sql`UPDATE finance_workspace SET snapshot=jsonb_set(snapshot,'{realm}','"123"'::jsonb)`;
