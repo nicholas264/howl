@@ -3,6 +3,7 @@ import { canAccessFinance,fiscalMonths } from '../src/lib/finance.js';
 import { defaultSettings,validateSettings,setup,nonce,hash,acquireConnection,releaseConnection,provider,monthEnd,closedThrough,protectRealm } from './_lib/finance.js';
 import { parseProfitLoss,parseBalanceSheet,combineAccounts } from './_lib/quickbooks-reports.js';
 import { syncProductMargins } from './_lib/quickbooks-products.js';
+import { marginProducts,productCostAccount } from '../src/lib/product-margins.js';
 export function createFinanceHandler({authorize=requirePermission,env=process.env,fetcher=fetch,now=()=>new Date()}={}){return async(req,res)=>{
  res.setHeader('Cache-Control','private, no-store');
  if(!['GET','POST'].includes(req.method))return res.status(405).json({error:'Method not allowed'});
@@ -28,10 +29,12 @@ export function createFinanceHandler({authorize=requirePermission,env=process.en
  }
  if(b.action==='disconnect'){
  // Atomic removal also invalidates pending consent and cached company data.
- await sql.transaction([sql`DELETE FROM finance_connection WHERE id='company'`,sql`UPDATE finance_workspace SET snapshot=NULL,settings=jsonb_set(settings-'ebitdaAdjustments'-'sellingAccountIds'-'productItemMapping','{mapping}','{}'::jsonb),revision=revision+1 WHERE id='company'`,sql`DELETE FROM finance_oauth WHERE user_id=${userId}`]);return res.json({ok:true});
+ await sql.transaction([sql`DELETE FROM finance_connection WHERE id='company'`,sql`UPDATE finance_workspace SET snapshot=NULL,settings=jsonb_set(settings-'ebitdaAdjustments'-'sellingAccountIds'-'productItemMapping'-'productCogsAccounts','{mapping}','{}'::jsonb),revision=revision+1 WHERE id='company'`,sql`DELETE FROM finance_oauth WHERE user_id=${userId}`]);return res.json({ok:true});
  }
  if(b.action==='save'){
  let settings;try{settings=validateSettings(b.settings);}catch(e){return res.status(400).json({error:e.message});}
+ const costAccounts=marginProducts.map(product=>productCostAccount(product.key,row?.snapshot?.accounts,settings.productCogsAccounts)?.id).filter(Boolean);
+ if(new Set(costAccounts).size!==costAccounts.length)return res.status(400).json({error:'Each product must use a distinct COGS account. Check the automatic and selected cost sources.'});
  if(!Number.isSafeInteger(b.revision)||b.revision!==(row?.revision||0))return res.status(409).json({error:'Financial settings changed. Reload before saving. Your edits remain on screen.'});
  const data=JSON.stringify(settings),same=row&&row.settings.start===settings.start&&row.settings.basis===settings.basis&&row.settings.currency===settings.currency;
  const saved=row?await sql`UPDATE finance_workspace SET settings=${data}::jsonb,revision=revision+1,snapshot=CASE WHEN ${!!same} THEN snapshot ELSE NULL END,updated_at=now() WHERE id='company' AND revision=${b.revision} RETURNING revision`:await sql`INSERT INTO finance_workspace(id,settings) VALUES ('company',${data}::jsonb) ON CONFLICT DO NOTHING RETURNING revision`;

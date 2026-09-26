@@ -100,14 +100,14 @@ The owner-only overview includes R1, R3, R4, and Bags. Each sync reads the full
 QuickBooks Item catalog (including inactive items) and a monthly P&L with
 `summarize_column_by=ProductsAndServices`. Product report currency, basis, periods,
 and revenue/COGS totals must match the company reports. Company totals and
-unassigned entries are never allocated across products.
+unassigned entries are never allocated across products unless a dedicated product COGS account is explicitly selected.
 
 Finished-product names suggest membership; the owner can override each item in
 **Review product item mapping**. Bags combines mapped bag items by total revenue
 and total COGS, not an average of item percentages. Saving a mapping recalculates
 from the imported item history. No QuickBooks transactions are written.
 
-Gross margin = (item revenue − item COGS) / item revenue. Nonpositive revenue,
+Gross margin = (actual item revenue − product COGS) / actual item revenue. Dedicated COGS - R1, COGS - R3, and COGS - R4 accounts are matched by name; account costs replace item COGS rather than adding to it. Shared Accessories costs are not automatically assigned to Bags. DLR item revenue uses actual dealer prices. The chart is blended across direct and dealer sales, and the detail table shows dealer revenue and share. Nonpositive revenue,
 missing reports, unmapped groups, or revenue with no recorded COGS are shown as
 gaps. This is booked item gross margin, excluding selling expenses and overhead;
 it does not apply today's website price or item purchase cost to past months.

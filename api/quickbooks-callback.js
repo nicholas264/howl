@@ -18,7 +18,7 @@ export function createQuickBooksCallback({getSql=()=>neon(process.env.DATABASE_U
  // Recheck owner at commit. Reconnection clears cached data and account mapping.
  const results=await sql.transaction([
  sql`WITH consent AS (DELETE FROM finance_oauth WHERE state=${hash(state)} AND binding=${hash(binding)} AND claimed_at IS NOT NULL AND expires_at>now() RETURNING user_id) INSERT INTO finance_connection(id,realm,tokens,expires_at,version,environment,connected_by) SELECT 'company',${encryptedRealm},${tokens},${expires},${version},${env.QUICKBOOKS_ENVIRONMENT},${s.user_id} FROM app_users JOIN consent ON consent.user_id=app_users.user_id WHERE app_users.user_id=${s.user_id} AND role='owner' AND status='active' ON CONFLICT(id) DO UPDATE SET realm=EXCLUDED.realm,tokens=EXCLUDED.tokens,expires_at=EXCLUDED.expires_at,version=EXCLUDED.version,environment=EXCLUDED.environment,connected_by=EXCLUDED.connected_by,lease_until=NULL RETURNING id`,
- sql`UPDATE finance_workspace SET snapshot=NULL,settings=jsonb_set(settings-'ebitdaAdjustments'-'sellingAccountIds'-'productItemMapping','{mapping}','{}'::jsonb),revision=revision+1 WHERE id='company' AND EXISTS(SELECT 1 FROM finance_connection WHERE version=${version})`
+ sql`UPDATE finance_workspace SET snapshot=NULL,settings=jsonb_set(settings-'ebitdaAdjustments'-'sellingAccountIds'-'productItemMapping'-'productCogsAccounts','{mapping}','{}'::jsonb),revision=revision+1 WHERE id='company' AND EXISTS(SELECT 1 FROM finance_connection WHERE version=${version})`
  ]);return finish(results[0].length?'connected':'access_denied');
  }catch{console.error('QuickBooks callback failed');return finish('connection_failed');}
 };}
