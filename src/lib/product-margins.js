@@ -27,7 +27,14 @@ export function productCostAccount(product, accounts = [], mapping = {}) {
  return candidates.length === 1 ? candidates[0] : null;
 }
 
-export function productMarginRows(periods, data, mapping = {}, accounts = [], costMapping = {}) {
+export function revenueAdjustmentProduct(account, mapping = {}) {
+ if (Object.hasOwn(mapping,account.id)) return mapping[account.id];
+ // R4 recognition was confirmed by the owner. Generic shared income accounts
+ // require explicit assignment; never allocate the company revenue remainder.
+ return /\br4(?:\s*mk\s*ii)?\b/i.test(account.name) ? 'r4' : 'exclude';
+}
+
+export function productMarginRows(periods, data, mapping = {}, accounts = [], costMapping = {}, revenueMapping = {}) {
  return periods.map(month => {
   const source = data?.months?.find(row => row.month === month);
   const row = { month, details: {} };
@@ -36,14 +43,17 @@ export function productMarginRows(periods, data, mapping = {}, accounts = [], co
    const values = source && items.map(item => source.values[item.id]);
    // Missing COGS with recorded revenue cannot be assumed to mean zero cost.
    const available = values?.length > 0 && values.every(value => value && Number.isFinite(value.revenue));
-   const revenue = available ? values.reduce((sum, value) => sum + value.revenue, 0) : null;
-   const dealerRevenue = available ? items.reduce((sum, item) => sum + (/(^|[\s:_-])DLR(?=[\s:_-]|$)/i.test(item.name) ? source.values[item.id].revenue : 0), 0) : null;
+   const itemRevenue = available ? values.reduce((sum, value) => sum + value.revenue, 0) : null;
+   const recognitionReady = product.key !== 'r4' || Array.isArray(source?.revenueAdjustments);
+   const recognizedRevenue = source && Array.isArray(source.revenueAdjustments) ? source.revenueAdjustments.filter(account=>revenueAdjustmentProduct(account,revenueMapping)===product.key).reduce((sum,account)=>sum+account.amount,0) : 0;
+   const revenue = available && recognitionReady ? itemRevenue + recognizedRevenue : null;
+   const dealerRevenue = available ? items.reduce((sum, item) => sum + (/DLR/i.test(`${item.sku || ''} ${item.name}`) ? source.values[item.id].revenue : 0), 0) : null;
    const account = productCostAccount(product.key, accounts, costMapping);
    const invalidAccount = costMapping[product.key] && costMapping[product.key] !== 'items' && !account;
    const cogs = !available || invalidAccount ? null : account ? (account.values[month] ?? 0) : values.every(value => Number.isFinite(value.cogs)) ? values.reduce((sum, value) => sum + value.cogs, 0) : null;
    const grossProfit = Number.isFinite(revenue) && Number.isFinite(cogs) ? revenue - cogs : null;
    row[product.key] = ratio(grossProfit, revenue);
-   row.details[product.key] = { revenue, dealerRevenue, dealerShare: ratio(dealerRevenue, revenue), cogs, grossProfit, itemCount: items.length, costSource: account?.name || 'Item COGS' };
+   row.details[product.key] = { revenue, itemRevenue, recognizedRevenue: recognitionReady ? recognizedRevenue : null, dealerRevenue, dealerShare: ratio(dealerRevenue, itemRevenue), cogs, grossProfit, itemCount: items.length, costSource: account?.name || 'Item COGS' };
   }
   return row;
  });
