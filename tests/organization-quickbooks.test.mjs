@@ -13,7 +13,7 @@ test('QuickBooks roster paginates, separates vendors and strips sensitive fields
 });
 test('import is idempotent, preserves fields, and source identity survives edits and archival',()=>{
  const first=importQuickBooksPeople(null,[candidate],[{key:candidate.key,title:'Assembly technician',department:'Assembly'}],'owner');
- assert.deepEqual(first.summary,{added:1,existing:0});const p=first.state.people[0];assert.equal(p.employmentType,'');assert.equal(p.managerId,'');assert.equal(p.title,'Assembly technician');
+ assert.deepEqual(first.summary,{added:1,existing:0});const p=first.state.people[0];assert.equal(p.employmentType,'Employee');assert.equal(p.managerId,'');assert.equal(p.title,'Assembly technician');
  let state=applyOrganizationCommand(first.state,{action:'save',id:p.id,expectedVersion:p.version,values:{...p,name:'Updated name',email:'new@example.com'}},'owner');
  assert.equal(matchQuickBooksPerson(state.people,candidate).status,'existing');
  state=applyOrganizationCommand(state,{action:'archive',id:p.id,expectedVersion:2},'owner');

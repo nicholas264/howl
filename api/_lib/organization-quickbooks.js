@@ -46,7 +46,7 @@ export function importQuickBooksPeople(current,candidates,selections,actor,now=n
     if(match.person){summary.existing++;continue;}
     state=applyOrganizationCommand(state,{action:'save',values:{name:candidate.name,email:candidate.email,
       title:selection.title||'Role not recorded',department:selection.department||'',managerId:selection.managerId||'',
-      employmentType:candidate.kind==='Employee'?'':'Contractor'}},actor,now);
+      employmentType:candidate.kind==='Employee'?'Employee':'Contractor'}},actor,now);
     const person=state.people.at(-1);
     person.quickbooksSources=[candidate.key];
     state.history.at(-1).after=structuredClone(person);
