@@ -1,6 +1,6 @@
 # Creative demand
 
-The Creative Demand workspace connects the DTC plan to aMER scenarios of 4.0, 4.55, and 5.0. It separates diagnostic creative demand from a funded calibration schedule. Launch counts are not revenue guarantees or approved production quotas.
+The Creative Demand workspace opens with a simple monthly recommendation at exactly 4.5× aMER: new ads to produce, weekly launch and brief dates, the DTC goal, Meta spending limit, and first-30-day testing commitment. A month selector and monthly schedule download are visible. Detailed forecasts, assumptions and historical tables are collapsed by default. The advanced view retains 4.0×, 4.55× and 5.0× comparisons alongside 4.5×; changing that comparison does not change the headline’s 4.5× target. It separates diagnostic creative demand from a funded calibration schedule. Launch counts are not revenue guarantees or approved production quotas.
 
 ## Sources and permissions
 
