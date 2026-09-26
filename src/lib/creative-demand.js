@@ -14,15 +14,16 @@ export function correlation(pairs) {
   const xx = points.reduce((s,p)=>s+(p[0]-x)**2,0), yy = points.reduce((s,p)=>s+(p[1]-y)**2,0);
   return {n:points.length,r:xx && yy ? points.reduce((s,p)=>s+(p[0]-x)*(p[1]-y),0)/Math.sqrt(xx*yy) : null};
 }
-export const DEFAULT_DEMAND_ASSUMPTIONS = Object.freeze({roasFloor:5, minTestSpend:500, minWinnerSpend:1000, minPurchases:3, newCustomerShare:80, otherSpend:40000, retainedCapacity:70, testBudgetPct:15, productionLeadDays:21, returnsPct:0});
+export const DEFAULT_DEMAND_ASSUMPTIONS = Object.freeze({roasFloor:5, minTestSpend:500, minWinnerSpend:1000, minPurchases:3, newCustomerShare:80, otherSpend:40000, retainedCapacity:70, testBudgetPct:15, productionLeadDays:21, returnsPct:0, weeklyCapacity:0});
 export function validateDemandAssumptions(input = {}) {
-  const ranges = {roasFloor:[.1,100],minTestSpend:[1,100000],minWinnerSpend:[1,1000000],minPurchases:[1,1000],newCustomerShare:[1,100],otherSpend:[0,10000000],retainedCapacity:[0,100],testBudgetPct:[0,90],productionLeadDays:[0,180],returnsPct:[0,90]};
+  const ranges = {roasFloor:[.1,100],minTestSpend:[1,100000],minWinnerSpend:[1,1000000],minPurchases:[1,1000],newCustomerShare:[1,100],otherSpend:[0,10000000],retainedCapacity:[0,100],testBudgetPct:[0,90],productionLeadDays:[0,180],returnsPct:[0,90],weeklyCapacity:[0,10000]};
   const result = {};
   for (const [key,[min,max]] of Object.entries(ranges)) {
     const value = input[key] ?? DEFAULT_DEMAND_ASSUMPTIONS[key];
     if (value === '' || typeof value === 'boolean' || !Number.isFinite(Number(value)) || Number(value)<min || Number(value)>max) throw new Error(`Invalid ${key}: use ${min}–${max}.`);
     result[key] = Number(value);
   }
+  if (!Number.isInteger(result.weeklyCapacity) || !Number.isInteger(result.productionLeadDays)) throw new Error('Weekly capacity and production lead time must be whole numbers.');
   if (result.minWinnerSpend < result.minTestSpend) throw new Error('Winner spend must be at least the minimum test spend.');
   return result;
 }

@@ -1,41 +1,64 @@
 # Creative demand
 
-The Creative Demand workspace connects the DTC revenue plan to three aMER scenarios (4.0, 4.55, 5.0). It is an evidence-backed scenario tool, not an automatic creative quota or a claim that an ad count causes revenue.
+The Creative Demand workspace connects the DTC plan to aMER scenarios of 4.0, 4.55, and 5.0. It separates diagnostic creative demand from a funded calibration schedule. Launch counts are not revenue guarantees or approved production quotas.
 
-## Sources and refresh
+## Sources and permissions
 
-Historical input lives in `dashboard_settings.creative_demand_history`, behind `analytics.read`. Raw provider records and private revenue baselines are not committed or put in public assets. Saved assumptions live in a separate key and require `analytics.write`. No existing forecast, financial target, or ad account setting is changed.
+The private `dashboard_settings.creative_demand_history` baseline is served behind `analytics.read`. Saved assumptions require `analytics.write` and live in a separate key. Raw provider records and private financial figures must never enter Git or public assets. The API uses private/no-store caching. No ad settings or financial targets are changed by this workspace.
 
-The first baseline contains monthly first-observed delivery history from September 2023 and daily standardized seven-day-click performance from January 2025. Display the source cutoff, import date and a stale warning after seven days. The baseline is a snapshot, not an automatically scheduled sync. Do not mix the existing daily insights table into it: that table does not identify the attribution window of every row.
+Monthly launch identity begins in September 2023; standardized daily seven-day-click performance begins in January 2025. The displayed cutoff and stale warning are authoritative. Refresh is manual. Do not mix the existing daily insights table into the baseline without verifying attribution compatibility.
 
-To refresh: retrieve complete paginated Meta metadata (including archived/paused ads), month-level ad insights for historical launch identity, and daily insights for evaluation windows; reconcile ad-level spend against account-level spend; update Shopify classifications and the DTC-specific revenue plan; normalize into the baseline schema. Preserve an old baseline locally before replacing it. Then run `node --env-file=/secure/path/.env scripts/import-creative-demand.mjs /secure/path/demand-inputs.json`. Never commit the input or credential file. The importer verifies the stored row counts and cutoff. Existing scenario assumptions are preserved.
+To refresh, retrieve paginated Meta metadata including paused/archived ads, monthly insights for launch identity, and daily insights for measurement. Reconcile ad-level spend to account totals, update Shopify classifications and the DTC-specific targets, preserve the previous private baseline, then run:
 
-## Definitions
+`node --env-file=/secure/path/.env scripts/import-creative-demand.mjs /secure/path/demand-inputs.json`
 
-- Unique asset: exact media-ID set across an ad, including all carousel/dynamic media. A repeated ad ID using the same set is not new production. Reuploads and ratio exports can still count separately. Not a concept count.
-- Unmapped ad: retained separately in launch counts; excluded from hit-rate and capacity benchmarks.
-- Launch: first observed delivery, not creation timestamp or launch-tool log. The first historical month may be left-censored. Daily launch dates are established for the daily-history period only.
-- Mature: first 30 days fully observed plus seven days to mature attribution. Later spend never leaks into the launch outcome.
-- Tested: minimum spend reached in that window. Below-threshold assets are unresolved tests, not automatically creative failures; they still reduce the end-to-end launch-to-winner yield.
-- Winner: meets independent configurable spend, purchase and Meta ROAS thresholds. A Meta ROAS threshold is not an aMER threshold or verified product profitability.
-- Launch-to-winner yield: winners / all mature mapped launches. Tested hit rate: winners / tested mapped launches.
-- New winner capacity: median observed spend in the first 30 days among winners. Quartile sensitivity is not a statistical confidence interval. Spend is observed delivery, not proven incremental capacity.
-- Existing qualified spend: assets meeting the same thresholds across the latest mature 30-day period. Editable monthly retention reduces the baseline for later targets.
+The importer validates and verifies row counts and cutoff; it preserves saved assumptions. Editing the target sheet does not automatically refresh this snapshot.
 
-## Budget and demand
+## Creative identity and performance
 
-DTC target after the returns allowance × assumed new-customer revenue share / target aMER = total allowable ad spend. Subtract planned other-channel spend for Meta. Reserve a percentage for unsuccessful tests and subtract retained existing creative spend; the remainder is the new-winner spend gap. Divide by median first-month winning spend, round up winners, then divide by launch-to-winner yield and round up launches. Winner spend already includes the winner's testing phase.
+- A unique asset is an exact set of Meta media IDs, including all carousel/dynamic media. Repeated ad IDs do not imply new production. Reuploads and ratio exports may still count separately. These are not concept counts.
+- Launch means first observed delivery, not creation time. The first historical month may include older assets. Unmapped ads stay in launch counts but do not enter lifecycle benchmarks.
+- A launch window is mature only after 30 delivery days plus seven attribution days. Below-minimum delivery is unresolved, not evidence of creative failure.
+- A first-month winner meets configurable spend, purchase and Meta ROAS thresholds during days 1–30. Meta ROAS is independent of aMER and does not establish product profitability.
+- Launch-to-winner yield includes all mature mapped launches. Tested hit rate uses only assets meeting the test-spend threshold.
 
-The reserve-supported launch count divides the reserve by expected unsuccessful spend per launch. It is a budget envelope at historical costs, not a guaranteed number of conclusive tests. Required spend per winner at that volume makes the remaining scale gap visible.
+## Lifecycle model
 
-Separately estimate unsuccessful-asset spend from the historical nonwinner mean. If it exceeds the testing reserve, flag the scenario as not ready for a production quota. Also flag inadequate winner samples, other-channel overspend, and high holdout error. Four-week production rates require all assets to launch at the beginning of the target month; do not imply that mid-month launches earn a full month's capacity. Future months are standalone stress tests against the current library, excluding wins not yet produced.
+`src/lib/creative-lifecycle.js` aggregates duplicate asset/day rows and uses prefix sums for point-in-time windows. Age windows are days 1–30, 31–60, and 61–90. Each uses only launches with that complete window and seven-day attribution lag. Zero delivery stays in the denominator.
 
-Revenue-share, retention, lead-time, channel budget and returns assumptions are editable and explicitly labeled. Targets derive from the updated Q4 build/sell sheet as total revenue less dealer revenue, not the older cached combined-channel forecast. Editing that source sheet does not automatically update this baseline.
+The 30/60/90-day cumulative spend comparison uses the same fully observed first-month winners. The separate age-window curve has a different eligible sample at each age, explicitly displayed. Qualified spend in later windows includes only first-month winners that also meet the threshold in that later window. Total spend includes every outcome. Unsuccessful spend includes assets that were not first-month winners, including unresolved tests. Later cumulative threshold crossings are reported separately, not silently promoted into the first-month-winner curve.
 
-## Validation and limitations
+Spend curves use means per launch, retaining zeros and skew, rather than median winner spend multiplied by a hit rate. Calendar planning prorates the age-window means by overlap days. Uniform within-window pacing is an assumption. No spend beyond day 90 is projected. Continued spend is observed delivery, not proven incremental capacity; disappearance is not proof of permanent fatigue.
 
-Historical revenue correlations exclude the current partial month and visibly incomplete early Shopify history. Only sufficiently classified, completed periods receive observed aMER; missing classification is not replaced by customer-count ratios. Correlation does not control seasonality, offers, prices or product launches.
+## Existing-library forecast and validation
 
-Rolling holdouts train only on launch windows that had closed before the test month. The evaluated month must have every mapped cohort asset mature. They estimate qualified first-month creative spend using prior yield × prior median winner spend. The displayed weighted absolute error is sum(abs(predicted−actual))/sum(actual), not a revenue forecast error. High error prevents presentation as an approved production quota.
+The current library contains mapped assets qualifying over the latest mature 30 days, ending seven days before the snapshot cutoff. The model takes historical monthly snapshots using the same gap between the baseline end and first target-month start as the live forecast. It measures total and qualified spend by those same assets over each of the next three calendar months.
 
-Tests cover asset/day deduplication, fixed window boundaries, immature and unmapped assets, zero winners, channel budget arithmetic, unsuccessful-test costs, input validation, permission boundaries, and holdout leakage. A localhost preview serves only a supplied local baseline with no credentials or live writes.
+For each horizon, predicted spend is current baseline spend multiplied by pooled future spend / pooled historical baseline spend. Newly launched historical assets cannot enter a snapshot after selection. Each historical training outcome must be fully observed plus seven attribution days by the decision date. Repeated assets and overlapping windows are not independent observations.
+
+Rolling holdouts compare both total and qualified spend with outcomes; a persistence comparison repeats baseline qualified spend unchanged. Error is sum of absolute error / sum of actual spend. Forecasts need at least three training windows, ten asset observations, three holdouts and errors ≤50% for both spend measures to pass the planning check. An inadequate or inaccurate model remains visibly provisional; the threshold is an internal heuristic, not a statistical guarantee.
+
+A separate launch-cohort holdout predicts qualified spend over 90 days using only age windows mature before that launch month. The evaluated month's entire cohort must be mature through day 90 plus attribution. The previous first-month holdout remains as a historical diagnostic, labeled separately.
+
+Product and prospecting/retargeting segments are not inferred from ambiguous ad names. Verified metadata or manual labels are needed before publishing those splits. Other existing assets and reactivations remain unmodeled opportunities.
+
+## Funded production schedule
+
+For each month:
+
+1. DTC target × (1 − returns allowance) × new-customer revenue share / aMER determines total allowable advertising spend. Subtract other-channel spend for Meta's limit.
+2. Forecast today's qualifying library, capped to Meta's budget with the qualified fraction preserved. Reserve a percentage for unsuccessful new-asset spend.
+3. Create continuous weekly launch slots starting no earlier than the planning date plus production lead time. Weekly slots continue across month boundaries. An optional integer weekly production cap limits assets; zero means capacity is unset.
+4. Allocate earlier slots first, dividing available current-month funding over remaining weekly slots. Fund a full first-30-day expected media cost at launch, at least the minimum test allocation. Also commit the full expected unsuccessful portion against that launch month's reserve. This prevents late-month launches from claiming large counts with only one day's funding.
+5. Carry projected total, qualified, and unsuccessful spend into all future target months using 90-day curves. Cap each new batch against every affected month's remaining total budget and unsuccessful-test reserve. A lower future budget can constrain an earlier batch.
+6. Keep commitment checks separate from calendar spend; do not add them together. Report spend beyond the target horizon separately for future funding, not as already budgeted.
+
+This is a transparent earlier-first allocation rule, not an optimization claiming the best possible schedule. First-slot diagnostic demand assumes all required assets launch in the earliest slot, ignoring team capacity; it is not the funded schedule. Expected first-30-day winners can mature after the launch month. Zero funded launches means a constraint binds; it does not erase the spend gap.
+
+The schedule gives brief, launch and mature-review dates, expected media cost, minimum test allocation, and a downloadable CSV. Production cost is excluded. Creative owns delivery, media buying owns launch and adequate testing, and growth owns budget release and actual aMER. Thresholds, budget shares, other-channel budgets, returns and production capacity remain provisional until reviewed. The legacy retention input remains API-compatible but no longer drives the lifecycle forecast.
+
+## Validation
+
+Tests cover duplicate aggregation, exact day boundaries and attribution lag, censoring, zero delivery, late qualifiers, month-length allocation, 90-day cutoff, holdout leakage, cross-month carry, full-test commitments, future budget limits, weekly capacity across month boundaries, unavailable evidence, and lead times outside the planning horizon. Existing endpoint authorization and assumption validation tests remain in place.
+
+`CREATIVE_DEMAND_INPUT=/secure/path/demand-inputs.json node scripts/preview-creative-demand.mjs` starts a localhost-only read-only preview. Never expose it publicly. Live production continues to read the protected stored baseline.
