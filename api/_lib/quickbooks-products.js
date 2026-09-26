@@ -25,7 +25,8 @@ const amount = cell => {
 };
 
 // Column identity is verified before any value is attributed to a product.
-// Company totals and unassigned columns never become product series.
+// Company totals never become product series. Unassigned income is retained
+// separately so recognition journals can be attributed without repeating sales.
 export function parseProductProfitLoss(report, month, basis, currency, items, company) {
  const header = report?.Header, columns = report?.Columns?.Column;
  if (header?.ReportName !== 'ProfitAndLoss' || header.StartPeriod !== `${month}-01` || header.EndPeriod !== monthEnd(month) || header.ReportBasis !== basis || header.Currency !== currency || header.SummarizeColumnsBy !== 'ProductsAndServices' || !Array.isArray(columns) || columns[0]?.ColType !== 'Account') throw new Error('QuickBooks did not return the requested product-level P&L.');
@@ -44,7 +45,7 @@ export function parseProductProfitLoss(report, month, basis, currency, items, co
  };
  const totalIndices = columns.flatMap((col, index) => (col.MetaData?.some(meta => meta.Name === 'ColKey' && meta.Value === 'total') || col.ColTitle?.toLowerCase() === 'total') ? [index] : []);
  if (totalIndices.length !== 1) {
-  if (empty && !company.revenue && !company.cogs && columns.length === 1 && !report.Rows?.Row?.some(row => row.type === 'Data')) return { month, values: Object.fromEntries(items.map(item => [item.id, { revenue: 0, cogs: 0 }])) };
+  if (empty && !company.revenue && !company.cogs && columns.length === 1 && !report.Rows?.Row?.some(row => row.type === 'Data')) return { month, revenueAdjustments: [], values: Object.fromEntries(items.map(item => [item.id, { revenue: 0, cogs: 0 }])) };
   throw new Error('QuickBooks product report is missing its reconciliation total.');
  }
  const totalIndex = totalIndices[0];
@@ -65,7 +66,21 @@ export function parseProductProfitLoss(report, month, basis, currency, items, co
  // Omitted items have no activity in this complete, reconciled report.
  for (const item of items) if (!mapped.has(item.id)) values[item.id] = { revenue: 0, cogs: 0 };
  if (!mapped.size && (company.revenue || company.cogs)) throw new Error('QuickBooks product columns could not be matched to its item catalog.');
- return { month, values };
+ const unassignedIndices = columns.flatMap((col, index) => index !== totalIndex && ( /^not\s*specified$/i.test(col.ColTitle?.trim() || '') || col.MetaData?.some(meta => meta.Name === 'ColKey' && /^(not_specified|notassigned|notSpecified)$/i.test(meta.Value)) ) ? [index] : []);
+ const adjustments = new Map();
+ const addIncome = cells => {
+  if (!cells || cells.length === 1) return;
+  const value = unassignedIndices.reduce((sum,index)=>sum+amount(cells[index]),0);
+  if (!cells[0]?.id) { if (Math.abs(value) > .005) throw new Error('QuickBooks unassigned income has no account identity.'); return; }
+  const id=`Income:${cells[0].id}`;
+  if (!adjustments.has(id)) adjustments.set(id,{id,name:cells[0].value,amount:0});
+  adjustments.get(id).amount+=value;
+ };
+ const incomeRows = rows => { for (const row of rows || []) { if (row.type === 'Data') addIncome(row.ColData); else { addIncome(row.Header?.ColData); incomeRows(row.Rows?.Row); } } };
+ if (unassignedIndices.length) incomeRows(groups.get('Income')?.Rows?.Row);
+ const expected = unassignedIndices.reduce((sum,index)=>sum+get('Income',index),0);
+ if (Math.abs([...adjustments.values()].reduce((sum,account)=>sum+account.amount,0)-expected)>.05) throw new Error('QuickBooks unassigned income did not reconcile to its account detail.');
+ return { month, values, revenueAdjustments:[...adjustments.values()] };
 }
 
 export async function syncProductMargins(connection, settings, months, env, fetcher) {
